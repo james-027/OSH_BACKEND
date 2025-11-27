@@ -52,6 +52,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { ModulesModule } from "./modules/modules/modules.module";
 import { ApiModule } from "./modules/api/api.module";
 import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.module";
+import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
 @Module({
   imports: [
     // Configuration
@@ -111,6 +112,7 @@ import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.mod
     ModulesModule,
     ApiModule,
     ReminderTypesModule,
+    RenewalTypesModule,
   ],
   providers: [
     EmailService,
