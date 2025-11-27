@@ -5,13 +5,9 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { Company } from "../entities/Company";
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 
-import { CreateCompanyDto } from "../dto/CreateCompanyDto";
-import { UpdateCompanyDto } from "../dto/UpdateCompanyDto";
-import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { ReminderType } from "src/entities/ReminderType";
 import { CreateReminderTypeDto } from "src/dto/CreateReminderTypeDto";
 import { UpdateReminderTypeDto } from "src/dto/UpdateReminderTypeDto";
