@@ -21,6 +21,7 @@ import { UserLoginSession } from "./entities/UserLoginSession";
 
 // Services
 import { EmailService } from "./services/email.service";
+import { ResponseMapperService } from "./services/response-mapper.service";
 
 // Modules
 import { UsersModule } from "./modules/users/users.module";
@@ -50,6 +51,7 @@ import { SchedulersModule } from "./modules/schedulers/schedulers.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ModulesModule } from "./modules/modules/modules.module";
 import { ApiModule } from "./modules/api/api.module";
+import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.module";
 @Module({
   imports: [
     // Configuration
@@ -108,12 +110,14 @@ import { ApiModule } from "./modules/api/api.module";
     AuthModule,
     ModulesModule,
     ApiModule,
+    ReminderTypesModule,
   ],
   providers: [
     EmailService,
     JwtStrategy,
     PermissionsGuard,
     DynamicPermissionsGuard,
+    ResponseMapperService,
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,

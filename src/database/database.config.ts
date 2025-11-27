@@ -42,6 +42,7 @@ import { Notification } from "../entities/Notification";
 import { ApiKey } from "../entities/ApiKey";
 import { ApiAuthAccess } from "../entities/ApiAuthAccess";
 import { ApiLogs } from "../entities/ApiLogs";
+import { ReminderType } from "../entities/ReminderType";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -87,6 +88,7 @@ export const entities = [
   ApiKey,
   ApiAuthAccess,
   ApiLogs,
+  ReminderType,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

@@ -113,7 +113,7 @@ export class CompaniesService {
       }
 
       const newCompany = this.companiesRepository.create({
-        company_name: createCompanyDto.company_name,
+        company_name: createCompanyDto.company_name.toUpperCase(),
         company_abbr: createCompanyDto.company_abbr,
         status_id: createCompanyDto.status_id || 1,
         created_by: userId,
@@ -210,6 +210,13 @@ export class CompaniesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      if (updateCompanyDto.company_name) {
+        updateCompanyDto.company_name =
+          updateCompanyDto.company_name.toUpperCase();
+      }
+      Object.assign(company, updateCompanyDto, {
+        updated_by: userId,
+      });
       await this.companiesRepository.save(company);
       // Audit trail
       await this.userAuditTrailCreateService.create(
