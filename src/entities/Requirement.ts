@@ -7,20 +7,39 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
-  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
-import { Requirement } from "./Requirement";
+import { RenewalType } from "./RenewalType";
 
-@Entity("renewal_types")
-@Unique("UQ_renewal_type_name", ["renewal_type_name"])
-export class RenewalType {
+@Entity("requirements")
+@Unique("UQ_requirement_name", ["requirement_name"])
+export class Requirement {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ length: 255 })
-  renewal_type_name: string;
+  requirement_name: string;
+
+  @Column()
+  renewal_type_id: number;
+
+  /**
+   * The number of days before the requirement is due to send a reminder.
+   */
+  @Column({
+    comment:
+      "The number of days before the requirement is due to send a reminder.",
+  })
+  requirement_reminder: number;
+
+  /**
+   * Start (number of month) to start counting the requirement from.
+   */
+  @Column({
+    comment: "Start (number of month) to start counting the requirement from.",
+  })
+  requirement_start: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -68,6 +87,12 @@ export class RenewalType {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-  @OneToMany(() => Requirement, (requirement) => requirement.renewalType)
-  requirements!: Requirement[];
+  // Foreign key to renewal type entity
+  @ManyToOne(() => RenewalType, (renewalType) => renewalType.requirements, {
+    eager: true,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "renewal_type_id" })
+  renewalType!: RenewalType;
 }

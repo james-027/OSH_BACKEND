@@ -46,6 +46,19 @@ export class ResponseMapperService {
       response.status_name = null;
     }
 
+    if (
+      entity.renewalType &&
+      typeof entity.renewalType === "object" &&
+      (typeof entity.renewal_type_name === "undefined" ||
+        typeof entity.renewal_type_name === "object")
+    ) {
+      response.renewal_type_name = entity.renewalType.renewal_type_name || null;
+    } else if (typeof entity.renewal_type_name !== "object") {
+      response.renewal_type_name = entity.renewal_type_name;
+    } else {
+      response.renewal_type_name = null;
+    }
+
     return response;
   }
 
