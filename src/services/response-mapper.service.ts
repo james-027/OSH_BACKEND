@@ -8,14 +8,27 @@ export class ResponseMapperService {
    * @returns Formatted response object with user names and status
    */
   mapEntityToResponse<T extends Record<string, any>>(entity: T): any {
+    if (!entity) return null;
+
     const response: any = {};
 
-    // Copy all primitive fields
+    // Copy all primitive fields and exclude relations
     for (const key in entity) {
-      if (entity.hasOwnProperty(key) && typeof entity[key] !== "object") {
-        response[key] = entity[key];
-      } else if (key === "created_at" || key === "modified_at") {
-        response[key] = entity[key];
+      if (
+        entity.hasOwnProperty(key) &&
+        ![
+          "createdBy",
+          "updatedBy",
+          "status",
+          "renewalType",
+          "requirementReminders",
+        ].includes(key)
+      ) {
+        if (typeof entity[key] !== "object" || entity[key] === null) {
+          response[key] = entity[key];
+        } else if (key === "created_at" || key === "modified_at") {
+          response[key] = entity[key];
+        }
       }
     }
 
@@ -46,17 +59,31 @@ export class ResponseMapperService {
       response.status_name = null;
     }
 
-    if (
-      entity.renewalType &&
-      typeof entity.renewalType === "object" &&
-      (typeof entity.renewal_type_name === "undefined" ||
-        typeof entity.renewal_type_name === "object")
-    ) {
+    // Map renewalType relation
+    if (entity.renewalType && typeof entity.renewalType === "object") {
       response.renewal_type_name = entity.renewalType.renewal_type_name || null;
-    } else if (typeof entity.renewal_type_name !== "object") {
-      response.renewal_type_name = entity.renewal_type_name;
-    } else {
-      response.renewal_type_name = null;
+    }
+
+    // Flatten requirementReminders if present
+    if (
+      entity.requirementReminders &&
+      Array.isArray(entity.requirementReminders)
+    ) {
+      response.requirement_reminders = entity.requirementReminders.map(
+        (reminder: any) => ({
+          id: reminder.id,
+          requirement_id: reminder.requirement_id,
+          reminder_type_id: reminder.reminder_type_id,
+          reminder_count_day: reminder.reminder_count_day,
+          status_id: reminder.status_id,
+          created_by: reminder.created_by,
+          updated_by: reminder.updated_by,
+          created_at: reminder.created_at,
+          modified_at: reminder.modified_at,
+          reminder_type_name: reminder.reminderType?.reminder_type_name || null,
+          reminder_status_name: reminder.status?.status_name || null,
+        })
+      );
     }
 
     return response;

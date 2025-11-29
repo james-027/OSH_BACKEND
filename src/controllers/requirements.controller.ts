@@ -20,18 +20,18 @@ import { UpdateRequirementDto } from "src/dto/UpdateRequirementDto";
 @Controller("requirements")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class RequirementsController {
-  constructor(private readonly renewalTypesService: RequirementsService) {}
+  constructor(private readonly requirementsService: RequirementsService) {}
 
   @Get()
   @RequirePermissions({ module: "REQUIREMENTS", action: "VIEW" })
   async findAll(@Request() req) {
-    return this.renewalTypesService.findAll();
+    return this.requirementsService.findAll();
   }
 
   @Get(":id")
   @RequirePermissions({ module: "REQUIREMENTS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
-    return this.renewalTypesService.findOne(id);
+    return this.requirementsService.findOne(id);
   }
 
   @Post()
@@ -41,7 +41,7 @@ export class RequirementsController {
     @Request() req
   ) {
     const userId = req.user.id;
-    return this.renewalTypesService.create(createRequirementDto, userId);
+    return this.requirementsService.create(createRequirementDto, userId);
   }
 
   @Put(":id")
@@ -52,7 +52,7 @@ export class RequirementsController {
     @Request() req
   ) {
     const userId = req.user.id;
-    return this.renewalTypesService.update(id, updateRequirementDto, userId);
+    return this.requirementsService.update(id, updateRequirementDto, userId);
   }
 
   @Patch(":id/toggle-status-activate")
@@ -62,7 +62,7 @@ export class RequirementsController {
     @Request() req
   ) {
     const userId = req.user.id;
-    return this.renewalTypesService.toggleStatus(id, userId);
+    return this.requirementsService.toggleStatus(id, userId);
   }
 
   @Patch(":id/toggle-status-deactivate")
@@ -72,6 +72,6 @@ export class RequirementsController {
     @Request() req
   ) {
     const userId = req.user.id;
-    return this.renewalTypesService.toggleStatus(id, userId);
+    return this.requirementsService.toggleStatus(id, userId);
   }
 }

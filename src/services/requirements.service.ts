@@ -8,6 +8,7 @@ import { Repository } from "typeorm";
 
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
+import { RequirementRemindersService } from "./requirement-reminders.service";
 
 import { Requirement } from "src/entities/Requirement";
 import { CreateRequirementDto } from "src/dto/CreateRequirementDto";
@@ -21,11 +22,20 @@ export class RequirementsService {
     private requirementsRepository: Repository<Requirement>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private responseMapperService: ResponseMapperService
+    private responseMapperService: ResponseMapperService,
+    private requirementRemindersService: RequirementRemindersService
   ) {}
 
   private getDataRepoRelations(): string[] {
-    return ["status", "createdBy", "updatedBy", "renewalType"];
+    return [
+      "status",
+      "createdBy",
+      "updatedBy",
+      "renewalType",
+      "requirementReminders",
+      "requirementReminders.reminderType",
+      "requirementReminders.status",
+    ];
   }
 
   async findAll(): Promise<any[]> {
@@ -33,6 +43,7 @@ export class RequirementsService {
       const requirements = await this.requirementsRepository.find({
         relations: this.getDataRepoRelations(),
       });
+
       return this.responseMapperService.mapEntitiesToResponse(requirements);
     } catch (error) {
       console.error("Error fetching requirements:", error);
@@ -94,6 +105,14 @@ export class RequirementsService {
 
       const savedRequirement =
         await this.requirementsRepository.save(newRequirement);
+
+      // Save requirement reminders (dynamic reminder_type_X fields)
+      await this.requirementRemindersService.createOrUpdateBulk(
+        savedRequirement.id,
+        createRequirementDto,
+        userId
+      );
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -109,7 +128,7 @@ export class RequirementsService {
       const requirementWithRelations =
         await this.requirementsRepository.findOne({
           where: { id: savedRequirement.id },
-          relations: ["status", "createdBy", "updatedBy"],
+          relations: this.getDataRepoRelations(),
         });
 
       if (!requirementWithRelations) {
@@ -171,11 +190,19 @@ export class RequirementsService {
         updateRequirementDto.requirement_name =
           updateRequirementDto.requirement_name.toUpperCase();
       }
+
       Object.assign(requirement, updateRequirementDto, {
         updated_by: userId,
       });
 
       await this.requirementsRepository.save(requirement);
+
+      // Update requirement reminders (dynamic reminder_type_X fields)
+      await this.requirementRemindersService.createOrUpdateBulk(
+        requirement.id,
+        updateRequirementDto,
+        userId
+      );
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -192,7 +219,7 @@ export class RequirementsService {
       const requirementWithRelations =
         await this.requirementsRepository.findOne({
           where: { id: requirement.id },
-          relations: ["status", "createdBy", "updatedBy"],
+          relations: this.getDataRepoRelations(),
         });
 
       if (!requirementWithRelations) {
@@ -230,9 +257,17 @@ export class RequirementsService {
       await this.requirementsRepository.update(id, {
         status_id: newStatusId,
       });
+
+      // Toggle status for all requirement reminders
+      await this.requirementRemindersService.toggleStatusByRequirementId(
+        id,
+        newStatusId,
+        userId
+      );
+
       const updatedRequirement = await this.requirementsRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy"],
+        relations: this.getDataRepoRelations(),
       });
       if (!updatedRequirement) {
         throw new Error("Failed to retrieve updated requirement");

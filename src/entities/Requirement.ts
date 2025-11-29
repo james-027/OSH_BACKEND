@@ -7,10 +7,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
 import { RenewalType } from "./RenewalType";
+import { RequirementReminder } from "./RequirementReminder";
 
 @Entity("requirements")
 @Unique("UQ_requirement_name", ["requirement_name"])
@@ -40,6 +42,11 @@ export class Requirement {
     comment: "Start (number of month) to start counting the requirement from.",
   })
   requirement_start: number;
+
+  @Column({
+    comment: "Start (number of days) to start counting the requirement from.",
+  })
+  requirement_start_days: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -89,10 +96,16 @@ export class Requirement {
 
   // Foreign key to renewal type entity
   @ManyToOne(() => RenewalType, (renewalType) => renewalType.requirements, {
-    eager: true,
+    eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "renewal_type_id" })
   renewalType!: RenewalType;
+
+  @OneToMany(
+    () => RequirementReminder,
+    (reqReminder) => reqReminder.requirement
+  )
+  requirementReminders!: RequirementReminder[];
 }

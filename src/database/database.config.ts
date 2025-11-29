@@ -45,6 +45,7 @@ import { ApiLogs } from "../entities/ApiLogs";
 import { ReminderType } from "../entities/ReminderType";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
+import { RequirementReminder } from "../entities/RequirementReminder";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -93,6 +94,7 @@ export const entities = [
   ReminderType,
   RenewalType,
   Requirement,
+  RequirementReminder,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
@@ -104,6 +106,7 @@ const baseConfig = {
   password: process.env.DB_PASSWORD || "B@v1r3m0t3Localdba@C3sS",
   database: process.env.DB_DATABASE || "rest_api",
   logging: process.env.NODE_ENV === "development",
+  // logging: false, // Disable SQL query logging
   entities,
 };
 
