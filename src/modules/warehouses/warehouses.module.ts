@@ -34,6 +34,7 @@ import { LocationsModule } from "../locations/locations.module";
 import { EmployeesModule } from "../employees/employees.module";
 import { ActionsModule } from "../actions/actions.module";
 import { ItemsModule } from "../items/items.module";
+import { WarehousesRequirementsController } from "src/controllers/warehouse-requirements.controller";
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ItemsModule } from "../items/items.module";
   ],
   controllers: [
     WarehousesController,
+    WarehousesRequirementsController,
     WarehouseTypesController,
     WarehouseRatesController,
     WarehouseHurdlesController,

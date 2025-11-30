@@ -94,10 +94,8 @@ export class RequirementsService {
       }
 
       const newRequirement = this.requirementsRepository.create({
+        ...createRequirementDto,
         requirement_name: createRequirementDto.requirement_name.toUpperCase(),
-        renewal_type_id: createRequirementDto.renewal_type_id,
-        requirement_reminder: createRequirementDto.requirement_reminder,
-        requirement_start: createRequirementDto.requirement_start,
         status_id: createRequirementDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
