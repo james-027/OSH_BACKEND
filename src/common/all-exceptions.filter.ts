@@ -5,15 +5,14 @@ import {
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
-import { Request, Response } from "express";
 import logger from "../config/logger";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = "Internal server error";
@@ -47,18 +46,38 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     // Log the error
-    logger.error(`${request.method} ${request.url} - ${status} - ${message}`, {
+    const url = request.url || request.raw?.url || "unknown";
+    const method = request.method || request.raw?.method || "unknown";
+
+    logger.error(`${method} ${url} - ${status} - ${message}`, {
       exception: exception instanceof Error ? exception.stack : exception,
       timestamp: new Date().toISOString(),
-      url: request.url,
-      method: request.method,
+      url,
+      method,
     });
 
-    response.status(status).json({
+    // Platform-agnostic response
+    const errorResponse = {
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: request.url,
+      path: url,
       error: message,
-    });
+    };
+
+    // Check platform: Fastify has .code() and .send(), Express has .status() and .json()
+    if (typeof response.code === "function" && typeof response.send === "function") {
+      // Fastify
+      response.code(status).send(errorResponse);
+    } else if (typeof response.status === "function" && typeof response.json === "function") {
+      // Express
+      response.status(status).json(errorResponse);
+    } else {
+      // Fallback - try Fastify style first, then Express
+      try {
+        response.code(status).send(errorResponse);
+      } catch (e) {
+        response.status(status).json(errorResponse);
+      }
+    }
   }
 }

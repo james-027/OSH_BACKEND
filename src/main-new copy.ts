@@ -1,7 +1,3 @@
-// Load environment variables FIRST before any imports
-import * as dotenv from "dotenv";
-dotenv.config();
-
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -52,7 +48,7 @@ async function bootstrap() {
 
 // Express-specific setup
 async function setupExpress(app: any, configService: ConfigService) {
-  const cors = require("cors");
+  const cors = await import("cors");
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
     : ["*"];
@@ -61,7 +57,7 @@ async function setupExpress(app: any, configService: ConfigService) {
 
   // Enable CORS
   app.use(
-    cors({
+    cors.default({
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         if (corsOrigins.includes("*") || corsOrigins.includes(origin)) {
@@ -110,10 +106,6 @@ async function setupExpress(app: any, configService: ConfigService) {
 
 // Fastify-specific setup
 async function setupFastify(app: any, configService: ConfigService) {
-  const fastifyCors = await import("@fastify/cors");
-  const fastifyMultipart = await import("@fastify/multipart");
-  const fastifyStatic = await import("@fastify/static");
-
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
     : ["*"];
@@ -121,7 +113,7 @@ async function setupFastify(app: any, configService: ConfigService) {
   console.log("🌍 CORS Origins configured:", corsOrigins);
 
   // Register CORS
-  await app.register(fastifyCors.default, {
+  await app.register(require("@fastify/cors"), {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (corsOrigins.includes("*") || corsOrigins.includes(origin)) {
@@ -162,14 +154,14 @@ async function setupFastify(app: any, configService: ConfigService) {
   });
 
   // Register multipart support
-  await app.register(fastifyMultipart.default, {
+  await app.register(require("@fastify/multipart"), {
     limits: {
       fileSize: 10 * 1024 * 1024, // 10MB
     },
   });
 
   // Serve static files
-  await app.register(fastifyStatic.default, {
+  await app.register(require("@fastify/static"), {
     root: join(__dirname, "..", "uploads"),
     prefix: "/uploads/",
   });

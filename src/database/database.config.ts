@@ -105,8 +105,8 @@ const baseConfig = {
   username: process.env.DB_USERNAME || "root",
   password: process.env.DB_PASSWORD || "B@v1r3m0t3Localdba@C3sS",
   database: process.env.DB_DATABASE || "rest_api",
-  logging: process.env.NODE_ENV === "development",
-  // logging: false, // Disable SQL query logging
+  // logging: process.env.NODE_ENV === "development",
+  logging: false, // Disable SQL query logging
   entities,
 };
 

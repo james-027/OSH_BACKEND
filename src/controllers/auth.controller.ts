@@ -25,8 +25,8 @@ export class AuthController {
     // Extract session info from request
     const sessionInfo: CreateSessionDto = {
       ip_address: req.ip || req.connection?.remoteAddress,
-      user_agent: req.get("User-Agent"),
-      device_info: req.get("User-Agent"), // You can enhance this to parse device info
+      user_agent: req.headers?.["user-agent"] || "Unknown",
+      device_info: req.headers?.["user-agent"] || "Unknown", // You can enhance this to parse device info
     };
 
     return this.authService.login(loginDto, sessionInfo);

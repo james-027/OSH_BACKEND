@@ -20,11 +20,10 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { WarehouseHurdlesService } from "../services/warehouse-hurdles.service";
 import { CreateWarehouseHurdleDto } from "../dto/CreateWarehouseHurdleDto";
 import { UpdateWarehouseHurdleDto } from "../dto/UpdateWarehouseHurdleDto";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
+import { excelFileFilter, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
 import * as XLSX from "xlsx";
-import { diskStorage } from "multer";
 import * as fs from "fs";
-import { extname } from "path";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 const dayjs = require("dayjs");
@@ -174,24 +173,16 @@ export class WarehouseHurdlesController {
       storage: diskStorage({
         destination: "./uploads/warehouse-hurdles",
         filename: (req, file, cb) => {
-          const uniqueSuffix =
-            Date.now() + "-" + Math.round(Math.random() * 1e9);
-          cb(null, uniqueSuffix + extname(file.originalname));
+          const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+          const ext = file.originalname.split('.').pop();
+          cb(null, `${uniqueSuffix}.${ext}`);
         },
       }),
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
-          return cb(
-            new BadRequestException("Only Excel files are allowed!"),
-            false
-          );
-        }
-        cb(null, true);
-      },
-      limits: { fileSize: 8 * 1024 * 1024 },
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     })
   )
-  async uploadExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+  async uploadExcel(@UploadedFile() file: FileType, @Request() req) {
     if (!file) {
       throw new BadRequestException("No file uploaded or invalid file type.");
     }

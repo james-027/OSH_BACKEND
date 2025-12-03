@@ -20,9 +20,8 @@ import { UpdateUserDto } from "../dto/UpdateUserDto";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { PermissionsGuard } from "src/guards/permissions.guard";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { diskStorage } from "multer";
-import { extname } from "path";
+import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
+import { imageFileFilter, excelFileFilter, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
 import * as fs from "fs";
 import * as bcrypt from "bcrypt";
 
@@ -120,28 +119,20 @@ export class UsersController {
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
-        destination: (req, file, cb) => {
-          const dir = "./uploads/profile_pics";
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
+        destination: "./uploads/profile_pics",
         filename: (req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, unique + extname(file.originalname));
+          const ext = file.originalname.split('.').pop();
+          cb(null, `${unique}.${ext}`);
         },
       }),
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/i)) {
-          return cb(new Error("Only image files are allowed!"), false);
-        }
-        cb(null, true);
-      },
-      limits: { fileSize: 4 * 1024 * 1024 }, // 4MB
+      fileFilter: imageFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.IMAGE_5MB },
     })
   )
   async uploadProfilePicture(
     @Param("id", ParseIntPipe) id: number,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: FileType,
     @Request() req
   ) {
     if (!file)
@@ -294,20 +285,16 @@ export class UsersController {
         destination: "./uploads/users",
         filename: (req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, unique + extname(file.originalname));
+          const ext = file.originalname.split('.').pop();
+          cb(null, `${unique}.${ext}`);
         },
       }),
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.(xlsx|xls)$/i)) {
-          return cb(new Error("Only Excel files are allowed!"), false);
-        }
-        cb(null, true);
-      },
-      limits: { fileSize: 8 * 1024 * 1024 },
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     })
   )
   async uploadExcelUsers(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: FileType,
     @Request() req
   ) {
     if (!file)

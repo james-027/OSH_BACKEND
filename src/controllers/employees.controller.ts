@@ -20,8 +20,11 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { EmployeesService } from "../services/employees.service";
 import { CreateEmployeeDto } from "../dto/CreateEmployeeDto";
 import { UpdateEmployeeDto } from "../dto/UpdateEmployeeDto";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { diskStorage } from "multer";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../adapters";
 
 @Controller("employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -115,10 +118,7 @@ export class EmployeesController {
     })
   )
   @RequirePermissions({ module: "EMPLOYEES", action: "ADD" })
-  async uploadExcelEmployees(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req
-  ) {
+  async uploadExcelEmployees(@UploadedFile() file: FileType, @Request() req) {
     if (!file) {
       throw new BadRequestException("No file uploaded or invalid file type.");
     }

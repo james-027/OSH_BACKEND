@@ -19,10 +19,9 @@ import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import * as XLSX from "xlsx";
-import { FileInterceptor } from "@nestjs/platform-express";
 import { UseInterceptors } from "@nestjs/common";
-import { diskStorage } from "multer";
-import { extname } from "path";
+import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
+import { excelFileFilter, generateTimestampFilename, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 
@@ -124,14 +123,14 @@ export class SalesBudgetTransactionsController {
     FileInterceptor("file", {
       storage: diskStorage({
         destination: "./uploads/sales-budget-trans",
-        filename: fileName,
+        filename: generateTimestampFilename,
       }),
       fileFilter: excelFileFilter,
-      limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     })
   )
   async uploadExcel(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: FileType,
     @Req() req: any
   ) {
     if (!file) {
@@ -172,13 +171,4 @@ export class SalesBudgetTransactionsController {
   }
 }
 
-function excelFileFilter(req, file, cb) {
-  if (!file.originalname.match(/\.(xlsx|xls)$/)) {
-    return cb(new Error("Only Excel files are allowed!"), false);
-  }
-  cb(null, true);
-}
 
-function fileName(req, file, cb) {
-  cb(null, `${Date.now()}-${file.originalname}`);
-}

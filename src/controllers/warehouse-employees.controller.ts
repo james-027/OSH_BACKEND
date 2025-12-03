@@ -20,15 +20,12 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { WarehouseEmployeesService } from "../services/warehouse-employees.service";
 import { CreateWarehouseEmployeeDto } from "../dto/CreateWarehouseEmployeeDto";
 import { UpdateWarehouseEmployeeDto } from "../dto/UpdateWarehouseEmployeeDto";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
+import { excelFileFilter, generateTimestampFilename, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
 import * as XLSX from "xlsx";
-import { diskStorage } from "multer";
-import { extname } from "path";
 import { WarehousesService } from "../services/warehouses.service";
 import { EmployeesService } from "../services/employees.service";
 import { StatusService } from "../services/status.service";
-import { Request as ExpressRequest } from "express";
-import { Multer } from "multer";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 
@@ -134,14 +131,14 @@ export class WarehouseEmployeesController {
     FileInterceptor("file", {
       storage: diskStorage({
         destination: "./uploads/warehouse-emp",
-        filename: fileName,
+        filename: generateTimestampFilename,
       }),
       fileFilter: excelFileFilter,
-      limits: { fileSize: 8 * 1024 * 1024 }, // 8MB limit
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     })
   )
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
-  async uploadExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+  async uploadExcel(@UploadedFile() file: FileType, @Request() req) {
     if (!file) {
       throw new BadRequestException("No file uploaded or invalid file type.");
     }
@@ -367,33 +364,4 @@ export class WarehouseEmployeesController {
   }
 }
 
-interface ExcelFileFilterRequest extends ExpressRequest {
-  file: Express.Multer.File;
-}
 
-type ExcelFileFilterCallback = (
-  error: Error | null,
-  acceptFile: boolean
-) => void;
-
-function excelFileFilter(
-  req: ExcelFileFilterRequest,
-  file: Express.Multer.File,
-  cb: ExcelFileFilterCallback
-): void {
-  if (!file.originalname.match(/\.(xlsx|xls)$/)) {
-    return cb(new Error("Only Excel files are allowed!"), false);
-  }
-  cb(null, true);
-}
-
-interface FileNameRequest extends ExpressRequest {}
-interface FileNameFile extends Express.Multer.File {}
-
-function fileName(
-  req: FileNameRequest,
-  file: FileNameFile,
-  cb: (error: Error | null, filename: string) => void
-): void {
-  cb(null, `${Date.now()}-${file.originalname}`);
-}
