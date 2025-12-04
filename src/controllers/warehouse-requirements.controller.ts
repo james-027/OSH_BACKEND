@@ -22,7 +22,7 @@ export class WarehousesRequirementsController {
   constructor(private readonly warehousesService: WarehousesService) {}
 
   @Get("/stores/:warehouse_type_id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAll(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Request() req
@@ -39,7 +39,7 @@ export class WarehousesRequirementsController {
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehousesService.findOne(id);
   }

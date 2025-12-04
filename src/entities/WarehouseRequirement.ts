@@ -1,0 +1,110 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Unique,
+  OneToMany,
+} from "typeorm";
+import { Status } from "./Status";
+import { User } from "./User";
+import { Requirement } from "./Requirement";
+import { Warehouse } from "./Warehouse";
+import { WarehouseRequirementDue } from "./WarehouseRequirementDue";
+import { WarehouseRequirementStart } from "./WarehouseRequirementStart";
+
+@Entity("warehouse_requirements")
+@Unique("UQ_wh_id_requirement_id", ["warehouse_id", "requirement_id"])
+export class WarehouseRequirement {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  warehouse_id: number;
+
+  @Column()
+  requirement_id: number;
+
+  @Column({ default: 1 })
+  status_id: number;
+
+  @Column({ nullable: true })
+  created_by: number;
+
+  @Column({ nullable: true })
+  updated_by: number;
+
+  @CreateDateColumn({
+    type: "timestamp",
+    default: () => "CURRENT_TIMESTAMP(6)",
+  })
+  created_at: Date;
+
+  @UpdateDateColumn({
+    type: "timestamp",
+    default: () => "CURRENT_TIMESTAMP(6)",
+    onUpdate: "CURRENT_TIMESTAMP(6)",
+  })
+  modified_at: Date;
+
+  @ManyToOne(() => Status, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "status_id" })
+  status: Status;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "created_by" })
+  createdBy: User;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "updated_by" })
+  updatedBy: User;
+
+  // Foreign key to requirement entity
+  @ManyToOne(() => Warehouse, (warehouse) => warehouse.warehouseRequirements, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse!: Warehouse;
+
+  @ManyToOne(
+    () => Requirement,
+    (requirement) => requirement.warehouseRequirements,
+    {
+      eager: false,
+      onDelete: "RESTRICT",
+      onUpdate: "CASCADE",
+    }
+  )
+  @JoinColumn({ name: "requirement_id" })
+  requirement!: Requirement;
+
+  @OneToMany(
+    () => WarehouseRequirementDue,
+    (warehouseRequirementDue) => warehouseRequirementDue.warehouseRequirement
+  )
+  warehouseRequirementDues!: WarehouseRequirementDue[];
+
+  @OneToMany(
+    () => WarehouseRequirementStart,
+    (warehouseRequirementStart) =>
+      warehouseRequirementStart.warehouseRequirement
+  )
+  warehouseRequirementStarts!: WarehouseRequirementStart[];
+}

@@ -7,6 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
+  OneToMany,
 } from "typeorm";
 import { WarehouseType } from "./WarehouseType";
 import { Location } from "./Location";
@@ -14,6 +15,7 @@ import { Segment } from "./Segment";
 import { Status } from "./Status";
 import { User } from "./User";
 import { AccessKey } from "./AccessKey";
+import { WarehouseRequirement } from "./WarehouseRequirement";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -102,4 +104,10 @@ export class Warehouse {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+  @OneToMany(
+    () => WarehouseRequirement,
+    (warehouseRequirement) => warehouseRequirement.warehouse
+  )
+  warehouseRequirements!: WarehouseRequirement[];
 }

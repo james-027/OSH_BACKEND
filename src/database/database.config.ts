@@ -46,6 +46,10 @@ import { ReminderType } from "../entities/ReminderType";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
 import { RequirementReminder } from "../entities/RequirementReminder";
+import { WarehouseRequirement } from "../entities/WarehouseRequirement";
+import { WarehouseRequirementDue } from "../entities/WarehouseRequirementDue";
+import { WarehouseRequirementStart } from "../entities/WarehouseRequirementStart";
+import { SyncLog } from "../entities/syncLog";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -95,6 +99,10 @@ export const entities = [
   RenewalType,
   Requirement,
   RequirementReminder,
+  WarehouseRequirement,
+  WarehouseRequirementDue,
+  WarehouseRequirementStart,
+  SyncLog,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
