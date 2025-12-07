@@ -89,9 +89,11 @@ export class ReqTransactionHeadersController {
     @Request() req
   ) {
     const userId = req.user?.id || 1;
+    const accessKeyId = req.user.current_access_key;
     return await this.reqTransactionHeadersService.createWithDetails(
       createDto,
-      userId
+      userId,
+      accessKeyId
     );
   }
 }

@@ -10,4 +10,8 @@ export class CreateWarehouseRequirementDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  access_key_id?: number;
 }

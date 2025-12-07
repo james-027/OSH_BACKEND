@@ -3,7 +3,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, LogLevel } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
@@ -17,15 +17,25 @@ async function bootstrap() {
   let app: any;
   const configService = new ConfigService();
 
+  // Determine log levels based on environment
+  const isDevelopment = process.env.NODE_ENV !== "production";
+  const logLevels: LogLevel[] = isDevelopment
+    ? ["error", "warn", "debug"]
+    : ["error", "warn"];
+
   if (USE_FASTIFY) {
     // Fastify setup
     const { FastifyAdapter } = await import("@nestjs/platform-fastify");
-    app = await NestFactory.create(AppModule, new FastifyAdapter());
+    app = await NestFactory.create(AppModule, new FastifyAdapter(), {
+      logger: logLevels,
+    });
     logger.info("⚡ Running with Fastify adapter");
     await setupFastify(app, configService);
   } else {
     // Express setup (default)
-    app = await NestFactory.create(AppModule);
+    app = await NestFactory.create(AppModule, {
+      logger: logLevels,
+    });
     logger.info("🚀 Running with Express adapter");
     await setupExpress(app, configService);
   }
@@ -57,7 +67,7 @@ async function setupExpress(app: any, configService: ConfigService) {
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
     : ["*"];
 
-  console.log("🌍 CORS Origins configured:", corsOrigins);
+  logger.info("🌍 CORS Origins configured:", corsOrigins);
 
   // Enable CORS
   app.use(
@@ -65,10 +75,10 @@ async function setupExpress(app: any, configService: ConfigService) {
       origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         if (corsOrigins.includes("*") || corsOrigins.includes(origin)) {
-          console.log(`✅ CORS: Allowing origin: ${origin}`);
+          logger.info(`✅ CORS: Allowing origin: ${origin}`);
           return callback(null, true);
         }
-        console.log(`❌ CORS: Rejecting origin: ${origin}`);
+        logger.error(`❌ CORS: Rejecting origin: ${origin}`);
         return callback(
           new Error(`CORS policy violation: Origin ${origin} not allowed`),
           false
@@ -118,17 +128,17 @@ async function setupFastify(app: any, configService: ConfigService) {
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
     : ["*"];
 
-  console.log("🌍 CORS Origins configured:", corsOrigins);
+  logger.info("🌍 CORS Origins configured:", corsOrigins);
 
   // Register CORS
   await app.register(fastifyCors.default, {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (corsOrigins.includes("*") || corsOrigins.includes(origin)) {
-        console.log(`✅ CORS: Allowing origin: ${origin}`);
+        logger.info(`✅ CORS: Allowing origin: ${origin}`);
         return callback(null, true);
       }
-      console.log(`❌ CORS: Rejecting origin: ${origin}`);
+      logger.error(`❌ CORS: Rejecting origin: ${origin}`);
       return callback(
         new Error(`CORS policy violation: Origin ${origin} not allowed`),
         false

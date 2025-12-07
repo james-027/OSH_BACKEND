@@ -15,6 +15,7 @@ import { Requirement } from "./Requirement";
 import { Warehouse } from "./Warehouse";
 import { ReqTransactionDetail } from "./ReqTransactionDetail";
 import { ReqTransactionDue } from "./ReqTransactionDue";
+import { AccessKey } from "./AccessKey";
 
 @Entity("req_transaction_headers")
 export class ReqTransactionHeader {
@@ -57,6 +58,17 @@ export class ReqTransactionHeader {
     onUpdate: "CURRENT_TIMESTAMP(6)",
   })
   modified_at: Date;
+
+  @Column({ nullable: true })
+  access_key_id: number;
+
+  @ManyToOne(() => AccessKey, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 
   @ManyToOne(() => Status, {
     eager: false,

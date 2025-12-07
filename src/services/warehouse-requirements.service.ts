@@ -52,11 +52,16 @@ export class WarehouseRequirementsService {
     ];
   }
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId) {
+        where.access_key_id = accessKeyId;
+      }
       const warehouseRequirements =
         await this.warehouseRequirementsRepository.find({
           relations: this.getDataRepoRelations(),
+          where: Object.keys(where).length ? where : undefined,
         });
 
       return this.responseMapperService.mapEntitiesToResponse(
@@ -384,6 +389,7 @@ export class WarehouseRequirementsService {
               warehouse_id: warehouse.id,
               requirement_id: requirement.id,
               status_id: 1,
+              access_key_id: warehouse.access_key_id,
               created_by: 1, // System user
             });
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { SalesTransactionsDwhService } from "../services/sales-transactions-dwh.service";
+import logger from "../config/logger";
 
 @Injectable()
 export class SalesTransactionsDwhScheduler {
@@ -11,7 +12,7 @@ export class SalesTransactionsDwhScheduler {
   // Runs every day at 2:00 AM
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleCron() {
-    this.logger.log("Starting scheduled DWH pull for sales transactions...");
+    logger.info("Starting scheduled DWH pull for sales transactions...");
     // Default: previous day
     const today = new Date();
     const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -22,6 +23,6 @@ export class SalesTransactionsDwhScheduler {
     //   startDate: start,
     //   endDate: end,
     // });
-    this.logger.log("Finished scheduled DWH pull for sales transactions.");
+    logger.info("Finished scheduled DWH pull for sales transactions.");
   }
 }

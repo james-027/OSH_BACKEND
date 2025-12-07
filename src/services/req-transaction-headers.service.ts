@@ -290,7 +290,8 @@ export class ReqTransactionHeadersService {
    */
   async createWithDetails(
     createDto: CreateReqTransactionWithDetailsDto,
-    userId: number
+    userId: number,
+    accessKeyId: number
   ): Promise<any> {
     const successResults: any[] = [];
     const errors: any[] = [];
@@ -489,6 +490,8 @@ export class ReqTransactionHeadersService {
             trans_date: calculatedTransDate,
             trans_remarks: createDto.remarks || null,
             trans_due_status_id: transDueStatusId,
+            created_by: userId,
+            access_key_id: accessKeyId,
             status_id: 1,
           };
 
