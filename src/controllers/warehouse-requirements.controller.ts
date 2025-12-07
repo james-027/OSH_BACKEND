@@ -38,6 +38,25 @@ export class WarehousesRequirementsController {
     );
   }
 
+  @Get("/stores/:warehouse_type_id/:status_id")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  async findAllPerStatus(
+    @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
+    @Param("status_id", ParseIntPipe) statusId: number,
+    @Request() req
+  ) {
+    const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+    return this.warehousesService.findAllPerStatus(
+      warehouseTypeId,
+      statusId,
+      accessKeyId,
+      userId,
+      roleId
+    );
+  }
+
   @Get(":id")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {

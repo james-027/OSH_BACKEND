@@ -67,6 +67,71 @@ export class WarehousesService {
       segment_id: w.segment_id,
       address: w.address,
       status_id: w.status_id,
+      rem_status_id: w.rem_status_id,
+      created_at: w.created_at,
+      created_by: w.created_by,
+      updated_by: w.updated_by,
+      modified_at: w.modified_at,
+      warehouse_type_name: w.warehouseType
+        ? w.warehouseType.warehouse_type_name
+        : null,
+      location_name: w.location ? w.location.location_name : null,
+      segment_name: w.segment ? w.segment.segment_name : null,
+      status_name: w.status ? w.status.status_name : null,
+      rem_status_name: w.remStatus ? w.remStatus.status_name : null,
+      created_user: w.createdBy
+        ? `${w.createdBy.first_name} ${w.createdBy.last_name}`
+        : null,
+      updated_user: w.updatedBy
+        ? `${w.updatedBy.first_name} ${w.updatedBy.last_name}`
+        : null,
+    }));
+  }
+
+  async findAllPerStatus(
+    warehouse_type_id?: number,
+    statusId?: number,
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number
+  ): Promise<any[]> {
+    const where: any = {};
+    if (warehouse_type_id) {
+      where.warehouse_type_id = warehouse_type_id;
+    }
+    if (statusId) {
+      where.status_id = statusId;
+    }
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
+    }
+    if (userId && roleId) {
+      const userLocations = await this.getUserLocationIds(userId, roleId);
+      const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      where.location_id = In(allowedLocationIds);
+    }
+    const warehouses = await this.warehousesRepository.find({
+      where,
+      relations: [
+        "warehouseType",
+        "location",
+        "segment",
+        "status",
+        "remStatus",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
+    return warehouses.map((w) => ({
+      id: w.id,
+      warehouse_name: w.warehouse_name,
+      warehouse_ifs: w.warehouse_ifs,
+      warehouse_code: w.warehouse_code,
+      warehouse_type_id: w.warehouse_type_id,
+      location_id: w.location_id,
+      segment_id: w.segment_id,
+      address: w.address,
+      status_id: w.status_id,
       created_at: w.created_at,
       created_by: w.created_by,
       updated_by: w.updated_by,

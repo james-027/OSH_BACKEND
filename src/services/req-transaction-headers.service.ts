@@ -1,0 +1,758 @@
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, In } from "typeorm";
+
+import { UsersService } from "./users.service";
+import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
+
+import { ReqTransactionHeader } from "src/entities/ReqTransactionHeader";
+import { Warehouse } from "src/entities/Warehouse";
+import { Requirement } from "src/entities/Requirement";
+import { CreateReqTransactionHeaderDto } from "src/dto/CreateReqTransactionHeaderDto";
+import { UpdateReqTransactionHeaderDto } from "src/dto/UpdateReqTransactionHeaderDto";
+import { ResponseMapperService } from "./response-mapper.service";
+import { SyncLog } from "src/entities/syncLog";
+import { WarehouseRequirement } from "src/entities/WarehouseRequirement";
+import { WarehouseRequirementDue } from "src/entities/WarehouseRequirementDue";
+import { RequirementReminder } from "src/entities/RequirementReminder";
+import { ReqTransactionDetailsService } from "./req-transaction-details.service";
+import { ReqTransactionDuesService } from "./req-transaction-dues.service";
+import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.service";
+import { CreateReqTransactionWithDetailsDto } from "src/dto/CreateReqTransactionWithDetailsDto";
+import { formatDateToString } from "src/utils/date.utils";
+import { FileUploadHandler } from "src/utils/file-upload.utils";
+
+@Injectable()
+export class ReqTransactionHeadersService {
+  constructor(
+    @InjectRepository(ReqTransactionHeader)
+    private reqTransactionHeadersRepository: Repository<ReqTransactionHeader>,
+    @InjectRepository(Warehouse)
+    private warehousesRepository: Repository<Warehouse>,
+    @InjectRepository(Requirement)
+    private requirementsRepository: Repository<Requirement>,
+    @InjectRepository(WarehouseRequirement)
+    private warehouseRequirementsRepository: Repository<WarehouseRequirement>,
+    @InjectRepository(WarehouseRequirementDue)
+    private warehouseRequirementDuesRepository: Repository<WarehouseRequirementDue>,
+    @InjectRepository(RequirementReminder)
+    private requirementRemindersRepository: Repository<RequirementReminder>,
+    @InjectRepository(SyncLog)
+    private syncLogRepository: Repository<SyncLog>,
+    private usersService: UsersService,
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private responseMapperService: ResponseMapperService,
+    private reqTransactionDetailsService: ReqTransactionDetailsService,
+    private reqTransactionDuesService: ReqTransactionDuesService,
+    private warehouseRequirementDuesService: WarehouseRequirementDuesService
+  ) {}
+
+  private getDataRepoRelations(): string[] {
+    return [
+      "status",
+      "createdBy",
+      "updatedBy",
+      "warehouse",
+      "warehouse.location",
+      "warehouse.segment",
+      "warehouse.warehouseType",
+      "requirement",
+      "transDueStatus",
+    ];
+  }
+
+  async findAll(): Promise<any[]> {
+    try {
+      const records = await this.reqTransactionHeadersRepository.find({
+        relations: this.getDataRepoRelations(),
+      });
+
+      return this.responseMapperService.mapEntitiesToResponse(records);
+    } catch (error) {
+      throw new Error("Failed to fetch req transaction headers");
+    }
+  }
+
+  async findOne(id: number): Promise<any> {
+    try {
+      const record = await this.reqTransactionHeadersRepository.findOne({
+        where: { id },
+        relations: this.getDataRepoRelations(),
+      });
+
+      if (!record) {
+        throw new NotFoundException(
+          `Req transaction header with ID ${id} not found`
+        );
+      }
+
+      return this.responseMapperService.mapEntityToResponse(record);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new Error("Failed to fetch req transaction header");
+    }
+  }
+
+  async create(
+    createDto: CreateReqTransactionHeaderDto,
+    userId: number
+  ): Promise<any> {
+    try {
+      // Check unique constraint: (warehouse_id, requirement_id, trans_date, status_id)
+      const existingRecord = await this.reqTransactionHeadersRepository.findOne(
+        {
+          where: {
+            warehouse_id: createDto.warehouse_id,
+            requirement_id: createDto.requirement_id,
+            trans_date: createDto.trans_date,
+            status_id: createDto.status_id || 1,
+          },
+        }
+      );
+
+      if (existingRecord) {
+        throw new BadRequestException(
+          "This req transaction header combination already exists"
+        );
+      }
+
+      const createdByUser = await this.usersService.findUserById(userId);
+      if (!createdByUser) {
+        throw new BadRequestException("Authenticated user not found");
+      }
+
+      const newRecord = this.reqTransactionHeadersRepository.create({
+        warehouse_id: createDto.warehouse_id,
+        requirement_id: createDto.requirement_id,
+        trans_date: createDto.trans_date,
+        trans_remarks: createDto.trans_remarks || null,
+        trans_due_status_id: createDto.trans_due_status_id || 1,
+        status_id: createDto.status_id || 1,
+        created_by: userId,
+      });
+
+      const savedRecord =
+        await this.reqTransactionHeadersRepository.save(newRecord);
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionHeadersService",
+          method: "create",
+          raw_data: JSON.stringify(createDto),
+          description: `Created req transaction header ID: ${savedRecord.id}`,
+          status_id: 1,
+        },
+        userId
+      );
+
+      return this.findOne(savedRecord.id);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new Error("Failed to create req transaction header");
+    }
+  }
+
+  async update(
+    id: number,
+    updateDto: UpdateReqTransactionHeaderDto,
+    userId: number
+  ): Promise<any> {
+    try {
+      const record = await this.reqTransactionHeadersRepository.findOne({
+        where: { id },
+      });
+
+      if (!record) {
+        throw new NotFoundException(
+          `Req transaction header with ID ${id} not found`
+        );
+      }
+
+      // Check unique constraint if updating these fields
+      if (
+        updateDto.warehouse_id ||
+        updateDto.requirement_id ||
+        updateDto.trans_date ||
+        updateDto.status_id
+      ) {
+        const checkWarehouseId = updateDto.warehouse_id || record.warehouse_id;
+        const checkRequirementId =
+          updateDto.requirement_id || record.requirement_id;
+        const checkTransDate = updateDto.trans_date || record.trans_date;
+        const checkStatusId = updateDto.status_id || record.status_id;
+
+        const duplicateCheck =
+          await this.reqTransactionHeadersRepository.findOne({
+            where: {
+              warehouse_id: checkWarehouseId,
+              requirement_id: checkRequirementId,
+              trans_date: checkTransDate,
+              status_id: checkStatusId,
+            },
+          });
+
+        if (duplicateCheck && duplicateCheck.id !== id) {
+          throw new BadRequestException(
+            "This req transaction header combination already exists"
+          );
+        }
+      }
+
+      const updatedByUser = await this.usersService.findUserById(userId);
+      if (!updatedByUser) {
+        throw new BadRequestException("Authenticated user not found");
+      }
+
+      Object.assign(record, {
+        ...updateDto,
+        updated_by: userId,
+      });
+
+      const savedRecord =
+        await this.reqTransactionHeadersRepository.save(record);
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionHeadersService",
+          method: "update",
+          raw_data: JSON.stringify(updateDto),
+          description: `Updated req transaction header ID: ${id}`,
+          status_id: 1,
+        },
+        userId
+      );
+
+      return this.findOne(savedRecord.id);
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to update req transaction header");
+    }
+  }
+
+  async toggleStatus(id: number, userId: number): Promise<any> {
+    try {
+      const record = await this.reqTransactionHeadersRepository.findOne({
+        where: { id },
+      });
+
+      if (!record) {
+        throw new NotFoundException(
+          `Req transaction header with ID ${id} not found`
+        );
+      }
+
+      const newStatusId = record.status_id === 1 ? 2 : 1;
+
+      record.status_id = newStatusId;
+      record.updated_by = userId;
+
+      const saved = await this.reqTransactionHeadersRepository.save(record);
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionHeadersService",
+          method: "toggleStatus",
+          raw_data: JSON.stringify({ id, newStatusId }),
+          description: `Toggled status for req transaction header ID: ${id} to status: ${newStatusId}`,
+          status_id: 1,
+        },
+        userId
+      );
+
+      return this.findOne(saved.id);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new Error("Failed to toggle req transaction header status");
+    }
+  }
+
+  /**
+   * Complex transaction creation with cascade operations
+   * Creates headers, details, dues, and warehouse_requirement_dues
+   */
+  async createWithDetails(
+    createDto: CreateReqTransactionWithDetailsDto,
+    userId: number
+  ): Promise<any> {
+    const successResults: any[] = [];
+    const errors: any[] = [];
+
+    try {
+      //* Step 1: Validate requirement exists
+      const requirement = await this.requirementsRepository.findOne({
+        where: { id: createDto.requirement_id },
+      });
+
+      if (!requirement) {
+        throw new BadRequestException(
+          `Requirement with ID ${createDto.requirement_id} not found`
+        );
+      }
+
+      //* Step 2: Get all warehouses from warehouse_ids
+      const warehouses = await this.warehousesRepository.find({
+        where: { id: In(createDto.warehouse_ids) },
+      });
+
+      if (warehouses.length === 0) {
+        throw new BadRequestException(
+          `No warehouses found for provided warehouse_ids`
+        );
+      }
+
+      // Create a map of warehouse_ifs to warehouse for file mapping
+      const warehouseByIfs = new Map(
+        warehouses.map((w) => [w.warehouse_ifs, w])
+      );
+
+      //* Step 3: Calculate trans_date based on renewal_type_id
+      let calculatedTransDate = formatDateToString(new Date());
+
+      if (createDto.renewal_type_id === 1) {
+        // ONE TIME: use today
+        calculatedTransDate = formatDateToString(new Date());
+      } else if (createDto.renewal_type_id === 2) {
+        // ANNUAL: year only from transaction_date, add to current year
+        if (!createDto.transaction_date) {
+          throw new BadRequestException(
+            "transaction_date (year) is required for ANNUAL renewal type"
+          );
+        }
+        const year = parseInt(createDto.transaction_date, 10);
+        const transDate = new Date(
+          year,
+          requirement.requirement_start - 1,
+          requirement.requirement_start_days
+        );
+        calculatedTransDate = formatDateToString(transDate);
+      } else if (createDto.renewal_type_id === 3) {
+        // QUARTERLY: year + quarter
+        if (!createDto.transaction_date || createDto.quarter === undefined) {
+          throw new BadRequestException(
+            "transaction_date (year) and quarter are required for QUARTERLY renewal type"
+          );
+        }
+        const year = parseInt(createDto.transaction_date, 10);
+        const quarterMonth =
+          (createDto.quarter - 1) * 3 + requirement.requirement_start;
+        const transDate = new Date(
+          year,
+          quarterMonth - 1,
+          requirement.requirement_start_days
+        );
+        calculatedTransDate = formatDateToString(transDate);
+      } else if (createDto.renewal_type_id === 4) {
+        // MONTHLY: year + month
+        if (!createDto.transaction_date) {
+          throw new BadRequestException(
+            "transaction_date (YYYY-MM) is required for MONTHLY renewal type"
+          );
+        }
+        const [year, month] = createDto.transaction_date.split("-").map(Number);
+        const transDate = new Date(
+          year,
+          month - 1,
+          requirement.requirement_start_days
+        );
+        calculatedTransDate = formatDateToString(transDate);
+      }
+
+      //* Step 4: Validation and header creation per warehouse
+      for (const warehouse of warehouses) {
+        try {
+          // Get warehouse requirement
+          const warehouseRequirement =
+            await this.warehouseRequirementsRepository.findOne({
+              where: {
+                warehouse_id: warehouse.id,
+                requirement_id: createDto.requirement_id,
+              },
+              relations: ["requirement"],
+            });
+
+          if (!warehouseRequirement) {
+            errors.push({
+              warehouse_id: warehouse.id,
+              reason:
+                "Warehouse requirement not found for this warehouse and requirement",
+              field: "warehouse_id",
+            });
+            continue;
+          }
+
+          //? Get current warehouse requirement due (today's due period)
+          const today = formatDateToString(new Date());
+          let currentDue: WarehouseRequirementDue;
+
+          if (createDto.renewal_type_id === 1) {
+            //* ONE TIME: get ANY due for this warehouse_requirement and status (no date filter)
+            currentDue = await this.warehouseRequirementDuesRepository.findOne({
+              where: {
+                warehouse_requirement_id: warehouseRequirement.id,
+                status_id: 1,
+              },
+              order: { id: "DESC" },
+            });
+          } else {
+            //* OTHER TYPES: get due record within today's date range
+            currentDue = await this.warehouseRequirementDuesRepository
+              .createQueryBuilder("due")
+              .where(
+                "due.warehouse_requirement_id = :wrId and due.status_id = 1",
+                {
+                  wrId: warehouseRequirement.id,
+                }
+              )
+              .andWhere("due.warehouse_requirement_due_start <= :today", {
+                today,
+              })
+              .andWhere("due.warehouse_requirement_due_end >= :today", {
+                today,
+              })
+              .getOne();
+          }
+
+          if (!currentDue) {
+            errors.push({
+              warehouse_id: warehouse.id,
+              reason: "Current warehouse requirement due not found",
+              field: "warehouse_requirement_due",
+            });
+            continue;
+          }
+
+          //* Step 5: Validate advance trans (if renewal_type ≠ ONE_TIME)
+          if (createDto.renewal_type_id !== 1) {
+            if (
+              calculatedTransDate > currentDue.warehouse_requirement_due_end
+            ) {
+              errors.push({
+                warehouse_id: warehouse.id,
+                reason:
+                  "Advanced Date Transaction is not allowed. Please transact the previous deadline first.",
+                field: "trans_date",
+                trans_date: calculatedTransDate,
+              });
+              continue;
+            }
+          }
+
+          //* Step 6: Calculate trans_due_status_id based on reminder type
+          const daysDiff = Math.ceil(
+            (new Date(currentDue.warehouse_requirement_due_end).getTime() -
+              new Date().getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+
+          const reminderRecord =
+            await this.requirementRemindersRepository.findOne({
+              where: {
+                requirement_id: createDto.requirement_id,
+              },
+              relations: ["reminderType"],
+              order: { reminder_count_day: "DESC" },
+            });
+
+          let transDueStatusId = 1; // default: active
+          if (reminderRecord && daysDiff <= reminderRecord.reminder_count_day) {
+            //* Check if reminder type is "overdue"
+            const reminderTypeName =
+              reminderRecord.reminderType?.reminder_type_name?.toLowerCase() ||
+              "";
+            if (reminderTypeName.includes("overdue")) {
+              transDueStatusId = 2; // overdue status
+            }
+          }
+
+          //* Step 7: Create transaction header
+          const headerDto = {
+            warehouse_id: warehouse.id,
+            requirement_id: createDto.requirement_id,
+            trans_date: calculatedTransDate,
+            trans_remarks: createDto.remarks || null,
+            trans_due_status_id: transDueStatusId,
+            status_id: 1,
+          };
+
+          const headerRecord =
+            this.reqTransactionHeadersRepository.create(headerDto);
+          const savedHeader =
+            await this.reqTransactionHeadersRepository.save(headerRecord);
+
+          //* Audit trail for header
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "ReqTransactionHeadersService",
+              method: "createWithDetails",
+              raw_data: JSON.stringify(headerDto),
+              description: `Created req transaction header ID: ${savedHeader.id} with cascade details`,
+              status_id: 1,
+            },
+            userId
+          );
+
+          //* Step 8: Create warehouse requirement due (new cycle) - ONLY for non-ONE_TIME types
+          if (createDto.renewal_type_id !== 1) {
+            try {
+              const lastDue =
+                await this.warehouseRequirementDuesRepository.findOne({
+                  where: {
+                    warehouse_requirement_id: warehouseRequirement.id,
+                    status_id: 1,
+                  },
+                  order: { id: "DESC" },
+                });
+
+              const newDueStart = lastDue
+                ? lastDue.warehouse_requirement_due_end
+                : today;
+
+              //* Calculate new due end date based on renewal_type
+              let newDueEnd: string;
+              const startDate = new Date(newDueStart);
+
+              if (createDto.renewal_type_id === 2) {
+                //* ANNUAL
+                startDate.setFullYear(startDate.getFullYear() + 1);
+                newDueEnd = formatDateToString(startDate);
+              } else if (createDto.renewal_type_id === 3) {
+                //* QUARTERLY
+                startDate.setMonth(startDate.getMonth() + 3);
+                newDueEnd = formatDateToString(startDate);
+              } else if (createDto.renewal_type_id === 4) {
+                //* MONTHLY
+                startDate.setMonth(startDate.getMonth() + 1);
+                newDueEnd = formatDateToString(startDate);
+              } else {
+                newDueEnd = newDueStart;
+              }
+
+              const newDueRecord =
+                this.warehouseRequirementDuesRepository.create({
+                  warehouse_requirement_id: warehouseRequirement.id,
+                  warehouse_requirement_due_start: newDueStart,
+                  warehouse_requirement_due_end: newDueEnd,
+                  status_id: 1,
+                  created_by: userId,
+                });
+
+              const savedNewDue =
+                await this.warehouseRequirementDuesRepository.save(
+                  newDueRecord
+                );
+
+              //* Step 9A: Create req_transaction_due linking to the new warehouse_requirement_due
+              const transactionDueDto = {
+                req_transaction_header_id: savedHeader.id,
+                warehouse_requirement_due_id: currentDue.id,
+                status_id: 1,
+              };
+
+              await this.reqTransactionDuesService.create(
+                transactionDueDto,
+                userId
+              );
+
+              //* Step 9B: Deactivate currentDue after successful transaction due creation
+              currentDue.status_id = 2;
+              currentDue.updated_by = userId;
+              await this.warehouseRequirementDuesRepository.save(currentDue);
+            } catch (dueError) {
+              //* Log due creation error but continue with file processing
+              await this.syncLogRepository.save({
+                module: "ReqTransactionHeadersService",
+                type: "createWithDetails",
+                action: "create_warehouse_requirement_due",
+                message: `Error creating warehouse requirement due: ${dueError.message}`,
+                row_data: JSON.stringify({
+                  warehouse_requirement_id: warehouseRequirement.id,
+                }),
+              });
+            }
+          } else {
+            //* ONE TIME: link to current due without creating new cycle
+            try {
+              const transactionDueDto = {
+                req_transaction_header_id: savedHeader.id,
+                warehouse_requirement_due_id: currentDue.id,
+                status_id: 1,
+              };
+
+              await this.reqTransactionDuesService.create(
+                transactionDueDto,
+                userId
+              );
+
+              //* Step 9B: Deactivate currentDue after successful transaction due creation
+              currentDue.status_id = 2;
+              currentDue.updated_by = userId;
+              await this.warehouseRequirementDuesRepository.save(currentDue);
+            } catch (dueError) {
+              //* Log due linking error but continue
+              await this.syncLogRepository.save({
+                module: "ReqTransactionHeadersService",
+                type: "createWithDetails",
+                action: "create_transaction_due",
+                message: `Error linking transaction due: ${dueError.message}`,
+                row_data: JSON.stringify({
+                  req_transaction_header_id: savedHeader.id,
+                  warehouse_requirement_due_id: currentDue.id,
+                }),
+              });
+            }
+          }
+
+          successResults.push({
+            warehouse_id: warehouse.id,
+            warehouse_name: warehouse.warehouse_name || "N/A",
+            req_transaction_header_id: savedHeader.id,
+            trans_date: calculatedTransDate,
+          });
+        } catch (warehouseError) {
+          errors.push({
+            warehouse_id: warehouse.id,
+            reason: warehouseError.message || "Error processing warehouse",
+            field: "warehouse_processing",
+          });
+        }
+      }
+
+      //* Step 10: Process files and create transaction details
+      for (const file of createDto.files) {
+        try {
+          //* Parse warehouse_ifs from filename
+          const parts = file.filename.split(" - ");
+          if (parts.length < 2) {
+            errors.push({
+              file: file.filename,
+              reason:
+                "Invalid filename format. Expected format: 'warehouse_ifs - filename'",
+              field: "filename",
+            });
+            continue;
+          }
+
+          const warehouseIfs = parts[0].trim();
+          const warehouseFromFile = warehouseByIfs.get(warehouseIfs);
+
+          if (!warehouseFromFile) {
+            errors.push({
+              file: file.filename,
+              reason: "Warehouse IFS not found in provided warehouses",
+              field: "warehouse_ifs",
+              warehouse_ifs: warehouseIfs,
+            });
+            continue;
+          }
+
+          //* Find the corresponding header created for this warehouse
+          const correspondingHeader = successResults.find(
+            (s) => s.warehouse_id === warehouseFromFile.id
+          );
+
+          if (!correspondingHeader) {
+            errors.push({
+              file: file.filename,
+              reason: `No transaction header created for warehouse ${warehouseFromFile.id}`,
+              field: "req_transaction_header_id",
+            });
+            continue;
+          }
+
+          //* Validate file before saving
+          const validation = FileUploadHandler.validateFile(
+            file.filename,
+            file.buffer
+          );
+          if (!validation.valid) {
+            errors.push({
+              file: file.filename,
+              reason: validation.error || "File validation failed",
+              field: "file_validation",
+            });
+            continue;
+          }
+
+          //* Save file to disk
+          const savedFileInfo = await FileUploadHandler.saveFile(
+            file.buffer,
+            file.filename,
+            correspondingHeader.req_transaction_header_id,
+            "uploads/req-transactions"
+          );
+
+          //* Create transaction detail with saved file path
+          const detailDto = {
+            req_transaction_header_id:
+              correspondingHeader.req_transaction_header_id,
+            requirement_file_path: savedFileInfo.relativePath,
+            requirement_file_name: savedFileInfo.filename,
+            status_id: 1,
+          };
+
+          await this.reqTransactionDetailsService.create(detailDto, userId);
+        } catch (fileError) {
+          errors.push({
+            file: file.filename,
+            reason: fileError.message || "Error processing file",
+            field: "file_processing",
+          });
+        }
+      }
+
+      //* Step 11: Build consolidated response
+      const response = {
+        success: {
+          warehouse_ids: successResults.map((s) => s.warehouse_id),
+          warehouse_names: successResults.map((s) => s.warehouse_name),
+          req_transaction_header_ids: successResults.map(
+            (s) => s.req_transaction_header_id
+          ),
+          req_transaction_header_count: successResults.length,
+          message: `Successfully created ${successResults.length} transaction(s)`,
+        },
+        errors: errors,
+      };
+
+      return response;
+    } catch (error) {
+      // Log fatal error
+      await this.syncLogRepository.save({
+        module: "ReqTransactionHeadersService",
+        type: "createWithDetails",
+        action: "error",
+        message: error.message || "Unknown error in createWithDetails",
+        row_data: JSON.stringify({
+          warehouse_ids: createDto.warehouse_ids,
+          requirement_id: createDto.requirement_id,
+        }),
+      });
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException(
+        `Transaction creation failed: ${error.message}`
+      );
+    }
+  }
+}

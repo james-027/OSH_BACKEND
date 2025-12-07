@@ -14,6 +14,7 @@ import { User } from "./User";
 import { RenewalType } from "./RenewalType";
 import { RequirementReminder } from "./RequirementReminder";
 import { WarehouseRequirement } from "./WarehouseRequirement";
+import { ReqTransactionHeader } from "./ReqTransactionHeader";
 
 @Entity("requirements")
 @Unique("UQ_requirement_name", ["requirement_name"])
@@ -115,4 +116,10 @@ export class Requirement {
     (warehouseRequirement) => warehouseRequirement.requirement
   )
   warehouseRequirements!: WarehouseRequirement[];
+
+  @OneToMany(
+    () => ReqTransactionHeader,
+    (reqTransactionHeader) => reqTransactionHeader.requirement
+  )
+  reqTransactionHeaders!: ReqTransactionHeader[];
 }

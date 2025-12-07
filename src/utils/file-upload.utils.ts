@@ -1,5 +1,8 @@
 // Reusable file upload utilities for both Express and Fastify
 
+import * as fs from "fs";
+import * as path from "path";
+
 /**
  * Excel file filter - validates that uploaded file is .xlsx or .xls
  */
@@ -47,3 +50,175 @@ export const FILE_SIZE_LIMITS = {
   EXCEL_8MB: 8 * 1024 * 1024,
   DOCUMENT_10MB: 10 * 1024 * 1024,
 };
+
+/**
+ * File validation and save utilities for transaction files
+ */
+export interface FileValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+export interface SavedFileInfo {
+  relativePath: string;
+  filename: string;
+  size: number;
+}
+
+export class FileUploadHandler {
+  private static readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  private static readonly ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
+  private static readonly ALLOWED_MIME_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "application/pdf",
+  ];
+
+  /**
+   * Get MIME type from file extension (optimized for performance)
+   */
+  static getMimeTypeFromExtension(extension: string): string {
+    const ext = extension.toLowerCase();
+    const mimeMap: { [key: string]: string } = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      pdf: "application/pdf",
+    };
+    return mimeMap[ext] || "application/octet-stream";
+  }
+
+  /**
+   * Validate file (size, extension, mime type)
+   * High-performance: O(1) lookups with Set instead of Array.includes()
+   */
+  static validateFile(
+    filename: string,
+    buffer: Buffer | string
+  ): FileValidationResult {
+    try {
+      // Get file extension
+      const ext = path.extname(filename).toLowerCase().slice(1);
+
+      // Validate extension (O(1) lookup)
+      const allowedExtSet = new Set(this.ALLOWED_EXTENSIONS);
+      if (!allowedExtSet.has(ext)) {
+        return {
+          valid: false,
+          error: `Invalid file extension: ${ext}. Allowed: jpg, jpeg, png, pdf`,
+        };
+      }
+
+      // Get buffer size
+      const bufferObj =
+        typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
+      const fileSize = bufferObj.length;
+
+      // Validate size
+      if (fileSize > this.MAX_FILE_SIZE) {
+        return {
+          valid: false,
+          error: `File size ${(fileSize / 1024 / 1024).toFixed(2)}MB exceeds max 5MB`,
+        };
+      }
+
+      // Validate MIME type (O(1) lookup)
+      const mimeType = this.getMimeTypeFromExtension(ext);
+      const allowedMimeSet = new Set(this.ALLOWED_MIME_TYPES);
+      if (!allowedMimeSet.has(mimeType)) {
+        return {
+          valid: false,
+          error: `Invalid MIME type: ${mimeType}`,
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      return {
+        valid: false,
+        error: `Validation error: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Save file to disk with generated unique filename
+   * Format: header-{headerId}-{timestamp}-{originalName}
+   * Returns relative path from project root
+   * High-performance for bulk operations (2000+ files)
+   */
+  static async saveFile(
+    buffer: Buffer | string,
+    filename: string,
+    headerId: number,
+    uploadDir: string = "uploads/req-transactions"
+  ): Promise<SavedFileInfo> {
+    try {
+      // Validate file first (quick fail for invalid files)
+      const validation = this.validateFile(filename, buffer);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
+      // Ensure upload directory exists (lazy creation)
+      const uploadPath = path.join(process.cwd(), uploadDir);
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+
+      // Generate unique filename: header-{headerId}-{timestamp}-{originalName}
+      const ext = path.extname(filename);
+      const nameWithoutExt = path.basename(filename, ext);
+      const timestamp = Date.now();
+      const uniqueFilename = `header-${headerId}-${timestamp}-${nameWithoutExt}${ext}`;
+      const fullPath = path.join(uploadPath, uniqueFilename);
+
+      // Convert buffer if needed (base64 → Buffer)
+      const bufferToSave =
+        typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
+
+      // Save file synchronously for performance
+      // Synchronous is faster for bulk operations than Promise-based writeFile
+      fs.writeFileSync(fullPath, bufferToSave);
+
+      // Return relative path from project root (normalized to forward slashes for frontend)
+      const relativePath = path
+        .relative(process.cwd(), fullPath)
+        .replace(/\\/g, "/");
+
+      return {
+        relativePath,
+        filename: uniqueFilename,
+        size: bufferToSave.length,
+      };
+    } catch (error) {
+      throw new Error(`File save failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Delete file from disk (cleanup on error)
+   */
+  static deleteFile(relativePath: string): void {
+    try {
+      const fullPath = path.join(process.cwd(), relativePath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    } catch (error) {
+      console.error(`Failed to delete file: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if file exists
+   */
+  static fileExists(relativePath: string): boolean {
+    try {
+      const fullPath = path.join(process.cwd(), relativePath);
+      return fs.existsSync(fullPath);
+    } catch {
+      return false;
+    }
+  }
+}

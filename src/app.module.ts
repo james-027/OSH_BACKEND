@@ -55,6 +55,9 @@ import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.mod
 import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
 import { RequirementsModule } from "./modules/requirements/requirements.module";
 import { WarehouseRequirementsModule } from "./modules/warehouse-requirements/warehouse-requirements.module";
+import { ReqTransactionHeadersModule } from "./modules/req-transaction-headers/req-transaction-headers.module";
+import { ReqTransactionDetailsModule } from "./modules/req-transaction-details/req-transaction-details.module";
+import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-transaction-dues.module";
 @Module({
   imports: [
     // Configuration
@@ -117,6 +120,9 @@ import { WarehouseRequirementsModule } from "./modules/warehouse-requirements/wa
     RenewalTypesModule,
     RequirementsModule,
     WarehouseRequirementsModule,
+    ReqTransactionHeadersModule,
+    ReqTransactionDetailsModule,
+    ReqTransactionDuesModule,
   ],
   providers: [
     EmailService,

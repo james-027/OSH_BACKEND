@@ -1,0 +1,48 @@
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsNumber,
+  ValidateNested,
+  ArrayMinSize,
+} from "class-validator";
+import { Type } from "class-transformer";
+
+export class FileWithContent {
+  @IsString()
+  filename: string;
+
+  @IsString()
+  buffer: string; // base64 encoded or file content
+}
+
+export class CreateReqTransactionWithDetailsDto {
+  @IsArray()
+  @IsInt({ each: true })
+  @ArrayMinSize(1)
+  warehouse_ids: number[];
+
+  @IsInt()
+  requirement_id: number;
+
+  @IsInt()
+  renewal_type_id: number; // 1=ONE_TIME, 2=ANNUAL, 3=QUARTERLY, 4=MONTHLY
+
+  @IsOptional()
+  @IsString()
+  transaction_date?: string; // format: YYYY, YYYY-MM, or YYYY-MM-DD depending on renewal_type
+
+  @IsOptional()
+  @IsInt()
+  quarter?: number; // 1-4, only for QUARTERLY
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FileWithContent)
+  files: FileWithContent[];
+}

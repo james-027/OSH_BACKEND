@@ -50,6 +50,9 @@ import { WarehouseRequirement } from "../entities/WarehouseRequirement";
 import { WarehouseRequirementDue } from "../entities/WarehouseRequirementDue";
 import { WarehouseRequirementStart } from "../entities/WarehouseRequirementStart";
 import { SyncLog } from "../entities/syncLog";
+import { ReqTransactionHeader } from "../entities/ReqTransactionHeader";
+import { ReqTransactionDetail } from "../entities/ReqTransactionDetail";
+import { ReqTransactionDue } from "../entities/ReqTransactionDue";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -103,6 +106,9 @@ export const entities = [
   WarehouseRequirementDue,
   WarehouseRequirementStart,
   SyncLog,
+  ReqTransactionHeader,
+  ReqTransactionDetail,
+  ReqTransactionDue,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

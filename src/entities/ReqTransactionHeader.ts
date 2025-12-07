@@ -11,27 +11,30 @@ import {
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
-import { WarehouseRequirement } from "./WarehouseRequirement";
+import { Requirement } from "./Requirement";
+import { Warehouse } from "./Warehouse";
+import { ReqTransactionDetail } from "./ReqTransactionDetail";
 import { ReqTransactionDue } from "./ReqTransactionDue";
 
-@Entity("warehouse_requirement_dues")
-@Unique("UQ_wh_req_id_req_dues", [
-  "warehouse_requirement_id",
-  "warehouse_requirement_due_start",
-  "warehouse_requirement_due_end",
-])
-export class WarehouseRequirementDue {
+@Entity("req_transaction_headers")
+export class ReqTransactionHeader {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
-  warehouse_requirement_id: number;
+  warehouse_id: number;
+
+  @Column()
+  requirement_id: number;
 
   @Column({ type: "date" })
-  warehouse_requirement_due_start: string;
+  trans_date: string;
 
-  @Column({ type: "date" })
-  warehouse_requirement_due_end: string;
+  @Column({ type: "text", nullable: true })
+  trans_remarks: string;
+
+  @Column({ default: 1 })
+  trans_due_status_id: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -60,6 +63,14 @@ export class WarehouseRequirementDue {
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
+  @JoinColumn({ name: "trans_due_status_id" })
+  transDueStatus: Status;
+
+  @ManyToOne(() => Status, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
   @JoinColumn({ name: "status_id" })
   status: Status;
 
@@ -79,22 +90,37 @@ export class WarehouseRequirementDue {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-  // Foreign key to requirement entity
+  // Foreign keys
+  @ManyToOne(() => Warehouse, (warehouse) => warehouse.reqTransactionHeaders, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse!: Warehouse;
+
   @ManyToOne(
-    () => WarehouseRequirement,
-    (warehouseRequirement) => warehouseRequirement.warehouseRequirementDues,
+    () => Requirement,
+    (requirement) => requirement.reqTransactionHeaders,
     {
       eager: false,
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
     }
   )
-  @JoinColumn({ name: "warehouse_requirement_id" })
-  warehouseRequirement!: WarehouseRequirement;
+  @JoinColumn({ name: "requirement_id" })
+  requirement!: Requirement;
+
+  // Reference to entity relations
+  @OneToMany(
+    () => ReqTransactionDetail,
+    (reqTransactionDetail) => reqTransactionDetail.reqTransactionHeader
+  )
+  reqTransactionDetails!: ReqTransactionDetail[];
 
   @OneToMany(
     () => ReqTransactionDue,
-    (reqTransactionDue) => reqTransactionDue.warehouseRequirementDue
+    (reqTransactionDue) => reqTransactionDue.reqTransactionHeader
   )
   reqTransactionDues!: ReqTransactionDue[];
 }

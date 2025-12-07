@@ -6,32 +6,24 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  Unique,
-  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
-import { WarehouseRequirement } from "./WarehouseRequirement";
-import { ReqTransactionDue } from "./ReqTransactionDue";
+import { ReqTransactionHeader } from "./ReqTransactionHeader";
 
-@Entity("warehouse_requirement_dues")
-@Unique("UQ_wh_req_id_req_dues", [
-  "warehouse_requirement_id",
-  "warehouse_requirement_due_start",
-  "warehouse_requirement_due_end",
-])
-export class WarehouseRequirementDue {
+@Entity("req_transaction_details")
+export class ReqTransactionDetail {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
-  warehouse_requirement_id: number;
+  req_transaction_header_id: number;
 
-  @Column({ type: "date" })
-  warehouse_requirement_due_start: string;
+  @Column({ type: "text" })
+  requirement_file_path: string;
 
-  @Column({ type: "date" })
-  warehouse_requirement_due_end: string;
+  @Column({ type: "text" })
+  requirement_file_name: string;
 
   @Column({ default: 1 })
   status_id: number;
@@ -79,22 +71,16 @@ export class WarehouseRequirementDue {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-  // Foreign key to requirement entity
+  // Foreign keys
   @ManyToOne(
-    () => WarehouseRequirement,
-    (warehouseRequirement) => warehouseRequirement.warehouseRequirementDues,
+    () => ReqTransactionHeader,
+    (transactionHeader) => transactionHeader.reqTransactionDetails,
     {
       eager: false,
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
     }
   )
-  @JoinColumn({ name: "warehouse_requirement_id" })
-  warehouseRequirement!: WarehouseRequirement;
-
-  @OneToMany(
-    () => ReqTransactionDue,
-    (reqTransactionDue) => reqTransactionDue.warehouseRequirementDue
-  )
-  reqTransactionDues!: ReqTransactionDue[];
+  @JoinColumn({ name: "req_transaction_header_id" })
+  reqTransactionHeader!: ReqTransactionHeader;
 }

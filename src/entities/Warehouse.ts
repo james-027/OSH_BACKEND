@@ -16,6 +16,7 @@ import { Status } from "./Status";
 import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 import { WarehouseRequirement } from "./WarehouseRequirement";
+import { ReqTransactionHeader } from "./ReqTransactionHeader";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -110,4 +111,10 @@ export class Warehouse {
     (warehouseRequirement) => warehouseRequirement.warehouse
   )
   warehouseRequirements!: WarehouseRequirement[];
+
+  @OneToMany(
+    () => ReqTransactionHeader,
+    (reqTransactionHeader) => reqTransactionHeader.warehouse
+  )
+  reqTransactionHeaders!: ReqTransactionHeader[];
 }
