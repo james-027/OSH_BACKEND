@@ -5,6 +5,10 @@ export class CreateRequirementDto {
   @IsNotEmpty()
   requirement_name!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  requirement_abbr_name!: string;
+
   @IsInt()
   renewal_type_id!: number;
 

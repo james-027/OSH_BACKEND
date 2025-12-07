@@ -25,6 +25,9 @@ export class Requirement {
   @Column({ length: 255 })
   requirement_name: string;
 
+  @Column({ length: 255 })
+  requirement_abbr_name: string;
+
   @Column()
   renewal_type_id: number;
 

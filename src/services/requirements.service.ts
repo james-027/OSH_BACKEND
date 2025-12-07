@@ -96,6 +96,8 @@ export class RequirementsService {
       const newRequirement = this.requirementsRepository.create({
         ...createRequirementDto,
         requirement_name: createRequirementDto.requirement_name.toUpperCase(),
+        requirement_abbr_name:
+          createRequirementDto.requirement_abbr_name.toUpperCase(),
         status_id: createRequirementDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
@@ -187,6 +189,11 @@ export class RequirementsService {
       if (updateRequirementDto.requirement_name) {
         updateRequirementDto.requirement_name =
           updateRequirementDto.requirement_name.toUpperCase();
+      }
+
+      if (updateRequirementDto.requirement_abbr_name) {
+        updateRequirementDto.requirement_abbr_name =
+          updateRequirementDto.requirement_abbr_name.toUpperCase();
       }
 
       Object.assign(requirement, updateRequirementDto, {
