@@ -4,7 +4,7 @@ import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
-import { APP_FILTER } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 
 // Configuration
@@ -45,6 +45,7 @@ import { DashboardModule } from "./modules/dashboard/dashboard.module";
 import { JwtStrategy } from "./guards/jwt.strategy";
 import { PermissionsGuard } from "./guards/permissions.guard";
 import { DynamicPermissionsGuard } from "./guards/dynamic-permissions.guard";
+import { PayloadSizeGuard } from "./guards/payload-size.guard";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
 import { UserAuditTrailModule } from "./modules/users/user-audit-trail.module";
 import { SchedulersModule } from "./modules/schedulers/schedulers.module";
@@ -133,6 +134,10 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PayloadSizeGuard,
     },
   ],
 })

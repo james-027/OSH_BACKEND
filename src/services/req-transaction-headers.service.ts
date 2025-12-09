@@ -297,6 +297,12 @@ export class ReqTransactionHeadersService {
     const errors: any[] = [];
 
     try {
+      // SECURITY: Validate batch before processing
+      const batchValidation = FileUploadHandler.validateBatch(createDto.files);
+      if (!batchValidation.valid) {
+        throw new BadRequestException(batchValidation.error);
+      }
+
       //* Step 1: Validate requirement exists
       const requirement = await this.requirementsRepository.findOne({
         where: { id: createDto.requirement_id },

@@ -73,6 +73,43 @@ export class FileUploadHandler {
     "image/png",
     "application/pdf",
   ];
+  private static readonly MAX_FILES_PER_BATCH = 150; // Security: max 150 files per batch
+  private static readonly MAX_TOTAL_BATCH_SIZE = 750 * 1024 * 1024; // Security: max 750MB total
+
+  /**
+   * Validate entire batch before processing
+   * Security measure: prevents batch DoS attacks
+   */
+  static validateBatch(
+    files: Array<{ filename: string; buffer: string | Buffer }>
+  ): FileValidationResult {
+    // Check batch size
+    if (files.length > this.MAX_FILES_PER_BATCH) {
+      return {
+        valid: false,
+        error: `Batch size ${files.length} exceeds maximum ${this.MAX_FILES_PER_BATCH} files`,
+      };
+    }
+
+    // Check total batch size
+    let totalSize = 0;
+    for (const file of files) {
+      const bufferObj =
+        typeof file.buffer === "string"
+          ? Buffer.from(file.buffer, "base64")
+          : file.buffer;
+      totalSize += bufferObj.length;
+    }
+
+    if (totalSize > this.MAX_TOTAL_BATCH_SIZE) {
+      return {
+        valid: false,
+        error: `Total batch size ${(totalSize / 1024 / 1024).toFixed(2)}MB exceeds maximum ${this.MAX_TOTAL_BATCH_SIZE / 1024 / 1024}MB`,
+      };
+    }
+
+    return { valid: true };
+  }
 
   /**
    * Get MIME type from file extension (optimized for performance)
