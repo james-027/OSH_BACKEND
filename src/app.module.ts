@@ -22,6 +22,7 @@ import { UserLoginSession } from "./entities/UserLoginSession";
 // Services
 import { EmailService } from "./services/email.service";
 import { ResponseMapperService } from "./services/response-mapper.service";
+import { CommonUtilitiesService } from "./services/common-utilities.service";
 
 // Modules
 import { UsersModule } from "./modules/users/users.module";
@@ -131,6 +132,7 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
     PermissionsGuard,
     DynamicPermissionsGuard,
     ResponseMapperService,
+    CommonUtilitiesService,
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,

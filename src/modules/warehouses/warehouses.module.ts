@@ -34,7 +34,8 @@ import { LocationsModule } from "../locations/locations.module";
 import { EmployeesModule } from "../employees/employees.module";
 import { ActionsModule } from "../actions/actions.module";
 import { ItemsModule } from "../items/items.module";
-import { WarehousesRequirementsController } from "src/controllers/warehouse-requirements.controller";
+import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
+import { WarehouseRequirementsController } from "../../controllers/warehouse-requirements.controller";
 
 @Module({
   imports: [
@@ -59,10 +60,11 @@ import { WarehousesRequirementsController } from "src/controllers/warehouse-requ
     EmployeesModule,
     ActionsModule,
     ItemsModule,
+    WarehouseRequirementsModule,
   ],
   controllers: [
     WarehousesController,
-    WarehousesRequirementsController,
+    WarehouseRequirementsController,
     WarehouseTypesController,
     WarehouseRatesController,
     WarehouseHurdlesController,
