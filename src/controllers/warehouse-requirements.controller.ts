@@ -88,7 +88,7 @@ export class WarehouseRequirementsController {
     const roleId = req?.user?.roleId;
     const accessKeyId = req?.user?.accessKeyId;
 
-    return await this.warehouseRequirementsService.getWarehouseRequirementsListing(
+    return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
       warehouse_type_id,
       warehouse_id ? Number(warehouse_id) : undefined,
       date_from,
@@ -117,7 +117,10 @@ export class WarehouseRequirementsController {
    */
   @Get("view/:id")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findOneRequirement(@Param("id", ParseIntPipe) id: number, @Request() req) {
+  async findOneRequirement(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req
+  ) {
     return this.warehouseRequirementsService.findOne(id);
   }
 
