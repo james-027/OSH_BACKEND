@@ -75,7 +75,7 @@ export class WarehouseRequirementsController {
    * GET /warehouse-requirements/stores/:warehouse_type_id/active-stores
    * Optional: warehouse_id, date_from, date_to
    */
-  @Get("stores/:warehouse_type_id/active-stores")
+  @Get("stores/:warehouse_type_id/active-stores-requirements")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async getWarehouseRequirementsListing(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
@@ -99,7 +99,7 @@ export class WarehouseRequirementsController {
     );
   }
 
-  @Get("stores/:warehouse_type_id/count-active-stores")
+  @Get("stores/:warehouse_type_id/count-active-stores-requirements")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async getWarehouseRequirementsListingCounts(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,

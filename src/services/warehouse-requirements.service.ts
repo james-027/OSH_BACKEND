@@ -882,6 +882,48 @@ export class WarehouseRequirementsService {
   }
 
   /**
+   * Reusable warehouse query builder with common filtering
+   * Returns a query builder that can be extended with additional joins/conditions
+   * Handles: warehouse_type_id, rem_status_id, warehouse_id, accessKeyId, allowedLocationIds
+   */
+  private buildBaseWarehouseQuery(
+    warehouse_type_id: number,
+    warehouse_id?: number,
+    accessKeyId?: number,
+    allowedLocationIds?: number[]
+  ) {
+    const query = this.warehousesRepository
+      .createQueryBuilder("warehouse")
+      .leftJoinAndSelect("warehouse.location", "location")
+      .leftJoinAndSelect("warehouse.warehouseType", "warehouseType")
+      .leftJoinAndSelect("warehouse.remStatus", "remStatus")
+      .where("warehouse.warehouse_type_id = :warehouse_type_id", {
+        warehouse_type_id,
+      })
+      .andWhere("warehouse.rem_status_id IN (:...remStatusIds)", {
+        remStatusIds: [8, 9],
+      });
+
+    if (warehouse_id) {
+      query.andWhere("warehouse.id = :warehouse_id", { warehouse_id });
+    }
+
+    if (accessKeyId !== undefined && accessKeyId !== null) {
+      query.andWhere("warehouse.access_key_id = :access_key_id", {
+        access_key_id: accessKeyId,
+      });
+    }
+
+    if (allowedLocationIds && allowedLocationIds.length > 0) {
+      query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
+        allowedLocationIds,
+      });
+    }
+
+    return query;
+  }
+
+  /**
    * OPTIMIZED: Get warehouses with base requirements and transacted requirements listing
    * Uses two-query approach for better performance on large datasets
    * Query 1: Warehouses + Requirements + Starts (without dues)
@@ -908,37 +950,13 @@ export class WarehouseRequirementsService {
           );
       }
 
-      // Step 2: Query warehouses first (minimal joins for structure only)
-      const warehouseQuery = this.warehousesRepository
-        .createQueryBuilder("warehouse")
-        .leftJoinAndSelect("warehouse.location", "location")
-        .leftJoinAndSelect("warehouse.warehouseType", "warehouseType")
-        .leftJoinAndSelect("warehouse.remStatus", "remStatus")
-        .where("warehouse.warehouse_type_id = :warehouse_type_id", {
-          warehouse_type_id,
-        })
-        .andWhere("warehouse.rem_status_id IN (:...remStatusIds)", {
-          remStatusIds: [8, 9],
-        });
-
-      if (warehouse_id) {
-        warehouseQuery.andWhere("warehouse.id = :warehouse_id", {
-          warehouse_id,
-        });
-      }
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseQuery.andWhere("warehouse.access_key_id = :access_key_id", {
-          access_key_id: accessKeyId,
-        });
-      }
-
-      if (allowedLocationIds.length > 0) {
-        warehouseQuery.andWhere(
-          "warehouse.location_id IN (:...allowedLocationIds)",
-          { allowedLocationIds }
-        );
-      }
+      // Step 2: Build and execute warehouse query
+      const warehouseQuery = this.buildBaseWarehouseQuery(
+        warehouse_type_id,
+        warehouse_id,
+        accessKeyId,
+        allowedLocationIds
+      );
 
       const warehouses = await warehouseQuery
         .orderBy("warehouse.warehouse_name", "ASC")
@@ -1047,7 +1065,7 @@ export class WarehouseRequirementsService {
               warehouse,
               date_from,
               date_to,
-              true
+              false
             );
 
           // Get transacted requirements
@@ -1056,7 +1074,7 @@ export class WarehouseRequirementsService {
               warehouse.id,
               date_from,
               date_to,
-              true
+              false
             );
 
           return {
@@ -1117,36 +1135,12 @@ export class WarehouseRequirementsService {
       }
 
       // Step 2: Get warehouse list (minimal query, no nested relations)
-      const warehouseQuery = this.warehousesRepository
-        .createQueryBuilder("warehouse")
-        .leftJoinAndSelect("warehouse.location", "location")
-        .leftJoinAndSelect("warehouse.warehouseType", "warehouseType")
-        .leftJoinAndSelect("warehouse.remStatus", "remStatus")
-        .where("warehouse.warehouse_type_id = :warehouse_type_id", {
-          warehouse_type_id,
-        })
-        .andWhere("warehouse.rem_status_id IN (:...remStatusIds)", {
-          remStatusIds: [8, 9],
-        });
-
-      if (warehouse_id) {
-        warehouseQuery.andWhere("warehouse.id = :warehouse_id", {
-          warehouse_id,
-        });
-      }
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseQuery.andWhere("warehouse.access_key_id = :access_key_id", {
-          access_key_id: accessKeyId,
-        });
-      }
-
-      if (allowedLocationIds.length > 0) {
-        warehouseQuery.andWhere(
-          "warehouse.location_id IN (:...allowedLocationIds)",
-          { allowedLocationIds }
-        );
-      }
+      const warehouseQuery = this.buildBaseWarehouseQuery(
+        warehouse_type_id,
+        warehouse_id,
+        accessKeyId,
+        allowedLocationIds
+      );
 
       const warehouses = await warehouseQuery
         .orderBy("warehouse.warehouse_name", "ASC")
@@ -1277,11 +1271,13 @@ export class WarehouseRequirementsService {
         },
       }));
 
-      return {
-        success: true,
-        data: result,
-        total: result.length,
-      };
+      return result;
+
+      // return {
+      //   success: true,
+      //   data: result,
+      //   total: result.length,
+      // };
     } catch (error) {
       console.error(
         "Error fetching warehouse requirements counts listing:",
