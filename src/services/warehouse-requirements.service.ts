@@ -1090,4 +1090,206 @@ export class WarehouseRequirementsService {
       );
     }
   }
+
+  /**
+   * Get warehouse requirements listing with COUNTS ONLY (ultra-fast)
+   * Returns minimal data: warehouse info + requirement/transaction counts
+   * Optimized for quick dashboard/list views
+   */
+  async getWarehouseRequirementsListingCounts(
+    warehouse_type_id: number,
+    warehouse_id?: number,
+    date_from?: string,
+    date_to?: string,
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number
+  ): Promise<any> {
+    try {
+      // Step 1: Get allowed location IDs based on user and role
+      let allowedLocationIds: number[] = [];
+      if (userId && roleId) {
+        allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId
+          );
+      }
+
+      // Step 2: Get warehouse list (minimal query, no nested relations)
+      const warehouseQuery = this.warehousesRepository
+        .createQueryBuilder("warehouse")
+        .leftJoinAndSelect("warehouse.location", "location")
+        .leftJoinAndSelect("warehouse.warehouseType", "warehouseType")
+        .leftJoinAndSelect("warehouse.remStatus", "remStatus")
+        .where("warehouse.warehouse_type_id = :warehouse_type_id", {
+          warehouse_type_id,
+        })
+        .andWhere("warehouse.rem_status_id IN (:...remStatusIds)", {
+          remStatusIds: [8, 9],
+        });
+
+      if (warehouse_id) {
+        warehouseQuery.andWhere("warehouse.id = :warehouse_id", {
+          warehouse_id,
+        });
+      }
+
+      if (accessKeyId !== undefined && accessKeyId !== null) {
+        warehouseQuery.andWhere("warehouse.access_key_id = :access_key_id", {
+          access_key_id: accessKeyId,
+        });
+      }
+
+      if (allowedLocationIds.length > 0) {
+        warehouseQuery.andWhere(
+          "warehouse.location_id IN (:...allowedLocationIds)",
+          { allowedLocationIds }
+        );
+      }
+
+      const warehouses = await warehouseQuery
+        .orderBy("warehouse.warehouse_name", "ASC")
+        .getMany();
+
+      if (warehouses.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: "No warehouses found matching the criteria",
+        };
+      }
+
+      // Step 3: Get requirement counts per warehouse (filtered by due date range)
+      const warehouseIds = warehouses.map((w) => w.id);
+      let requirementCountsQuery = this.warehouseRequirementsRepository
+        .createQueryBuilder("warehouseRequirement")
+        .select("warehouseRequirement.warehouse_id", "warehouse_id")
+        .addSelect(
+          "COUNT(DISTINCT warehouseRequirement.id)",
+          "requirement_count"
+        )
+        .leftJoin(
+          "warehouseRequirement.warehouseRequirementDues",
+          "warehouseRequirementDue"
+        )
+        .where("warehouseRequirement.warehouse_id IN (:...warehouseIds)", {
+          warehouseIds,
+        });
+
+      // Apply date filtering if provided
+      if (date_from && date_to) {
+        const filterDateFrom = new Date(date_from);
+        const filterDateTo = new Date(date_to);
+
+        requirementCountsQuery = requirementCountsQuery.andWhere(
+          `(
+            warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
+            AND warehouseRequirementDue.warehouse_requirement_due_end >= :filterDateFrom
+          )`,
+          { filterDateFrom, filterDateTo }
+        );
+      } else {
+        // Fallback: count all requirements with status_id = 1 or 2
+        requirementCountsQuery = requirementCountsQuery.andWhere(
+          "warehouseRequirement.status_id IN (:...requirementStatusIds)",
+          { requirementStatusIds: [1, 2] }
+        );
+      }
+
+      requirementCountsQuery = requirementCountsQuery.groupBy(
+        "warehouseRequirement.warehouse_id"
+      );
+
+      const requirementCounts = await requirementCountsQuery.getRawMany();
+
+      // Create map for fast lookup
+      const requirementCountMap = new Map<number, number>();
+      requirementCounts.forEach((rc) => {
+        requirementCountMap.set(
+          parseInt(rc.warehouse_id),
+          parseInt(rc.requirement_count)
+        );
+      });
+
+      // Step 4: Get transaction counts per warehouse
+      const transactionHeaderCountsQuery = this.reqTransactionHeaderRepository
+        .createQueryBuilder("reqTransactionHeader")
+        .select("reqTransactionHeader.warehouse_id", "warehouse_id")
+        .addSelect("COUNT(DISTINCT reqTransactionHeader.id)", "header_count")
+        .addSelect("COUNT(reqTransactionDetail.id)", "detail_count")
+        .leftJoin(
+          "reqTransactionHeader.reqTransactionDetails",
+          "reqTransactionDetail",
+          "reqTransactionDetail.status_id = :detail_status_id"
+        )
+        .where("reqTransactionHeader.warehouse_id IN (:...warehouseIds)", {
+          warehouseIds,
+        })
+        .andWhere("reqTransactionHeader.status_id = :header_status_id", {
+          header_status_id: 1,
+        })
+        .setParameter("detail_status_id", 1);
+
+      // Apply date filtering if provided
+      if (date_from && date_to) {
+        const dateRange = this.commonUtilitiesService.getDateRange(
+          date_from,
+          date_to
+        );
+        transactionHeaderCountsQuery.andWhere(
+          "reqTransactionHeader.trans_date IN (:...dateRange)",
+          { dateRange }
+        );
+      }
+
+      const transactionHeaderCounts = await transactionHeaderCountsQuery
+        .groupBy("reqTransactionHeader.warehouse_id")
+        .getRawMany();
+
+      // Create map for fast lookup
+      const transactionCountMap = new Map<number, any>();
+      transactionHeaderCounts.forEach((tc) => {
+        transactionCountMap.set(parseInt(tc.warehouse_id), {
+          count_hdr: parseInt(tc.header_count) || 0,
+          count_dtl: parseInt(tc.detail_count) || 0,
+        });
+      });
+
+      // Step 5: Build response with counts only
+      const result = warehouses.map((warehouse) => ({
+        id: warehouse.id,
+        location_name: warehouse.location?.location_name || null,
+        warehouse_name: warehouse.warehouse_name,
+        warehouse_ifs: warehouse.warehouse_ifs,
+        warehouse_code: warehouse.warehouse_code,
+        warehouse_type_id: warehouse.warehouse_type_id,
+        warehouse_type_name:
+          warehouse.warehouseType?.warehouse_type_name || null,
+        warehouse_rem_status_name: warehouse.remStatus?.status_name || null,
+        baseRequirements: {
+          count: requirementCountMap.get(warehouse.id) || 0,
+        },
+        transactedRequirements: {
+          count_hdr: transactionCountMap.get(warehouse.id)?.count_hdr || 0,
+          count_dtl: transactionCountMap.get(warehouse.id)?.count_dtl || 0,
+          trans_headers: [],
+        },
+      }));
+
+      return {
+        success: true,
+        data: result,
+        total: result.length,
+      };
+    } catch (error) {
+      console.error(
+        "Error fetching warehouse requirements counts listing:",
+        error
+      );
+      throw new BadRequestException(
+        `Failed to fetch warehouse requirements counts: ${error.message}`
+      );
+    }
+  }
 }
