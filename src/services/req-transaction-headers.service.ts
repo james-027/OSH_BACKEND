@@ -25,6 +25,7 @@ import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.se
 import { CreateReqTransactionWithDetailsDto } from "src/dto/CreateReqTransactionWithDetailsDto";
 import { formatDateToString } from "src/utils/date.utils";
 import { FileUploadHandler } from "src/utils/file-upload.utils";
+import { RequirementRemindersService } from "./requirement-reminders.service";
 
 @Injectable()
 export class ReqTransactionHeadersService {
@@ -48,7 +49,8 @@ export class ReqTransactionHeadersService {
     private responseMapperService: ResponseMapperService,
     private reqTransactionDetailsService: ReqTransactionDetailsService,
     private reqTransactionDuesService: ReqTransactionDuesService,
-    private warehouseRequirementDuesService: WarehouseRequirementDuesService
+    private warehouseRequirementDuesService: WarehouseRequirementDuesService,
+    private requirementRemindersService: RequirementRemindersService
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -463,31 +465,19 @@ export class ReqTransactionHeadersService {
             }
           }
 
-          //* Step 6: Calculate trans_due_status_id based on reminder type
-          const daysDiff = Math.ceil(
-            (new Date(currentDue.warehouse_requirement_due_end).getTime() -
-              new Date().getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
-
-          const reminderRecord =
-            await this.requirementRemindersRepository.findOne({
-              where: {
-                requirement_id: createDto.requirement_id,
-              },
-              relations: ["reminderType"],
-              order: { reminder_count_day: "DESC" },
-            });
+          //* Step 6: Calculate trans_due_status_id based on reminder type status via requirement reminder count day.
+          const reqReminderStatusDetail =
+            await this.requirementRemindersService.calculateDueRequirementReminderStatus(
+              createDto.requirement_id,
+              currentDue.warehouse_requirement_due_end
+            );
 
           let transDueStatusId = 1; // default: active
-          if (reminderRecord && daysDiff <= reminderRecord.reminder_count_day) {
-            //* Check if reminder type is "overdue"
-            const reminderTypeName =
-              reminderRecord.reminderType?.reminder_type_name?.toLowerCase() ||
-              "";
-            if (reminderTypeName.includes("overdue")) {
-              transDueStatusId = 2; // overdue status
-            }
+          if (
+            reqReminderStatusDetail?.reminderTypeName.toLowerCase() ===
+            "overdue"
+          ) {
+            transDueStatusId = 2; // overdue status
           }
 
           //* Step 7: Create transaction header
