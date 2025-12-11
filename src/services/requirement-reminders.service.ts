@@ -352,13 +352,18 @@ export class RequirementRemindersService {
       const dueEndDate =
         typeof due_end === "string" ? new Date(due_end) : due_end;
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      dueEndDate.setHours(0, 0, 0, 0);
+
+      // Use UTC methods to avoid timezone offset issues
+      today.setUTCHours(0, 0, 0, 0);
+      dueEndDate.setUTCHours(0, 0, 0, 0);
 
       // Calculate days difference (due_end - today)
       // Positive = future, Negative = overdue, Zero = today
-      const daysDiff = Math.floor(
-        (dueEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      const daysDiff = Math.max(
+        0,
+        Math.floor(
+          (dueEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        )
       );
 
       // Fetch all reminders for this requirement, ordered by reminder_count_day DESC
@@ -375,9 +380,13 @@ export class RequirementRemindersService {
         return null;
       }
 
-      // Find the first matching reminder where daysDiff <= reminder_count_day
+      // console.log("Days Difference:", daysDiff);
+      // console.log("today:", today);
+      // console.log("dueEndDate:", dueEndDate);
+
+      // Find the first matching reminder where daysDiff >= reminder_count_day
       for (const reminder of reminders) {
-        if (daysDiff <= reminder.reminder_count_day) {
+        if (daysDiff >= reminder.reminder_count_day) {
           return {
             reminderTypeName: reminder.reminderType?.reminder_type_name || null,
             reminderTypeId: reminder.reminder_type_id,
