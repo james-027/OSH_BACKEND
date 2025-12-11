@@ -18,6 +18,7 @@ import { UserPermissions } from "src/entities/UserPermissions";
 import { ReqTransactionDetailsModule } from "../req-transaction-details/req-transaction-details.module";
 import { ReqTransactionDuesModule } from "../req-transaction-dues/req-transaction-dues.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
+import { RequirementsModule } from "../requirements/requirements.module";
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse
     ReqTransactionDetailsModule,
     ReqTransactionDuesModule,
     WarehouseRequirementsModule,
+    RequirementsModule,
   ],
   controllers: [ReqTransactionHeadersController],
   providers: [ReqTransactionHeadersService, ResponseMapperService],
