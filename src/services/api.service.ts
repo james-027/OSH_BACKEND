@@ -330,10 +330,17 @@ export class ApiService {
       database: "ctgi_sems",
     });
 
-    const bosSourceConn = await mysql.createConnection({
+    const ebtSourceConn = await mysql.createConnection({
       host: "192.168.74.214",
       user: "dba_remote",
       password: "Wdwaxwdadz#07",
+      database: "ctgi",
+    });
+
+    const bosSourceConn = await mysql.createConnection({
+      host: "10.2.4.122",
+      user: "sperks_prod",
+      password: "D*F3sgF2",
       database: "ctgi",
     });
 
