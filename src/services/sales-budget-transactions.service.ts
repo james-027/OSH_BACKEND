@@ -204,6 +204,7 @@ export class SalesBudgetTransactionsService {
 
     const rows = await qb.getRawMany();
     return rows.map((row) => ({
+      id: row.store_ifs,
       store_ifs: row.store_ifs,
       store_name: row.store_name,
       month: row.month,

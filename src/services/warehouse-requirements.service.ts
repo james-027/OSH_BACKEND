@@ -9,6 +9,7 @@ import { Repository, In } from "typeorm";
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CommonUtilitiesService } from "./common-utilities.service";
+import { RequirementRemindersService } from "./requirement-reminders.service";
 
 import { WarehouseRequirement } from "src/entities/WarehouseRequirement";
 import { Warehouse } from "src/entities/Warehouse";
@@ -42,6 +43,7 @@ export class WarehouseRequirementsService {
     private responseMapperService: ResponseMapperService,
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private warehouseRequirementStartsService: WarehouseRequirementStartsService,
+    private requirementRemindersService: RequirementRemindersService,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>
   ) {}
@@ -563,26 +565,26 @@ export class WarehouseRequirementsService {
       // Step 3: Fetch warehouses with query builder for optimized date filtering on dues
       let query = this.warehousesRepository
         .createQueryBuilder("warehouse")
-        .innerJoinAndSelect("warehouse.location", "location")
-        .innerJoinAndSelect("warehouse.warehouseType", "warehouseType")
-        .innerJoinAndSelect("warehouse.segment", "segment")
-        .innerJoinAndSelect("warehouse.status", "status")
-        .innerJoinAndSelect("warehouse.remStatus", "remStatus")
-        .innerJoinAndSelect(
+        .leftJoinAndSelect("warehouse.location", "location")
+        .leftJoinAndSelect("warehouse.warehouseType", "warehouseType")
+        .leftJoinAndSelect("warehouse.segment", "segment")
+        .leftJoinAndSelect("warehouse.status", "status")
+        .leftJoinAndSelect("warehouse.remStatus", "remStatus")
+        .leftJoinAndSelect(
           "warehouse.warehouseRequirements",
           "warehouseRequirement"
         )
-        .innerJoinAndSelect("warehouseRequirement.requirement", "requirement")
-        .innerJoinAndSelect("warehouseRequirement.status", "requirementStatus")
-        .innerJoinAndSelect(
+        .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
+        .leftJoinAndSelect("warehouseRequirement.status", "requirementStatus")
+        .leftJoinAndSelect(
           "warehouseRequirement.warehouseRequirementStarts",
           "warehouseRequirementStart"
         )
-        .innerJoinAndSelect(
+        .leftJoinAndSelect(
           "warehouseRequirement.warehouseRequirementDues",
           "warehouseRequirementDue"
-        );
-
+        )
+        .leftJoinAndSelect("requirement.renewalType", "renewalType");
       // Apply date filtering at database level if provided
       if (date_from && date_to) {
         const filterDateFrom = new Date(date_from);
@@ -653,7 +655,7 @@ export class WarehouseRequirementsService {
         warehouses.map(async (warehouse) => {
           // ========== BASE REQUIREMENTS WITH DETAILS ==========
           const baseRequirementsData =
-            this.getBaseRequirementsDetailsFromWarehouse(
+            await this.getBaseRequirementsDetailsFromWarehouse(
               warehouse,
               date_from,
               date_to,
@@ -702,13 +704,15 @@ export class WarehouseRequirementsService {
    * Get base requirements details from warehouse entity
    * Uses eager-loaded dues already filtered by database query
    * Handles recurring requirements with multiple dues
+   * Adds reminder status for each due based on due date
    */
-  private getBaseRequirementsDetailsFromWarehouse(
+  private async getBaseRequirementsDetailsFromWarehouse(
     warehouse: any,
     dateFrom?: string,
     dateTo?: string,
-    countOnly: boolean = false
-  ): any {
+    countOnly: boolean = false,
+    flatten: boolean = true
+  ): Promise<any> {
     try {
       // Filter active base requirements (status_id = 1)
       const baseRequirements = (warehouse.warehouseRequirements || []).filter(
@@ -730,45 +734,114 @@ export class WarehouseRequirementsService {
 
       // Process each requirement with its eager-loaded dues
       // (dues are already filtered by date at database level in optimized version)
-      const countDetails = baseRequirements
-        .map((baseReq) => {
-          // Get the most recent warehouse requirement start
+      let baseRequirementsDetails = [];
+
+      if (!flatten) {
+        // Nested structure: requirements with nested dues array
+        baseRequirementsDetails = await Promise.all(
+          baseRequirements.map(async (baseReq) => {
+            // Get the most recent warehouse requirement start
+            const requirementStart = (baseReq.warehouseRequirementStarts ||
+              [])[0];
+
+            // Get warehouse requirement dues (already filtered by database query)
+            const filteredDues = baseReq.warehouseRequirementDues || [];
+
+            // Map dues to response structure with reminder status
+            const warehouseRequirementDues = await Promise.all(
+              filteredDues.map(async (due) => {
+                // Get reminder status for this due
+                const reminderStatus =
+                  await this.requirementRemindersService.calculateDueRequirementReminderStatus(
+                    baseReq.requirement_id,
+                    due.warehouse_requirement_due_end
+                  );
+
+                return {
+                  warehouse_requirement_due_start: this.formatDateString(
+                    due.warehouse_requirement_due_start
+                  ),
+                  warehouse_requirement_due_end: this.formatDateString(
+                    due.warehouse_requirement_due_end
+                  ),
+                  warehouse_requirement_due_id: due.id,
+                  warehouse_requirement_due_status_id: due.status_id,
+                  warehouse_requirement_due_status_name:
+                    due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
+                  warehouse_requirement_due_reminder_name:
+                    reminderStatus?.reminderTypeName || null,
+                };
+              })
+            );
+
+            return {
+              requirement_name: baseReq.requirement?.requirement_name || null,
+              renewal_type_name:
+                baseReq.requirement?.renewalType?.renewal_type_name || null,
+              warehouse_requirement_start: requirementStart
+                ? this.formatDateString(
+                    requirementStart.warehouse_requirement_start
+                  )
+                : null,
+              warehouse_requirement_dues: warehouseRequirementDues,
+            };
+          })
+        );
+
+        // Filter out requirements with no dues in the date range
+        baseRequirementsDetails = baseRequirementsDetails.filter(
+          (req) => req.warehouse_requirement_dues.length > 0
+        );
+      } else {
+        // Flatten structure: one row per due with requirement info
+        const flattenedDetails = [];
+
+        for (const baseReq of baseRequirements) {
           const requirementStart = (baseReq.warehouseRequirementStarts ||
             [])[0];
-
-          // Get warehouse requirement dues (already filtered by database query)
           const filteredDues = baseReq.warehouseRequirementDues || [];
 
-          // Map dues to response structure
-          const warehouseRequirementDues = filteredDues.map((due) => ({
-            warehouse_requirement_due_start: this.formatDateString(
-              due.warehouse_requirement_due_start
-            ),
-            warehouse_requirement_due_end: this.formatDateString(
-              due.warehouse_requirement_due_end
-            ),
-            warehouse_requirement_due_id: due.id,
-            warehouse_requirement_due_status_id: due.status_id,
-            warehouse_requirement_due_status_name:
-              due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
-          }));
+          for (const due of filteredDues) {
+            // Get reminder status for this due
+            const reminderStatus =
+              await this.requirementRemindersService.calculateDueRequirementReminderStatus(
+                baseReq.requirement_id,
+                due.warehouse_requirement_due_end
+              );
 
-          return {
-            requirement_name: baseReq.requirement?.requirement_name || null,
-            warehouse_requirement_start: requirementStart
-              ? this.formatDateString(
-                  requirementStart.warehouse_requirement_start
-                )
-              : null,
-            warehouse_requirement_dues: warehouseRequirementDues,
-          };
-        })
-        // Filter out requirements with no dues in the date range
-        .filter((req) => req.warehouse_requirement_dues.length > 0);
+            flattenedDetails.push({
+              requirement_name: baseReq.requirement?.requirement_name || null,
+              renewal_type_name:
+                baseReq.requirement?.renewalType?.renewal_type_name || null,
+              warehouse_requirement_start: requirementStart
+                ? this.formatDateString(
+                    requirementStart.warehouse_requirement_start
+                  )
+                : null,
+              warehouse_requirement_due_start: this.formatDateString(
+                due.warehouse_requirement_due_start
+              ),
+              warehouse_requirement_due_end: this.formatDateString(
+                due.warehouse_requirement_due_end
+              ),
+              warehouse_requirement_due_id: due.id,
+              warehouse_requirement_due_status_id: due.status_id,
+              warehouse_requirement_due_status_name:
+                due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
+              warehouse_requirement_due_reminder_name:
+                reminderStatus?.reminderTypeName || null,
+              warehouse_requirement_due_reminder_days_diff:
+                reminderStatus?.daysDiff || null,
+            });
+          }
+        }
+
+        baseRequirementsDetails = flattenedDetails;
+      }
 
       return {
         count: baseRequirements.length,
-        base_requirements_details: countDetails,
+        base_requirements_details: baseRequirementsDetails,
       };
     } catch (error) {
       console.error("Error processing base requirements details:", error);
@@ -789,7 +862,8 @@ export class WarehouseRequirementsService {
     warehouseId: number,
     dateFrom?: string,
     dateTo?: string,
-    countOnly: boolean = false
+    countOnly: boolean = false,
+    flatten: boolean = true
   ): Promise<any> {
     try {
       // Build where condition for transaction headers
@@ -826,26 +900,53 @@ export class WarehouseRequirementsService {
 
       // Filter and map details - only include active details (status_id=1)
       let totalDetailCount = 0;
-      const transHeaders = transactionHeaders
-        .map((header) => {
-          // Filter active details for this header
+      let transHeaders = [];
+      if (!flatten) {
+        transHeaders = transactionHeaders
+          .map((header) => {
+            // Filter active details for this header
+            const activeDetails = (header.reqTransactionDetails || []).filter(
+              (detail) => detail.status_id === 1
+            );
+
+            totalDetailCount += activeDetails.length;
+
+            return {
+              requirement_name: header.requirement?.requirement_name || null,
+              trans_header_id: header.id,
+              trans_date: this.formatDateString(header.trans_date),
+              trans_details: activeDetails.map((detail) => ({
+                trans_detail_id: detail.id,
+                requirement_file_path: detail.requirement_file_path || null,
+                requirement_file_name: detail.requirement_file_name || null,
+              })),
+            };
+          })
+          .filter((header) => header.trans_details.length > 0); // Only include headers with active details
+      } else {
+        // Flatten mode: return flattened list of details with header info
+        const flattenedDetails = [];
+        transactionHeaders.forEach((header) => {
           const activeDetails = (header.reqTransactionDetails || []).filter(
             (detail) => detail.status_id === 1
           );
 
           totalDetailCount += activeDetails.length;
 
-          return {
-            requirement_name: header.requirement?.requirement_name || null,
-            trans_header_id: header.id,
-            trans_date: this.formatDateString(header.trans_date),
-            trans_details: activeDetails.map((detail) => ({
+          activeDetails.forEach((detail) => {
+            flattenedDetails.push({
+              requirement_name: header.requirement?.requirement_name || null,
+              trans_header_id: header.id,
+              trans_date: this.formatDateString(header.trans_date),
+              trans_detail_id: detail.id,
               requirement_file_path: detail.requirement_file_path || null,
               requirement_file_name: detail.requirement_file_name || null,
-            })),
-          };
-        })
-        .filter((header) => header.trans_details.length > 0); // Only include headers with active details
+            });
+          });
+        });
+
+        transHeaders = flattenedDetails;
+      }
 
       if (countOnly) {
         return {
@@ -975,6 +1076,7 @@ export class WarehouseRequirementsService {
       const requirementsQuery = this.warehouseRequirementsRepository
         .createQueryBuilder("warehouseRequirement")
         .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
+        .leftJoinAndSelect("requirement.renewalType", "renewalType")
         .leftJoinAndSelect("warehouseRequirement.status", "requirementStatus")
         .leftJoinAndSelect(
           "warehouseRequirement.warehouseRequirementStarts",
@@ -1061,7 +1163,7 @@ export class WarehouseRequirementsService {
         warehouses.map(async (warehouse) => {
           // Get base requirements with nested dues
           const baseRequirementsData =
-            this.getBaseRequirementsDetailsFromWarehouse(
+            await this.getBaseRequirementsDetailsFromWarehouse(
               warehouse,
               date_from,
               date_to,

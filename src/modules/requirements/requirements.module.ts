@@ -34,6 +34,6 @@ import { RenewalType } from "../../entities/RenewalType";
     UserAuditTrailCreateService,
     ResponseMapperService,
   ],
-  exports: [RequirementsService],
+  exports: [RequirementsService, RequirementRemindersService],
 })
 export class RequirementsModule {}

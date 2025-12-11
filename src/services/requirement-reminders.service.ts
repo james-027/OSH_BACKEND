@@ -329,4 +329,71 @@ export class RequirementRemindersService {
       throw new Error("Failed to toggle requirement reminders status");
     }
   }
+
+  /**
+   * Calculate the deadline reminder status based on requirement due date
+   * Compares days remaining (due_end - today) against requirement reminders
+   * Returns the matching reminder type name (e.g., "OVERDUE", "CRITICAL", "MEDIUM")
+   *
+   * @param requirement_id - The requirement ID to fetch reminders for
+   * @param due_end - The due end date to calculate days difference from
+   * @returns Object with reminder status name and reminder type ID, or null if no match
+   */
+  async calculateDueRequirementReminderStatus(
+    requirement_id: number,
+    due_end: Date | string
+  ): Promise<{
+    reminderTypeName: string;
+    reminderTypeId: number;
+    daysDiff: number;
+  } | null> {
+    try {
+      // Parse due_end date if string
+      const dueEndDate =
+        typeof due_end === "string" ? new Date(due_end) : due_end;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dueEndDate.setHours(0, 0, 0, 0);
+
+      // Calculate days difference (due_end - today)
+      // Positive = future, Negative = overdue, Zero = today
+      const daysDiff = Math.floor(
+        (dueEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Fetch all reminders for this requirement, ordered by reminder_count_day DESC
+      const reminders = await this.requirementRemindersRepository.find({
+        where: {
+          requirement_id,
+          status_id: 1, // Active reminders only
+        },
+        relations: ["reminderType"],
+        order: { reminder_count_day: "DESC" },
+      });
+
+      if (reminders.length === 0) {
+        return null;
+      }
+
+      // Find the first matching reminder where daysDiff <= reminder_count_day
+      for (const reminder of reminders) {
+        if (daysDiff <= reminder.reminder_count_day) {
+          return {
+            reminderTypeName: reminder.reminderType?.reminder_type_name || null,
+            reminderTypeId: reminder.reminder_type_id,
+            daysDiff: daysDiff,
+          };
+        }
+      }
+
+      // If no reminder matches, return null (no reminder status)
+      return null;
+    } catch (error) {
+      console.error(
+        "Error calculating due requirement reminder status:",
+        error
+      );
+      throw new Error(`Failed to calculate reminder status: ${error.message}`);
+    }
+  }
 }

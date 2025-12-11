@@ -15,6 +15,7 @@ import { CommonUtilitiesService } from "../../services/common-utilities.service"
 import { WarehouseRequirementsSyncScheduler } from "../../schedulers/warehouse-requirements-sync.scheduler";
 import { UsersModule } from "../users/users.module";
 import { UserAuditTrailModule } from "../users/user-audit-trail.module";
+import { RequirementsModule } from "../requirements/requirements.module";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
@@ -37,6 +38,7 @@ import { UserPermissions } from "src/entities/UserPermissions";
     ]),
     UsersModule,
     UserAuditTrailModule,
+    RequirementsModule,
   ],
   controllers: [],
   providers: [
