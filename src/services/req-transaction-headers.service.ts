@@ -391,6 +391,7 @@ export class ReqTransactionHeadersService {
               where: {
                 warehouse_id: warehouse.id,
                 requirement_id: createDto.requirement_id,
+                status_id: 1,
               },
               relations: ["requirement"],
             });
@@ -518,6 +519,8 @@ export class ReqTransactionHeadersService {
             userId
           );
 
+          let saveReqTransactionDue: any;
+
           //* Step 8: Create warehouse requirement due (new cycle) - ONLY for non-ONE_TIME types
           if (createDto.renewal_type_id !== 1) {
             try {
@@ -575,10 +578,11 @@ export class ReqTransactionHeadersService {
                 status_id: 1,
               };
 
-              await this.reqTransactionDuesService.create(
-                transactionDueDto,
-                userId
-              );
+              saveReqTransactionDue =
+                await this.reqTransactionDuesService.create(
+                  transactionDueDto,
+                  userId
+                );
 
               //* Step 9B: Deactivate currentDue after successful transaction due creation
               currentDue.status_id = 2;
@@ -605,10 +609,11 @@ export class ReqTransactionHeadersService {
                 status_id: 1,
               };
 
-              await this.reqTransactionDuesService.create(
-                transactionDueDto,
-                userId
-              );
+              saveReqTransactionDue =
+                await this.reqTransactionDuesService.create(
+                  transactionDueDto,
+                  userId
+                );
 
               //* Step 9B: Deactivate currentDue after successful transaction due creation
               currentDue.status_id = 2;
@@ -634,6 +639,7 @@ export class ReqTransactionHeadersService {
             warehouse_name: warehouse.warehouse_name || "N/A",
             req_transaction_header_id: savedHeader.id,
             trans_date: calculatedTransDate,
+            req_transaction_due_id: saveReqTransactionDue.id,
           });
         } catch (warehouseError) {
           errors.push({

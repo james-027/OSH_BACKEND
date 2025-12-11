@@ -599,7 +599,7 @@ export class WarehouseRequirementsService {
         // If no date filter, use subquery to get only the most recent due per requirement
         query = query.andWhere(
           `warehouseRequirementDue.id IN (
-            SELECT MAX(id) FROM warehouse_requirement_due 
+            SELECT MAX(id) FROM warehouse_requirement_dues 
             WHERE warehouse_requirement_id = warehouseRequirement.id
           )`
         );
@@ -1032,7 +1032,7 @@ export class WarehouseRequirementsService {
         // If no date filter, get only the most recent due per requirement
         duesQuery = duesQuery.andWhere(
           `warehouseRequirementDue.id IN (
-            SELECT MAX(id) FROM warehouse_requirement_due 
+            SELECT MAX(id) FROM warehouse_requirement_dues 
             WHERE warehouse_requirement_id = warehouseRequirementDue.warehouse_requirement_id
           )`
         );
