@@ -711,7 +711,7 @@ export class WarehouseRequirementsService {
     dateFrom?: string,
     dateTo?: string,
     countOnly: boolean = false,
-    flatten: boolean = true
+    flatten: boolean = false
   ): Promise<any> {
     try {
       // Filter active base requirements (status_id = 1)
@@ -769,7 +769,11 @@ export class WarehouseRequirementsService {
                   warehouse_requirement_due_status_name:
                     due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
                   warehouse_requirement_due_reminder_name:
-                    reminderStatus?.reminderTypeName || null,
+                    due.status_id === 1
+                      ? reminderStatus?.reminderTypeName
+                      : "-",
+                  warehouse_requirement_due_reminder_days_diff:
+                    reminderStatus?.daysDiff || null,
                 };
               })
             );
@@ -829,7 +833,7 @@ export class WarehouseRequirementsService {
               warehouse_requirement_due_status_name:
                 due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
               warehouse_requirement_due_reminder_name:
-                reminderStatus?.reminderTypeName || null,
+                due.status_id === 1 ? reminderStatus?.reminderTypeName : "-",
               warehouse_requirement_due_reminder_days_diff:
                 reminderStatus?.daysDiff || null,
             });
@@ -863,7 +867,7 @@ export class WarehouseRequirementsService {
     dateFrom?: string,
     dateTo?: string,
     countOnly: boolean = false,
-    flatten: boolean = true
+    flatten: boolean = false
   ): Promise<any> {
     try {
       // Build where condition for transaction headers
@@ -914,11 +918,16 @@ export class WarehouseRequirementsService {
             return {
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
+              trans_remarks: header.trans_remarks || null,
+              trans_due_status_name:
+                header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
               trans_date: this.formatDateString(header.trans_date),
               trans_details: activeDetails.map((detail) => ({
                 trans_detail_id: detail.id,
                 requirement_file_path: detail.requirement_file_path || null,
-                requirement_file_name: detail.requirement_file_name || null,
+                requirement_file_name:
+                  this.formatTransFileName(detail.requirement_file_name) ||
+                  null,
               })),
             };
           })
@@ -938,9 +947,12 @@ export class WarehouseRequirementsService {
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
               trans_date: this.formatDateString(header.trans_date),
+              trans_due_status_name:
+                header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
               trans_detail_id: detail.id,
               requirement_file_path: detail.requirement_file_path || null,
-              requirement_file_name: detail.requirement_file_name || null,
+              requirement_file_name:
+                this.formatTransFileName(detail.requirement_file_name) || null,
             });
           });
         });
@@ -980,6 +992,17 @@ export class WarehouseRequirementsService {
       return date.toISOString().split("T")[0];
     }
     return null;
+  }
+
+  private formatTransFileName(fileName: any): string {
+    if (!fileName) return null;
+
+    const parts = fileName.split("-");
+    let newFileName = "";
+    if (parts.length === 5) {
+      newFileName = `${parts[3].trim()} - ${parts[4].trim()}`;
+    }
+    return newFileName;
   }
 
   /**
@@ -1038,7 +1061,8 @@ export class WarehouseRequirementsService {
     date_to?: string,
     userId?: number,
     roleId?: number,
-    accessKeyId?: number
+    accessKeyId?: number,
+    flatten: boolean = false
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
@@ -1167,7 +1191,8 @@ export class WarehouseRequirementsService {
               warehouse,
               date_from,
               date_to,
-              false
+              false,
+              flatten
             );
 
           // Get transacted requirements
@@ -1176,7 +1201,8 @@ export class WarehouseRequirementsService {
               warehouse.id,
               date_from,
               date_to,
-              false
+              false,
+              flatten
             );
 
           return {
