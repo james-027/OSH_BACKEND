@@ -23,6 +23,7 @@ import logger from "../config/logger";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { EmailService } from "./email.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class UsersService {
@@ -48,7 +49,8 @@ export class UsersService {
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private emailService: EmailService
+    private emailService: EmailService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -436,6 +438,19 @@ export class UsersService {
 
       const savedUser = await this.usersRepository.save(user);
 
+      // Emit SSE event for user creation
+      try {
+        const flattenedResponse = await this.createFlattenedResponse(savedUser);
+        this.sseEventEmitter.emitUserCreate(
+          savedUser.id,
+          "users",
+          savedUser.id,
+          flattenedResponse
+        );
+      } catch (sseError) {
+        logger.warn("SSE event emission failed for user creation:", sseError);
+      }
+
       // Create UserPermissions if provided
       if (access_key_id && user_permission_presets) {
         await this.createUserPermissions(
@@ -685,6 +700,19 @@ export class UsersService {
       // Save user before updating permissions/locations so role_id is up-to-date
       const savedUser = await this.usersRepository.save(userToUpdate);
 
+      // Emit SSE event for user update
+      try {
+        const flattenedResponse = await this.createFlattenedResponse(savedUser);
+        this.sseEventEmitter.emitUserUpdate(
+          savedUser.id,
+          "users",
+          savedUser.id,
+          flattenedResponse
+        );
+      } catch (sseError) {
+        logger.warn("SSE event emission failed for user update:", sseError);
+      }
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -871,6 +899,13 @@ export class UsersService {
       }
 
       await this.usersRepository.remove(userToRemove);
+
+      // Emit SSE event for user deletion
+      try {
+        this.sseEventEmitter.emitUserDelete(userToRemove.id, "users", id);
+      } catch (sseError) {
+        logger.warn("SSE event emission failed for user deletion:", sseError);
+      }
 
       logger.info(`User deleted successfully with ID: ${id}`);
       return { message: "User successfully deleted." };

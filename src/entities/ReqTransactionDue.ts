@@ -89,6 +89,7 @@ export class ReqTransactionDue {
       eager: false,
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
+      cascade: true,
     }
   )
   @JoinColumn({ name: "warehouse_requirement_due_id" })

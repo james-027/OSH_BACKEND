@@ -20,6 +20,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
 import { UserPermissions } from "src/entities/UserPermissions";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { UserPermissions } from "src/entities/UserPermissions";
     UsersModule,
     UserAuditTrailModule,
     RequirementsModule,
+    SSEModule,
   ],
   controllers: [],
   providers: [

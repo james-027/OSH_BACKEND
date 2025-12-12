@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, Req } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ReqTransactionHeader } from "../../entities/ReqTransactionHeader";
 import { Warehouse } from "../../entities/Warehouse";
@@ -19,6 +19,9 @@ import { ReqTransactionDetailsModule } from "../req-transaction-details/req-tran
 import { ReqTransactionDuesModule } from "../req-transaction-dues/req-transaction-dues.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
 import { RequirementsModule } from "../requirements/requirements.module";
+import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
+import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -33,6 +36,8 @@ import { RequirementsModule } from "../requirements/requirements.module";
       AppModule,
       Action,
       UserPermissions,
+      ReqTransactionDue,
+      ReqTransactionDetail,
     ]),
     UsersModule,
     UserAuditTrailModule,
@@ -40,6 +45,7 @@ import { RequirementsModule } from "../requirements/requirements.module";
     ReqTransactionDuesModule,
     WarehouseRequirementsModule,
     RequirementsModule,
+    SSEModule,
   ],
   controllers: [ReqTransactionHeadersController],
   providers: [ReqTransactionHeadersService, ResponseMapperService],

@@ -201,20 +201,6 @@ export class WarehouseRequirementsController {
   }
 
   /**
-   * Deactivate warehouse requirement
-   * PATCH /warehouse-requirements/:id/toggle-status-deactivate
-   */
-  @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
-  async toggleStatusDeactivate(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req
-  ) {
-    const userId = req.user.id;
-    return this.warehouseRequirementsService.toggleStatus(id, userId);
-  }
-
-  /**
    * Manually sync warehouse requirements
    * POST /warehouse-requirements/sync
    */

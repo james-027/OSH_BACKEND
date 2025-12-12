@@ -23,6 +23,8 @@ import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.se
 import { WarehouseRequirementStartsService } from "./warehouse-requirement-starts.service";
 import { SyncLog } from "src/entities/syncLog";
 import { count } from "console";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class WarehouseRequirementsService {
@@ -45,7 +47,8 @@ export class WarehouseRequirementsService {
     private warehouseRequirementStartsService: WarehouseRequirementStartsService,
     private requirementRemindersService: RequirementRemindersService,
     @InjectRepository(SyncLog)
-    private syncLogRepository: Repository<SyncLog>
+    private syncLogRepository: Repository<SyncLog>,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -148,6 +151,23 @@ export class WarehouseRequirementsService {
           newWarehouseRequirement
         );
 
+      // Emit SSE event for warehouse requirement creation
+      try {
+        const response = await this.findOne(savedWarehouseRequirement.id);
+        const warehouseId = newWarehouseRequirement.warehouse_id;
+        this.sseEventEmitter.emitUserCreate(
+          userId,
+          "warehouse_requirements",
+          savedWarehouseRequirement.id,
+          response
+        );
+      } catch (sseError) {
+        logger.warn(
+          "SSE event emission failed for warehouse requirement creation:",
+          sseError
+        );
+      }
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -227,6 +247,22 @@ export class WarehouseRequirementsService {
       const savedWarehouseRequirement =
         await this.warehouseRequirementsRepository.save(warehouseRequirement);
 
+      // Emit SSE event for warehouse requirement update
+      try {
+        const response = await this.findOne(savedWarehouseRequirement.id);
+        this.sseEventEmitter.emitUserUpdate(
+          userId,
+          "warehouse_requirements",
+          id,
+          response
+        );
+      } catch (sseError) {
+        logger.warn(
+          "SSE event emission failed for warehouse requirement update:",
+          sseError
+        );
+      }
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -265,7 +301,7 @@ export class WarehouseRequirementsService {
         );
       }
 
-      const newStatusId = warehouseRequirement.status_id === 1 ? 2 : 1;
+      const newStatusId = 2; // deactivate
 
       warehouseRequirement.status_id = newStatusId;
       warehouseRequirement.updated_by = userId;
@@ -897,6 +933,7 @@ export class WarehouseRequirementsService {
             "requirement",
             "reqTransactionDetails",
             "requirement.renewalType",
+            "reqTransactionDues",
           ],
           order: { id: "ASC" },
         }
@@ -934,6 +971,11 @@ export class WarehouseRequirementsService {
               ),
               renewal_type_name:
                 header.requirement?.renewalType?.renewal_type_name || null,
+              req_transaction_due_id:
+                header.reqTransactionDues &&
+                header.reqTransactionDues.length > 0
+                  ? header.reqTransactionDues[0].id
+                  : null,
               trans_details: activeDetails.map((detail) => ({
                 trans_detail_id: detail.id,
                 requirement_file_path: detail.requirement_file_path || null,

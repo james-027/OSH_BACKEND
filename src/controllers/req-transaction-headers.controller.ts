@@ -17,6 +17,7 @@ import { CreateReqTransactionWithDetailsDto } from "../dto/CreateReqTransactionW
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
+import { CreateWarehouseRequirementDueAndReqTransDto } from "src/dto/CreateWarehouseRequirementDueAndReqTransDto";
 
 @Controller("req-transaction-headers")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -94,6 +95,26 @@ export class ReqTransactionHeadersController {
       createDto,
       userId,
       accessKeyId
+    );
+  }
+
+  /**
+   * Deactivate warehouse requirement due
+   * Cancel requirement transaction hdr and details
+   * PATCH /req-transaction-headers/toggle-status-cancel
+   */
+  @Patch("toggle-status-cancel")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
+  async toggleStatusCancel(
+    @Body() updateDto: CreateWarehouseRequirementDueAndReqTransDto,
+    @Request() req
+  ) {
+    const userId = req.user.id;
+    return this.reqTransactionHeadersService.toggleStatus(
+      updateDto.trans_header_id,
+      userId,
+      updateDto.status_id,
+      updateDto.trans_due_id
     );
   }
 }

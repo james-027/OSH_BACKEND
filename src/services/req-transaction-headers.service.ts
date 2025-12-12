@@ -26,12 +26,20 @@ import { CreateReqTransactionWithDetailsDto } from "src/dto/CreateReqTransaction
 import { formatDateToString } from "src/utils/date.utils";
 import { FileUploadHandler } from "src/utils/file-upload.utils";
 import { RequirementRemindersService } from "./requirement-reminders.service";
+import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
+import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class ReqTransactionHeadersService {
   constructor(
     @InjectRepository(ReqTransactionHeader)
     private reqTransactionHeadersRepository: Repository<ReqTransactionHeader>,
+    @InjectRepository(ReqTransactionDue)
+    private reqTransactionDuesRepository: Repository<ReqTransactionDue>,
+    @InjectRepository(ReqTransactionDetail)
+    private reqTransactionDetailsRepository: Repository<ReqTransactionDetail>,
     @InjectRepository(Warehouse)
     private warehousesRepository: Repository<Warehouse>,
     @InjectRepository(Requirement)
@@ -50,7 +58,8 @@ export class ReqTransactionHeadersService {
     private reqTransactionDetailsService: ReqTransactionDetailsService,
     private reqTransactionDuesService: ReqTransactionDuesService,
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
-    private requirementRemindersService: RequirementRemindersService
+    private requirementRemindersService: RequirementRemindersService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -142,6 +151,22 @@ export class ReqTransactionHeadersService {
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(newRecord);
 
+      // Emit SSE event for req transaction header creation
+      try {
+        const response = await this.findOne(savedRecord.id);
+        this.sseEventEmitter.emitUserCreate(
+          userId,
+          "req_transaction_headers",
+          savedRecord.id,
+          response
+        );
+      } catch (sseError) {
+        logger.warn(
+          "SSE event emission failed for req transaction header creation:",
+          sseError
+        );
+      }
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -222,6 +247,22 @@ export class ReqTransactionHeadersService {
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(record);
 
+      // Emit SSE event for req transaction header update
+      try {
+        const response = await this.findOne(savedRecord.id);
+        this.sseEventEmitter.emitUserUpdate(
+          userId,
+          "req_transaction_headers",
+          id,
+          response
+        );
+      } catch (sseError) {
+        logger.warn(
+          "SSE event emission failed for req transaction header update:",
+          sseError
+        );
+      }
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -246,36 +287,80 @@ export class ReqTransactionHeadersService {
     }
   }
 
-  async toggleStatus(id: number, userId: number): Promise<any> {
+  async toggleStatus(
+    transHdrId: number,
+    userId: number,
+    statusId?: number,
+    transDueId?: number
+  ): Promise<any> {
     try {
-      const record = await this.reqTransactionHeadersRepository.findOne({
-        where: { id },
+      // const record = await this.reqTransactionHeadersRepository.findOne({
+      //   where: { id },
+      // });
+
+      const recordDue = await this.reqTransactionDuesRepository.findOne({
+        where: { req_transaction_header_id: transHdrId, id: transDueId },
+        relations: ["warehouseRequirementDue"],
       });
 
-      if (!record) {
+      if (!recordDue) {
         throw new NotFoundException(
-          `Req transaction header with ID ${id} not found`
+          `Req transaction due with header ID ${transHdrId} not found`
         );
       }
 
-      const newStatusId = record.status_id === 1 ? 2 : 1;
+      const recordHdr = await this.reqTransactionHeadersRepository.findOne({
+        where: { id: transHdrId },
+        relations: ["reqTransactionDetails"],
+      });
 
-      record.status_id = newStatusId;
-      record.updated_by = userId;
+      if (!recordHdr) {
+        throw new NotFoundException(
+          `Req transaction header ID ${transHdrId} not found`
+        );
+      }
 
-      const saved = await this.reqTransactionHeadersRepository.save(record);
+      const transStatusId = statusId;
+      const whsDueStatusId = transStatusId === 5 ? 1 : 2; // activate due if connected transaction is cancelled.
 
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "ReqTransactionHeadersService",
-          method: "toggleStatus",
-          raw_data: JSON.stringify({ id, newStatusId }),
-          description: `Toggled status for req transaction header ID: ${id} to status: ${newStatusId}`,
-          status_id: 1,
-        },
-        userId
-      );
+      // update trans dues and connected warehouse due
+      recordDue.status_id = transStatusId;
+      recordDue.updated_by = userId;
+      recordDue.warehouseRequirementDue.status_id = whsDueStatusId;
+      recordDue.warehouseRequirementDue.updated_by = userId;
+      const saved = await this.reqTransactionDuesRepository.save(recordDue);
+
+      let savedDtl = null;
+      if (saved) {
+        // Also update header status and detail status
+        recordHdr.status_id = transStatusId;
+        recordHdr.updated_by = userId;
+        const savedHdr =
+          await this.reqTransactionHeadersRepository.save(recordHdr);
+
+        if (savedHdr) {
+          // Update details status
+          for (const detail of recordHdr.reqTransactionDetails) {
+            detail.status_id = transStatusId;
+            detail.updated_by = userId;
+            savedDtl = await this.reqTransactionDetailsRepository.save(detail);
+          }
+        }
+      }
+
+      if (savedDtl) {
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "ReqTransactionHeadersService",
+            method: "toggleStatus",
+            raw_data: JSON.stringify({ transHdrId, transStatusId }),
+            description: `Toggled status for req transaction header ID: ${transHdrId} to status: ${transStatusId} and connected dues: ID: ${transDueId} warehouse due to status: ${whsDueStatusId}`,
+            status_id: 1,
+          },
+          userId
+        );
+      }
 
       return this.findOne(saved.id);
     } catch (error) {

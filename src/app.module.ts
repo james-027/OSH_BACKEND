@@ -60,6 +60,7 @@ import { WarehouseRequirementsModule } from "./modules/warehouse-requirements/wa
 import { ReqTransactionHeadersModule } from "./modules/req-transaction-headers/req-transaction-headers.module";
 import { ReqTransactionDetailsModule } from "./modules/req-transaction-details/req-transaction-details.module";
 import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-transaction-dues.module";
+import { SSEModule } from "./modules/sse/sse.module";
 @Module({
   imports: [
     // Configuration
@@ -125,6 +126,7 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
     ReqTransactionHeadersModule,
     ReqTransactionDetailsModule,
     ReqTransactionDuesModule,
+    SSEModule,
   ],
   providers: [
     EmailService,

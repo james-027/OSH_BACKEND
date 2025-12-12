@@ -30,6 +30,7 @@ import { PositionsService } from "src/services/positions.service";
 import { Position } from "src/entities/Position";
 import { EmployeeLocation } from "src/entities/EmployeeLocation";
 import { LocationsModule } from "../locations/locations.module";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { LocationsModule } from "../locations/locations.module";
       EmployeeLocation,
     ]),
     LocationsModule,
+    SSEModule,
   ],
   controllers: [ItemsController, ItemCategoriesController, ItemsDwhController],
   providers: [

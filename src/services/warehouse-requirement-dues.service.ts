@@ -10,6 +10,7 @@ import { WarehouseRequirement } from "../entities/WarehouseRequirement";
 import { Requirement } from "../entities/Requirement";
 import { SyncLog } from "../entities/syncLog";
 import { formatDateToString } from "../utils/date.utils";
+import { ResponseMapperService } from "./response-mapper.service";
 
 @Injectable()
 export class WarehouseRequirementDuesService {
@@ -21,7 +22,8 @@ export class WarehouseRequirementDuesService {
     @InjectRepository(Requirement)
     private requirementsRepository: Repository<Requirement>,
     @InjectRepository(SyncLog)
-    private syncLogRepository: Repository<SyncLog>
+    private syncLogRepository: Repository<SyncLog>,
+    private responseMapperService: ResponseMapperService
   ) {}
 
   /**
@@ -300,6 +302,42 @@ export class WarehouseRequirementDuesService {
       }
 
       return result;
+    }
+  }
+
+  async toggleStatus(id: number, userId: number): Promise<any> {
+    try {
+      const warehouseRequirement =
+        await this.warehouseRequirementsRepository.findOne({
+          where: { id },
+        });
+
+      if (!warehouseRequirement) {
+        throw new NotFoundException(
+          `Warehouse requirement with ID ${id} not found`
+        );
+      }
+
+      warehouseRequirement.status_id = 2; // deactivate
+      warehouseRequirement.updated_by = userId;
+
+      if (!warehouseRequirement) {
+        throw new NotFoundException(
+          `Warehouse requirement with ID ${id} not found`
+        );
+      }
+
+      warehouseRequirement.status_id = 2; // deactivate
+      warehouseRequirement.updated_by = userId;
+
+      await this.warehouseRequirementsRepository.save(warehouseRequirement);
+
+      return this.responseMapperService.mapEntityToResponse(
+        warehouseRequirement
+      );
+    } catch (error) {
+      console.error("Error toggling warehouse requirement status:", error);
+      throw new Error("Failed to toggle warehouse requirement status");
     }
   }
 }
