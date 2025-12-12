@@ -32,6 +32,12 @@ export class LocationsController {
     return this.locationsService.findAll(userId, roleId);
   }
 
+  @Get("/all")
+  @RequirePermissions({ module: "LOCATIONS", action: "DATA ACCESS" })
+  async findAllLocationsNoRestriction(@Request() req) {
+    return this.locationsService.findAll();
+  }
+
   @Get(":id")
   @RequirePermissions({ module: "LOCATIONS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
