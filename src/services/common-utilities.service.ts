@@ -77,6 +77,32 @@ export class CommonUtilitiesService {
   }
 
   /**
+   * Helper method to format date string
+   */
+  formatDateString(date: any): string {
+    if (!date) return null;
+    if (typeof date === "string") return date;
+    if (date instanceof Date) {
+      return date.toISOString().split("T")[0];
+    }
+    return null;
+  }
+
+  /**
+   * Helper method to format file name
+   */
+  formatTransFileName(fileName: any): string {
+    if (!fileName) return null;
+
+    const parts = fileName.split("-");
+    let newFileName = "";
+    if (parts.length === 5) {
+      newFileName = `${parts[3].trim()} - ${parts[4].trim()}`;
+    }
+    return newFileName;
+  }
+
+  /**
    * Check if date string is valid
    * @param dateStr - Date string in YYYY-MM-DD format
    * @returns true if valid, false otherwise

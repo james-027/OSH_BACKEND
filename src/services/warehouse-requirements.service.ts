@@ -758,12 +758,14 @@ export class WarehouseRequirementsService {
                   );
 
                 return {
-                  warehouse_requirement_due_start: this.formatDateString(
-                    due.warehouse_requirement_due_start
-                  ),
-                  warehouse_requirement_due_end: this.formatDateString(
-                    due.warehouse_requirement_due_end
-                  ),
+                  warehouse_requirement_due_start:
+                    this.commonUtilitiesService.formatDateString(
+                      due.warehouse_requirement_due_start
+                    ),
+                  warehouse_requirement_due_end:
+                    this.commonUtilitiesService.formatDateString(
+                      due.warehouse_requirement_due_end
+                    ),
                   warehouse_requirement_due_id: due.id,
                   warehouse_requirement_due_status_id: due.status_id,
                   warehouse_requirement_due_status_name:
@@ -783,7 +785,7 @@ export class WarehouseRequirementsService {
               renewal_type_name:
                 baseReq.requirement?.renewalType?.renewal_type_name || null,
               warehouse_requirement_start: requirementStart
-                ? this.formatDateString(
+                ? this.commonUtilitiesService.formatDateString(
                     requirementStart.warehouse_requirement_start
                   )
                 : null,
@@ -818,16 +820,18 @@ export class WarehouseRequirementsService {
               renewal_type_name:
                 baseReq.requirement?.renewalType?.renewal_type_name || null,
               warehouse_requirement_start: requirementStart
-                ? this.formatDateString(
+                ? this.commonUtilitiesService.formatDateString(
                     requirementStart.warehouse_requirement_start
                   )
                 : null,
-              warehouse_requirement_due_start: this.formatDateString(
-                due.warehouse_requirement_due_start
-              ),
-              warehouse_requirement_due_end: this.formatDateString(
-                due.warehouse_requirement_due_end
-              ),
+              warehouse_requirement_due_start:
+                this.commonUtilitiesService.formatDateString(
+                  due.warehouse_requirement_due_start
+                ),
+              warehouse_requirement_due_end:
+                this.commonUtilitiesService.formatDateString(
+                  due.warehouse_requirement_due_end
+                ),
               warehouse_requirement_due_id: due.id,
               warehouse_requirement_due_status_id: due.status_id,
               warehouse_requirement_due_status_name:
@@ -889,7 +893,11 @@ export class WarehouseRequirementsService {
       const transactionHeaders = await this.reqTransactionHeaderRepository.find(
         {
           where: headerWhere,
-          relations: ["requirement", "reqTransactionDetails"],
+          relations: [
+            "requirement",
+            "reqTransactionDetails",
+            "requirement.renewalType",
+          ],
           order: { id: "ASC" },
         }
       );
@@ -921,13 +929,18 @@ export class WarehouseRequirementsService {
               trans_remarks: header.trans_remarks || null,
               trans_due_status_name:
                 header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
-              trans_date: this.formatDateString(header.trans_date),
+              trans_date: this.commonUtilitiesService.formatDateString(
+                header.trans_date
+              ),
+              renewal_type_name:
+                header.requirement?.renewalType?.renewal_type_name || null,
               trans_details: activeDetails.map((detail) => ({
                 trans_detail_id: detail.id,
                 requirement_file_path: detail.requirement_file_path || null,
                 requirement_file_name:
-                  this.formatTransFileName(detail.requirement_file_name) ||
-                  null,
+                  this.commonUtilitiesService.formatTransFileName(
+                    detail.requirement_file_name
+                  ) || null,
               })),
             };
           })
@@ -946,13 +959,19 @@ export class WarehouseRequirementsService {
             flattenedDetails.push({
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
-              trans_date: this.formatDateString(header.trans_date),
+              trans_date: this.commonUtilitiesService.formatDateString(
+                header.trans_date
+              ),
+              renewal_type_name:
+                header.requirement?.renewalType?.renewal_type_name || null,
               trans_due_status_name:
                 header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
               trans_detail_id: detail.id,
               requirement_file_path: detail.requirement_file_path || null,
               requirement_file_name:
-                this.formatTransFileName(detail.requirement_file_name) || null,
+                this.commonUtilitiesService.formatTransFileName(
+                  detail.requirement_file_name
+                ) || null,
             });
           });
         });
@@ -980,29 +999,6 @@ export class WarehouseRequirementsService {
         trans_headers: [],
       };
     }
-  }
-
-  /**
-   * Helper method to format date string
-   */
-  private formatDateString(date: any): string {
-    if (!date) return null;
-    if (typeof date === "string") return date;
-    if (date instanceof Date) {
-      return date.toISOString().split("T")[0];
-    }
-    return null;
-  }
-
-  private formatTransFileName(fileName: any): string {
-    if (!fileName) return null;
-
-    const parts = fileName.split("-");
-    let newFileName = "";
-    if (parts.length === 5) {
-      newFileName = `${parts[3].trim()} - ${parts[4].trim()}`;
-    }
-    return newFileName;
   }
 
   /**

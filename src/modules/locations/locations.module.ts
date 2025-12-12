@@ -14,6 +14,7 @@ import { Action } from "src/entities/Action";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UsersModule } from "../users/users.module";
 import { LocationTypesController } from "src/controllers/location-types.controller";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { LocationTypesController } from "src/controllers/location-types.controll
     LocationsService,
     LocationTypesService,
     UserAuditTrailCreateService,
+    CommonUtilitiesService,
   ],
   exports: [LocationsService, LocationTypesService],
 })

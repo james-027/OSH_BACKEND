@@ -11,6 +11,7 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 
 import { CreateLocationDto } from "../dto/CreateLocationDto";
 import { UpdateLocationDto } from "../dto/UpdateLocationDto";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class LocationsService {
@@ -18,7 +19,8 @@ export class LocationsService {
     @InjectRepository(Location)
     private locationsRepository: Repository<Location>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
 
   async getUserLocationIds(userId: number, roleId: number) {
@@ -31,9 +33,13 @@ export class LocationsService {
   async findAll(userId?: number, roleId?: number): Promise<any[]> {
     try {
       let allowedLocationIds: number[] | undefined = undefined;
+
       if (userId && roleId) {
-        const userLocations = await this.getUserLocationIds(userId, roleId);
-        allowedLocationIds = userLocations.map((ul) => ul.location_id);
+        allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId
+          );
       }
       const where: any = {};
       if (allowedLocationIds && allowedLocationIds.length > 0) {

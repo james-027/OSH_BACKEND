@@ -26,10 +26,10 @@ import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { EmployeesService } from "src/services/employees.service";
 import { Employee } from "src/entities/Employee";
 import { EmployeeLocationsService } from "src/services/employee-locations.service";
-import { LocationsService } from "src/services/locations.service";
 import { PositionsService } from "src/services/positions.service";
 import { Position } from "src/entities/Position";
 import { EmployeeLocation } from "src/entities/EmployeeLocation";
+import { LocationsModule } from "../locations/locations.module";
 
 @Module({
   imports: [
@@ -52,6 +52,7 @@ import { EmployeeLocation } from "src/entities/EmployeeLocation";
       Position,
       EmployeeLocation,
     ]),
+    LocationsModule,
   ],
   controllers: [ItemsController, ItemCategoriesController, ItemsDwhController],
   providers: [
@@ -63,7 +64,6 @@ import { EmployeeLocation } from "src/entities/EmployeeLocation";
     EmailService,
     EmployeesService,
     EmployeeLocationsService,
-    LocationsService,
     PositionsService,
   ],
   exports: [ItemsService, ItemCategoriesService, ItemsDwhService],
