@@ -489,10 +489,10 @@ export class ApiService {
             DATE_FORMAT( a.LASTUPDATED, '%Y-%m-%d %H:%i:%s' ) AS ts_modified 
           FROM
             suppliers a
-            LEFT JOIN addresses b ON a.SUPPNO = b.REFID 
+            INNER JOIN addresses b ON a.SUPPNO = b.REFID 
             AND b.COMPANY = 'CTGI' 
             AND b.BRANCH = 'HO'
-            LEFT JOIN provinces c ON b.PROVINCE = c.PROVINCE 
+            INNER JOIN provinces c ON b.PROVINCE = c.PROVINCE 
           WHERE
             ${whereClauses3.join(" AND ")}
         `;
