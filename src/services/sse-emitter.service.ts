@@ -2,75 +2,48 @@ import { Injectable } from "@nestjs/common";
 import { Subject, Observable } from "rxjs";
 
 /**
- * SSE Event types for React Query invalidation
+ * SSE Event interface for pure broadcast architecture
+ * All events are broadcast to ALL connected clients
+ * React Query on client intelligently matches resource type to query keys
  */
 export interface SSEEvent {
   type: "UPDATE" | "CREATE" | "DELETE" | "INVALIDATE";
-  resource: string; // e.g., "users", "warehouse-requirements", etc.
+  resource: string; // e.g., "users", "renewal_types", "warehouse_requirements", etc.
   resourceId?: number;
   data?: any;
   timestamp: string;
-  userId?: number;
 }
 
 @Injectable()
 export class SSEEmitterService {
-  // Store subjects per user for targeted broadcasts
-  private userEventSubjects = new Map<number, Subject<SSEEvent>>();
+  // Single global broadcast subject for all connected clients
+  private broadcastSubject = new Subject<SSEEvent>();
 
   /**
-   * Get or create an event stream for a specific user
+   * Subscribe to broadcast event stream
+   * All connected users receive the same stream
+   * React Query on client filters events by resource type
    */
-  subscribeToUserEvents(userId: number): Observable<SSEEvent> {
-    if (!this.userEventSubjects.has(userId)) {
-      this.userEventSubjects.set(userId, new Subject<SSEEvent>());
-    }
-    return this.userEventSubjects.get(userId)!.asObservable();
+  subscribeToEvents(): Observable<SSEEvent> {
+    return this.broadcastSubject.asObservable();
   }
 
   /**
-   * Broadcast event to specific user
+   * Broadcast event to ALL connected clients
+   * This is the only emission method needed for pure broadcast
+   * @param event - The SSE event to broadcast
    */
-  emitUserEvent(userId: number, event: SSEEvent): void {
-    const subject = this.userEventSubjects.get(userId);
-    if (subject) {
-      subject.next(event);
-    }
-  }
-
-  /**
-   * Broadcast event to multiple users
-   */
-  emitMultipleUserEvents(userIds: number[], event: SSEEvent): void {
-    userIds.forEach((userId) => {
-      this.emitUserEvent(userId, event);
-    });
-  }
-
-  /**
-   * Broadcast event to all connected users
-   */
-  emitBroadcastEvent(event: SSEEvent): void {
-    this.userEventSubjects.forEach((subject) => {
-      subject.next(event);
-    });
-  }
-
-  /**
-   * Clean up user subscription when they disconnect
-   */
-  unsubscribeUser(userId: number): void {
-    const subject = this.userEventSubjects.get(userId);
-    if (subject) {
-      subject.complete();
-      this.userEventSubjects.delete(userId);
-    }
+  broadcastEvent(event: SSEEvent): void {
+    this.broadcastSubject.next(event);
   }
 
   /**
    * Get count of active subscriptions (useful for monitoring)
    */
   getActiveSubscriptions(): number {
-    return this.userEventSubjects.size;
+    // Note: Subject doesn't track subscriber count directly
+    // In production, you'd implement custom subscription tracking
+    // For now, this is a placeholder
+    return 0;
   }
 }

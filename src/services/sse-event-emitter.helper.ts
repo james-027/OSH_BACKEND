@@ -3,114 +3,152 @@ import { SSEEmitterService, SSEEvent } from "./sse-emitter.service";
 
 /**
  * Helper service for emitting SSE events from business logic services
- * Use this in your services (e.g., UsersService, WarehouseRequirementsService) to emit updates
+ * Pure broadcast architecture: all events go to ALL connected clients
+ * React Query on client matches resource type to query keys automatically
+ *
+ * Usage in services:
+ * - After creating a resource: this.sseEventEmitter.emitCreate('renewal_types', id, data)
+ * - After updating a resource: this.sseEventEmitter.emitUpdate('users', userId, data)
+ * - After deleting a resource: this.sseEventEmitter.emitDelete('warehouse_requirements', id)
+ * - For complex updates: this.sseEventEmitter.emitInvalidate('resource_name')
  */
 @Injectable()
 export class SSEEventEmitterHelper {
   constructor(private sseEmitterService: SSEEmitterService) {}
 
   /**
-   * Emit update event for a user resource
-   * @param userId - The user ID receiving the event
-   * @param resource - Resource type (e.g., "users", "warehouse-requirements")
-   * @param resourceId - The ID of the updated resource
-   * @param data - Optional data payload
+   * Broadcast CREATE event to all connected clients
+   * @param resource - Resource type (e.g., "renewal_types", "users", "warehouse_requirements")
+   * @param resourceId - The ID of the created resource
+   * @param data - Optional data payload with full resource details
    */
-  emitUserUpdate(
-    userId: number,
-    resource: string,
-    resourceId: number,
-    data?: any
-  ): void {
-    const event: SSEEvent = {
-      type: "UPDATE",
-      resource,
-      resourceId,
-      data,
-      timestamp: new Date().toISOString(),
-      userId,
-    };
-    this.sseEmitterService.emitUserEvent(userId, event);
-  }
-
-  /**
-   * Emit create event
-   */
-  emitUserCreate(
-    userId: number,
-    resource: string,
-    resourceId: number,
-    data?: any
-  ): void {
+  emitCreate(resource: string, resourceId: number, data?: any): void {
     const event: SSEEvent = {
       type: "CREATE",
       resource,
       resourceId,
       data,
       timestamp: new Date().toISOString(),
-      userId,
     };
-    this.sseEmitterService.emitUserEvent(userId, event);
+    this.sseEmitterService.broadcastEvent(event);
   }
 
   /**
-   * Emit delete event
+   * Broadcast UPDATE event to all connected clients
+   * @param resource - Resource type (e.g., "users", "renewal_types")
+   * @param resourceId - The ID of the updated resource
+   * @param data - Optional data payload with updated resource details
    */
-  emitUserDelete(userId: number, resource: string, resourceId: number): void {
+  emitUpdate(resource: string, resourceId: number, data?: any): void {
+    const event: SSEEvent = {
+      type: "UPDATE",
+      resource,
+      resourceId,
+      data,
+      timestamp: new Date().toISOString(),
+    };
+    this.sseEmitterService.broadcastEvent(event);
+  }
+
+  /**
+   * Broadcast DELETE event to all connected clients
+   * @param resource - Resource type (e.g., "renewal_types", "warehouse_requirements")
+   * @param resourceId - The ID of the deleted resource
+   */
+  emitDelete(resource: string, resourceId: number): void {
     const event: SSEEvent = {
       type: "DELETE",
       resource,
       resourceId,
       timestamp: new Date().toISOString(),
-      userId,
     };
-    this.sseEmitterService.emitUserEvent(userId, event);
+    this.sseEmitterService.broadcastEvent(event);
   }
 
   /**
-   * Emit invalidation event (tells client to refetch)
-   * Useful when you want the client to do a full refetch instead of partial update
+   * Broadcast INVALIDATE event to trigger full refetch
+   * Use this when update is complex and you want client to refetch
+   * @param resource - Resource type to invalidate (e.g., "users", "warehouse_requirements")
    */
-  emitQueryInvalidation(userId: number, resource: string): void {
+  emitInvalidate(resource: string): void {
     const event: SSEEvent = {
       type: "INVALIDATE",
       resource,
       timestamp: new Date().toISOString(),
-      userId,
     };
-    this.sseEmitterService.emitUserEvent(userId, event);
+    this.sseEmitterService.broadcastEvent(event);
   }
 
   /**
-   * Emit update to multiple users
+   * ========== SIGNAL-ONLY METHODS (No Data) ==========
+   * Use these for SSE + React Query (cache invalidation only)
+   * Frontend: useSSEBroadcast hook + useQuery hooks
+   * Benefit: No data in event, React Query refetches to get fresh data
+   * Network: 1 initial load + N refetch calls (cleaner but more API calls)
    */
-  emitMultipleUsersUpdate(
-    userIds: number[],
-    resource: string,
-    resourceId: number,
-    data?: any
-  ): void {
+
+  /**
+   * Broadcast CREATE signal (without data) to all connected clients
+   * Triggers React Query cache invalidation and refetch
+   * @param resource - Resource type (e.g., "locations", "users")
+   * @param resourceId - The ID of the created resource
+   */
+  emitCreateSignal(resource: string, resourceId: number): void {
+    const event: SSEEvent = {
+      type: "CREATE",
+      resource,
+      resourceId,
+      // NO data field
+      timestamp: new Date().toISOString(),
+    };
+    this.sseEmitterService.broadcastEvent(event);
+  }
+
+  /**
+   * Broadcast UPDATE signal (without data) to all connected clients
+   * Triggers React Query cache invalidation and refetch
+   * @param resource - Resource type (e.g., "locations", "users")
+   * @param resourceId - The ID of the updated resource
+   */
+  emitUpdateSignal(resource: string, resourceId: number): void {
     const event: SSEEvent = {
       type: "UPDATE",
       resource,
       resourceId,
-      data,
+      // NO data field
       timestamp: new Date().toISOString(),
     };
-    this.sseEmitterService.emitMultipleUserEvents(userIds, event);
+    this.sseEmitterService.broadcastEvent(event);
   }
 
   /**
-   * Broadcast update to all users
+   * Broadcast DELETE signal (without data) to all connected clients
+   * Triggers React Query cache removal and list refetch
+   * @param resource - Resource type (e.g., "locations", "users")
+   * @param resourceId - The ID of the deleted resource
    */
-  emitBroadcastUpdate(resource: string, resourceId: number, data?: any): void {
+  emitDeleteSignal(resource: string, resourceId: number): void {
     const event: SSEEvent = {
-      type: "UPDATE",
+      type: "DELETE",
       resource,
       resourceId,
-      data,
+      // NO data field
       timestamp: new Date().toISOString(),
     };
-    this.sseEmitterService.emitBroadcastEvent(event);
+    this.sseEmitterService.broadcastEvent(event);
+  }
+
+  /**
+   * Broadcast INVALIDATE signal (without data) to trigger full refetch
+   * @param resource - Resource type to invalidate (e.g., "locations", "users")
+   */
+  emitInvalidateSignal(resource: string): void {
+    const event: SSEEvent = {
+      type: "INVALIDATE",
+      resource,
+      // NO data field
+      timestamp: new Date().toISOString(),
+    };
+    this.sseEmitterService.broadcastEvent(event);
   }
 }

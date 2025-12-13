@@ -151,11 +151,11 @@ export class ReqTransactionHeadersService {
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(newRecord);
 
-      // Emit SSE event for req transaction header creation
+      const response = await this.findOne(savedRecord.id);
+
+      // Emit SSE event for req transaction header creation (broadcast to all users)
       try {
-        const response = await this.findOne(savedRecord.id);
-        this.sseEventEmitter.emitUserCreate(
-          userId,
+        this.sseEventEmitter.emitCreate(
           "req_transaction_headers",
           savedRecord.id,
           response
@@ -179,7 +179,7 @@ export class ReqTransactionHeadersService {
         userId
       );
 
-      return this.findOne(savedRecord.id);
+      return response;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -247,11 +247,10 @@ export class ReqTransactionHeadersService {
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(record);
 
-      // Emit SSE event for req transaction header update
+      // Emit SSE event for req transaction header update (broadcast to all users)
       try {
         const response = await this.findOne(savedRecord.id);
-        this.sseEventEmitter.emitUserUpdate(
-          userId,
+        this.sseEventEmitter.emitUpdate(
           "req_transaction_headers",
           id,
           response

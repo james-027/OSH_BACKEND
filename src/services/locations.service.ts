@@ -12,6 +12,7 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateLocationDto } from "../dto/CreateLocationDto";
 import { UpdateLocationDto } from "../dto/UpdateLocationDto";
 import { CommonUtilitiesService } from "./common-utilities.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class LocationsService {
@@ -20,7 +21,8 @@ export class LocationsService {
     private locationsRepository: Repository<Location>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private commonUtilitiesService: CommonUtilitiesService
+    private commonUtilitiesService: CommonUtilitiesService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async getUserLocationIds(userId: number, roleId: number) {
@@ -200,7 +202,7 @@ export class LocationsService {
         throw new Error("Failed to retrieve created location");
       }
 
-      return {
+      const locationResponse = {
         id: locationWithRelations.id,
         location_name: locationWithRelations.location_name,
         location_code: locationWithRelations.location_code,
@@ -228,6 +230,19 @@ export class LocationsService {
           ? locationWithRelations.region.region_name
           : null,
       };
+
+      // SSE Events (choose which one to use based on frontend approach)
+      try {
+        // Option 1: WITH data (for Approach 1 - pure SSE on frontend)
+        // this.sseEventEmitter.emitCreate('locations', locationResponse.id, locationResponse);
+
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitCreateSignal("locations", locationResponse.id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
+
+      return locationResponse;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -309,7 +324,7 @@ export class LocationsService {
         throw new Error("Failed to retrieve updated location");
       }
 
-      return {
+      const locationResponse = {
         id: updatedLocation.id,
         location_name: updatedLocation.location_name,
         location_code: updatedLocation.location_code,
@@ -337,6 +352,19 @@ export class LocationsService {
           : null,
         location_abbr: updatedLocation.location_abbr,
       };
+
+      // SSE Events (choose which one to use based on frontend approach)
+      try {
+        // Option 1: WITH data (for Approach 1 - pure SSE on frontend)
+        // this.sseEventEmitter.emitUpdate('locations', id, locationResponse);
+
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("locations", id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
+
+      return locationResponse;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -360,6 +388,18 @@ export class LocationsService {
       }
 
       await this.locationsRepository.remove(location);
+
+      // SSE Events (choose which one to use based on frontend approach)
+      try {
+        // Option 1: WITH data (for Approach 1 - pure SSE on frontend)
+        // Delete event doesn't need data, but keeping for consistency
+        // this.sseEventEmitter.emitDelete('locations', id);
+
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitDeleteSignal("locations", id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -424,7 +464,7 @@ export class LocationsService {
         throw new Error("Failed to retrieve updated location");
       }
 
-      return {
+      const locationResponse = {
         id: updatedLocation.id,
         location_name: updatedLocation.location_name,
         location_code: updatedLocation.location_code,
@@ -452,6 +492,19 @@ export class LocationsService {
           : null,
         location_abbr: updatedLocation.location_abbr,
       };
+
+      // SSE Events (choose which one to use based on frontend approach)
+      try {
+        // Option 1: WITH data (for Approach 1 - pure SSE on frontend)
+        // this.sseEventEmitter.emitUpdate('locations', id, locationResponse);
+
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("locations", id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
+
+      return locationResponse;
     } catch (error) {
       if (
         error instanceof NotFoundException ||

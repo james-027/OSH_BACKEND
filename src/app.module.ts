@@ -1,4 +1,9 @@
-import { Module } from "@nestjs/common";
+import {
+  Module,
+  NestModule,
+  MiddlewareConsumer,
+  RequestMethod,
+} from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -61,6 +66,8 @@ import { ReqTransactionHeadersModule } from "./modules/req-transaction-headers/r
 import { ReqTransactionDetailsModule } from "./modules/req-transaction-details/req-transaction-details.module";
 import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-transaction-dues.module";
 import { SSEModule } from "./modules/sse/sse.module";
+import cookieParser from "cookie-parser";
+import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 @Module({
   imports: [
     // Configuration
@@ -145,4 +152,14 @@ import { SSEModule } from "./modules/sse/sse.module";
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Parse cookies first (before SSE middleware)
+    consumer.apply(cookieParser).forRoutes("*");
+
+    // Apply SSE JWT middleware to extract token from cookies or query params
+    consumer
+      .apply(SSEJwtMiddleware)
+      .forRoutes({ path: "sse/*", method: RequestMethod.GET });
+  }
+}

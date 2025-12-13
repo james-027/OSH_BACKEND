@@ -151,12 +151,10 @@ export class WarehouseRequirementsService {
           newWarehouseRequirement
         );
 
-      // Emit SSE event for warehouse requirement creation
+      // Emit SSE event for warehouse requirement creation (broadcast to all users)
       try {
         const response = await this.findOne(savedWarehouseRequirement.id);
-        const warehouseId = newWarehouseRequirement.warehouse_id;
-        this.sseEventEmitter.emitUserCreate(
-          userId,
+        this.sseEventEmitter.emitCreate(
           "warehouse_requirements",
           savedWarehouseRequirement.id,
           response
@@ -247,11 +245,10 @@ export class WarehouseRequirementsService {
       const savedWarehouseRequirement =
         await this.warehouseRequirementsRepository.save(warehouseRequirement);
 
-      // Emit SSE event for warehouse requirement update
+      // Emit SSE event for warehouse requirement update (broadcast to all users)
       try {
         const response = await this.findOne(savedWarehouseRequirement.id);
-        this.sseEventEmitter.emitUserUpdate(
-          userId,
+        this.sseEventEmitter.emitUpdate(
           "warehouse_requirements",
           id,
           response

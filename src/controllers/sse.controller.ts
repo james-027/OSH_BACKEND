@@ -19,25 +19,52 @@ export class SSEController {
   constructor(private sseEmitterService: SSEEmitterService) {}
 
   /**
-   * SSE endpoint for real-time user data updates
-   * Frontend connects: EventSource('/sse/users/:user_id')
+   * SSE endpoint for real-time broadcast events
+   * All users connect to the same broadcast stream
+   * React Query on client matches resource types to query keys
    *
-   * @param user_id - The user ID to subscribe to
+   * Frontend connects: EventSource('/sse/broadcast')
+   * Auth is still required - only authenticated users get the stream
+   *
    * @param req - Request object with authenticated user
-   * @returns Observable stream of server-sent events
+   * @returns Observable stream of server-sent events (broadcast to all)
+   */
+  @Sse("broadcast")
+  subscribeToEvents(
+    @Request() req
+  ): Observable<any> {
+    // Verify user is authenticated (JwtAuthGuard ensures this)
+    const authenticatedUserId = req.user?.id;
+    if (!authenticatedUserId) {
+      throw new Error("Unauthorized: Must be authenticated to receive events");
+    }
+
+    return this.sseEmitterService.subscribeToEvents().pipe(
+      map((event: SSEEvent) => ({
+        data: event,
+        id: `${event.timestamp}-${Math.random()}`,
+      }))
+    );
+  }
+
+  /**
+   * Legacy endpoint for backward compatibility
+   * Redirects to broadcast stream regardless of user_id
+   * (In pure broadcast, user_id doesn't matter - all users get same events)
    */
   @Sse("users/:user_id")
   subscribeToUserEvents(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Request() req
   ): Observable<any> {
-    // Verify user is requesting their own data or has permission
+    // Verify user is authenticated
     const authenticatedUserId = req.user?.id;
-    if (authenticatedUserId !== user_id) {
-      throw new Error("Unauthorized: Cannot subscribe to other users' events");
+    if (!authenticatedUserId) {
+      throw new Error("Unauthorized: Must be authenticated to receive events");
     }
 
-    return this.sseEmitterService.subscribeToUserEvents(user_id).pipe(
+    // Return broadcast stream (same for all users)
+    return this.sseEmitterService.subscribeToEvents().pipe(
       map((event: SSEEvent) => ({
         data: event,
         id: `${event.timestamp}-${Math.random()}`,

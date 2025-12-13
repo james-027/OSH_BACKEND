@@ -15,6 +15,7 @@ import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UsersModule } from "../users/users.module";
 import { LocationTypesController } from "src/controllers/location-types.controller";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
       UserAuditTrail,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [LocationsController, LocationTypesController],
   providers: [

@@ -438,15 +438,10 @@ export class UsersService {
 
       const savedUser = await this.usersRepository.save(user);
 
-      // Emit SSE event for user creation
+      // Emit SSE event for user creation (broadcast to all users)
       try {
         const flattenedResponse = await this.createFlattenedResponse(savedUser);
-        this.sseEventEmitter.emitUserCreate(
-          savedUser.id,
-          "users",
-          savedUser.id,
-          flattenedResponse
-        );
+        this.sseEventEmitter.emitCreate("users", savedUser.id, flattenedResponse);
       } catch (sseError) {
         logger.warn("SSE event emission failed for user creation:", sseError);
       }
@@ -700,15 +695,10 @@ export class UsersService {
       // Save user before updating permissions/locations so role_id is up-to-date
       const savedUser = await this.usersRepository.save(userToUpdate);
 
-      // Emit SSE event for user update
+      // Emit SSE event for user update (broadcast to all users)
       try {
         const flattenedResponse = await this.createFlattenedResponse(savedUser);
-        this.sseEventEmitter.emitUserUpdate(
-          savedUser.id,
-          "users",
-          savedUser.id,
-          flattenedResponse
-        );
+        this.sseEventEmitter.emitUpdate("users", savedUser.id, flattenedResponse);
       } catch (sseError) {
         logger.warn("SSE event emission failed for user update:", sseError);
       }
@@ -900,9 +890,9 @@ export class UsersService {
 
       await this.usersRepository.remove(userToRemove);
 
-      // Emit SSE event for user deletion
+      // Emit SSE event for user deletion (broadcast to all users)
       try {
-        this.sseEventEmitter.emitUserDelete(userToRemove.id, "users", id);
+        this.sseEventEmitter.emitDelete("users", id);
       } catch (sseError) {
         logger.warn("SSE event emission failed for user deletion:", sseError);
       }
