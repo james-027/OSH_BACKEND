@@ -13,6 +13,8 @@ import { RenewalType } from "src/entities/RenewalType";
 import { CreateRenewalTypeDto } from "src/dto/CreateRenewalTypeDto";
 import { UpdateRenewalTypeDto } from "src/dto/UpdateRenewalTypeDto";
 import { ResponseMapperService } from "./response-mapper.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "../config/logger";
 
 @Injectable()
 export class RenewalTypesService {
@@ -21,7 +23,8 @@ export class RenewalTypesService {
     private renewalTypesRepository: Repository<RenewalType>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private responseMapperService: ResponseMapperService
+    private responseMapperService: ResponseMapperService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -110,9 +113,18 @@ export class RenewalTypesService {
         throw new Error("Failed to retrieve created renewal type");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         renewalTypeWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreate("renewal_types", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -193,9 +205,18 @@ export class RenewalTypesService {
         throw new Error("Failed to retrieve created renewal type");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         renewalTypeWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -243,7 +264,17 @@ export class RenewalTypesService {
         userId
       );
 
-      return this.responseMapperService.mapEntityToResponse(updatedRenewalType);
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedRenewalType);
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||

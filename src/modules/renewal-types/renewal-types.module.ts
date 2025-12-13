@@ -11,6 +11,7 @@ import { RenewalType } from "../../entities/RenewalType";
 import { RenewalTypesController } from "../../controllers/renewal-types.controller";
 import { RenewalTypesService } from "../../services/renewal-types.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       Action,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [RenewalTypesController],
   providers: [

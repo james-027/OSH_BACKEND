@@ -11,6 +11,7 @@ import { ReminderType } from "../../entities/ReminderType";
 import { ReminderTypesController } from "../../controllers/reminder-types.controller";
 import { ReminderTypesService } from "../../services/reminder-types.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       Location,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [ReminderTypesController],
   providers: [

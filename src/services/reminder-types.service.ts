@@ -12,6 +12,8 @@ import { ReminderType } from "src/entities/ReminderType";
 import { CreateReminderTypeDto } from "src/dto/CreateReminderTypeDto";
 import { UpdateReminderTypeDto } from "src/dto/UpdateReminderTypeDto";
 import { ResponseMapperService } from "./response-mapper.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "../config/logger";
 
 @Injectable()
 export class ReminderTypesService {
@@ -20,7 +22,8 @@ export class ReminderTypesService {
     private reminderTypesRepository: Repository<ReminderType>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private responseMapperService: ResponseMapperService
+    private responseMapperService: ResponseMapperService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -110,9 +113,22 @@ export class ReminderTypesService {
         throw new Error("Failed to retrieve created reminder type");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         reminderTypeWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreate(
+          "reminder_types",
+          response.id,
+          response
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -195,9 +211,22 @@ export class ReminderTypesService {
         throw new Error("Failed to retrieve created reminder type");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         reminderTypeWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "reminder_types",
+          response.id,
+          response
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -245,9 +274,21 @@ export class ReminderTypesService {
         userId
       );
 
-      return this.responseMapperService.mapEntityToResponse(
-        updatedReminderType
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedReminderType);
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "reminder_types",
+          response.id,
+          response
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
