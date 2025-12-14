@@ -13,6 +13,7 @@ import { UpdateRoleDto } from "../dto/UpdateRoleDto";
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class RolesService {
@@ -24,7 +25,8 @@ export class RolesService {
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -148,6 +150,14 @@ export class RolesService {
         userId
       );
 
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitCreateSignal("roles", savedRole.id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
+
       // Return flattened structure
       return {
         id: savedRole.id,
@@ -246,6 +256,16 @@ export class RolesService {
           "UPDATE user_permissions SET status_id = ? WHERE role_id = ?",
           [updateRoleDto.status_id, id]
         );
+      }
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("roles", id);
+        this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
+        this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
+      } catch (err) {
+        console.warn("SSE event failed:", err);
       }
 
       // Return flattened structure
@@ -354,6 +374,16 @@ export class RolesService {
           "UPDATE user_permissions SET status_id = ? WHERE role_id = ?",
           [newStatusId, id]
         );
+      }
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("roles", id);
+        this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
+        this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
+      } catch (err) {
+        console.warn("SSE event failed:", err);
       }
 
       // Return flattened structure

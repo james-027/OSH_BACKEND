@@ -13,6 +13,7 @@ import { RequirementsService } from "../../services/requirements.service";
 import { RequirementRemindersService } from "../../services/requirement-reminders.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { RenewalType } from "../../entities/RenewalType";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { RenewalType } from "../../entities/RenewalType";
       RenewalType,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [RequirementsController],
   providers: [

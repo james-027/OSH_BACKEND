@@ -22,6 +22,7 @@ import {
   RoleActionPresetsController,
   RolePresetsController,
 } from "src/controllers/role-action-presets.controller";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import {
       AccessKey,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [
     RolesController,

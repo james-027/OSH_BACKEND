@@ -24,6 +24,7 @@ import { UpdateRoleActionPresetDto } from "src/dto/UpdateRoleActionPresetDto";
 import { CreateRoleActionPresetDto } from "src/dto/CreateRoleActionPresetDto";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class RoleActionPresetsService {
@@ -51,7 +52,8 @@ export class RoleActionPresetsService {
     @InjectRepository(AccessKey)
     private accessKeyRepository: Repository<AccessKey>,
     private dataSource: DataSource,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findRolesNotInPresets() {
@@ -673,6 +675,16 @@ export class RoleActionPresetsService {
           userId
         );
 
+        // SSE Events
+        try {
+          // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+          this.sseEventEmitter.emitUpdateSignal("users", userId);
+          this.sseEventEmitter.emitUpdateSignal("role_presets", id);
+          this.sseEventEmitter.emitUpdateSignal("roles", id);
+        } catch (err) {
+          console.warn("SSE event failed:", err);
+        }
+
         return result;
       } catch (error) {
         await queryRunner.rollbackTransaction();
@@ -1233,6 +1245,16 @@ export class RoleActionPresetsService {
           `Successfully created ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`
         );
 
+        // SSE Events
+        try {
+          // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+          this.sseEventEmitter.emitCreateSignal("users", userId);
+          this.sseEventEmitter.emitCreateSignal("role_presets", role_id);
+          this.sseEventEmitter.emitUpdateSignal("roles", role_id);
+        } catch (err) {
+          console.warn("SSE event failed:", err);
+        }
+
         return flattenedResponse;
       } catch (error) {
         await queryRunner.rollbackTransaction();
@@ -1522,6 +1544,16 @@ export class RoleActionPresetsService {
         logger.info(
           `Successfully updated ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`
         );
+
+        // SSE Events
+        try {
+          // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+          this.sseEventEmitter.emitUpdateSignal("users", userId);
+          this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
+          this.sseEventEmitter.emitUpdateSignal("roles", role_id);
+        } catch (err) {
+          console.warn("SSE event failed:", err);
+        }
 
         return flattenedResponse;
       } catch (error) {
