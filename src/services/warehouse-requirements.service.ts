@@ -248,11 +248,7 @@ export class WarehouseRequirementsService {
       // Emit SSE event for warehouse requirement update (broadcast to all users)
       try {
         const response = await this.findOne(savedWarehouseRequirement.id);
-        this.sseEventEmitter.emitUpdate(
-          "warehouse_requirements",
-          id,
-          response
-        );
+        this.sseEventEmitter.emitUpdate("warehouse_requirements", id, response);
       } catch (sseError) {
         logger.warn(
           "SSE event emission failed for warehouse requirement update:",
@@ -1182,12 +1178,24 @@ export class WarehouseRequirementsService {
         const filterDateFrom = new Date(date_from);
         const filterDateTo = new Date(date_to);
 
+        console.log(
+          "Filtering requirements from",
+          this.commonUtilitiesService.formatDateString(filterDateFrom),
+          "to",
+          this.commonUtilitiesService.formatDateString(filterDateTo)
+        );
+
         duesQuery = duesQuery.andWhere(
           `(
-            warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
-            AND warehouseRequirementDue.warehouse_requirement_due_end >= :filterDateFrom
+            warehouseRequirementDue.warehouse_requirement_due_start >= :filterDateFrom
+            AND warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
           )`,
-          { filterDateFrom, filterDateTo }
+          {
+            filterDateFrom:
+              this.commonUtilitiesService.formatDateString(filterDateFrom),
+            filterDateTo:
+              this.commonUtilitiesService.formatDateString(filterDateTo),
+          }
         );
       } else {
         // If no date filter, get only the most recent due per requirement
@@ -1341,10 +1349,15 @@ export class WarehouseRequirementsService {
 
         requirementCountsQuery = requirementCountsQuery.andWhere(
           `(
-            warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
-            AND warehouseRequirementDue.warehouse_requirement_due_end >= :filterDateFrom
+            warehouseRequirementDue.warehouse_requirement_due_start >= :filterDateFrom
+            AND warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
           )`,
-          { filterDateFrom, filterDateTo }
+          {
+            filterDateFrom:
+              this.commonUtilitiesService.formatDateString(filterDateFrom),
+            filterDateTo:
+              this.commonUtilitiesService.formatDateString(filterDateTo),
+          }
         );
       } else {
         // Fallback: count all requirements with status_id = 1 or 2
