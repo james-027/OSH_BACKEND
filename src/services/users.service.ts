@@ -438,14 +438,6 @@ export class UsersService {
 
       const savedUser = await this.usersRepository.save(user);
 
-      // Emit SSE event for user creation (broadcast to all users)
-      try {
-        const flattenedResponse = await this.createFlattenedResponse(savedUser);
-        this.sseEventEmitter.emitCreate("users", savedUser.id, flattenedResponse);
-      } catch (sseError) {
-        logger.warn("SSE event emission failed for user creation:", sseError);
-      }
-
       // Create UserPermissions if provided
       if (access_key_id && user_permission_presets) {
         await this.createUserPermissions(
@@ -524,6 +516,14 @@ export class UsersService {
           },
           savedUser.created_by
         );
+      }
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitCreateSignal("users", savedUser.id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
       }
 
       return this.createFlattenedResponse(savedUser);
@@ -695,14 +695,6 @@ export class UsersService {
       // Save user before updating permissions/locations so role_id is up-to-date
       const savedUser = await this.usersRepository.save(userToUpdate);
 
-      // Emit SSE event for user update (broadcast to all users)
-      try {
-        const flattenedResponse = await this.createFlattenedResponse(savedUser);
-        this.sseEventEmitter.emitUpdate("users", savedUser.id, flattenedResponse);
-      } catch (sseError) {
-        logger.warn("SSE event emission failed for user update:", sseError);
-      }
-
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -856,6 +848,14 @@ export class UsersService {
       });
 
       const responseMessage = `Successfully updated user with ID ${id}.${permissionsMessage}${locationsMessage}`;
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
 
       logger.info(`User updated successfully with ID: ${id}`);
       return {
@@ -1036,6 +1036,14 @@ export class UsersService {
       logger.info(
         `Successfully toggled status for user with ID ${id} and all related records.`
       );
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        this.sseEventEmitter.emitUpdateSignal("users", id);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
       return response;
     } catch (error) {
       logger.error(`Error toggling status for user with ID ${id}:`, error);
