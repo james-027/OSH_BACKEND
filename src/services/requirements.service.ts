@@ -14,6 +14,8 @@ import { Requirement } from "src/entities/Requirement";
 import { CreateRequirementDto } from "src/dto/CreateRequirementDto";
 import { UpdateRequirementDto } from "src/dto/UpdateRequirementDto";
 import { ResponseMapperService } from "./response-mapper.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "../config/logger";
 
 @Injectable()
 export class RequirementsService {
@@ -23,7 +25,8 @@ export class RequirementsService {
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-    private requirementRemindersService: RequirementRemindersService
+    private requirementRemindersService: RequirementRemindersService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -135,9 +138,18 @@ export class RequirementsService {
         throw new Error("Failed to retrieve created requirement");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         requirementWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreate("requirements", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -231,9 +243,18 @@ export class RequirementsService {
         throw new Error("Failed to retrieve created requirement");
       }
 
-      return this.responseMapperService.mapEntityToResponse(
+      const response = this.responseMapperService.mapEntityToResponse(
         requirementWithRelations
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -289,7 +310,17 @@ export class RequirementsService {
         userId
       );
 
-      return this.responseMapperService.mapEntityToResponse(updatedRequirement);
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedRequirement);
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
