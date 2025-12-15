@@ -153,20 +153,6 @@ export class ReqTransactionHeadersService {
 
       const response = await this.findOne(savedRecord.id);
 
-      // Emit SSE event for req transaction header creation (broadcast to all users)
-      try {
-        this.sseEventEmitter.emitCreate(
-          "req_transaction_headers",
-          savedRecord.id,
-          response
-        );
-      } catch (sseError) {
-        logger.warn(
-          "SSE event emission failed for req transaction header creation:",
-          sseError
-        );
-      }
-
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -246,21 +232,6 @@ export class ReqTransactionHeadersService {
 
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(record);
-
-      // Emit SSE event for req transaction header update (broadcast to all users)
-      try {
-        const response = await this.findOne(savedRecord.id);
-        this.sseEventEmitter.emitUpdate(
-          "req_transaction_headers",
-          id,
-          response
-        );
-      } catch (sseError) {
-        logger.warn(
-          "SSE event emission failed for req transaction header update:",
-          sseError
-        );
-      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -820,6 +791,15 @@ export class ReqTransactionHeadersService {
         },
         errors: errors,
       };
+
+      if (successResults.length > 0) {
+        // SSE Events
+        try {
+          this.sseEventEmitter.emitCreateSignal("req_transactions", 0);
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
 
       return response;
     } catch (error) {
