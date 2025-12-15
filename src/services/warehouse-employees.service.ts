@@ -10,6 +10,8 @@ import { CreateWarehouseEmployeeDto } from "../dto/CreateWarehouseEmployeeDto";
 import { UpdateWarehouseEmployeeDto } from "../dto/UpdateWarehouseEmployeeDto";
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
+import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class WarehouseEmployeesService {
@@ -17,7 +19,8 @@ export class WarehouseEmployeesService {
     @InjectRepository(WarehouseEmployee)
     private warehouseEmployeesRepository: Repository<WarehouseEmployee>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(
@@ -204,6 +207,12 @@ export class WarehouseEmployeesService {
         },
         userId
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouse_employees", saved.id);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
       return saved;
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -264,6 +273,12 @@ export class WarehouseEmployeesService {
         },
         userId
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("warehouse_employees", id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return this.findOne(id);
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -313,6 +328,14 @@ export class WarehouseEmployeesService {
       },
       userId
     );
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("warehouse_employees", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
+
     return this.findOne(id);
   }
 
@@ -373,6 +396,14 @@ export class WarehouseEmployeesService {
         }
       });
       await Promise.all(batchPromises); // Run batch in parallel
+    }
+    if (success.length > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouse_employees", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
     }
     return { success, errors, inserted, updated };
   }
