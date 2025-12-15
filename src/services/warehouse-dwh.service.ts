@@ -4,6 +4,8 @@ import { Repository } from "typeorm";
 import * as mysql from "mysql2/promise";
 import { Warehouse } from "../entities/Warehouse";
 import { WarehouseDwhLog } from "../entities/WarehouseDwhLog";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class WarehouseDwhService {
@@ -11,7 +13,8 @@ export class WarehouseDwhService {
     @InjectRepository(Warehouse)
     private warehouseRepository: Repository<Warehouse>,
     @InjectRepository(WarehouseDwhLog)
-    private logRepository: Repository<WarehouseDwhLog>
+    private logRepository: Repository<WarehouseDwhLog>,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async pullAndInsertFromOutlets(
@@ -185,6 +188,23 @@ export class WarehouseDwhService {
             })
           );
         }
+      }
+    }
+
+    if (inserted > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+    }
+    if (fullUniqueUpdates + individualUpdates > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("warehouses", 0);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
       }
     }
 
