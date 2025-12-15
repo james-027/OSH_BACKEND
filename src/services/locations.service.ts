@@ -25,12 +25,12 @@ export class LocationsService {
     private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
-  }
+  // async getUserLocationIds(userId: number, roleId: number) {
+  //   return this.usersService["userLocationsRepository"].find({
+  //     where: { user_id: userId, role_id: roleId, status_id: 1 },
+  //     select: ["location_id"],
+  //   });
+  // }
 
   async findAll(userId?: number, roleId?: number): Promise<any[]> {
     try {
@@ -361,7 +361,7 @@ export class LocationsService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("locations", id);
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
 
       return locationResponse;
@@ -501,7 +501,7 @@ export class LocationsService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("locations", id);
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
 
       return locationResponse;

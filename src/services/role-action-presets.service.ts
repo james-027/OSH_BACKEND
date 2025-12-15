@@ -682,7 +682,7 @@ export class RoleActionPresetsService {
           this.sseEventEmitter.emitUpdateSignal("role_presets", id);
           this.sseEventEmitter.emitUpdateSignal("roles", id);
         } catch (err) {
-          console.warn("SSE event failed:", err);
+          console.warn("SSE event failed for update:", err);
         }
 
         return result;
@@ -1252,7 +1252,7 @@ export class RoleActionPresetsService {
           this.sseEventEmitter.emitCreateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
         } catch (err) {
-          console.warn("SSE event failed:", err);
+          console.warn("SSE event failed for update:", err);
         }
 
         return flattenedResponse;
@@ -1552,7 +1552,7 @@ export class RoleActionPresetsService {
           this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
         } catch (err) {
-          console.warn("SSE event failed:", err);
+          console.warn("SSE event failed for update:", err);
         }
 
         return flattenedResponse;

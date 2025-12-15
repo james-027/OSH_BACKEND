@@ -854,7 +854,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
 
       logger.info(`User updated successfully with ID: ${id}`);
@@ -1042,7 +1042,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", id);
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
       return response;
     } catch (error) {

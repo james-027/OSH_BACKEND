@@ -265,7 +265,7 @@ export class RolesService {
         this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
 
       // Return flattened structure
@@ -383,7 +383,7 @@ export class RolesService {
         this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        console.warn("SSE event failed for update:", err);
       }
 
       // Return flattened structure
