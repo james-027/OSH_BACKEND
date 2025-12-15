@@ -15,6 +15,8 @@ import { Position } from "src/entities/Position";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { Action } from "../../entities/Action";
     ]),
     UsersModule,
     LocationsModule,
+    SSEModule,
   ],
   controllers: [EmployeesController],
   providers: [
@@ -37,6 +40,7 @@ import { Action } from "../../entities/Action";
     UserAuditTrailCreateService,
     EmployeeLocationsService,
     PositionsService,
+    CommonUtilitiesService,
   ],
   exports: [EmployeesService, EmployeeLocationsService],
 })

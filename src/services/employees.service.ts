@@ -14,6 +14,9 @@ import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { EmployeeLocationsService } from "./employee-locations.service";
 import { LocationsService } from "./locations.service";
 import { PositionsService } from "./positions.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "../config/logger";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class EmployeesService {
@@ -24,15 +27,10 @@ export class EmployeesService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private employeeLocationsService: EmployeeLocationsService,
     private locationsService: LocationsService,
-    private positionsService: PositionsService
+    private positionsService: PositionsService,
+    private commonUtilitiesService: CommonUtilitiesService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
-
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
-  }
 
   async findAll(
     accessKeyId?: number,
@@ -41,8 +39,11 @@ export class EmployeesService {
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
     }
     const employees = await this.employeesRepository.find({
       where: accessKeyId !== undefined ? { access_key_id: accessKeyId } : {},
@@ -145,8 +146,11 @@ export class EmployeesService {
     const { location_ids, ...employeeData } = createEmployeeDto;
     // Validate allowed locations
     if (roleId && Array.isArray(location_ids)) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
           throw new BadRequestException(
@@ -186,6 +190,12 @@ export class EmployeesService {
         },
         userId
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("employees", saved.id);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
       return saved;
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -201,8 +211,11 @@ export class EmployeesService {
     const { location_ids, ...employeeData } = updateEmployeeDto;
     // Validate allowed locations
     if (roleId && Array.isArray(location_ids)) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
           throw new BadRequestException(
@@ -251,6 +264,12 @@ export class EmployeesService {
         },
         userId
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("employees", saved.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return saved;
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -290,6 +309,13 @@ export class EmployeesService {
       },
       userId
     );
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("employees", saved.id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return saved;
   }
 
@@ -317,8 +343,11 @@ export class EmployeesService {
     // --- Allowed location validation ---
     let allowedLocationIds: number[] | undefined = undefined;
     if (roleId) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
     }
     // --- Preprocess for batch duplicate checks ---
     const batchEmployeeNumbers = new Set<string>();
@@ -554,6 +583,14 @@ export class EmployeesService {
         success.push({ ...upd.row, __rowNum__: upd.rowNum });
       } catch (err) {
         errors.push({ row: upd.rowNum, error: err.message });
+      }
+    }
+    if (inserted_count > 0 || updated_count > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("employees", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
     }
     return {
