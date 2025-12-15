@@ -31,6 +31,7 @@ import { Position } from "src/entities/Position";
 import { EmployeeLocation } from "src/entities/EmployeeLocation";
 import { LocationsModule } from "../locations/locations.module";
 import { SSEModule } from "../sse/sse.module";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { SSEModule } from "../sse/sse.module";
     EmployeesService,
     EmployeeLocationsService,
     PositionsService,
+    CommonUtilitiesService,
   ],
   exports: [ItemsService, ItemCategoriesService, ItemsDwhService],
 })
