@@ -19,6 +19,8 @@ import { ActionLogsService } from "./action-logs.service";
 
 import * as dayjs from "dayjs";
 import * as utc from "dayjs/plugin/utc";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 dayjs.extend(utc);
 
 @Injectable()
@@ -34,7 +36,8 @@ export class WarehouseHurdlesService {
     private warehousesService: WarehousesService,
     private itemCategoriesService: ItemCategoriesService,
     @Inject(ActionLogsService)
-    private ActionLogsService: ActionLogsService
+    private ActionLogsService: ActionLogsService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(
@@ -226,6 +229,13 @@ export class WarehouseHurdlesService {
       userId
     );
 
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitCreateSignal("warehouse_hurdles", 0);
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
+
     return result;
   }
 
@@ -310,6 +320,13 @@ export class WarehouseHurdlesService {
         created_by: userId,
       });
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", saved.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
+
       return saved;
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -378,6 +395,12 @@ export class WarehouseHurdlesService {
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
     });
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return this.findOne(id);
   }
 
@@ -446,6 +469,12 @@ export class WarehouseHurdlesService {
       },
       userId
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", 0);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
 
     // Return updated hurdles
     return Promise.all(ids.map((id) => this.findOne(id)));
@@ -593,6 +622,14 @@ export class WarehouseHurdlesService {
         }
       } catch (err) {
         errors.push({ row: i + 2, error: err.message });
+      }
+    }
+    if (inserted_count > 0 || updated_count > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouse_hurdles", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
     }
     return {
