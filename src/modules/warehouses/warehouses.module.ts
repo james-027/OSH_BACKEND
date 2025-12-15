@@ -36,6 +36,8 @@ import { ActionsModule } from "../actions/actions.module";
 import { ItemsModule } from "../items/items.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
 import { WarehouseRequirementsController } from "../../controllers/warehouse-requirements.controller";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -61,6 +63,7 @@ import { WarehouseRequirementsController } from "../../controllers/warehouse-req
     ActionsModule,
     ItemsModule,
     WarehouseRequirementsModule,
+    SSEModule,
   ],
   controllers: [
     WarehousesController,
@@ -82,6 +85,7 @@ import { WarehouseRequirementsController } from "../../controllers/warehouse-req
     WarehouseDwhService,
     UserAuditTrailCreateService,
     UserAuditTrailCreateService,
+    CommonUtilitiesService,
   ],
   exports: [
     WarehousesService,

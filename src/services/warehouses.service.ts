@@ -10,6 +10,7 @@ import { UsersService } from "./users.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class WarehousesService {
@@ -17,15 +18,9 @@ export class WarehousesService {
     @InjectRepository(Warehouse)
     private warehousesRepository: Repository<Warehouse>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
-
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
-  }
 
   async findAll(
     warehouse_type_id?: number,
@@ -41,8 +36,12 @@ export class WarehousesService {
       where.access_key_id = accessKeyId;
     }
     if (userId && roleId) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
+
       where.location_id = In(allowedLocationIds);
     }
     const warehouses = await this.warehousesRepository.find({
@@ -106,8 +105,11 @@ export class WarehousesService {
       where.access_key_id = accessKeyId;
     }
     if (userId && roleId) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
       where.location_id = In(allowedLocationIds);
     }
     const warehouses = await this.warehousesRepository.find({
