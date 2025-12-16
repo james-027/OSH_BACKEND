@@ -21,6 +21,8 @@ import { DwhLog } from "src/entities/dwhLog";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
+import { SSEModule } from "../sse/sse.module";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -37,6 +39,7 @@ import { Action } from "src/entities/Action";
     UsersModule,
     LocationsModule,
     UserAuditTrailModule,
+    SSEModule,
   ],
   controllers: [
     TransactionsController,
@@ -51,6 +54,7 @@ import { Action } from "src/entities/Action";
     SalesTransactionsDwhService,
     SalesBudgetTransactionsService,
     SalesBudgetTransactionsDwhService,
+    CommonUtilitiesService,
   ],
   exports: [
     TransactionsService,

@@ -11,6 +11,10 @@ import { LocationsService } from "./locations.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { UserLocationsService } from "./user-locations.service";
+import { CommonUtilitiesService } from "./common-utilities.service";
+import { filter } from "rxjs";
+import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class TransactionsService {
@@ -22,7 +26,9 @@ export class TransactionsService {
     private locationsService: LocationsService,
     private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private userLocationsService: UserLocationsService
+    private userLocationsService: UserLocationsService,
+    private commonUtilitiesService: CommonUtilitiesService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   // HEADER CRUD
@@ -37,13 +43,11 @@ export class TransactionsService {
   ) {
     let allowedLocationIds: number[] | undefined = undefined;
     if (user_id && role_id) {
-      const userLocations = await this.userLocationsService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id, role_id, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          user_id,
+          role_id
+        );
     }
     const where: any = {};
     if (allowedLocationIds && allowedLocationIds.length > 0) {
@@ -239,6 +243,13 @@ export class TransactionsService {
       { transaction_header_id: id },
       { status_id: 4 }
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", id);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return this.findHeaderById(id);
   }
 
@@ -273,6 +284,13 @@ export class TransactionsService {
       { transaction_header_id: id },
       { status_id: 5 }
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", id);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return this.findHeaderById(id);
   }
 
@@ -324,6 +342,13 @@ export class TransactionsService {
       { transaction_header_id: id },
       { status_id: 3 }
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", id);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return this.findHeaderById(id);
   }
 
@@ -353,6 +378,13 @@ export class TransactionsService {
 
   async updateDetail(id: number, dto: UpdateTransactionDetailDto) {
     await this.detailRepo.update(id, dto);
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", id);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return this.findDetailById(id);
   }
 
@@ -383,13 +415,11 @@ export class TransactionsService {
     // Validate allowed locations for user
     let allowedLocationIds: number[] | undefined = undefined;
     if (user_id && role_id) {
-      const userLocations = await this.userLocationsService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id, role_id, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          user_id,
+          role_id
+        );
     }
     const filteredLocationIds = allowedLocationIds
       ? location_ids.filter((id) => allowedLocationIds.includes(id))
@@ -652,6 +682,15 @@ export class TransactionsService {
         details_count: merged.length,
       });
     }
+    if (results.length > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreate("transactions", 0);
+        this.sseEventEmitter.emitCreate("dashboard", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+    }
     return results;
   }
 
@@ -738,6 +777,13 @@ export class TransactionsService {
         }
       }
     }
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", 0);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", 0);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return results;
   }
 
@@ -760,17 +806,11 @@ export class TransactionsService {
     // Validate allowed locations for user
     let allowedLocationIds: number[] | undefined = undefined;
     if (filters?.user_id && filters?.role_id) {
-      const userLocations = await this.userLocationsService[
-        "userLocationsRepository"
-      ].find({
-        where: {
-          user_id: filters.user_id,
-          role_id: filters.role_id,
-          status_id: 1,
-        },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          filters.user_id,
+          filters.role_id
+        );
     }
 
     // Build query for details with joins to header, warehouse, status, location, region, and employees for assigned roles

@@ -11,6 +11,7 @@ import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UsersModule } from "../users/users.module";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UsersModule } from "../users/users.module";
       UserAuditTrail,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [CompaniesController],
   providers: [CompaniesService, UserAuditTrailCreateService],

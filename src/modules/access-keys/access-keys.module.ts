@@ -9,6 +9,7 @@ import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { Action } from "src/entities/Action";
       Action,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [AccessKeysController],
   providers: [AccessKeysService, UserAuditTrailCreateService],

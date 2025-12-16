@@ -11,6 +11,8 @@ import { CreatePositionDto } from "../dto/CreatePositionDto";
 import { UpdatePositionDto } from "../dto/UpdatePositionDto";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class PositionsService {
@@ -18,7 +20,8 @@ export class PositionsService {
     @InjectRepository(Position)
     private positionsRepository: Repository<Position>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -102,6 +105,12 @@ export class PositionsService {
       },
       userId
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitCreateSignal("positions", savedPosition.id);
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
     return this.findOne(savedPosition.id);
   }
 
@@ -140,6 +149,12 @@ export class PositionsService {
       },
       userId
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("positions", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return updatedPosition;
   }
 
@@ -177,6 +192,12 @@ export class PositionsService {
       },
       userId
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("positions", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return toggledPosition;
   }
 }

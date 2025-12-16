@@ -7,6 +7,7 @@ import { UserAuditTrailController } from "../../controllers/user-audit-trail.con
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { Action } from "src/entities/Action";
       AppModule,
       Action,
     ]),
+    SSEModule,
   ],
   controllers: [UserAuditTrailController],
   providers: [UserAuditTrailService, UserAuditTrailCreateService],

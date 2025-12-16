@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Not } from "typeorm";
 import { WarehouseRate } from "../entities/WarehouseRate";
@@ -10,8 +6,9 @@ import { CreateWarehouseRateDto } from "../dto/CreateWarehouseRateDto";
 import { UpdateWarehouseRateDto } from "../dto/UpdateWarehouseRateDto";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { WarehousesService } from "./warehouses.service";
-import { Status } from "../entities/Status";
 import { UsersService } from "./users.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class WarehouseRatesService {
@@ -20,7 +17,8 @@ export class WarehouseRatesService {
     private warehouseRatesRepository: Repository<WarehouseRate>,
     private auditTrailService: UserAuditTrailCreateService,
     private warehousesService: WarehousesService,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(
@@ -144,6 +142,12 @@ export class WarehouseRatesService {
       );
       results.push(saved);
     }
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitCreateSignal("warehouse_rates", 0);
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
     return results;
   }
 
@@ -189,6 +193,12 @@ export class WarehouseRatesService {
         );
         results.push(saved);
       }
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("warehouse_rates", 0);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return results;
     } else {
       // Fallback: update by id
@@ -208,6 +218,12 @@ export class WarehouseRatesService {
         },
         userId
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("warehouse_rates", 0);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return saved;
     }
   }
@@ -229,14 +245,13 @@ export class WarehouseRatesService {
       },
       userId
     );
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("warehouse_rates", id);
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
     return saved;
-  }
-
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
   }
 
   async bulkUploadFromExcel(
@@ -335,6 +350,14 @@ export class WarehouseRatesService {
         }
       } catch (err) {
         errors.push({ row: row.__rowNum__, error: err.message });
+      }
+    }
+    if (inserted_count > 0 || updated_count > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouse_rates", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
     }
     return {
