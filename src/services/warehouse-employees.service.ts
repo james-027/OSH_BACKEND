@@ -12,6 +12,7 @@ import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class WarehouseEmployeesService {
@@ -20,7 +21,8 @@ export class WarehouseEmployeesService {
     private warehouseEmployeesRepository: Repository<WarehouseEmployee>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
 
   async findAll(
@@ -30,8 +32,11 @@ export class WarehouseEmployeesService {
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.getUserLocationIds(userId, roleId);
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId
+        );
     }
     const query = this.warehouseEmployeesRepository
       .createQueryBuilder("we")
@@ -406,12 +411,5 @@ export class WarehouseEmployeesService {
       }
     }
     return { success, errors, inserted, updated };
-  }
-
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
   }
 }

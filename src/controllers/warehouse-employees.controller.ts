@@ -20,14 +20,23 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { WarehouseEmployeesService } from "../services/warehouse-employees.service";
 import { CreateWarehouseEmployeeDto } from "../dto/CreateWarehouseEmployeeDto";
 import { UpdateWarehouseEmployeeDto } from "../dto/UpdateWarehouseEmployeeDto";
-import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
-import { excelFileFilter, generateTimestampFilename, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../adapters";
+import {
+  excelFileFilter,
+  generateTimestampFilename,
+  FILE_SIZE_LIMITS,
+} from "../utils/file-upload.utils";
 import * as XLSX from "xlsx";
 import { WarehousesService } from "../services/warehouses.service";
 import { EmployeesService } from "../services/employees.service";
 import { StatusService } from "../services/status.service";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Controller("warehouse-employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -37,7 +46,8 @@ export class WarehouseEmployeesController {
     private readonly warehousesService: WarehousesService,
     private readonly employeesService: EmployeesService,
     private readonly statusService: StatusService,
-    private readonly userAuditTrailCreateService: UserAuditTrailCreateService // Inject audit trail service
+    private readonly userAuditTrailCreateService: UserAuditTrailCreateService, // Inject audit trail service
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
 
   @Get()
@@ -151,9 +161,11 @@ export class WarehouseEmployeesController {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     // Get allowed location_ids for this user/role
-    const userLocations =
-      await this.warehouseEmployeesService.getUserLocationIds(userId, roleId);
-    const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+    const allowedLocationIds =
+      await this.commonUtilitiesService.getUserAllowedLocationIds(
+        userId,
+        roleId
+      );
 
     // Preload all warehouses, employees (with their locations), and statuses for fast lookup
     const warehouses = await this.warehousesService.findAll();
@@ -363,5 +375,3 @@ export class WarehouseEmployeesController {
     return summary;
   }
 }
-
-
