@@ -26,6 +26,7 @@ import * as fs from "fs";
 import { extname } from "path";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 import { BadRequestException } from "@nestjs/common/exceptions";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -36,7 +37,8 @@ dayjs.extend(utc);
 export class WarehouseRatesController {
   constructor(
     private readonly warehouseRatesService: WarehouseRatesService,
-    private readonly auditTrailService: UserAuditTrailCreateService
+    private readonly auditTrailService: UserAuditTrailCreateService,
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
 
   @Get()
@@ -127,11 +129,11 @@ export class WarehouseRatesController {
     const roleId = req.user.role_id;
 
     // Get allowed location_ids for this user/role
-    const userLocations = await this.warehouseRatesService.getUserLocationIds(
-      userId,
-      roleId
-    );
-    const allowedLocationIds = userLocations.map((ul) => ul.location_id);
+    const allowedLocationIds =
+      await this.commonUtilitiesService.getUserAllowedLocationIds(
+        userId,
+        roleId
+      );
 
     // Map Excel columns to DTOs
     const records = json.map((row, idx) => {
