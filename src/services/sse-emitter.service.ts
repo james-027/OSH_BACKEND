@@ -45,6 +45,9 @@ export class SSEEmitterService {
   // Track all active subscriptions with metadata
   private subscriptionRegistry = new Map<string, SubscriptionDetail>();
 
+  // Track all emitted resources (for monitoring what's active)
+  private emittedResources = new Map<string, { resource: string; resourceId?: number; lastEmittedAt: Date; eventCount: number }>();
+
   /**
    * Subscribe to broadcast event stream
    * All connected users receive the same stream
@@ -87,6 +90,23 @@ export class SSEEmitterService {
    * @param event - The SSE event to broadcast
    */
   broadcastEvent(event: SSEEvent): void {
+    // Track emitted resource
+    const resourceKey = `${event.resource}:${event.resourceId || "*"}`;
+    const existing = this.emittedResources.get(resourceKey);
+
+    this.emittedResources.set(resourceKey, {
+      resource: event.resource,
+      resourceId: event.resourceId,
+      lastEmittedAt: new Date(),
+      eventCount: (existing?.eventCount || 0) + 1,
+    });
+
+    this.logger.log(
+      `[SSE] Event emitted: ${event.type} - ${event.resource}${
+        event.resourceId ? `:${event.resourceId}` : ""
+      }`
+    );
+
     this.broadcastSubject.next(event);
   }
 
@@ -253,6 +273,93 @@ export class SSEEmitterService {
     resourceIds.forEach((id) => {
       this.invalidateAllSubscriptionsForResourceId(id);
     });
+  }
+
+  /**
+   * List all emitted resources (resources with active SSE events)
+   * @returns Array of emitted resources with metadata
+   */
+  listEmittedResources(): Array<{
+    resource: string;
+    resourceId?: number;
+    lastEmittedAt: Date;
+    eventCount: number;
+  }> {
+    return Array.from(this.emittedResources.values());
+  }
+
+  /**
+   * Get emitted resources grouped by resource type
+   * @returns Object with resource types as keys and arrays of details as values
+   */
+  getEmittedResourcesByType(): Record<
+    string,
+    Array<{ resourceId?: number; lastEmittedAt: Date; eventCount: number }>
+  > {
+    const grouped: Record<
+      string,
+      Array<{ resourceId?: number; lastEmittedAt: Date; eventCount: number }>
+    > = {};
+
+    this.emittedResources.forEach((value) => {
+      if (!grouped[value.resource]) {
+        grouped[value.resource] = [];
+      }
+      grouped[value.resource].push({
+        resourceId: value.resourceId,
+        lastEmittedAt: value.lastEmittedAt,
+        eventCount: value.eventCount,
+      });
+    });
+
+    return grouped;
+  }
+
+  /**
+   * Clear all emitted resources tracking (for testing)
+   */
+  clearEmittedResources(): void {
+    const count = this.emittedResources.size;
+    this.emittedResources.clear();
+    this.logger.warn(`[SSE] Cleared ${count} emitted resource records`);
+  }
+
+  /**
+   * Register a client's interest in specific resources
+   * Called by frontend after EventSource connects
+   *
+   * @param subscriptionId - The subscription ID
+   * @param resources - Array of resources: [{ resource: 'users', resourceId: 3 }, ...]
+   */
+  registerSubscriptionResources(
+    subscriptionId: string,
+    resources: Array<{ resource: string; resourceId?: number }>
+  ): void {
+    const existing = this.subscriptionRegistry.get(subscriptionId);
+    if (!existing) {
+      this.logger.warn(
+        `[SSE] Subscription ${subscriptionId} not found for registration`
+      );
+      return;
+    }
+
+    // Update with actual resources being listened to
+    resources.forEach((res) => {
+      const detailKey = `${subscriptionId}:${res.resource}:${res.resourceId || "*"}`;
+      this.subscriptionRegistry.set(detailKey, {
+        subscriptionId,
+        subscribedAt: existing.subscribedAt,
+        resource: res.resource,
+        resourceId: res.resourceId,
+        queryKey: res.resourceId
+          ? `${res.resource}:${res.resourceId}`
+          : res.resource,
+      });
+    });
+
+    this.logger.log(
+      `[SSE] Registered ${resources.length} resources for subscription ${subscriptionId}`
+    );
   }
 
   /**
