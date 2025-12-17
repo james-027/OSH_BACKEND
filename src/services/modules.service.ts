@@ -14,6 +14,7 @@ import { UpdateModuleDto } from "../dto/UpdateModuleDto";
 import logger from "../config/logger";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class ModulesService {
@@ -24,7 +25,8 @@ export class ModulesService {
     private userRepository: Repository<User>,
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -237,6 +239,12 @@ export class ModulesService {
       logger.info(
         `Successfully created module with ID: ${createdModule.id} by user ${authenticatedUserId}`
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("modules", createdModule.id);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
       return flattenedModule;
     } catch (error) {
       logger.error("Error creating module:", error);
@@ -395,6 +403,12 @@ export class ModulesService {
       logger.info(
         `Successfully updated module with ID: ${updatedModule.id} by user ${authenticatedUserId}`
       );
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return flattenedModule;
     } catch (error) {
       logger.error(`Error updating module with ID ${id}:`, error);
@@ -503,6 +517,12 @@ export class ModulesService {
       const statusText = newStatusId === 1 ? "activated" : "deactivated";
 
       logger.info(`Module ${statusText} successfully with ID: ${id}`);
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
       return {
         message: `Module successfully ${statusText}.`,
         module: {

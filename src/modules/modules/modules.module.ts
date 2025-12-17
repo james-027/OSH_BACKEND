@@ -8,6 +8,7 @@ import { Status } from "src/entities/Status";
 import { UsersModule } from "../users/users.module";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Action } from "src/entities/Action";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Action } from "src/entities/Action";
       Action,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [ModulesController],
   providers: [ModulesService],
