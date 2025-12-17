@@ -460,7 +460,7 @@ export class ApiService {
       case "suppliers":
         const supplier_modified_date = queryParams.modified_date ?? "";
 
-        const whereClauses3 = ["a.ACTIVE = 1"];
+        const whereClauses3 = ["x.ACTIVE = 1"];
 
         const sqlParams3: any[] = [];
         if (supplier_modified_date) {
