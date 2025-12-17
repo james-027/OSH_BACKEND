@@ -7,6 +7,8 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Post,
+  Body,
 } from "@nestjs/common";
 import { Observable, interval } from "rxjs";
 import { map } from "rxjs/operators";
@@ -87,10 +89,43 @@ export class SSEController {
    * Returns current active subscriptions count
    */
   @Get("list-all-subscriptions")
-  getSSESubscriptionList(@Request() req) {
+  getSSESubscriptionList() {
     return {
-      user: req.user?.id || null,
-      activeSubscriptionLists: this.sseEmitterService.listAllSubscriptions(),
+      // activeSubscriptionLists: this.sseEmitterService.listAllSubscriptions(),
+      activeSubscriptionLists: this.sseEmitterService.listEmittedResources(),
     };
+  }
+
+  /**
+   * List all emmited groupos by resource type
+   * Returns current active subscriptions count
+   */
+  @Get("list-all-emitted-resources-by-type")
+  getEmittedResourcesByType() {
+    return {
+      // activeSubscriptionLists: this.sseEmitterService.listAllSubscriptions(),
+      activeSubscriptionLists:
+        this.sseEmitterService.getEmittedResourcesByType(),
+    };
+  }
+
+  /**
+   * Register subscription resources
+   * Frontend calls this after connecting to EventSource
+   * Sends: { subscriptionId, resources: [{ resource: 'users', resourceId: 3 }, ...] }
+   */
+  @Post("register-subscriptions")
+  registerSubscriptions(
+    @Body()
+    body: {
+      subscriptionId: string;
+      resources: Array<{ resource: string; resourceId?: number }>;
+    }
+  ) {
+    this.sseEmitterService.registerSubscriptionResources(
+      body.subscriptionId,
+      body.resources
+    );
+    return { success: true, message: "Subscriptions registered" };
   }
 }
