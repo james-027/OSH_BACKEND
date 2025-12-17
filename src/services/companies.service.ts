@@ -11,7 +11,8 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 
 import { CreateCompanyDto } from "../dto/CreateCompanyDto";
 import { UpdateCompanyDto } from "../dto/UpdateCompanyDto";
-import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class CompaniesService {
@@ -19,7 +20,8 @@ export class CompaniesService {
     @InjectRepository(Company)
     private companiesRepository: Repository<Company>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -142,6 +144,16 @@ export class CompaniesService {
         throw new Error("Failed to retrieve created company");
       }
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal(
+          "companies",
+          companyWithRelations.id
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
       return {
         id: companyWithRelations.id,
         company_name: companyWithRelations.company_name,
@@ -239,6 +251,13 @@ export class CompaniesService {
         throw new Error("Failed to retrieve updated company");
       }
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("companies", updatedCompany.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
+
       return {
         id: updatedCompany.id,
         company_name: updatedCompany.company_name,
@@ -324,6 +343,13 @@ export class CompaniesService {
         },
         userId
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("companies", updatedCompany.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
 
       return {
         id: updatedCompany.id,

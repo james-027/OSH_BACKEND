@@ -12,6 +12,8 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateAccessKeyDto } from "../dto/CreateAccessKeyDto";
 import { UpdateAccessKeyDto } from "../dto/UpdateAccessKeyDto";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class AccessKeysService {
@@ -19,7 +21,8 @@ export class AccessKeysService {
     @InjectRepository(AccessKey)
     private accessKeysRepository: Repository<AccessKey>,
     private usersService: UsersService,
-    private userAuditTrailCreateService: UserAuditTrailCreateService
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -147,6 +150,16 @@ export class AccessKeysService {
         throw new Error("Failed to retrieve created access key");
       }
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal(
+          "access_keys",
+          accessKeyWithRelations.id
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
       return {
         id: accessKeyWithRelations.id,
         access_key_name: accessKeyWithRelations.access_key_name,
@@ -260,6 +273,16 @@ export class AccessKeysService {
         userId
       );
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal(
+          "access_keys",
+          updatedAccessKey.id
+        );
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
+
       return {
         id: updatedAccessKey.id,
         access_key_name: updatedAccessKey.access_key_name,
@@ -361,6 +384,16 @@ export class AccessKeysService {
         },
         userId
       );
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal(
+          "access_keys",
+          updatedAccessKey.id
+        );
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
 
       return {
         id: updatedAccessKey.id,
