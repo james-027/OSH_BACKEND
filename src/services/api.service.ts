@@ -464,35 +464,53 @@ export class ApiService {
 
         const sqlParams3: any[] = [];
         if (supplier_modified_date) {
-          whereClauses3.push("a.LASTUPDATED >= ?");
+          // whereClauses3.push("x.LASTUPDATED >= ?");
+          whereClauses3.push("x.ts_modified >= ?");
           sqlParams3.push(supplier_modified_date);
         }
 
         const suppQuery = `
           SELECT
-            a.SUPPNO AS supp_no,
-            a.SUPPNAME AS supp_name,
-            a.EMAIL AS email,
-            CONCAT(
-              CONCAT_WS(
-                ' ',
-                NULLIF( b.STREET, '' ),
-                NULLIF( b.BARANGAY, '' ),
-              NULLIF( b.CITY, '' )),
-            IF
-              (
-                c.PROVINCENAME IS NULL 
-                OR c.PROVINCENAME = '',
-                '',
-              CONCAT( ', ', c.PROVINCENAME )) 
-            ) AS supp_address,
-            DATE_FORMAT( a.LASTUPDATED, '%Y-%m-%d %H:%i:%s' ) AS ts_modified 
+            * 
           FROM
-            suppliers a
-            INNER JOIN addresses b ON a.SUPPNO = b.REFID 
-            AND b.COMPANY = 'CTGI' 
-            AND b.BRANCH = 'HO'
-            INNER JOIN provinces c ON b.PROVINCE = c.PROVINCE 
+            (
+            SELECT
+              a.SUPPNO AS supp_no,
+              a.SUPPNAME AS supp_name,
+              a.EMAIL AS email,
+              CONCAT(
+                CONCAT_WS(
+                  ' ',
+                  NULLIF( b.STREET, '' ),
+                  NULLIF( b.BARANGAY, '' ),
+                NULLIF( b.CITY, '' )),
+              IF
+                (
+                  c.PROVINCENAME IS NULL 
+                  OR c.PROVINCENAME = '',
+                  '',
+                CONCAT( ', ', c.PROVINCENAME )) 
+              ) AS supp_address,
+              DATE_FORMAT( a.LASTUPDATED, '%Y-%m-%d %H:%i:%s' ) AS ts_modified,
+              a.ACTIVE
+            FROM
+              suppliers a
+              INNER JOIN addresses b ON a.SUPPNO = b.REFID 
+              AND b.COMPANY = 'CTGI' 
+              AND b.BRANCH = 'HO'
+              INNER JOIN provinces c ON b.PROVINCE = c.PROVINCE UNION
+            SELECT
+              a.SUPPNO AS supp_no,
+              a.SUPPNAME AS supp_name,
+              a.EMAIL AS email,
+              "" AS supp_address,
+              DATE_FORMAT( a.LASTUPDATED, '%Y-%m-%d %H:%i:%s' ) AS ts_modified,
+              a.ACTIVE
+            FROM
+              suppliers a 
+            WHERE
+            a.SUPPNO NOT IN ( SELECT b.REFID FROM addresses b WHERE b.REFTYPE = "SUPPLIER" AND b.COMPANY = 'CTGI' AND b.BRANCH = 'HO' ) 
+            ) x
           WHERE
             ${whereClauses3.join(" AND ")}
         `;
