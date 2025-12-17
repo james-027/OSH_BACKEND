@@ -108,20 +108,22 @@ export class WarehouseRequirementsController {
     @Query("warehouse_id") warehouse_id?: number,
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
+    @Query("flatten") flatten?: boolean,
     @Request() req?: any
   ) {
     const userId = req?.user?.id;
     const roleId = req?.user?.roleId;
     const accessKeyId = req?.user?.accessKeyId;
 
-    return await this.warehouseRequirementsService.getWarehouseRequirementsListingCounts(
+    return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
       warehouse_type_id,
       warehouse_id ? Number(warehouse_id) : undefined,
       date_from,
       date_to,
       userId,
       roleId,
-      accessKeyId
+      accessKeyId,
+      flatten
     );
   }
 

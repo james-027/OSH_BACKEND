@@ -528,11 +528,13 @@ export class ReqTransactionHeadersService {
             );
 
           let transDueStatusId = 1; // default: active
-          if (
-            reqReminderStatusDetail?.reminderTypeName.toLowerCase() ===
-            "overdue"
-          ) {
-            transDueStatusId = 2; // overdue status
+          if (createDto.renewal_type_id !== 1) {
+            if (
+              reqReminderStatusDetail?.reminderTypeName.toLowerCase() ===
+              "overdue"
+            ) {
+              transDueStatusId = 2; // overdue status
+            }
           }
 
           //* Step 7: Create transaction header
