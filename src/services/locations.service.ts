@@ -13,12 +13,18 @@ import { CreateLocationDto } from "../dto/CreateLocationDto";
 import { UpdateLocationDto } from "../dto/UpdateLocationDto";
 import { CommonUtilitiesService } from "./common-utilities.service";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { UserLocations } from "src/entities/UserLocations";
+import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
 
 @Injectable()
 export class LocationsService {
   constructor(
     @InjectRepository(Location)
     private locationsRepository: Repository<Location>,
+    @InjectRepository(UserLocations)
+    private userLocationsRepository: Repository<UserLocations>,
+    @InjectRepository(RoleLocationPreset)
+    private roleLocationPresetRepository: Repository<RoleLocationPreset>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -413,7 +419,14 @@ export class LocationsService {
     try {
       const location = await this.locationsRepository.findOne({
         where: { id },
-        relations: ["locationType", "status", "createdBy", "updatedBy"],
+        relations: [
+          "locationType",
+          "status",
+          "createdBy",
+          "updatedBy",
+          "userLocations",
+          "roleLocationPresets",
+        ],
       });
 
       if (!location) {
@@ -432,6 +445,18 @@ export class LocationsService {
         status_id: newStatusId,
         updated_by: userId,
       });
+
+      // Update userLocations by location_id
+      await this.userLocationsRepository.update(
+        { location_id: id },
+        { status_id: newStatusId, updated_by: userId }
+      );
+
+      // Update roleLocationPresets by location_id
+      await this.roleLocationPresetRepository.update(
+        { location_id: id },
+        { status_id: newStatusId, updated_by: userId }
+      );
 
       // Audit trail
       await this.userAuditTrailCreateService.create(

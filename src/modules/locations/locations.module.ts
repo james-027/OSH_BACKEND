@@ -16,6 +16,8 @@ import { UsersModule } from "../users/users.module";
 import { LocationTypesController } from "src/controllers/location-types.controller";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
+import { UserLocations } from "src/entities/UserLocations";
+import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { SSEModule } from "../sse/sse.module";
       AppModule,
       Action,
       UserAuditTrail,
+      UserLocations,
+      RoleLocationPreset,
     ]),
     UsersModule,
     SSEModule,
