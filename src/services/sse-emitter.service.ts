@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
-import { Subject, Observable } from "rxjs";
+import { Injectable, Logger } from "@nestjs/common";
+import { Subject, Observable, Subscription } from "rxjs";
+import { tap } from "rxjs/operators";
 
 /**
  * SSE Event interface for pure broadcast architecture
@@ -14,18 +15,70 @@ export interface SSEEvent {
   timestamp: string;
 }
 
+/**
+ * Subscription details for tracking active connections
+ */
+export interface SubscriptionDetail {
+  subscriptionId: string;
+  subscribedAt: Date;
+  resource: string;
+  resourceId?: number; // e.g., ["users", 3] where 3 is userId
+  queryKey: string; // e.g., "users" or "users:3"
+}
+
+/**
+ * Subscription statistics
+ */
+export interface SubscriptionStats {
+  totalActiveSubscriptions: number;
+  subscriptionsPerResource: Record<string, number>;
+  allSubscriptions: SubscriptionDetail[];
+}
+
 @Injectable()
 export class SSEEmitterService {
+  private readonly logger = new Logger(SSEEmitterService.name);
+
   // Single global broadcast subject for all connected clients
   private broadcastSubject = new Subject<SSEEvent>();
+
+  // Track all active subscriptions with metadata
+  private subscriptionRegistry = new Map<string, SubscriptionDetail>();
 
   /**
    * Subscribe to broadcast event stream
    * All connected users receive the same stream
    * React Query on client filters events by resource type
+   *
+   * Tracks subscription in registry for monitoring and invalidation
    */
   subscribeToEvents(): Observable<SSEEvent> {
-    return this.broadcastSubject.asObservable();
+    const subscriptionId = this.generateSubscriptionId();
+    const subscriptionDetail: SubscriptionDetail = {
+      subscriptionId,
+      subscribedAt: new Date(),
+      resource: "broadcast", // Broadcast subscription
+      queryKey: "broadcast",
+    };
+
+    this.subscriptionRegistry.set(subscriptionId, subscriptionDetail);
+    this.logger.log(
+      `[SSE] New subscription: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
+    );
+
+    return this.broadcastSubject.asObservable().pipe(
+      tap({
+        complete: () => {
+          this.subscriptionRegistry.delete(subscriptionId);
+          this.logger.log(
+            `[SSE] Subscription removed: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
+          );
+        },
+        error: () => {
+          this.subscriptionRegistry.delete(subscriptionId);
+        },
+      })
+    );
   }
 
   /**
@@ -38,12 +91,184 @@ export class SSEEmitterService {
   }
 
   /**
-   * Get count of active subscriptions (useful for monitoring)
+   * Get statistics about active subscriptions
+   * @returns Subscription statistics including counts and details
    */
-  getActiveSubscriptions(): number {
-    // Note: Subject doesn't track subscriber count directly
-    // In production, you'd implement custom subscription tracking
-    // For now, this is a placeholder
-    return 0;
+  getSubscriptionStats(): SubscriptionStats {
+    const stats: SubscriptionStats = {
+      totalActiveSubscriptions: this.subscriptionRegistry.size,
+      subscriptionsPerResource: {},
+      allSubscriptions: Array.from(this.subscriptionRegistry.values()),
+    };
+
+    // Count subscriptions per resource
+    stats.allSubscriptions.forEach((sub) => {
+      if (!stats.subscriptionsPerResource[sub.resource]) {
+        stats.subscriptionsPerResource[sub.resource] = 0;
+      }
+      stats.subscriptionsPerResource[sub.resource]++;
+    });
+
+    return stats;
+  }
+
+  /**
+   * Get count of active subscriptions globally
+   * @returns Total number of active subscriptions
+   */
+  getActiveSubscriptionsCount(): number {
+    return this.subscriptionRegistry.size;
+  }
+
+  /**
+   * List all active subscriptions with details
+   * @returns Array of subscription details
+   */
+  listAllSubscriptions(): SubscriptionDetail[] {
+    return Array.from(this.subscriptionRegistry.values());
+  }
+
+  /**
+   * List subscriptions for a specific resource
+   * @param resource - The resource name (e.g., "users", "locations")
+   * @param resourceId - Optional resource ID (e.g., userId)
+   * @returns Array of matching subscriptions
+   */
+  listSubscriptionsByResource(
+    resource: string,
+    resourceId?: number
+  ): SubscriptionDetail[] {
+    return this.listAllSubscriptions().filter((sub) => {
+      if (sub.resource !== resource) return false;
+      if (resourceId !== undefined && sub.resourceId !== resourceId)
+        return false;
+      return true;
+    });
+  }
+
+  /**
+   * Invalidate specific resource subscriptions
+   *
+   * Usage:
+   * - Invalidate all subscriptions for a resource: invalidateResource('users')
+   * - Invalidate specific user's subscriptions: invalidateResource('users', 3)
+   * - Invalidate subscriptions for user #3's data: invalidateResourceId(3)
+   *
+   * @param resource - The resource type to invalidate
+   * @param resourceId - Optional specific resource ID to invalidate
+   *
+   * Example: When user #3's permissions change:
+   * this.sseEmitterService.invalidateResource('users', 3);
+   * // Broadcasts: { type: 'INVALIDATE', resource: 'users', resourceId: 3 }
+   */
+  invalidateResource(resource: string, resourceId?: number): void {
+    const subscriptions = this.listSubscriptionsByResource(
+      resource,
+      resourceId
+    );
+
+    if (subscriptions.length === 0) {
+      this.logger.warn(
+        `[SSE] No subscriptions found for ${resource}${
+          resourceId ? `:${resourceId}` : ""
+        }`
+      );
+      return;
+    }
+
+    this.logger.log(
+      `[SSE] Invalidating ${subscriptions.length} subscriptions for ${resource}${
+        resourceId ? `:${resourceId}` : ""
+      }`
+    );
+
+    // Broadcast invalidation event to all clients
+    const event: SSEEvent = {
+      type: "INVALIDATE",
+      resource,
+      resourceId,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.broadcastEvent(event);
+  }
+
+  /**
+   * Invalidate all subscriptions for a specific resource ID across all resource types
+   *
+   * Usage: When a user is deleted or permissions change, invalidate all their subscriptions
+   * Example: User #3 is deleted
+   * this.sseEmitterService.invalidateAllSubscriptionsForResourceId(3);
+   * // Broadcasts invalidation for ['users', 3], ['locations', 3], etc.
+   *
+   * @param resourceId - The ID to invalidate across all resources
+   */
+  invalidateAllSubscriptionsForResourceId(resourceId: number): void {
+    const allSubscriptions = this.listAllSubscriptions();
+
+    // Find all unique resources that have this resourceId
+    const affectedResources = new Set<string>();
+    allSubscriptions.forEach((sub) => {
+      if (sub.resourceId === resourceId) {
+        affectedResources.add(sub.resource);
+      }
+    });
+
+    if (affectedResources.size === 0) {
+      this.logger.warn(
+        `[SSE] No subscriptions found for resource ID: ${resourceId}`
+      );
+      return;
+    }
+
+    this.logger.log(
+      `[SSE] Invalidating ${affectedResources.size} resource types for ID ${resourceId}`
+    );
+
+    // Broadcast invalidation for each affected resource
+    affectedResources.forEach((resource) => {
+      const event: SSEEvent = {
+        type: "INVALIDATE",
+        resource,
+        resourceId,
+        timestamp: new Date().toISOString(),
+      };
+      this.broadcastEvent(event);
+    });
+  }
+
+  /**
+   * Invalidate all subscriptions for multiple resource IDs
+   *
+   * Usage: When multiple users' permissions change
+   * Example: Roles [1, 2, 3] are deactivated
+   * this.sseEmitterService.invalidateMultipleResourceIds([1, 2, 3]);
+   *
+   * @param resourceIds - Array of IDs to invalidate
+   */
+  invalidateMultipleResourceIds(resourceIds: number[]): void {
+    this.logger.log(
+      `[SSE] Invalidating ${resourceIds.length} resource IDs: ${resourceIds.join(", ")}`
+    );
+    resourceIds.forEach((id) => {
+      this.invalidateAllSubscriptionsForResourceId(id);
+    });
+  }
+
+  /**
+   * Clear all subscriptions (for testing or emergency cleanup)
+   */
+  clearAllSubscriptions(): void {
+    const count = this.subscriptionRegistry.size;
+    this.subscriptionRegistry.clear();
+    this.logger.warn(`[SSE] Cleared ${count} subscriptions`);
+  }
+
+  /**
+   * Generate unique subscription ID
+   * @private
+   */
+  private generateSubscriptionId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 }

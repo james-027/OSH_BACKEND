@@ -30,9 +30,7 @@ export class SSEController {
    * @returns Observable stream of server-sent events (broadcast to all)
    */
   @Sse("broadcast")
-  subscribeToEvents(
-    @Request() req
-  ): Observable<any> {
+  subscribeToEvents(@Request() req): Observable<any> {
     // Verify user is authenticated (JwtAuthGuard ensures this)
     const authenticatedUserId = req.user?.id;
     if (!authenticatedUserId) {
@@ -80,7 +78,19 @@ export class SSEController {
   getSSEHealth() {
     return {
       status: "healthy",
-      activeSubscriptions: this.sseEmitterService.getActiveSubscriptions(),
+      activeSubscriptions: this.sseEmitterService.getActiveSubscriptionsCount(),
+    };
+  }
+
+  /**
+   * List all subscriptions for SSE
+   * Returns current active subscriptions count
+   */
+  @Get("list-all-subscriptions")
+  getSSESubscriptionList(@Request() req) {
+    return {
+      user: req.user?.id || null,
+      activeSubscriptionLists: this.sseEmitterService.listAllSubscriptions(),
     };
   }
 }
