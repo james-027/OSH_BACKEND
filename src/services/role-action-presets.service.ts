@@ -25,6 +25,8 @@ import { CreateRoleActionPresetDto } from "src/dto/CreateRoleActionPresetDto";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { SSEEmitterService } from "./sse-emitter.service";
+import { UsersService } from "./users.service";
 
 @Injectable()
 export class RoleActionPresetsService {
@@ -53,7 +55,9 @@ export class RoleActionPresetsService {
     private accessKeyRepository: Repository<AccessKey>,
     private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private usersService: UsersService,
+    private sseEmitterService: SSEEmitterService
   ) {}
 
   async findRolesNotInPresets() {
@@ -678,7 +682,11 @@ export class RoleActionPresetsService {
         // SSE Events
         try {
           // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
-          this.sseEventEmitter.emitUpdateSignal("users", userId);
+          const userIds =
+            await this.usersService.getUserPermissionsByRole(role_id);
+          userIds.forEach((uid) => {
+            this.sseEventEmitter.emitUpdateSignal("users", uid);
+          });
           this.sseEventEmitter.emitUpdateSignal("role_presets", id);
           this.sseEventEmitter.emitUpdateSignal("roles", id);
         } catch (err) {
@@ -1190,6 +1198,14 @@ export class RoleActionPresetsService {
               location_ids,
               userId
             );
+
+            // SSE Events
+            try {
+              // Option 2: WITHOUT data
+              this.sseEventEmitter.emitUpdateSignal("locations", 0);
+            } catch (err) {
+              console.warn("SSE event failed for update:", err);
+            }
           }
         }
 
@@ -1248,7 +1264,11 @@ export class RoleActionPresetsService {
         // SSE Events
         try {
           // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
-          this.sseEventEmitter.emitCreateSignal("users", userId);
+          const userIds =
+            await this.usersService.getUserPermissionsByRole(role_id);
+          userIds.forEach((uid) => {
+            this.sseEventEmitter.emitUpdateSignal("users", uid);
+          });
           this.sseEventEmitter.emitCreateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
         } catch (err) {
@@ -1548,7 +1568,11 @@ export class RoleActionPresetsService {
         // SSE Events
         try {
           // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
-          this.sseEventEmitter.emitUpdateSignal("users", userId);
+          const userIds =
+            await this.usersService.getUserPermissionsByRole(role_id);
+          userIds.forEach((uid) => {
+            this.sseEventEmitter.emitUpdateSignal("users", uid);
+          });
           this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
         } catch (err) {

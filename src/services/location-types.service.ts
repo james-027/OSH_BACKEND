@@ -10,6 +10,8 @@ import { User } from "../entities/User";
 import { Status } from "../entities/Status";
 import { UpdateLocationTypeDto } from "src/dto/UpdateLocationTypeDto";
 import { CreateLocationTypeDto } from "src/dto/CreateLocationTypeDto";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class LocationTypesService {
@@ -19,7 +21,8 @@ export class LocationTypesService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Status)
-    private statusRepository: Repository<Status>
+    private statusRepository: Repository<Status>,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async findAll() {
@@ -123,6 +126,16 @@ export class LocationTypesService {
       throw new Error("Failed to retrieve created location type");
     }
 
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitCreateSignal(
+        "location_types",
+        newLocationType.id
+      );
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
+
     return {
       id: newLocationType.id,
       location_type_name: newLocationType.location_type_name,
@@ -212,6 +225,16 @@ export class LocationTypesService {
 
     if (!updatedLocationType) {
       throw new Error("Failed to retrieve updated location type");
+    }
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal(
+        "location_types",
+        updatedLocationType.id
+      );
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
     }
 
     return {
@@ -308,6 +331,16 @@ export class LocationTypesService {
         ? updatedLocationType.status.status_name
         : null,
     };
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal(
+        "location_types",
+        updatedLocationType.id
+      );
+    } catch (err) {
+      logger.error("SSE event failed for update:", err);
+    }
 
     return {
       message: `Location type ${updatedLocationType.location_type_name} successfully toggled to ${newStatusEntity.status_name}.`,

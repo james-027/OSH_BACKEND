@@ -1634,6 +1634,12 @@ export class UsersService {
             },
             created_by
           );
+          try {
+            // Option 2: WITHOUT data
+            this.sseEventEmitter.emitUpdateSignal("users", existingUser.id);
+          } catch (err) {
+            console.warn("SSE event failed:", err);
+          }
           updated_count++;
           updated_row_numbers.push(rowNum);
           success.push({ ...row, __rowNum__: rowNum });
@@ -1747,6 +1753,14 @@ export class UsersService {
         errors.push({ row: rowNum, error: err.message });
       }
     }
+    if (inserted_count > 0) {
+      try {
+        // Option 2: WITHOUT data
+        this.sseEventEmitter.emitCreateSignal("users", 0);
+      } catch (err) {
+        console.warn("SSE event failed:", err);
+      }
+    }
     return {
       inserted_count,
       updated_count,
@@ -1755,5 +1769,72 @@ export class UsersService {
       errors,
       success,
     };
+  }
+
+  async getUserPermissionsByRole(role_id: number): Promise<number[]> {
+    try {
+      const userPermissions = await this.userPermissionsRepository.find({
+        where: { role_id, status_id: 1 },
+      });
+      // return userPermissions.filter((up) => up.user_id !== null);
+      const ids = userPermissions
+        .filter((up) => up.user_id !== null)
+        .map((up) => up.user_id as number);
+      return Array.from(new Set(ids));
+    } catch (error) {
+      throw new Error(
+        `Failed to get user ids permissions by role: ${error.message}`
+      );
+    }
+  }
+
+  async getUserPermissionsByModule(module_id: number): Promise<number[]> {
+    try {
+      const userPermissions = await this.userPermissionsRepository.find({
+        where: { module_id, status_id: 1 },
+      });
+      const ids = userPermissions
+        .filter((up) => up.user_id !== null)
+        .map((up) => up.user_id as number);
+      return Array.from(new Set(ids));
+    } catch (error) {
+      throw new Error(
+        `Failed to get user ids permissions by module: ${error.message}`
+      );
+    }
+  }
+
+  async getUserPermissionsByAccessKey(
+    access_key_id: number
+  ): Promise<number[]> {
+    try {
+      const userPermissions = await this.userPermissionsRepository.find({
+        where: { access_key_id, status_id: 1 },
+      });
+      const ids = userPermissions
+        .filter((up) => up.user_id !== null)
+        .map((up) => up.user_id as number);
+      return Array.from(new Set(ids));
+    } catch (error) {
+      throw new Error(
+        `Failed to get user ids permissions by access key: ${error.message}`
+      );
+    }
+  }
+
+  async getUserLocationsByLocation(location_id: number): Promise<number[]> {
+    try {
+      const userLocations = await this.userLocationsRepository.find({
+        where: { location_id, status_id: 1 },
+      });
+      const ids = userLocations
+        .filter((ul) => ul.user_id !== null)
+        .map((ul) => ul.user_id as number);
+      return Array.from(new Set(ids));
+    } catch (error) {
+      throw new Error(
+        `Failed to get user ids locations by location: ${error.message}`
+      );
+    }
   }
 }

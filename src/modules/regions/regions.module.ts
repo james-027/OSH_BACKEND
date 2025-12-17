@@ -8,6 +8,7 @@ import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
 import { Location } from "src/entities/Location";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Location } from "src/entities/Location";
       Location,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [RegionsController],
   providers: [RegionsService],

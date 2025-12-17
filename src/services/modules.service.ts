@@ -15,6 +15,7 @@ import logger from "../config/logger";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { SSEEmitterService } from "./sse-emitter.service";
 
 @Injectable()
 export class ModulesService {
@@ -26,7 +27,8 @@ export class ModulesService {
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private sseEmitterService: SSEEmitterService
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -523,6 +525,29 @@ export class ModulesService {
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
+
+      /**
+       * EXAMPLE: Invalidate subscriptions for users affected by this module change
+       *
+       * When a module is toggled (activated/deactivated), any user viewing this module
+       * in their UI needs to refresh. The module affects those users whose roles have
+       * this module assigned.
+       *
+       * Find users with roles that have this module, then invalidate their subscriptions:
+       *
+       * const affectedUsers = await this.getUsersAffectedByModule(updatedModule.id);
+       * if (affectedUsers.length > 0) {
+       *   // Invalidate all subscriptions for these users so all other connected clients
+       *   // see that these user's permissions/access have changed
+       *   this.sseEmitterService.invalidateMultipleResourceIds(
+       *     affectedUsers.map(u => u.id)
+       *   );
+       * }
+       *
+       * This will broadcast INVALIDATE events for ['users', userId] for each affected user,
+       * prompting all connected clients to refetch user data and detect permission changes.
+       */
+
       return {
         message: `Module successfully ${statusText}.`,
         module: {
@@ -543,4 +568,41 @@ export class ModulesService {
       throw new Error(`Failed to toggle status for module with ID ${id}.`);
     }
   }
+
+  /**
+   * Helper method to find all users affected by a module change
+   * This is a TEMPLATE - adapt to your business logic
+   *
+   * Example use case:
+   * - When a module is deactivated, find all users whose roles have access to this module
+   * - When a module's permissions change, find all affected users
+   *
+   * @param moduleId - The module that changed
+   * @returns Array of affected user IDs
+   *
+   * IMPLEMENTATION NOTES:
+   * This depends on your role-module relationship table.
+   * You may need to:
+   * 1. Find all roles that contain this module
+   * 2. Find all users that have those roles
+   * 3. Return the user IDs
+   *
+   * USAGE EXAMPLE (in toggleStatus or update):
+   * const affectedUsers = await this.getUsersAffectedByModule(moduleId);
+   * this.sseEmitterService.invalidateMultipleResourceIds(
+   *   affectedUsers.map(u => u.id)
+   * );
+   *
+   * This will ensure all connected clients receive invalidation
+   * for ['users', userId] so they refetch and detect changes.
+   */
+  // private async getUsersAffectedByModule(moduleId: number): Promise<User[]> {
+  //   // TODO: Implement based on your role-module relationship
+  //   // Example query:
+  //   // SELECT u.* FROM users u
+  //   // INNER JOIN user_roles ur ON u.id = ur.user_id
+  //   // INNER JOIN role_modules rm ON ur.role_id = rm.role_id
+  //   // WHERE rm.module_id = ?
+  //   return [];
+  // }
 }

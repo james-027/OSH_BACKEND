@@ -9,13 +9,16 @@ import { Region } from "../entities/Region";
 import { CreateRegionDto } from "../dto/CreateRegionDto";
 import { UpdateRegionDto } from "../dto/UpdateRegionDto";
 import { UsersService } from "./users.service";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class RegionsService {
   constructor(
     @InjectRepository(Region)
     private regionsRepository: Repository<Region>,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private sseEventEmitter: SSEEventEmitterHelper
   ) {}
 
   async create(createRegionDto: CreateRegionDto, userId: number): Promise<any> {
@@ -48,6 +51,13 @@ export class RegionsService {
         where: { id: savedRegion.id },
         relations: ["status", "createdBy", "updatedBy"],
       });
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("regions", completeRegion.id);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
 
       return {
         id: completeRegion.id,
@@ -192,6 +202,13 @@ export class RegionsService {
         throw new Error("Failed to retrieve updated region");
       }
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("regions", updatedRegion.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
+
       return {
         id: updatedRegion.id,
         region_name: updatedRegion.region_name,
@@ -253,6 +270,13 @@ export class RegionsService {
 
       if (!updatedRegion) {
         throw new Error("Failed to retrieve updated region");
+      }
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("regions", updatedRegion.id);
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
       }
 
       return {
