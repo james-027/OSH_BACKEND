@@ -901,11 +901,13 @@ export class TransactionsService {
         // Transaction header info
         trans_number: header?.trans_number,
         location_name: header?.location?.location_name,
+        location_id: header?.location_id,
         trans_date: header?.trans_date,
         trans_year: header?.trans_date
           ? new Date(header.trans_date).getFullYear()
           : null,
         status_name: header?.status?.status_name,
+        status_id: header?.status_id,
         region_name: header?.location?.region?.region_name || null,
       };
     });
