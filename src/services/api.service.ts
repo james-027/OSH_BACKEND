@@ -339,8 +339,10 @@ export class ApiService {
 
     const bosSourceConn = await mysql.createConnection({
       host: "10.2.4.122",
-      user: "sperks_prod",
-      password: "D*F3sgF2",
+      // user: "sperks_prod",
+      // password: "D*F3sgF2",
+      user: "akatok",
+      password: "nF+G5-M%",
       database: "ctgi",
     });
 
