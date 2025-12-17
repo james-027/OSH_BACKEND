@@ -20,8 +20,16 @@ import { UpdateUserDto } from "../dto/UpdateUserDto";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { PermissionsGuard } from "src/guards/permissions.guard";
-import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
-import { imageFileFilter, excelFileFilter, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../adapters";
+import {
+  imageFileFilter,
+  excelFileFilter,
+  FILE_SIZE_LIMITS,
+} from "../utils/file-upload.utils";
 import * as fs from "fs";
 import * as bcrypt from "bcrypt";
 
@@ -122,7 +130,7 @@ export class UsersController {
         destination: "./uploads/profile_pics",
         filename: (req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          const ext = file.originalname.split('.').pop();
+          const ext = file.originalname.split(".").pop();
           cb(null, `${unique}.${ext}`);
         },
       }),
@@ -285,7 +293,7 @@ export class UsersController {
         destination: "./uploads/users",
         filename: (req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          const ext = file.originalname.split('.').pop();
+          const ext = file.originalname.split(".").pop();
           cb(null, `${unique}.${ext}`);
         },
       }),
@@ -293,10 +301,7 @@ export class UsersController {
       limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     })
   )
-  async uploadExcelUsers(
-    @UploadedFile() file: FileType,
-    @Request() req
-  ) {
+  async uploadExcelUsers(@UploadedFile() file: FileType, @Request() req) {
     if (!file)
       throw new BadRequestException("No file uploaded or invalid file type.");
     return this.usersService.uploadExcelUsers(
@@ -305,5 +310,33 @@ export class UsersController {
       req.user.role_id,
       req.user.role.role_level
     );
+  }
+
+  @Get("/user-permissions-by-role/:role_id")
+  async getUserPermissionsByRole(
+    @Param("role_id", ParseIntPipe) role_id: number
+  ) {
+    return this.usersService.getUserPermissionsByRole(role_id);
+  }
+
+  @Get("/user-permissions-by-module/:module_id")
+  async getUserPermissionsByModule(
+    @Param("module_id", ParseIntPipe) module_id: number
+  ) {
+    return this.usersService.getUserPermissionsByModule(module_id);
+  }
+
+  @Get("/user-permissions-by-access-key/:access_key_id")
+  async getUserPermissionsByAccessKey(
+    @Param("access_key_id", ParseIntPipe) access_key_id: number
+  ) {
+    return this.usersService.getUserPermissionsByAccessKey(access_key_id);
+  }
+
+  @Get("/user-locations-by-location/:location_id")
+  async getUserLocationsByLocation(
+    @Param("location_id", ParseIntPipe) location_id: number
+  ) {
+    return this.usersService.getUserLocationsByLocation(location_id);
   }
 }
