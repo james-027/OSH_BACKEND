@@ -31,7 +31,7 @@ export class RoleLocationPreset {
 
   // Foreign key to Location entity
   @ManyToOne(() => Location, (location) => location.roleLocationPresets, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "location_id" })
