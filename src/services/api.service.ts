@@ -500,7 +500,8 @@ export class ApiService {
               INNER JOIN addresses b ON a.SUPPNO = b.REFID 
               AND b.COMPANY = 'CTGI' 
               AND b.BRANCH = 'HO'
-              INNER JOIN provinces c ON b.PROVINCE = c.PROVINCE UNION
+              AND b.REFTYPE = 'SUPPLIER'
+              LEFT JOIN provinces c ON b.PROVINCE = c.PROVINCE UNION
             SELECT
               a.SUPPNO AS supp_no,
               a.SUPPNAME AS supp_name,
