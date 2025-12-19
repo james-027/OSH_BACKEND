@@ -39,11 +39,16 @@ export class SSEController {
       throw new Error("Unauthorized: Must be authenticated to receive events");
     }
 
+    console.log(`[SSE] User ${authenticatedUserId} connecting to broadcast stream`);
+
     return this.sseEmitterService.subscribeToEvents().pipe(
-      map((event: SSEEvent) => ({
-        data: event,
-        id: `${event.timestamp}-${Math.random()}`,
-      }))
+      map((event: SSEEvent) => {
+        console.log(`[SSE Controller] Broadcasting to user ${authenticatedUserId}: ${event.resource}:${event.resourceId || 'N/A'}`);
+        return {
+          data: event,
+          id: `${event.timestamp}-${Math.random()}`,
+        };
+      })
     );
   }
 

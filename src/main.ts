@@ -128,10 +128,16 @@ async function setupExpress(app: any, configService: ConfigService) {
   // ===== SECURITY CONFIGURATIONS =====
 
   // 1. Set request timeout to prevent slowloris attacks
-  // Requests taking longer than 30 seconds will be killed
+  // EXCEPT for SSE endpoints which need persistent connections
   app.use((req, res, next) => {
-    req.setTimeout(30000); // 30 seconds
-    res.setTimeout(30000);
+    // SSE endpoints need NO timeout (or very long timeout)
+    if (req.path && req.path.startsWith('/sse/')) {
+      req.setTimeout(0); // No timeout for SSE
+      res.setTimeout(0);
+    } else {
+      req.setTimeout(30000); // 30 seconds for normal requests
+      res.setTimeout(30000);
+    }
     next();
   });
 
