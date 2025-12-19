@@ -1,5 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Subject, Observable, Subscription } from "rxjs";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Subject, Observable, Subscription, interval } from "rxjs";
 import { tap } from "rxjs/operators";
 import logger from "src/config/logger";
 
@@ -37,11 +37,14 @@ export interface SubscriptionStats {
 }
 
 @Injectable()
-export class SSEEmitterService {
+export class SSEEmitterService implements OnModuleInit {
   // private readonly logger = new Logger(SSEEmitterService.name);
 
   // Single global broadcast subject for all connected clients
   private broadcastSubject = new Subject<SSEEvent>();
+
+  // Heartbeat interval subscription to keep connections alive
+  private heartbeatSubscription: Subscription;
 
   // Track all active subscriptions with metadata
   private subscriptionRegistry = new Map<string, SubscriptionDetail>();
@@ -56,6 +59,30 @@ export class SSEEmitterService {
       eventCount: number;
     }
   >();
+
+  /**
+   * Initialize heartbeat on module startup
+   */
+  onModuleInit() {
+    this.startHeartbeat();
+  }
+
+  /**
+   * Start sending heartbeat events every 15 seconds to keep connections alive
+   * Without this, browsers close idle EventSource connections after ~30 seconds
+   */
+  private startHeartbeat(): void {
+    this.heartbeatSubscription = interval(15000).subscribe(() => {
+      this.broadcastSubject.next({
+        type: "UPDATE",
+        resource: "heartbeat",
+        timestamp: new Date().toISOString(),
+      });
+      logger.debug(
+        `[SSE] Heartbeat sent (keeping ${this.subscriptionRegistry.size} connections alive)`
+      );
+    });
+  }
 
   /**
    * Subscribe to broadcast event stream
