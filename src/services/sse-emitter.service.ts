@@ -37,7 +37,8 @@ export interface SubscriptionStats {
 }
 
 @Injectable()
-export class SSEEmitterService implements OnModuleInit {
+// export class SSEEmitterService implements OnModuleInit {
+export class SSEEmitterService {
   // private readonly logger = new Logger(SSEEmitterService.name);
 
   // Single global broadcast subject for all connected clients
@@ -63,9 +64,9 @@ export class SSEEmitterService implements OnModuleInit {
   /**
    * Initialize heartbeat on module startup
    */
-  onModuleInit() {
-    this.startHeartbeat();
-  }
+  // onModuleInit() {
+  //   this.startHeartbeat();
+  // }
 
   /**
    * Start sending heartbeat events every 15 seconds to keep connections alive
