@@ -397,9 +397,11 @@ export class WarehouseHurdlesService {
     });
     // SSE Events
     try {
+      logger.info(`[SSE] Emitting UPDATE signal for warehouse_hurdles:${id}`);
       this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", id);
+      logger.info(`[SSE] Successfully emitted UPDATE signal for warehouse_hurdles:${id}`);
     } catch (err) {
-      logger.error("SSE event failed for update:", err);
+      logger.error("[SSE] SSE event failed for update:", err);
     }
     return this.findOne(id);
   }

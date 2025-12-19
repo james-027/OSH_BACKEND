@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Subject, Observable, Subscription } from "rxjs";
 import { tap } from "rxjs/operators";
+import logger from "src/config/logger";
 
 /**
  * SSE Event interface for pure broadcast architecture
@@ -37,7 +38,7 @@ export interface SubscriptionStats {
 
 @Injectable()
 export class SSEEmitterService {
-  private readonly logger = new Logger(SSEEmitterService.name);
+  // private readonly logger = new Logger(SSEEmitterService.name);
 
   // Single global broadcast subject for all connected clients
   private broadcastSubject = new Subject<SSEEvent>();
@@ -46,7 +47,15 @@ export class SSEEmitterService {
   private subscriptionRegistry = new Map<string, SubscriptionDetail>();
 
   // Track all emitted resources (for monitoring what's active)
-  private emittedResources = new Map<string, { resource: string; resourceId?: number; lastEmittedAt: Date; eventCount: number }>();
+  private emittedResources = new Map<
+    string,
+    {
+      resource: string;
+      resourceId?: number;
+      lastEmittedAt: Date;
+      eventCount: number;
+    }
+  >();
 
   /**
    * Subscribe to broadcast event stream
@@ -65,7 +74,7 @@ export class SSEEmitterService {
     };
 
     this.subscriptionRegistry.set(subscriptionId, subscriptionDetail);
-    this.logger.log(
+    logger.info(
       `[SSE] New subscription: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
     );
 
@@ -73,7 +82,7 @@ export class SSEEmitterService {
       tap({
         complete: () => {
           this.subscriptionRegistry.delete(subscriptionId);
-          this.logger.log(
+          logger.info(
             `[SSE] Subscription removed: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
           );
         },
@@ -101,13 +110,18 @@ export class SSEEmitterService {
       eventCount: (existing?.eventCount || 0) + 1,
     });
 
-    this.logger.log(
+    logger.info(
       `[SSE] Event emitted: ${event.type} - ${event.resource}${
         event.resourceId ? `:${event.resourceId}` : ""
-      }`
+      } | Active subscriptions: ${this.subscriptionRegistry.size}`
     );
 
+    // Emit to all subscribers
     this.broadcastSubject.next(event);
+
+    logger.info(
+      `[SSE] Broadcast complete for ${event.resource}:${event.resourceId || "N/A"}`
+    );
   }
 
   /**
@@ -188,7 +202,7 @@ export class SSEEmitterService {
     );
 
     if (subscriptions.length === 0) {
-      this.logger.warn(
+      logger.warn(
         `[SSE] No subscriptions found for ${resource}${
           resourceId ? `:${resourceId}` : ""
         }`
@@ -196,7 +210,7 @@ export class SSEEmitterService {
       return;
     }
 
-    this.logger.log(
+    logger.info(
       `[SSE] Invalidating ${subscriptions.length} subscriptions for ${resource}${
         resourceId ? `:${resourceId}` : ""
       }`
@@ -235,13 +249,13 @@ export class SSEEmitterService {
     });
 
     if (affectedResources.size === 0) {
-      this.logger.warn(
+      logger.warn(
         `[SSE] No subscriptions found for resource ID: ${resourceId}`
       );
       return;
     }
 
-    this.logger.log(
+    logger.info(
       `[SSE] Invalidating ${affectedResources.size} resource types for ID ${resourceId}`
     );
 
@@ -267,7 +281,7 @@ export class SSEEmitterService {
    * @param resourceIds - Array of IDs to invalidate
    */
   invalidateMultipleResourceIds(resourceIds: number[]): void {
-    this.logger.log(
+    logger.info(
       `[SSE] Invalidating ${resourceIds.length} resource IDs: ${resourceIds.join(", ")}`
     );
     resourceIds.forEach((id) => {
@@ -321,7 +335,7 @@ export class SSEEmitterService {
   clearEmittedResources(): void {
     const count = this.emittedResources.size;
     this.emittedResources.clear();
-    this.logger.warn(`[SSE] Cleared ${count} emitted resource records`);
+    logger.warn(`[SSE] Cleared ${count} emitted resource records`);
   }
 
   /**
@@ -337,7 +351,7 @@ export class SSEEmitterService {
   ): void {
     const existing = this.subscriptionRegistry.get(subscriptionId);
     if (!existing) {
-      this.logger.warn(
+      logger.warn(
         `[SSE] Subscription ${subscriptionId} not found for registration`
       );
       return;
@@ -357,7 +371,7 @@ export class SSEEmitterService {
       });
     });
 
-    this.logger.log(
+    logger.info(
       `[SSE] Registered ${resources.length} resources for subscription ${subscriptionId}`
     );
   }
@@ -368,7 +382,7 @@ export class SSEEmitterService {
   clearAllSubscriptions(): void {
     const count = this.subscriptionRegistry.size;
     this.subscriptionRegistry.clear();
-    this.logger.warn(`[SSE] Cleared ${count} subscriptions`);
+    logger.warn(`[SSE] Cleared ${count} subscriptions`);
   }
 
   /**

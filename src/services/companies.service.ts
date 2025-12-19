@@ -346,9 +346,13 @@ export class CompaniesService {
 
       // SSE Events
       try {
+        logger.info(`[SSE] Emitting UPDATE signal for companies:${id}`);
         this.sseEventEmitter.emitUpdateSignal("companies", updatedCompany.id);
+        logger.info(
+          `[SSE] Successfully emitted UPDATE signal for warehouse_hurdles:${id}`
+        );
       } catch (err) {
-        logger.error("SSE event failed for update:", err);
+        logger.error("[SSE] event failed for update:", err);
       }
 
       return {
