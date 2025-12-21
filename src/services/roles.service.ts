@@ -153,6 +153,12 @@ export class RolesService {
       // SSE Events
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        const userIds = await this.usersService.getUserPermissionsByRole(
+          savedRole.id
+        );
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitCreateSignal("roles", savedRole.id);
       } catch (err) {
         console.warn("SSE event failed:", err);
@@ -261,8 +267,11 @@ export class RolesService {
       // SSE Events
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        const userIds = await this.usersService.getUserPermissionsByRole(id);
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitUpdateSignal("roles", id);
-        this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
       } catch (err) {
         console.warn("SSE event failed for update:", err);
@@ -379,8 +388,11 @@ export class RolesService {
       // SSE Events
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        const userIds = await this.usersService.getUserPermissionsByRole(id);
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitUpdateSignal("roles", id);
-        this.sseEventEmitter.emitUpdateSignal("users", 0); // Broadcast to all users
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
       } catch (err) {
         console.warn("SSE event failed for update:", err);

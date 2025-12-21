@@ -152,6 +152,12 @@ export class AccessKeysService {
 
       // SSE Events
       try {
+        const userIds = await this.usersService.getUserPermissionsByAccessKey(
+          accessKeyWithRelations.id
+        );
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitCreateSignal(
           "access_keys",
           accessKeyWithRelations.id
@@ -275,6 +281,12 @@ export class AccessKeysService {
 
       // SSE Events
       try {
+        const userIds = await this.usersService.getUserPermissionsByAccessKey(
+          updatedAccessKey.id
+        );
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitUpdateSignal(
           "access_keys",
           updatedAccessKey.id
@@ -387,6 +399,12 @@ export class AccessKeysService {
 
       // SSE Events
       try {
+        const userIds = await this.usersService.getUserPermissionsByAccessKey(
+          updatedAccessKey.id
+        );
+        userIds.forEach((uid) => {
+          this.sseEventEmitter.emitUpdateSignal("users", uid);
+        });
         this.sseEventEmitter.emitUpdateSignal(
           "access_keys",
           updatedAccessKey.id
