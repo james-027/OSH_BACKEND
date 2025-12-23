@@ -12,7 +12,14 @@ import {
 // Define interface for user permission presets
 export interface UserPermissionPreset {
   module_ids: number;
+  role_id: number;
   action_ids: number[];
+}
+
+// Define interface for user location presets
+export interface UserLocationPreset {
+  role_id: number;
+  location_ids: number[];
 }
 
 export class CreateUserDto {
@@ -36,6 +43,11 @@ export class CreateUserDto {
   @IsInt({ message: "Role ID must be an integer" })
   @Min(1, { message: "Role ID must be at least 1" })
   role_id!: number;
+
+  @IsOptional()
+  @IsArray({ message: "Role IDs must be an array" })
+  @IsInt({ each: true, message: "Each role ID must be an integer" })
+  role_ids?: number[];
 
   @IsOptional()
   @IsString({ message: "Employee number must be a string" })
@@ -85,6 +97,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsArray({ message: "User permission presets must be an array" })
   user_permission_presets?: UserPermissionPreset[];
+
+  @IsOptional()
+  @IsArray({ message: "User location presets must be an array" })
+  user_location_presets?: UserLocationPreset[];
 
   // UserLocations fields
   @IsOptional()

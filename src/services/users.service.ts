@@ -207,7 +207,11 @@ export class UsersService {
       });
 
       // Create nested structure for all users
-      const nestedData = await this.createNestedStructureForUsers(users);
+      const nestedData = await this.createNestedStructureForUsers(
+        users,
+        false,
+        false
+      );
 
       logger.info("Successfully retrieved all nested user data.");
       return nestedData;
@@ -242,7 +246,11 @@ export class UsersService {
     }
 
     // Create nested structure for single user
-    const nestedData = await this.createNestedStructureForUsers([user]);
+    const nestedData = await this.createNestedStructureForUsers(
+      [user],
+      false,
+      true
+    );
 
     logger.info(
       `Successfully retrieved nested user data for user_id: ${user_id}.`
@@ -273,7 +281,11 @@ export class UsersService {
     }
 
     // Create nested structure for single user
-    const nestedData = await this.createNestedStructureForUsers([user], true);
+    const nestedData = await this.createNestedStructureForUsers(
+      [user],
+      true,
+      false
+    );
 
     logger.info(
       `Successfully retrieved nested user data for user_id: ${user_id}.`
@@ -361,6 +373,7 @@ export class UsersService {
       middle_name,
       last_name,
       role_id,
+      role_ids,
       emp_number,
       email,
       password,
@@ -373,6 +386,7 @@ export class UsersService {
       access_key_id,
       user_permission_presets,
       location_ids,
+      user_location_presets,
       created_by,
     } = createUserDto;
 
@@ -402,7 +416,7 @@ export class UsersService {
         }
       }
 
-      // Validate role exists
+      // Validate default role exists
       const role = await this.roleRepository.findOne({
         where: { id: role_id },
       });
@@ -410,15 +424,46 @@ export class UsersService {
         throw new BadRequestException(`Role with ID ${role_id} not found.`);
       }
 
+      // Validate all roles in role_ids exist if provided
+      const allRoleIds = role_ids && role_ids.length > 0 ? role_ids : [role_id];
+      const rolesMap = new Map<number, Role>();
+      for (const rId of allRoleIds) {
+        const foundRole = await this.roleRepository.findOne({
+          where: { id: rId },
+        });
+        if (!foundRole) {
+          throw new BadRequestException(`Role with ID ${rId} not found.`);
+        }
+        rolesMap.set(rId, foundRole);
+      }
+
+      // Validate access keys exist if provided
+      const accessKeys: AccessKey[] = [];
+      if (access_key_id && access_key_id.length > 0) {
+        for (const akId of access_key_id) {
+          const ak = await this.accessKeyRepository.findOne({
+            where: { id: akId },
+          });
+          if (!ak) {
+            throw new BadRequestException(
+              `Access key with ID ${akId} not found`
+            );
+          }
+          accessKeys.push(ak);
+        }
+      }
+
       // Hash password
       const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(password, saltRounds); // Create new user
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+      // Create new user with default role_id
       const user = new User();
       user.user_name = user_name;
       user.first_name = first_name;
       user.middle_name = middle_name || null;
       user.last_name = last_name;
-      user.role_id = role_id;
+      user.role_id = role_id; // Default role
       user.emp_number = emp_number || null;
       user.email = email || null;
       user.password = hashedPassword;
@@ -432,28 +477,37 @@ export class UsersService {
       user.created_by = created_by;
 
       // Set current_access_key to the first access key if provided
-      if (access_key_id && access_key_id.length > 0) {
-        user.current_access_key = access_key_id[0];
+      if (accessKeys.length > 0) {
+        user.current_access_key = accessKeys[0].id;
       }
 
       const savedUser = await this.usersRepository.save(user);
 
-      // Create UserPermissions if provided
-      if (access_key_id && user_permission_presets) {
-        await this.createUserPermissions(
+      // Create UserPermissions from presets if provided
+      if (
+        accessKeys.length > 0 &&
+        user_permission_presets &&
+        user_permission_presets.length > 0
+      ) {
+        await this.createUserPermissionsFromPresets(
           savedUser.id,
-          role_id,
-          access_key_id,
+          accessKeys.map((ak) => ak.id),
           user_permission_presets,
           created_by
         );
       }
 
-      // Create UserLocations if provided
-      if (location_ids) {
-        await this.createUserLocations(
+      // Create UserLocations from presets or fallback to location_ids
+      if (user_location_presets && user_location_presets.length > 0) {
+        await this.createUserLocationsFromPresets(
           savedUser.id,
-          role_id,
+          user_location_presets,
+          created_by
+        );
+      } else if (location_ids && location_ids.length > 0) {
+        await this.createUserLocationsForMultipleRoles(
+          savedUser.id,
+          allRoleIds,
           location_ids,
           created_by
         );
@@ -522,6 +576,7 @@ export class UsersService {
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitCreateSignal("users", savedUser.id);
+        this.sseEventEmitter.emitCreateSignal("users", 0);
       } catch (err) {
         console.warn("SSE event failed:", err);
       }
@@ -533,6 +588,207 @@ export class UsersService {
         throw error;
       }
       throw new Error("Failed to create user.");
+    }
+  }
+
+  // Helper method to create/update user permissions from presets with multiple access keys
+  private async createUserPermissionsFromPresets(
+    userId: number,
+    accessKeyIds: number[],
+    userPermissionPresets: any[],
+    updatedBy: number
+  ): Promise<void> {
+    // Step 1: Mark all existing permissions for this user as inactive (status_id = 2)
+    await this.userPermissionsRepository.update(
+      { user_id: userId },
+      {
+        status_id: 2, // inactive
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      }
+    );
+
+    // Step 2: Upsert permissions from presets
+    for (const accessKeyId of accessKeyIds) {
+      for (const preset of userPermissionPresets) {
+        const roleId = preset.role_id;
+        const moduleId = preset.module_ids;
+        const actionIds = preset.action_ids;
+
+        if (!Array.isArray(actionIds)) {
+          logger.warn(
+            `action_ids must be an array for module ${moduleId}, skipping`
+          );
+          continue;
+        }
+
+        for (const actionId of actionIds) {
+          // Check if this combination already exists
+          const existingPermission =
+            await this.userPermissionsRepository.findOne({
+              where: {
+                user_id: userId,
+                role_id: roleId,
+                module_id: moduleId,
+                action_id: actionId,
+                access_key_id: accessKeyId,
+              },
+            });
+
+          if (existingPermission) {
+            // Update existing permission back to active status
+            existingPermission.status_id = 1; // active
+            existingPermission.updated_by = updatedBy;
+            existingPermission.modified_at = new Date();
+            await this.userPermissionsRepository.save(existingPermission);
+          } else {
+            // Create new permission with active status
+            const userPermission = this.userPermissionsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              module_id: moduleId,
+              action_id: actionId,
+              access_key_id: accessKeyId,
+              status_id: 1, // active
+              created_by: updatedBy,
+            });
+
+            await this.userPermissionsRepository.save(userPermission);
+          }
+        }
+      }
+    }
+  }
+
+  // Helper method to create/update user locations from location presets (per role)
+  private async createUserLocationsFromPresets(
+    userId: number,
+    userLocationPresets: any[],
+    updatedBy: number
+  ): Promise<void> {
+    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
+    await this.userLocationsRepository.update(
+      { user_id: userId },
+      {
+        status_id: 2, // inactive
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      }
+    );
+
+    // Step 2: Validate unique location IDs across all presets and verify they exist
+    const uniqueLocationIds = Array.from(
+      new Set(
+        userLocationPresets.flatMap((preset) => preset.location_ids || [])
+      )
+    );
+
+    if (uniqueLocationIds.length > 0) {
+      // Validate all unique locations exist
+      for (const locationId of uniqueLocationIds) {
+        const location = await this.locationRepository.findOne({
+          where: { id: locationId },
+        });
+        if (!location) {
+          throw new BadRequestException(
+            `Location with ID ${locationId} not found`
+          );
+        }
+      }
+    }
+
+    // Step 3: Upsert locations from presets
+    for (const preset of userLocationPresets) {
+      const roleId = preset.role_id;
+      const locationIds = preset.location_ids || [];
+
+      if (!Array.isArray(locationIds)) {
+        logger.warn(
+          `location_ids must be an array for role ${roleId}, skipping`
+        );
+        continue;
+      }
+
+      for (const locationId of locationIds) {
+        // Check if this combination already exists
+        const existingLocation = await this.userLocationsRepository.findOne({
+          where: {
+            user_id: userId,
+            role_id: roleId,
+            location_id: locationId,
+          },
+        });
+
+        if (existingLocation) {
+          // Update existing location back to active status
+          existingLocation.status_id = 1; // active
+          existingLocation.updated_by = updatedBy;
+          existingLocation.modified_at = new Date();
+          await this.userLocationsRepository.save(existingLocation);
+        } else {
+          // Create new location with active status
+          const userLocation = this.userLocationsRepository.create({
+            user_id: userId,
+            role_id: roleId,
+            location_id: locationId,
+            status_id: 1, // active
+            created_by: updatedBy,
+          });
+
+          await this.userLocationsRepository.save(userLocation);
+        }
+      }
+    }
+  }
+
+  // Helper method to create/update user locations for multiple roles
+  private async createUserLocationsForMultipleRoles(
+    userId: number,
+    roleIds: number[],
+    locationIds: number[],
+    updatedBy: number
+  ): Promise<void> {
+    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
+    await this.userLocationsRepository.update(
+      { user_id: userId },
+      {
+        status_id: 2, // inactive
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      }
+    );
+
+    // Step 2: Upsert locations from presets
+    for (const roleId of roleIds) {
+      for (const locationId of locationIds) {
+        // Check if this combination already exists
+        const existingLocation = await this.userLocationsRepository.findOne({
+          where: {
+            user_id: userId,
+            role_id: roleId,
+            location_id: locationId,
+          },
+        });
+
+        if (existingLocation) {
+          // Update existing location back to active status
+          existingLocation.status_id = 1; // active
+          existingLocation.updated_by = updatedBy;
+          existingLocation.modified_at = new Date();
+          await this.userLocationsRepository.save(existingLocation);
+        } else {
+          // Create new location with active status
+          const userLocation = this.userLocationsRepository.create({
+            user_id: userId,
+            role_id: roleId,
+            location_id: locationId,
+            status_id: 1, // active
+            created_by: updatedBy,
+          });
+
+          await this.userLocationsRepository.save(userLocation);
+        }
+      }
     }
   }
 
@@ -548,6 +804,7 @@ export class UsersService {
       middle_name,
       last_name,
       role_id,
+      role_ids,
       emp_number,
       email,
       password,
@@ -562,6 +819,7 @@ export class UsersService {
       user_permission_presets,
       // UserLocations fields
       location_ids,
+      user_location_presets,
       // Audit field
       updated_by,
     } = updateUserDto;
@@ -709,129 +967,59 @@ export class UsersService {
 
       // Handle UserPermissions updates if provided
       let permissionsMessage = "";
-      if (access_key_id && user_permission_presets) {
-        // First, mark all existing permissions for this user as inactive (status_id = 2)
-        await this.userPermissionsRepository.update(
-          { user_id: id },
-          {
-            status_id: 2, // inactive
-            updated_by: updated_by,
-            modified_at: new Date(),
-          }
+      if (
+        access_key_id &&
+        user_permission_presets &&
+        user_permission_presets.length > 0
+      ) {
+        await this.createUserPermissionsFromPresets(
+          id,
+          access_key_id,
+          user_permission_presets,
+          updated_by
         );
 
-        const updatedPermissions: any[] = [];
-        const createdPermissions: any[] = [];
-
-        // Get the final role_id and status_id to use
-        const finalRoleId =
-          role_id !== undefined ? role_id : userToUpdate.role_id;
-        const finalStatusId = 1; // active status for new/updated permissions
-
-        // Iterate through access keys first
-        for (const accessKeyId of access_key_id) {
-          // Then iterate through permission presets
-          for (const preset of user_permission_presets) {
-            // Then iterate through each action in the preset
-            for (const actionId of preset.action_ids) {
-              // Check if this combination already exists
-              const existingPermission =
-                await this.userPermissionsRepository.findOne({
-                  where: {
-                    user_id: id,
-                    role_id: finalRoleId,
-                    module_id: preset.module_ids,
-                    action_id: actionId,
-                    access_key_id: accessKeyId,
-                  },
-                });
-
-              if (existingPermission) {
-                // Update existing permission back to active status
-                existingPermission.status_id = finalStatusId;
-                existingPermission.updated_by = updated_by;
-                existingPermission.modified_at = new Date();
-                const savedPermission =
-                  await this.userPermissionsRepository.save(existingPermission);
-                updatedPermissions.push(savedPermission);
-              } else {
-                // Create new permission with active status
-                const userPermission = this.userPermissionsRepository.create({
-                  user_id: id,
-                  role_id: finalRoleId,
-                  module_id: preset.module_ids,
-                  action_id: actionId,
-                  access_key_id: accessKeyId,
-                  status_id: finalStatusId,
-                  created_by: updated_by,
-                });
-                const savedPermission =
-                  await this.userPermissionsRepository.save(userPermission);
-                createdPermissions.push(savedPermission);
-              }
-            }
-          }
-        }
-
-        permissionsMessage = ` Updated ${updatedPermissions.length} existing permission(s) and created ${createdPermissions.length} new permission(s).`;
+        // Count active permissions for message
+        const activePermissions = await this.userPermissionsRepository.count({
+          where: { user_id: id, status_id: 1 },
+        });
+        permissionsMessage = ` Updated/created ${activePermissions} permission(s).`;
       }
 
       // Handle UserLocations updates if provided
       let locationsMessage = "";
-      if (location_ids) {
-        // First, mark all existing locations for this user as inactive (status_id = 2)
-        await this.userLocationsRepository.update(
-          { user_id: id },
-          {
-            status_id: 2, // inactive
-            updated_by: updated_by,
-            modified_at: new Date(),
-          }
+      if (user_location_presets && user_location_presets.length > 0) {
+        await this.createUserLocationsFromPresets(
+          id,
+          user_location_presets,
+          updated_by
         );
 
-        const updatedLocations: any[] = [];
-        const createdLocations: any[] = [];
+        // Count active locations for message
+        const activeLocations = await this.userLocationsRepository.count({
+          where: { user_id: id, status_id: 1 },
+        });
+        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
+      } else if (location_ids && location_ids.length > 0) {
+        // Fallback to location_ids if presets not provided
+        // Determine which role IDs to use for location assignments
+        const allRoleIds =
+          role_ids && role_ids.length > 0
+            ? role_ids
+            : [role_id || userToUpdate.role_id];
 
-        // Get the final role_id to use
-        const finalRoleId =
-          role_id !== undefined ? role_id : userToUpdate.role_id;
-        const finalStatusId = 1; // active status for new/updated locations
+        await this.createUserLocationsForMultipleRoles(
+          id,
+          allRoleIds,
+          location_ids,
+          updated_by
+        );
 
-        // Iterate through location IDs
-        for (const locationId of location_ids) {
-          // Check if this combination already exists
-          const existingLocation = await this.userLocationsRepository.findOne({
-            where: {
-              user_id: id,
-              role_id: finalRoleId,
-              location_id: locationId,
-            },
-          });
-
-          if (existingLocation) {
-            // Update existing location back to active status
-            existingLocation.status_id = finalStatusId;
-            existingLocation.updated_by = updated_by;
-            existingLocation.modified_at = new Date();
-            const savedLocation =
-              await this.userLocationsRepository.save(existingLocation);
-            updatedLocations.push(savedLocation);
-          } else {
-            // Create new location with active status
-            const userLocation = this.userLocationsRepository.create({
-              user_id: id,
-              role_id: finalRoleId,
-              location_id: locationId,
-              status_id: finalStatusId,
-              created_by: updated_by,
-            });
-            const savedLocation =
-              await this.userLocationsRepository.save(userLocation);
-            createdLocations.push(savedLocation);
-          }
-        }
-
-        locationsMessage = ` Updated ${updatedLocations.length} existing location(s) and created ${createdLocations.length} new location(s).`;
+        // Count active locations for message
+        const activeLocations = await this.userLocationsRepository.count({
+          where: { user_id: id, status_id: 1 },
+        });
+        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
       }
 
       // Fetch updated user with relations
@@ -853,6 +1041,7 @@ export class UsersService {
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
+        this.sseEventEmitter.emitUpdateSignal("users", 0);
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }
@@ -1057,7 +1246,7 @@ export class UsersService {
     }
   }
 
-  // Helper method to create user permissions
+  // Helper method to create user permissions (kept for backward compatibility in update method)
   private async createUserPermissions(
     userId: number,
     roleId: number,
@@ -1098,7 +1287,7 @@ export class UsersService {
     }
   }
 
-  // Helper method to create user locations
+  // Helper method to create user locations (kept for backward compatibility in update method)
   private async createUserLocations(
     userId: number,
     roleId: number,
@@ -1133,7 +1322,7 @@ export class UsersService {
   private async createFlattenedResponse(user: User): Promise<any> {
     // Get user permissions for this user
     const userPermissions = await this.userPermissionsRepository.find({
-      where: { user_id: user.id },
+      where: { user_id: user.id, status_id: 1 },
       relations: [
         "module",
         "action",
@@ -1177,6 +1366,22 @@ export class UsersService {
       )
     );
 
+    // Extract unique role_ids from user permissions
+    const uniqueRoleIds = Array.from(
+      new Set(userPermissions.map((up) => up.role_id).filter(Boolean))
+    );
+
+    // Get role names for all unique role_ids
+    const roleNames: string[] = [];
+    for (const roleId of uniqueRoleIds) {
+      const role = await this.roleRepository.findOne({
+        where: { id: roleId },
+      });
+      if (role) {
+        roleNames.push(role.role_name);
+      }
+    }
+
     // Build flattened response
     return {
       id: user.id,
@@ -1187,6 +1392,7 @@ export class UsersService {
       full_name:
         `${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim(),
       role_id: user.role_id,
+      role_ids: uniqueRoleIds,
       emp_number: user.emp_number,
       email: user.email,
       user_reset: user.user_reset,
@@ -1201,6 +1407,7 @@ export class UsersService {
       modified_at: user.modified_at,
       current_access_key: user.current_access_key,
       role_name: user.role?.role_name || null,
+      role_names: roleNames,
       role_level: user.role?.role_level || null,
       user_upline_name: user.userUpline
         ? `${user.userUpline.first_name} ${user.userUpline.last_name}`
@@ -1258,7 +1465,8 @@ export class UsersService {
   // Helper method to create nested structure from users with permissions and locations
   private async createNestedStructureForUsers(
     users: User[],
-    perAccessKey: boolean = false
+    perAccessKey: boolean = false,
+    includeUserRoles: boolean = false
   ): Promise<any[]> {
     const nestedUsers = [];
 
@@ -1280,67 +1488,180 @@ export class UsersService {
         ],
       });
 
-      // Get user locations for this user
+      // Get user locations for this user (all locations regardless of role for now)
       const userLocations = await this.userLocationsRepository.find({
-        where: { user_id: user.id, role_id: user.role_id, status_id: 1 },
+        where: { user_id: user.id, status_id: 1 },
         relations: ["location", "status"],
       });
 
-      // Group permissions by module and nest actions within modules
-      const moduleMap = new Map<number, any>();
-      // Collect unique access keys for this user
-      const accessKeyMap = new Map<number, any>();
+      // Extract unique role_ids from user permissions
+      const uniqueRoleIds = Array.from(
+        new Set(userPermissions.map((up) => up.role_id).filter(Boolean))
+      );
 
-      userPermissions.forEach((permission) => {
-        // Collect access key information
-        if (
-          permission.accessKey &&
-          !accessKeyMap.has(permission.access_key_id)
-        ) {
-          accessKeyMap.set(permission.access_key_id, {
-            id: permission.accessKey.id,
-            access_key_name: permission.accessKey.access_key_name,
-            status_id: permission.accessKey.status_id,
-            user_access_key_status_id: permission.status_id,
+      // Get role names and build role-aware structures
+      const roleNames: string[] = [];
+      const userRoles: any[] = [];
+      const userPermissionsLocations: any[] = [];
+      let moduleMap = new Map<number, any>();
+      let accessKeyMap = new Map<number, any>();
+
+      for (const roleId of uniqueRoleIds) {
+        const role = await this.roleRepository.findOne({
+          where: { id: roleId },
+        });
+        if (role) {
+          roleNames.push(role.role_name);
+          if (includeUserRoles) {
+            userRoles.push({
+              role_id: role.id,
+              role_name: role.role_name,
+            });
+          }
+        }
+      }
+
+      // Build role-specific modules and locations if includeUserRoles is true
+      if (includeUserRoles) {
+        // Collect unique access keys from all active user permissions
+        userPermissions.forEach((permission) => {
+          if (
+            permission.accessKey &&
+            !accessKeyMap.has(permission.access_key_id)
+          ) {
+            accessKeyMap.set(permission.access_key_id, {
+              id: permission.accessKey.id,
+              access_key_name: permission.accessKey.access_key_name,
+              status_id: permission.accessKey.status_id,
+              user_access_key_status_id: permission.status_id,
+            });
+          }
+        });
+
+        for (const roleId of uniqueRoleIds) {
+          const role = await this.roleRepository.findOne({
+            where: { id: roleId },
+          });
+          if (!role) continue;
+
+          // Get permissions for this specific role
+          const rolePermissions = userPermissions.filter(
+            (up) => up.role_id === roleId && up.status_id === 1
+          );
+
+          // Build modules for this role
+          const roleModuleMap = new Map<number, any>();
+          rolePermissions.forEach((permission) => {
+            if (permission.module) {
+              const moduleId = permission.module.id;
+
+              if (!roleModuleMap.has(moduleId)) {
+                roleModuleMap.set(moduleId, {
+                  id: permission.module.id,
+                  module_name: permission.module.module_name,
+                  module_alias: permission.module.module_alias,
+                  module_link: permission.module.module_link,
+                  menu_title: permission.module.menu_title,
+                  parent_title: permission.module.parent_title,
+                  link_name: permission.module.link_name,
+                  order_level: permission.module.order_level,
+                  status_id: permission.module.status_id,
+                  created_at: permission.module.created_at,
+                  modified_at: permission.module.modified_at,
+                  actions: [],
+                });
+              }
+
+              const module = roleModuleMap.get(moduleId);
+
+              // Add action to the module's actions array (if not already present)
+              if (
+                permission.action &&
+                !module.actions.find((a: any) => a.id === permission.action.id)
+              ) {
+                module.actions.push({
+                  id: permission.action.id,
+                  action_name: permission.action.action_name,
+                  status_id: permission.action.status_id,
+                  permission_status_id: permission.status_id,
+                });
+              }
+            }
+          });
+
+          // Get locations for this role
+          const roleLocations = userLocations
+            .filter((ul) => ul.role_id === roleId)
+            .map((ul) => ({
+              id: ul.location?.id || null,
+              location_name: ul.location?.location_name || null,
+              status_id: ul.location?.status_id || null,
+              user_location_status_id: ul.status_id,
+            }));
+
+          // Add to user_permissions_locations array
+          userPermissionsLocations.push({
+            role_id: role.id,
+            role_name: role.role_name,
+            modules: Array.from(roleModuleMap.values()).sort(
+              (a, b) => a.order_level - b.order_level
+            ),
+            locations: roleLocations,
           });
         }
-
-        if (permission.module) {
-          const moduleId = permission.module.id;
-
-          if (!moduleMap.has(moduleId)) {
-            moduleMap.set(moduleId, {
-              id: permission.module.id,
-              module_name: permission.module.module_name,
-              module_alias: permission.module.module_alias,
-              module_link: permission.module.module_link,
-              menu_title: permission.module.menu_title,
-              parent_title: permission.module.parent_title,
-              link_name: permission.module.link_name,
-              order_level: permission.module.order_level,
-              status_id: permission.module.status_id,
-              created_at: permission.module.created_at,
-              modified_at: permission.module.modified_at,
-              actions: [], // Initialize actions array for each module
-            });
-          }
-
-          const module = moduleMap.get(moduleId);
-
-          // Add action to the module's actions array (if not already present)
+      } else {
+        // Build top-level modules and locations (original behavior)
+        userPermissions.forEach((permission) => {
+          // Collect access key information
           if (
-            permission.action &&
-            !module.actions.find((a: any) => a.id === permission.action.id)
+            permission.accessKey &&
+            !accessKeyMap.has(permission.access_key_id)
           ) {
-            module.actions.push({
-              id: permission.action.id,
-              action_name: permission.action.action_name,
-              status_id: permission.action.status_id,
-              permission_status_id: permission.status_id,
+            accessKeyMap.set(permission.access_key_id, {
+              id: permission.accessKey.id,
+              access_key_name: permission.accessKey.access_key_name,
+              status_id: permission.accessKey.status_id,
+              user_access_key_status_id: permission.status_id,
             });
           }
-        }
-      });
+
+          if (permission.module) {
+            const moduleId = permission.module.id;
+
+            if (!moduleMap.has(moduleId)) {
+              moduleMap.set(moduleId, {
+                id: permission.module.id,
+                module_name: permission.module.module_name,
+                module_alias: permission.module.module_alias,
+                module_link: permission.module.module_link,
+                menu_title: permission.module.menu_title,
+                parent_title: permission.module.parent_title,
+                link_name: permission.module.link_name,
+                order_level: permission.module.order_level,
+                status_id: permission.module.status_id,
+                created_at: permission.module.created_at,
+                modified_at: permission.module.modified_at,
+                actions: [],
+              });
+            }
+
+            const module = moduleMap.get(moduleId);
+
+            // Add action to the module's actions array (if not already present)
+            if (
+              permission.action &&
+              !module.actions.find((a: any) => a.id === permission.action.id)
+            ) {
+              module.actions.push({
+                id: permission.action.id,
+                action_name: permission.action.action_name,
+                status_id: permission.action.status_id,
+                permission_status_id: permission.status_id,
+              });
+            }
+          }
+        });
+      }
 
       // Get the current access key name if current_access_key exists
       const currentAccessKeyName = user.current_access_key
@@ -1380,14 +1701,26 @@ export class UsersService {
               status_id: user.role.status_id,
             }
           : null,
+        role_ids: uniqueRoleIds,
+        role_names: roleNames,
+        ...(includeUserRoles && { user_roles: userRoles }),
+        ...(includeUserRoles && {
+          user_permissions_locations: userPermissionsLocations,
+        }),
         access_keys: Array.from(accessKeyMap.values()),
-        modules: Array.from(moduleMap.values()),
-        locations: userLocations.map((ul) => ({
-          id: ul.location?.id || null,
-          location_name: ul.location?.location_name || null,
-          status_id: ul.location?.status_id || null,
-          user_location_status_id: ul.status_id,
-        })),
+        ...(!includeUserRoles && {
+          modules: Array.from(moduleMap.values()).sort(
+            (a, b) => a.order_level - b.order_level
+          ),
+        }),
+        ...(!includeUserRoles && {
+          locations: userLocations.map((ul) => ({
+            id: ul.location?.id || null,
+            location_name: ul.location?.location_name || null,
+            status_id: ul.location?.status_id || null,
+            user_location_status_id: ul.status_id,
+          })),
+        }),
         user_upline: user.userUpline
           ? {
               id: user.userUpline.id,
@@ -1501,32 +1834,60 @@ export class UsersService {
             "Some Access Keys not found: " + accessKeyAbbrs.join(", ")
           );
         }
-        // 2. Lookup role
-        const role = await this.roleRepository.findOne({
-          where: {
-            role_name: row["Role"],
-            // role_level: MoreThanOrEqual(role_level),
-          },
-        });
-        if (!role) throw new Error("Role not found: " + row["Role"]);
-        if (role.role_level < role_level) {
-          throw new Error(
-            "Role level too low: " +
-              row["Role"] +
-              " requires level " +
-              role.role_level +
-              ". Your Role level hierarchy is only: " +
-              role_level
-          );
-        }
-        // 3. Lookup role_action_preset and role_location_preset
-        const roleActionPresets = await this.usersRepository.manager
-          .getRepository("RoleActionPreset")
-          .find({ where: { role_id: role.id, status_id: 1 } });
+        // 2. Lookup multiple roles (comma separated)
+        const roleNames = String(row["Role(s)"] || "")
+          .split(",")
+          .map((name: string) => name.trim())
+          .filter(Boolean);
 
-        // Check if Location(s) column has values
-        let locationIds: number[] = [];
-        let useRoleLocationPresets = true;
+        if (roleNames.length === 0) {
+          throw new Error("No roles provided in Role(s) column");
+        }
+
+        // Validate all roles exist and user has permission to create them
+        const roles: Role[] = [];
+        const allRoleActionPresets: any[] = [];
+        const allRoleIds: number[] = [];
+
+        for (const roleName of roleNames) {
+          const role = await this.roleRepository.findOne({
+            where: { role_name: roleName },
+          });
+
+          if (!role) {
+            throw new Error("Role not found: " + roleName);
+          }
+
+          // Check if user uploading has permission to create this role
+          if (role.role_level < role_level) {
+            throw new Error(
+              `Role level too low: ${roleName} requires level ${role.role_level}. Your role level hierarchy is only: ${role_level}`
+            );
+          }
+
+          roles.push(role);
+          allRoleIds.push(role.id);
+
+          // 3. Lookup role_action_preset for each role
+          const roleActionPresets = await this.usersRepository.manager
+            .getRepository("RoleActionPreset")
+            .find({ where: { role_id: role.id, status_id: 1 } });
+
+          // Build permission presets for this role
+          roleActionPresets.forEach((preset) => {
+            allRoleActionPresets.push({
+              role_id: preset.role_id,
+              module_ids: preset.module_id,
+              action_ids: [preset.action_id],
+            });
+          });
+        }
+
+        // Use first role as default role_id
+        const primaryRole = roles[0];
+
+        // Check if Location(s) column has values and build user_location_presets
+        let userLocationPresets: any[] = [];
 
         if (row["Location(s)"] && String(row["Location(s)"]).trim() !== "") {
           try {
@@ -1544,8 +1905,15 @@ export class UsersService {
             // Check if at least one location was found
             if (locations.length > 0) {
               // At least one location found, use the ones that were found
-              locationIds = locations.map((loc) => loc.id);
-              useRoleLocationPresets = false;
+              const locationIds = locations.map((loc) => loc.id);
+
+              // Build user_location_presets for each role with the same locations
+              for (const role of roles) {
+                userLocationPresets.push({
+                  role_id: role.id,
+                  location_ids: locationIds,
+                });
+              }
 
               // Log any locations that weren't found
               if (locations.length < locationNames.length) {
@@ -1570,12 +1938,24 @@ export class UsersService {
           }
         }
 
-        // If no locations specified or any error in location lookup, use role location presets
-        if (useRoleLocationPresets) {
-          const roleLocationPresets = await this.usersRepository.manager
-            .getRepository("RoleLocationPreset")
-            .find({ where: { role_id: role.id, status_id: 1 } });
-          locationIds = roleLocationPresets.map((preset) => preset.location_id);
+        // If no user_location_presets built yet, use role location presets for each role
+        if (userLocationPresets.length === 0) {
+          for (const role of roles) {
+            const roleLocationPresets = await this.usersRepository.manager
+              .getRepository("RoleLocationPreset")
+              .find({ where: { role_id: role.id, status_id: 1 } });
+
+            const roleLocationIds = roleLocationPresets.map(
+              (preset) => preset.location_id
+            );
+
+            if (roleLocationIds.length > 0) {
+              userLocationPresets.push({
+                role_id: role.id,
+                location_ids: roleLocationIds,
+              });
+            }
+          }
         }
 
         // 4. Check if user already exists (by user_name or email)
@@ -1599,7 +1979,7 @@ export class UsersService {
           }
         }
         if (existingUser) {
-          // Update logic (identical to update method, no deletion)
+          // Update logic
           const updateUserDto: any = {
             user_name: row["Username"],
             emp_number: row["Employee No."],
@@ -1609,18 +1989,16 @@ export class UsersService {
             email: row["Email"],
             password: row["Password"],
             current_access_key: accessKeys[0]?.id,
-            role_id: role.id,
+            role_id: primaryRole.id, // Use primary (first) role as default
+            role_ids: allRoleIds, // Multiple roles
             status_id: 1,
             updated_by: created_by,
             user_reset: row["User Reset"] || false,
             theme_id: row["Theme ID"] || 1,
-            // Permissions/locations
+            // Permissions/locations with role_ids from presets
             access_key_id: accessKeys.map((k) => k.id),
-            user_permission_presets: roleActionPresets.map((preset) => ({
-              module_ids: preset.module_id,
-              action_ids: [preset.action_id],
-            })),
-            location_ids: locationIds,
+            user_permission_presets: allRoleActionPresets,
+            user_location_presets: userLocationPresets,
           };
           await this.update(existingUser.id, updateUserDto);
           // Audit trail for update
@@ -1637,6 +2015,7 @@ export class UsersService {
           try {
             // Option 2: WITHOUT data
             this.sseEventEmitter.emitUpdateSignal("users", existingUser.id);
+            this.sseEventEmitter.emitUpdateSignal("users", 0);
           } catch (err) {
             console.warn("SSE event failed:", err);
           }
@@ -1654,7 +2033,7 @@ export class UsersService {
             email: row["Email"],
             password: await bcrypt.hash(row["Password"], 10),
             current_access_key: accessKeys[0]?.id, // for main access key
-            role_id: role.id,
+            role_id: primaryRole.id, // Use primary (first) role as default
             status_id: 1,
             user_reset: true, // default to true on create
             user_upline_id: row["User Upline ID"] || null,
@@ -1674,31 +2053,26 @@ export class UsersService {
             },
             created_by
           );
-          // Create user_permissions for all access keys
-          for (const accessKey of accessKeys) {
-            for (const preset of roleActionPresets) {
-              await this.userPermissionsRepository.save({
-                user_id: savedUser.id,
-                role_id: role.id,
-                module_id: preset.module_id,
-                action_id: preset.action_id,
-                access_key_id: accessKey.id,
-                status_id: 1,
-                created_by,
-              });
-            }
+
+          // Create user_permissions for all access keys and all presets (which have role_ids)
+          if (accessKeys.length > 0 && allRoleActionPresets.length > 0) {
+            await this.createUserPermissionsFromPresets(
+              savedUser.id,
+              accessKeys.map((k) => k.id),
+              allRoleActionPresets,
+              created_by
+            );
           }
-          // Create user_locations ONCE per location
-          const uniqueLocationIds = Array.from(new Set(locationIds));
-          for (const locationId of uniqueLocationIds) {
-            await this.userLocationsRepository.save({
-              user_id: savedUser.id,
-              role_id: role.id,
-              location_id: locationId,
-              status_id: 1,
-              created_by,
-            });
+
+          // Create user_locations from presets
+          if (userLocationPresets.length > 0) {
+            await this.createUserLocationsFromPresets(
+              savedUser.id,
+              userLocationPresets,
+              created_by
+            );
           }
+
           inserted_count++;
           // Send email notification to user
           if (savedUser.email) {

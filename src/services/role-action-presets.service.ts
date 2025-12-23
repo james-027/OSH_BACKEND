@@ -745,29 +745,40 @@ export class RoleActionPresetsService {
       }
 
       // Group action presets by module
-      const moduleActionMap = new Map<number, number[]>();
+      const moduleActionMap = new Map<
+        number,
+        { actions: number[]; module_name: string; order_level: number }
+      >();
       roleActionPresets.forEach((preset) => {
         if (!moduleActionMap.has(preset.module_id)) {
-          moduleActionMap.set(preset.module_id, []);
+          moduleActionMap.set(preset.module_id, {
+            actions: [],
+            module_name: preset.module?.module_name || "",
+            order_level: preset.module?.order_level || 0,
+          });
         }
-        moduleActionMap.get(preset.module_id)!.push(preset.action_id);
+        moduleActionMap.get(preset.module_id)!.actions.push(preset.action_id);
       });
 
       // Build presets array
       const presets = Array.from(moduleActionMap.entries()).map(
-        ([module_id, action_ids]) => ({
+        ([module_id, data]) => ({
+          role_id,
           module_ids: module_id,
-          action_ids: action_ids.sort(),
+          module_name: data.module_name,
+          action_ids: data.actions.sort(),
+          order_level: data.order_level,
         })
       );
 
       // Build response
       const response_data = {
         role_id,
+        role_name: roleActionPresets[0]?.role?.role_name || null,
         location_ids: roleLocationPresets
           .map((preset) => preset.location_id)
           .sort(),
-        presets: presets.sort((a, b) => a.module_ids - b.module_ids),
+        presets: presets.sort((a, b) => a.order_level - b.order_level),
       };
 
       return response_data;
