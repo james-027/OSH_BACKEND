@@ -66,7 +66,11 @@ export class UsersController {
   @Get("info/:role_id")
   // @RequirePermissions({ module: "USERS", action: "VIEW" })
   async findUserBasic(@Param("role_id", ParseIntPipe) role_id: number) {
-    return this.usersService.findUsersBasic({ role_id: role_id });
+    // return this.usersService.findUsersBasic({ role_id: role_id });
+    return this.usersService.findUsersByRoleInUserPermission({
+      role_id: role_id,
+      status_id: 1,
+    });
   }
 
   @Get(":id")

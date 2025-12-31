@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, MoreThanOrEqual } from "typeorm";
+import { Repository, MoreThanOrEqual, In } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "../entities/User";
 import { Role } from "../entities/Role";
@@ -192,6 +192,90 @@ export class UsersService {
     }
   }
 
+  async findUsersByRoleInUserPermission(filters?: {
+    role_id?: number;
+    status_id?: number;
+    [key: string]: any;
+  }): Promise<any[]> {
+    try {
+      // Build query with group by for optimal performance
+      let query = this.userPermissionsRepository
+        .createQueryBuilder("up")
+        .leftJoinAndSelect("up.role", "role")
+        .leftJoinAndSelect("up.user", "user")
+        .select("up.user_id", "user_id")
+        .addSelect("user.first_name", "first_name")
+        .addSelect("user.middle_name", "middle_name")
+        .addSelect("user.last_name", "last_name")
+        .addSelect("role.role_name", "role_name")
+        .groupBy("up.user_id");
+
+      // Apply filters to WHERE clause before GROUP BY
+      if (filters) {
+        // Handle role_id filter
+        if (filters.role_id !== undefined) {
+          if (isNaN(filters.role_id)) {
+            throw new BadRequestException("Invalid role ID provided.");
+          }
+          query = query.andWhere("up.role_id = :role_id", {
+            role_id: filters.role_id,
+          });
+        }
+
+        // Handle status_id filter
+        if (filters.status_id !== undefined) {
+          if (isNaN(filters.status_id)) {
+            throw new BadRequestException("Invalid status ID provided.");
+          }
+          query = query.andWhere("up.status_id = :status_id", {
+            status_id: filters.status_id,
+          });
+        }
+
+        // Handle any other numeric filters dynamically
+        Object.keys(filters).forEach((key) => {
+          if (
+            key !== "role_id" &&
+            key !== "status_id" &&
+            filters[key] !== undefined
+          ) {
+            if (typeof filters[key] === "number" && isNaN(filters[key])) {
+              throw new BadRequestException(`Invalid ${key} provided.`);
+            }
+            query = query.andWhere(`up.${key} = :${key}`, {
+              [key]: filters[key],
+            });
+          }
+        });
+      }
+
+      const results = await query.getRawMany();
+
+      const basicUsers = results.map((row) => ({
+        id: row.user_id,
+        full_name:
+          `${row.first_name} ${row.middle_name || ""} ${row.last_name}`.trim(),
+        role_name: row.role_name || null,
+      }));
+
+      const filterDescription =
+        filters && Object.keys(filters).length > 0
+          ? ` with filters: ${JSON.stringify(filters)}`
+          : "";
+
+      logger.info(
+        `Successfully retrieved ${basicUsers.length} unique users with basic info${filterDescription}.`
+      );
+      return basicUsers;
+    } catch (error) {
+      logger.error("Error retrieving users basic info:", error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new Error("Failed to retrieve users basic info.");
+    }
+  }
+
   async nested(): Promise<any[]> {
     try {
       // Get all users with relations
@@ -249,6 +333,8 @@ export class UsersService {
     // Create nested structure for single user
     const nestedData = await this.createNestedStructureForUsers(
       [user],
+      false,
+      true,
       false,
       true
     );
@@ -1465,12 +1551,18 @@ export class UsersService {
     users: User[],
     perAccessKey: boolean = false,
     includeUserRoles: boolean = false,
-    includeUserSystems: boolean = false
+    includeUserSystems: boolean = false,
+    includeAllModules: boolean = false
   ): Promise<any[]> {
     const nestedUsers = [];
 
     for (const user of users) {
-      let wherePermissions: any = { user_id: user.id, status_id: 1 };
+      let wherePermissions: any = { user_id: user.id };
+      if (includeAllModules) {
+        wherePermissions.status_id = In([1, 2]); // include all modules regardless of status
+      } else {
+        wherePermissions.status_id = 1; // only active permissions
+      }
       if (perAccessKey) {
         wherePermissions.access_key_id = user.current_access_key;
         wherePermissions.role_id = user.role_id;
@@ -1561,7 +1653,11 @@ export class UsersService {
 
           // Get permissions for this specific role
           const rolePermissions = userPermissions.filter(
-            (up) => up.role_id === roleId && up.status_id === 1
+            (up) =>
+              up.role_id === roleId &&
+              (includeAllModules
+                ? up.status_id === 1 || up.status_id === 2
+                : up.status_id === 1)
           );
 
           // Build modules for this role
