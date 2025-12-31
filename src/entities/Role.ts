@@ -12,6 +12,7 @@ import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { System } from "./System";
 
 @Entity()
 export class Role {
@@ -34,6 +35,9 @@ export class Role {
 
   @Column({ default: 1 })
   status_id!: number;
+
+  @Column({ default: 1 })
+  system_id!: number;
 
   @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
   created_at!: Date;
@@ -85,4 +89,13 @@ export class Role {
   // Relationship for role_id in UserLocations
   @OneToMany(() => UserLocations, (userLocations) => userLocations.role)
   userLocations!: UserLocations[];
+
+  // Foreign key to User entity for updated_by
+  @ManyToOne(() => System, (system) => system.roles, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "system_id" })
+  system?: System;
 }

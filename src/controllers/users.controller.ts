@@ -339,4 +339,15 @@ export class UsersController {
   ) {
     return this.usersService.getUserLocationsByLocation(location_id);
   }
+
+  @Get(":user_id/:access_key_id/permissions-roles-systems")
+  async getUserPermissionsWithRolesAndSystems(
+    @Param("user_id", ParseIntPipe) user_id: number,
+    @Param("access_key_id", ParseIntPipe) access_key_id: number
+  ) {
+    return this.usersService.getUserPermissionsWithRolesAndSystems(
+      user_id,
+      access_key_id
+    );
+  }
 }

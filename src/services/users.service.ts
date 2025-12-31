@@ -238,6 +238,7 @@ export class UsersService {
         "theme",
         "createdBy",
         "updatedBy",
+        "role.system",
       ],
     });
 
@@ -273,6 +274,7 @@ export class UsersService {
         "theme",
         "createdBy",
         "updatedBy",
+        "role.system",
       ],
     });
 
@@ -281,11 +283,7 @@ export class UsersService {
     }
 
     // Create nested structure for single user
-    const nestedData = await this.createNestedStructureForUsers(
-      [user],
-      true,
-      false
-    );
+    const nestedData = await this.createNestedStructureForUsers([user], true);
 
     logger.info(
       `Successfully retrieved nested user data for user_id: ${user_id}.`
@@ -1466,7 +1464,8 @@ export class UsersService {
   private async createNestedStructureForUsers(
     users: User[],
     perAccessKey: boolean = false,
-    includeUserRoles: boolean = false
+    includeUserRoles: boolean = false,
+    includeUserSystems: boolean = false
   ): Promise<any[]> {
     const nestedUsers = [];
 
@@ -1474,6 +1473,7 @@ export class UsersService {
       let wherePermissions: any = { user_id: user.id, status_id: 1 };
       if (perAccessKey) {
         wherePermissions.access_key_id = user.current_access_key;
+        wherePermissions.role_id = user.role_id;
       }
       // Get user permissions for this user
       const userPermissions = await this.userPermissionsRepository.find({
@@ -1503,12 +1503,14 @@ export class UsersService {
       const roleNames: string[] = [];
       const userRoles: any[] = [];
       const userPermissionsLocations: any[] = [];
+      const userSystems: any[] = [];
       let moduleMap = new Map<number, any>();
       let accessKeyMap = new Map<number, any>();
 
       for (const roleId of uniqueRoleIds) {
         const role = await this.roleRepository.findOne({
           where: { id: roleId },
+          relations: ["system"],
         });
         if (role) {
           roleNames.push(role.role_name);
@@ -1517,6 +1519,19 @@ export class UsersService {
               role_id: role.id,
               role_name: role.role_name,
             });
+          }
+          // Collect unique systems from roles
+          if (includeUserSystems && role.system_id) {
+            const existingSystem = userSystems.find(
+              (sys) => sys.system_id === role.system_id
+            );
+            if (!existingSystem) {
+              userSystems.push({
+                system_id: role.system_id,
+                system_name: role.system?.system_name || null,
+                system_abbr: role.system?.system_abbr || null,
+              });
+            }
           }
         }
       }
@@ -1699,11 +1714,19 @@ export class UsersService {
               role_name: user.role.role_name,
               role_level: user.role.role_level,
               status_id: user.role.status_id,
+              system_id: user.role.system_id,
+              system_abbr: user.role.system
+                ? user.role.system.system_abbr
+                : null,
+              system_name: user.role.system
+                ? user.role.system.system_name
+                : null,
             }
           : null,
         role_ids: uniqueRoleIds,
         role_names: roleNames,
         ...(includeUserRoles && { user_roles: userRoles }),
+        ...(includeUserSystems && { user_systems: userSystems }),
         ...(includeUserRoles && {
           user_permissions_locations: userPermissionsLocations,
         }),
@@ -2208,6 +2231,123 @@ export class UsersService {
     } catch (error) {
       throw new Error(
         `Failed to get user ids locations by location: ${error.message}`
+      );
+    }
+  }
+
+  async getUserPermissionsWithRolesAndSystems(
+    user_id: number,
+    access_key_id: number
+  ): Promise<any> {
+    if (isNaN(user_id)) {
+      throw new BadRequestException("Invalid user ID provided.");
+    }
+
+    try {
+      // Validate user exists
+      const user = await this.usersRepository.findOne({
+        where: { id: user_id },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${user_id} not found.`);
+      }
+
+      // Get user permissions with role, system, and system access keys relations
+      const userPermissions = await this.userPermissionsRepository.find({
+        where: { user_id, status_id: 1, access_key_id },
+        relations: ["role", "role.system", "role.system.system_access_keys"],
+      });
+
+      // Filter permissions to only include those where:
+      // 1. The system has the provided access_key_id in its allowed access keys
+      // 2. The permission's access_key_id matches the provided access_key_id
+      const filteredPermissions = userPermissions.filter((permission) => {
+        if (
+          !permission.role ||
+          !permission.role.system ||
+          !permission.role.system.system_access_keys
+        ) {
+          return false;
+        }
+
+        // Check if access_key_id matches
+        if (permission.access_key_id !== access_key_id) {
+          return false;
+        }
+
+        // Check if this access key is allowed for this system
+        return permission.role.system.system_access_keys.some(
+          (sak: any) => sak.access_key_id === access_key_id
+        );
+      });
+
+      // Build user_systems array with deduplication by system_id
+      const systemsMap = new Map<number, any>();
+
+      for (const permission of filteredPermissions) {
+        const systemKey = permission.role.system_id;
+
+        // Check if this system is already in the map
+        if (!systemsMap.has(systemKey)) {
+          systemsMap.set(systemKey, {
+            system_id: permission.role.system_id,
+            system_name: permission.role.system.system_name || null,
+            system_abbr: permission.role.system.system_abbr || null,
+            system_status_id: permission.role.system.status_id || null,
+            roles: [],
+          });
+        }
+
+        // Add role to this system (avoid duplicates by role_id)
+        const systemData = systemsMap.get(systemKey);
+        const existingRole = systemData.roles.find(
+          (r: any) => r.role_id === permission.role.id
+        );
+
+        if (!existingRole && permission.role) {
+          systemData.roles.push({
+            role_id: permission.role.id,
+            role_name: permission.role.role_name,
+            role_status_id: permission.role.status_id,
+          });
+        }
+      }
+
+      // Transform to desired response format
+      const userSystems = Array.from(systemsMap.values()).map((system) => {
+        // Flatten the response to include the first role's details
+        // or create separate entries for each role if needed
+        return {
+          system_id: system.system_id,
+          system_name: system.system_name,
+          system_abbr: system.system_abbr,
+          system_status_id: system.system_status_id,
+          roles: system.roles,
+        };
+      });
+
+      logger.info(
+        `Successfully retrieved permissions with roles and systems for user ID ${user_id}`
+      );
+
+      return {
+        user_id,
+        user_systems: userSystems,
+      };
+    } catch (error) {
+      logger.error(
+        `Error retrieving permissions with roles and systems for user ID ${user_id}:`,
+        error
+      );
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error(
+        `Failed to retrieve permissions with roles and systems for user ID ${user_id}.`
       );
     }
   }

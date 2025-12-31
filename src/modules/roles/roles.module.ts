@@ -5,6 +5,7 @@ import { RolesService } from "../../services/roles.service";
 import { Role } from "../../entities/Role";
 import { User } from "src/entities/User";
 import { Status } from "src/entities/Status";
+import { System } from "src/entities/System";
 import { UserAuditTrailCreateService } from "src/services/user-audit-trail-create.service";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
@@ -32,6 +33,7 @@ import { SSEModule } from "../sse/sse.module";
       AppModule,
       Action,
       Status,
+      System,
       Location,
       UserAuditTrail,
       UserPermissions,

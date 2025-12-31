@@ -5,6 +5,8 @@ import {
   ValidateNested,
   IsOptional,
   IsBoolean,
+  Allow,
+  IsString,
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -16,6 +18,16 @@ class PresetDto {
   @ArrayMinSize(1)
   @IsInt({ each: true })
   action_ids!: number[];
+
+  // Optional fields (sent from frontend but not validated)
+  @Allow()
+  role_id?: number;
+
+  @Allow()
+  module_name?: string;
+
+  @Allow()
+  order_level?: number;
 }
 
 export class CreateRolePresetDto {

@@ -24,7 +24,7 @@ export class SystemsController {
   constructor(private readonly systemsService: SystemsService) {}
 
   @Get()
-  @RequirePermissions({ module: "SYSTEMS", action: "VIEW" })
+  //   @RequirePermissions({ module: "SYSTEMS", action: "VIEW" })
   async findAll(@Request() req) {
     return this.systemsService.findAll();
   }

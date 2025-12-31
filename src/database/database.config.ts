@@ -53,8 +53,8 @@ import { SyncLog } from "../entities/syncLog";
 import { ReqTransactionHeader } from "../entities/ReqTransactionHeader";
 import { ReqTransactionDetail } from "../entities/ReqTransactionDetail";
 import { ReqTransactionDue } from "../entities/ReqTransactionDue";
-import { System } from "src/entities/System";
-import { SystemAccessKey } from "src/entities/SystemAccessKey";
+import { System } from "../entities/System";
+import { SystemAccessKey } from "../entities/SystemAccessKey";
 
 // All entities in one place for easy maintenance
 export const entities = [

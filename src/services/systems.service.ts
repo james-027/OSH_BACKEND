@@ -42,7 +42,13 @@ export class SystemsService {
   async findAll(): Promise<any[]> {
     try {
       const systems = await this.systemRepository.find({
-        relations: ["status", "createdBy", "updatedBy", "system_access_keys"],
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "system_access_keys",
+          "system_access_keys.accessKey",
+        ],
         order: { id: "ASC" },
       });
 
@@ -177,7 +183,11 @@ export class SystemsService {
 
       return response;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rollbackError) {
+        logger.warn("Error rolling back transaction:", rollbackError);
+      }
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -279,7 +289,13 @@ export class SystemsService {
       // Fetch the complete system with relations
       const systemWithRelations = await this.systemRepository.findOne({
         where: { id: savedSystem.id },
-        relations: ["status", "createdBy", "updatedBy", "system_access_keys"],
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "system_access_keys",
+          "system_access_keys.accessKey",
+        ],
       });
 
       if (!systemWithRelations) {
@@ -309,7 +325,11 @@ export class SystemsService {
 
       return response;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rollbackError) {
+        logger.warn("Error rolling back transaction:", rollbackError);
+      }
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -444,7 +464,11 @@ export class SystemsService {
 
       return response;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rollbackError) {
+        logger.warn("Error rolling back transaction:", rollbackError);
+      }
       if (
         error instanceof BadRequestException ||
         error instanceof NotFoundException
@@ -481,12 +505,16 @@ export class SystemsService {
     const accessKeyIds = (system.system_access_keys || [])
       .filter((sak) => sak.status_id === 1)
       .map((sak) => sak.access_key_id);
+    const accessKeyNames = (system.system_access_keys || [])
+      .filter((sak) => sak.status_id === 1)
+      .map((sak) => sak.accessKey.access_key_name);
 
     return {
       id: system.id,
       system_name: system.system_name,
       system_abbr: system.system_abbr,
       access_key_ids: accessKeyIds,
+      access_key_names: accessKeyNames,
       status_id: system.status_id,
       created_at: system.created_at,
       created_by: system.created_by,

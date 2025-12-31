@@ -11,6 +11,7 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { SystemAccessKey } from "./SystemAccessKey";
+import { Role } from "./Role";
 
 @Entity("systems")
 export class System {
@@ -53,4 +54,7 @@ export class System {
 
   @OneToMany(() => SystemAccessKey, (systemAccessKey) => systemAccessKey.system)
   system_access_keys!: SystemAccessKey[];
+
+  @OneToMany(() => Role, (role) => role.system)
+  roles!: Role[];
 }

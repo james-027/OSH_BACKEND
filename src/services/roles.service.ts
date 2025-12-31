@@ -8,6 +8,7 @@ import { Repository } from "typeorm";
 import { Role } from "../entities/Role";
 import { User } from "../entities/User";
 import { Status } from "../entities/Status";
+import { System } from "../entities/System";
 import { CreateRoleDto } from "../dto/CreateRoleDto";
 import { UpdateRoleDto } from "../dto/UpdateRoleDto";
 import { UsersService } from "./users.service";
@@ -24,6 +25,8 @@ export class RolesService {
     private userRepository: Repository<User>,
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
+    @InjectRepository(System)
+    private systemRepository: Repository<System>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private sseEventEmitter: SSEEventEmitterHelper
@@ -32,13 +35,15 @@ export class RolesService {
   async findAll(): Promise<any[]> {
     try {
       const roles = await this.roleRepository.find({
-        relations: ["createdBy", "updatedBy", "status"],
+        relations: ["createdBy", "updatedBy", "status", "system"],
       });
 
       return roles.map((role) => ({
         id: role.id,
         role_name: role.role_name,
         role_level: role.role_level,
+        system_id: role.system_id,
+        system_name: role.system ? role.system.system_name : null,
         status_id: role.status_id,
         created_at: role.created_at,
         created_by: role.created_by,
@@ -72,6 +77,7 @@ export class RolesService {
         id: role.id,
         role_name: role.role_name,
         role_level: role.role_level,
+        system_id: role.system_id,
         status_id: role.status_id,
         created_at: role.created_at,
         created_by: role.created_by,
@@ -109,6 +115,18 @@ export class RolesService {
         throw new BadRequestException("Authenticated user not found.");
       }
 
+      // Validate system exists if provided
+      if (createRoleDto.system_id) {
+        const system = await this.systemRepository.findOneBy({
+          id: createRoleDto.system_id,
+        });
+        if (!system) {
+          throw new BadRequestException(
+            `System with ID ${createRoleDto.system_id} not found.`
+          );
+        }
+      }
+
       // Find status entity if provided
       let statusEntity = null;
       if (createRoleDto.status_id) {
@@ -131,6 +149,7 @@ export class RolesService {
       const newRole = this.roleRepository.create({
         role_name: createRoleDto.role_name,
         role_level: createRoleDto.role_level,
+        system_id: createRoleDto.system_id || 1,
         status: statusEntity,
         status_id: statusEntity.id,
         createdBy: createdByUser,
@@ -169,6 +188,7 @@ export class RolesService {
         id: savedRole.id,
         role_name: savedRole.role_name,
         role_level: savedRole.role_level,
+        system_id: savedRole.system_id,
         status_id: savedRole.status_id,
         created_at: savedRole.created_at,
         created_by: savedRole.created_by,
@@ -215,6 +235,19 @@ export class RolesService {
 
       if (updateRoleDto.role_level !== undefined) {
         roleToUpdate.role_level = updateRoleDto.role_level;
+      }
+
+      // Update system if provided
+      if (updateRoleDto.system_id !== undefined) {
+        const system = await this.systemRepository.findOneBy({
+          id: updateRoleDto.system_id,
+        });
+        if (!system) {
+          throw new BadRequestException(
+            `System with ID ${updateRoleDto.system_id} not found.`
+          );
+        }
+        roleToUpdate.system_id = updateRoleDto.system_id;
       }
 
       // Update status if provided
@@ -282,6 +315,7 @@ export class RolesService {
         id: roleToUpdate.id,
         role_name: roleToUpdate.role_name,
         role_level: roleToUpdate.role_level,
+        system_id: roleToUpdate.system_id,
         status_id: roleToUpdate.status_id,
         created_at: roleToUpdate.created_at,
         created_by: roleToUpdate.created_by,
@@ -403,6 +437,7 @@ export class RolesService {
         role_id: updatedRole.id,
         role_name: updatedRole.role_name,
         role_level: updatedRole.role_level,
+        system_id: updatedRole.system_id,
         status_id: updatedRole.status_id,
         created_at: updatedRole.created_at,
         created_by: updatedRole.created_by,

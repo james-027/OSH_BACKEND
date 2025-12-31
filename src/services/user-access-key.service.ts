@@ -12,19 +12,26 @@ import { UserPermissions } from "../entities/UserPermissions";
 import { UserLoginSession } from "../entities/UserLoginSession";
 import { ChangeAccessKeyDto } from "../dto/ChangeAccessKeyDto";
 import logger from "../config/logger";
+import { Role } from "src/entities/Role";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { SSEEmitterService } from "./sse-emitter.service";
 
 @Injectable()
 export class UserAccessKeyService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>,
     @InjectRepository(AccessKey)
     private accessKeyRepository: Repository<AccessKey>,
     @InjectRepository(UserPermissions)
     private userPermissionsRepository: Repository<UserPermissions>,
     @InjectRepository(UserLoginSession)
     private sessionRepository: Repository<UserLoginSession>,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private sseEmitterService: SSEEmitterService
   ) {}
   async changeAccessKey(
     userId: number,
@@ -32,7 +39,7 @@ export class UserAccessKeyService {
     authenticatedUserId: number,
     currentSessionId?: number
   ): Promise<any> {
-    const { access_key_id } = changeAccessKeyDto;
+    const { access_key_id, role_id } = changeAccessKeyDto;
 
     try {
       // Validate user exists
@@ -56,6 +63,15 @@ export class UserAccessKeyService {
         );
       }
 
+      // Validate role exists
+      const role = await this.roleRepository.findOne({
+        where: { id: role_id },
+      });
+
+      if (!role) {
+        throw new BadRequestException(`Role with ID ${role_id} not found.`);
+      }
+
       // Check if user has permission to use this access key
       const userPermission = await this.userPermissionsRepository.findOne({
         where: {
@@ -76,6 +92,7 @@ export class UserAccessKeyService {
         { id: userId },
         {
           current_access_key: access_key_id,
+          role_id: role_id,
           updated_by: authenticatedUserId,
           modified_at: new Date(),
         }
@@ -154,6 +171,56 @@ export class UserAccessKeyService {
           refreshToken = session?.refresh_token || null;
         }
         response["refresh_token"] = refreshToken;
+      }
+
+      // SSE Events
+      try {
+        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
+        // this.sseEventEmitter.emitUpdateSignal("users", authenticatedUserId);
+        this.sseEventEmitter.emitUpdateSignal("users", 0);
+        const resourceList = [
+          { resource: "locations" },
+          { resource: "users" },
+          { resource: "roles_presets" },
+          { resource: "roles" },
+          { resource: "modules" },
+          { resource: "location_types" },
+          { resource: "positions" },
+          { resource: "regions" },
+          { resource: "take_out_stores" },
+          { resource: "employees" },
+          { resource: "store_employees" },
+          { resource: "transactions" },
+          { resource: "store_hurdles" },
+          { resource: "store_rates" },
+          { resource: "requirements" },
+          { resource: "store_requirements" },
+          { resource: "access_keys" },
+          { resource: "companies" },
+          { resource: "audit_trail" },
+          { resource: "warehouses" },
+          { resource: "req_transactions" },
+          { resource: "warehouse_employees" },
+          { resource: "warehouse_hurdles" },
+          { resource: "warehouse_rates" },
+          { resource: "employees" },
+          { resource: "positions" },
+          { resource: "audit_trails" },
+          { resource: "transactions" },
+          { resource: "dashboard" },
+          { resource: "modules" },
+          { resource: "systems" },
+          { resource: "requirements" },
+          { resource: "renewal_types" },
+          { resource: "reminder_types" },
+          { resource: "role_presets" },
+          { resource: "users", resourceId: authenticatedUserId },
+        ];
+        // Update specific resources that depend on role/access key context
+        // Frontend only listens for UPDATE events, not INVALIDATE events
+        this.sseEmitterService.updateSpecificResources(resourceList);
+      } catch (err) {
+        console.warn("SSE event failed for update:", err);
       }
 
       return response;

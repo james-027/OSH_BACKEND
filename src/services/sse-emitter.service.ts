@@ -224,29 +224,52 @@ export class SSEEmitterService {
    * // Broadcasts: { type: 'INVALIDATE', resource: 'users', resourceId: 3 }
    */
   invalidateResource(resource: string, resourceId?: number): void {
-    const subscriptions = this.listSubscriptionsByResource(
-      resource,
-      resourceId
-    );
-
-    if (subscriptions.length === 0) {
-      logger.warn(
-        `[SSE] No subscriptions found for ${resource}${
-          resourceId ? `:${resourceId}` : ""
-        }`
-      );
-      return;
-    }
-
     logger.info(
-      `[SSE] Invalidating ${subscriptions.length} subscriptions for ${resource}${
+      `[SSE] Invalidating resource: ${resource}${
         resourceId ? `:${resourceId}` : ""
       }`
     );
 
     // Broadcast invalidation event to all clients
+    // Note: We always broadcast regardless of subscription count because
+    // this is a broadcast SSE architecture where all events go to all clients
     const event: SSEEvent = {
       type: "INVALIDATE",
+      resource,
+      resourceId,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.broadcastEvent(event);
+  }
+
+  /**
+   * Update specific resource subscriptions
+   *
+   * Usage:
+   * - Update all subscriptions for a resource: updateResource('users')
+   * - Update specific user's subscriptions: updateResource('users', 3)
+   * - Update subscriptions for user #3's data: updateResourceId(3)
+   *
+   * @param resource - The resource type to invalidate
+   * @param resourceId - Optional specific resource ID to invalidate
+   *
+   * Example: When user #3's permissions change:
+   * this.sseEmitterService.invalidateResource('users', 3);
+   * // Broadcasts: { type: 'INVALIDATE', resource: 'users', resourceId: 3 }
+   */
+  updateResource(resource: string, resourceId?: number): void {
+    logger.info(
+      `[SSE] Updating resource: ${resource}${
+        resourceId ? `:${resourceId}` : ""
+      }`
+    );
+
+    // Broadcast update event to all clients
+    // Note: We always broadcast regardless of subscription count because
+    // this is a broadcast SSE architecture where all events go to all clients
+    const event: SSEEvent = {
+      type: "UPDATE",
       resource,
       resourceId,
       timestamp: new Date().toISOString(),
@@ -328,6 +351,141 @@ export class SSEEmitterService {
     eventCount: number;
   }> {
     return Array.from(this.emittedResources.values());
+  }
+
+  /**
+   * Invalidate all currently emitted resources in a single call
+   * Iterates through all tracked resources and invalidates each one
+   *
+   * Usage: After a major operation that affects multiple resources
+   * Example: After a data import or sync operation
+   * this.sseEmitterService.invalidateAllEmittedResources();
+   * // Broadcasts invalidation for all active resources
+   */
+  invalidateAllEmittedResources(): void {
+    const emittedResources = this.listEmittedResources();
+
+    if (emittedResources.length === 0) {
+      logger.info(`[SSE] No emitted resources to invalidate`);
+      return;
+    }
+
+    logger.info(
+      `[SSE] Invalidating all ${emittedResources.length} emitted resources:`
+    );
+
+    // Log each resource being invalidated
+    emittedResources.forEach((resource) => {
+      const resourceKey = resource.resourceId
+        ? `${resource.resource}:${resource.resourceId}`
+        : resource.resource;
+      logger.info(`[SSE]   - ${resourceKey} (${resource.eventCount} events)`);
+    });
+
+    // Invalidate each resource
+    emittedResources.forEach((resource) => {
+      this.invalidateResource(resource.resource, resource.resourceId);
+    });
+
+    const resourcesList = emittedResources
+      .map((r) => (r.resourceId ? `${r.resource}:${r.resourceId}` : r.resource))
+      .join(", ");
+
+    logger.info(
+      `[SSE] Successfully invalidated all ${emittedResources.length} emitted resources: ${resourcesList}`
+    );
+  }
+
+  /**
+   * Invalidate specific resources by providing an array
+   * Useful for invalidating master data when user context changes
+   *
+   * Usage: When user switches roles/access keys, invalidate related master data
+   * Example: After user switches role, need to refresh location filters
+   * this.sseEmitterService.invalidateSpecificResources([
+   *   { resource: 'locations', resourceId: 1 },
+   *   { resource: 'warehouse_requirements' },
+   *   { resource: 'renewal_types' }
+   * ]);
+   *
+   * @param resources - Array of resources to invalidate: [{ resource: string, resourceId?: number }, ...]
+   */
+  invalidateSpecificResources(
+    resources: Array<{ resource: string; resourceId?: number }>
+  ): void {
+    if (!resources || resources.length === 0) {
+      logger.warn(`[SSE] No resources provided to invalidate`);
+      return;
+    }
+
+    logger.info(`[SSE] Invalidating ${resources.length} specific resources:`);
+
+    // Log each resource being invalidated
+    resources.forEach((resource) => {
+      const resourceKey = resource.resourceId
+        ? `${resource.resource}:${resource.resourceId}`
+        : resource.resource;
+      logger.info(`[SSE]   - ${resourceKey}`);
+    });
+
+    // Invalidate each resource
+    resources.forEach((resource) => {
+      this.invalidateResource(resource.resource, resource.resourceId);
+    });
+
+    const resourcesList = resources
+      .map((r) => (r.resourceId ? `${r.resource}:${r.resourceId}` : r.resource))
+      .join(", ");
+
+    logger.info(
+      `[SSE] Successfully invalidated ${resources.length} specific resources: ${resourcesList}`
+    );
+  }
+
+  /**
+   * Update specific resources by providing an array
+   * Useful for invalidating master data when user context changes
+   *
+   * Usage: When user switches roles/access keys, update related master data
+   * Example: After user switches role, need to refresh location filters
+   * this.sseEmitterService.updateSpecificResources([
+   *   { resource: 'locations', resourceId: 1 },
+   *   { resource: 'warehouse_requirements' },
+   *   { resource: 'renewal_types' }
+   * ]);
+   *
+   * @param resources - Array of resources to invalidate: [{ resource: string, resourceId?: number }, ...]
+   */
+  updateSpecificResources(
+    resources: Array<{ resource: string; resourceId?: number }>
+  ): void {
+    if (!resources || resources.length === 0) {
+      logger.warn(`[SSE] No resources provided to update`);
+      return;
+    }
+
+    logger.info(`[SSE] Updating ${resources.length} specific resources:`);
+
+    // Log each resource being updated
+    resources.forEach((resource) => {
+      const resourceKey = resource.resourceId
+        ? `${resource.resource}:${resource.resourceId}`
+        : resource.resource;
+      logger.info(`[SSE]   - ${resourceKey}`);
+    });
+
+    // Update each resource
+    resources.forEach((resource) => {
+      this.updateResource(resource.resource, resource.resourceId);
+    });
+
+    const resourcesList = resources
+      .map((r) => (r.resourceId ? `${r.resource}:${r.resourceId}` : r.resource))
+      .join(", ");
+
+    logger.info(
+      `[SSE] Successfully updated ${resources.length} specific resources: ${resourcesList}`
+    );
   }
 
   /**

@@ -20,4 +20,7 @@ export class CreateRoleDto {
   @IsOptional() // status_id has a default in entity, but can be provided
   @IsInt({ message: "Status ID must be an integer" })
   status_id?: number;
+
+  @IsInt()
+  system_id!: number;
 }
