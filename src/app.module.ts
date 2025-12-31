@@ -60,6 +60,7 @@ import { ModulesModule } from "./modules/modules/modules.module";
 import { ApiModule } from "./modules/api/api.module";
 import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.module";
 import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
+import { SystemsModule } from "./modules/systems/systems.module";
 import { RequirementsModule } from "./modules/requirements/requirements.module";
 import { WarehouseRequirementsModule } from "./modules/warehouse-requirements/warehouse-requirements.module";
 import { ReqTransactionHeadersModule } from "./modules/req-transaction-headers/req-transaction-headers.module";
@@ -128,6 +129,7 @@ import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
     ApiModule,
     ReminderTypesModule,
     RenewalTypesModule,
+    SystemsModule,
     RequirementsModule,
     WarehouseRequirementsModule,
     ReqTransactionHeadersModule,

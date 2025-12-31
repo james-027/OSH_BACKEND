@@ -12,6 +12,7 @@ import { User } from "./User";
 import { Status } from "./Status";
 import { Company } from "./Company";
 import { UserPermissions } from "./UserPermissions";
+import { SystemAccessKey } from "./SystemAccessKey";
 
 @Entity()
 export class AccessKey {
@@ -68,4 +69,10 @@ export class AccessKey {
   // Relationship for users who have this as their current access key
   @OneToMany(() => User, (user) => user.currentAccessKey)
   currentUsers!: User[];
+
+  @OneToMany(
+    () => SystemAccessKey,
+    (systemAccessKey) => systemAccessKey.accessKey
+  )
+  system_access_keys!: SystemAccessKey[];
 }
