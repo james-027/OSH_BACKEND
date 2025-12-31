@@ -118,7 +118,8 @@ export class UserAccessKeyService {
         const payload = {
           id: updatedUser.id,
           user_name: updatedUser.user_name,
-          role_id: updatedUser.role_id,
+          // role_id: updatedUser.role_id,
+          role_id: role_id,
           status_id: updatedUser.status_id,
           current_access_key: access_key_id, // Updated access key
           session_id: currentSessionId,
