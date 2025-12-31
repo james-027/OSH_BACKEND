@@ -85,9 +85,9 @@ export class WarehouseRequirementsController {
     @Query("flatten") flatten?: boolean,
     @Request() req?: any
   ) {
-    const userId = req?.user?.id;
-    const roleId = req?.user?.roleId;
-    const accessKeyId = req?.user?.accessKeyId;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+    const accessKeyId = req.user?.current_access_key;
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
       warehouse_type_id,
@@ -111,9 +111,12 @@ export class WarehouseRequirementsController {
     @Query("flatten") flatten?: boolean,
     @Request() req?: any
   ) {
-    const userId = req?.user?.id;
-    const roleId = req?.user?.roleId;
-    const accessKeyId = req?.user?.accessKeyId;
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+
+    console.log("Role ID:", roleId);
+    console.log("Access Key ID:", accessKeyId);
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
       warehouse_type_id,
