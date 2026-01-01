@@ -1464,4 +1464,168 @@ export class WarehouseRequirementsService {
       );
     }
   }
+
+  /**
+   * Get warehouse requirements report grouped by location
+   * Shows count of warehouses per location that have each requirement
+   * Dynamic columns based on active requirements (status_id = 1)
+   */
+  async getWarehouseRequirementsListingPerLocation(
+    warehouse_type_id: number,
+    location_ids?: string,
+    date_from?: string,
+    date_to?: string,
+    status_id?: number,
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number
+  ): Promise<any[]> {
+    try {
+      // Step 1: Get active requirements only (status_id = 1)
+      const activeRequirements = await this.requirementsRepository.find({
+        where: { status_id: 1 },
+        order: { id: "ASC" },
+      });
+
+      if (activeRequirements.length === 0) {
+        return [];
+      }
+
+      // Step 2: Parse location_ids if provided (comma-separated)
+      let filterLocationIds: number[] = [];
+      if (location_ids) {
+        filterLocationIds = location_ids
+          .split(",")
+          .map((id) => parseInt(id.trim(), 10))
+          .filter((id) => !isNaN(id));
+      }
+
+      // Step 3: Get allowed location IDs based on user and role
+      let allowedLocationIds: number[] = [];
+      if (userId && roleId) {
+        allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId
+          );
+      }
+
+      // Step 4: Determine final location IDs to use
+      let finalLocationIds =
+        filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
+
+      // Step 5: Build warehouse query
+      const warehouseWhere: any = {
+        warehouse_type_id,
+        rem_status_id: In([8, 9]),
+      };
+
+      if (accessKeyId !== undefined && accessKeyId !== null) {
+        warehouseWhere.access_key_id = accessKeyId;
+      }
+
+      if (finalLocationIds.length > 0) {
+        warehouseWhere.location_id = In(finalLocationIds);
+      }
+
+      // Fetch warehouses with location relation
+      const warehouses = await this.warehousesRepository.find({
+        where: warehouseWhere,
+        relations: ["location"],
+      });
+
+      if (warehouses.length === 0) {
+        return [];
+      }
+
+      // Step 6: Group warehouses by location
+      const warehousesByLocation = new Map<number, any[]>();
+      warehouses.forEach((wh) => {
+        if (!warehousesByLocation.has(wh.location_id)) {
+          warehousesByLocation.set(wh.location_id, []);
+        }
+        warehousesByLocation.get(wh.location_id)!.push(wh);
+      });
+
+      // Step 7: Build report rows per location
+      const result: any[] = [];
+
+      for (const [locationId, locationWarehouses] of Array.from(
+        warehousesByLocation.entries()
+      ).sort((a, b) => {
+        const nameA = a[1][0].location.location_name || "";
+        const nameB = b[1][0].location.location_name || "";
+        return nameA.localeCompare(nameB);
+      })) {
+        const location = locationWarehouses[0].location;
+        const totalStores = locationWarehouses.length;
+        const warehouseIds = locationWarehouses.map((w) => w.id);
+
+        const row: any = {
+          location_name: location.location_name,
+          location_abbr: location.location_abbr,
+          no_of_stores: totalStores,
+          requirements: {},
+        };
+
+        // Step 8: For each active requirement, count warehouses in this location that have TRANSACTED that requirement
+        for (const requirement of activeRequirements) {
+          // Query transacted requirements (req_transaction_headers + req_transaction_details)
+          let transactionQuery = this.reqTransactionHeaderRepository
+            .createQueryBuilder("rth")
+            .select("DISTINCT(rth.warehouse_id)", "warehouse_id")
+            .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds })
+            .andWhere("rth.requirement_id = :requirement_id", {
+              requirement_id: requirement.id,
+            })
+            .andWhere("rth.status_id = :header_status_id", {
+              header_status_id: status_id || 1,
+            });
+
+          // Join with transaction details to ensure active details exist
+          transactionQuery = transactionQuery
+            .leftJoin("rth.reqTransactionDetails", "rtd")
+            .andWhere("rtd.status_id = :detail_status_id", {
+              detail_status_id: status_id || 1,
+            });
+
+          // Apply date filtering on transaction date if provided
+          if (date_from && date_to) {
+            const filterDateFrom = new Date(date_from);
+            const filterDateTo = new Date(date_to);
+            filterDateTo.setHours(23, 59, 59, 999);
+
+            transactionQuery = transactionQuery.andWhere(
+              "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
+              { filterDateFrom, filterDateTo }
+            );
+          }
+
+          const results = await transactionQuery.getRawMany();
+          const requirementCount = results.length;
+          const percentage =
+            totalStores > 0
+              ? Math.round((requirementCount / totalStores) * 100)
+              : 0;
+
+          row.requirements[requirement.requirement_name] = {
+            actual_no: requirementCount,
+            percentage: percentage,
+          };
+        }
+
+        result.push(row);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error(
+        "Error fetching warehouse requirements listing per location:",
+        error
+      );
+      throw new BadRequestException(
+        `Failed to fetch warehouse requirements per location: ${error.message}`
+      );
+    }
+  }
 }

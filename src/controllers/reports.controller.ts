@@ -1,13 +1,24 @@
-import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Query,
+  Req,
+  UseGuards,
+  ParseIntPipe,
+} from "@nestjs/common";
 import { TransactionsService } from "../services/transactions.service";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
+import { WarehouseRequirementsService } from "../services/warehouse-requirements.service";
 
 @Controller("reports")
 @UseGuards(JwtAuthGuard)
 export class ReportsController {
-  constructor(private readonly service: TransactionsService) {}
+  constructor(
+    private readonly service: TransactionsService,
+    private readonly warehouseRequirementsService: WarehouseRequirementsService
+  ) {}
 
   /**
    * GET /transactions/report
@@ -44,5 +55,39 @@ export class ReportsController {
       role_id: user.role_id,
       current_access_key: user.current_access_key,
     });
+  }
+
+  /**
+   * Get warehouse requirements report per location
+   * GET /warehouse-requirements/report/per-location
+   * Shows requirement counts and percentages grouped by location
+   */
+  @Get("warehouse-req-per-location")
+  @RequirePermissions({
+    module: "STORE REQUIREMENTS REPORTS",
+    action: "VIEW",
+  })
+  async getWarehouseRequirementsPerLocation(
+    @Query("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
+    @Query("location_ids") location_ids?: string,
+    @Query("date_from") date_from?: string,
+    @Query("date_to") date_to?: string,
+    @Query("status_id") status_id?: number,
+    @Req() req?: any
+  ) {
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+
+    return await this.warehouseRequirementsService.getWarehouseRequirementsListingPerLocation(
+      warehouse_type_id,
+      location_ids,
+      date_from,
+      date_to,
+      status_id,
+      userId,
+      roleId,
+      accessKeyId
+    );
   }
 }
