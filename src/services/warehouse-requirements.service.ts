@@ -66,6 +66,87 @@ export class WarehouseRequirementsService {
     ];
   }
 
+  /**
+   * Get allowed location IDs based on user and role
+   * Reusable helper to avoid redundant code across multiple methods
+   */
+  private async getAllowedLocationIds(
+    userId?: number,
+    roleId?: number
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+    return await this.commonUtilitiesService.getUserAllowedLocationIds(
+      userId,
+      roleId
+    );
+  }
+
+  /**
+   * Build date range filter condition for transaction headers
+   * Returns trans_date IN array format for use in queries
+   */
+  private buildTransactionDateRangeParams(
+    dateFrom?: string,
+    dateTo?: string
+  ): { dateRange?: string[]; filterDateFrom?: Date; filterDateTo?: Date } {
+    if (!dateFrom || !dateTo) {
+      return {};
+    }
+
+    const dateRange = this.commonUtilitiesService.getDateRange(
+      dateFrom,
+      dateTo
+    );
+    return { dateRange };
+  }
+
+  /**
+   * Build base transaction query for requirement counting
+   * Handles warehouse_ids, requirement_id, and status filters
+   */
+  private buildTransactionCountQuery(
+    warehouseIds: number[],
+    requirementId: number,
+    headerStatusId: number = 1,
+    detailStatusId: number = 1
+  ) {
+    return this.reqTransactionHeaderRepository
+      .createQueryBuilder("rth")
+      .select("DISTINCT(rth.warehouse_id)", "warehouse_id")
+      .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds })
+      .andWhere("rth.requirement_id = :requirement_id", {
+        requirement_id: requirementId,
+      })
+      .andWhere("rth.status_id = :header_status_id", {
+        header_status_id: headerStatusId,
+      })
+      .leftJoin("rth.reqTransactionDetails", "rtd")
+      .andWhere("rtd.status_id = :detail_status_id", {
+        detail_status_id: detailStatusId,
+      });
+  }
+
+  /**
+   * Group warehouses by location
+   * Returns a Map<locationId, warehouses[]> sorted by location name
+   */
+  private groupWarehousesByLocation(
+    warehouses: any[]
+  ): Map<number, any[]> {
+    const warehousesByLocation = new Map<number, any[]>();
+
+    warehouses.forEach((wh) => {
+      if (!warehousesByLocation.has(wh.location_id)) {
+        warehousesByLocation.set(wh.location_id, []);
+      }
+      warehousesByLocation.get(wh.location_id)!.push(wh);
+    });
+
+    return warehousesByLocation;
+  }
+
   async findAll(accessKeyId?: number): Promise<any[]> {
     try {
       const where: any = {};
@@ -564,14 +645,7 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      let allowedLocationIds: number[] = [];
-      if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId
-          );
-      }
+      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
 
       // Step 2: Build warehouse query conditions
       const warehouseWhere: any = {
@@ -1097,14 +1171,7 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      let allowedLocationIds: number[] = [];
-      if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId
-          );
-      }
+      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
 
       // Step 2: Build and execute warehouse query
       const warehouseQuery = this.buildBaseWarehouseQuery(
@@ -1296,14 +1363,7 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      let allowedLocationIds: number[] = [];
-      if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId
-          );
-      }
+      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
 
       // Step 2: Get warehouse list (minimal query, no nested relations)
       const warehouseQuery = this.buildBaseWarehouseQuery(
@@ -1501,14 +1561,7 @@ export class WarehouseRequirementsService {
       }
 
       // Step 3: Get allowed location IDs based on user and role
-      let allowedLocationIds: number[] = [];
-      if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId
-          );
-      }
+      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
 
       // Step 4: Determine final location IDs to use
       let finalLocationIds =
@@ -1539,13 +1592,7 @@ export class WarehouseRequirementsService {
       }
 
       // Step 6: Group warehouses by location
-      const warehousesByLocation = new Map<number, any[]>();
-      warehouses.forEach((wh) => {
-        if (!warehousesByLocation.has(wh.location_id)) {
-          warehousesByLocation.set(wh.location_id, []);
-        }
-        warehousesByLocation.get(wh.location_id)!.push(wh);
-      });
+      const warehousesByLocation = this.groupWarehousesByLocation(warehouses);
 
       // Step 7: Build report rows per location
       const result: any[] = [];
@@ -1571,23 +1618,12 @@ export class WarehouseRequirementsService {
         // Step 8: For each active requirement, count warehouses in this location that have TRANSACTED that requirement
         for (const requirement of activeRequirements) {
           // Query transacted requirements (req_transaction_headers + req_transaction_details)
-          let transactionQuery = this.reqTransactionHeaderRepository
-            .createQueryBuilder("rth")
-            .select("DISTINCT(rth.warehouse_id)", "warehouse_id")
-            .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds })
-            .andWhere("rth.requirement_id = :requirement_id", {
-              requirement_id: requirement.id,
-            })
-            .andWhere("rth.status_id = :header_status_id", {
-              header_status_id: status_id || 1,
-            });
-
-          // Join with transaction details to ensure active details exist
-          transactionQuery = transactionQuery
-            .leftJoin("rth.reqTransactionDetails", "rtd")
-            .andWhere("rtd.status_id = :detail_status_id", {
-              detail_status_id: status_id || 1,
-            });
+          let transactionQuery = this.buildTransactionCountQuery(
+            warehouseIds,
+            requirement.id,
+            status_id || 1,
+            status_id || 1
+          );
 
           // Apply date filtering on transaction date if provided
           if (date_from && date_to) {
