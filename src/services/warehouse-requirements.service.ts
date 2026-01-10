@@ -132,9 +132,7 @@ export class WarehouseRequirementsService {
    * Group warehouses by location
    * Returns a Map<locationId, warehouses[]> sorted by location name
    */
-  private groupWarehousesByLocation(
-    warehouses: any[]
-  ): Map<number, any[]> {
+  private groupWarehousesByLocation(warehouses: any[]): Map<number, any[]> {
     const warehousesByLocation = new Map<number, any[]>();
 
     warehouses.forEach((wh) => {
@@ -145,6 +143,91 @@ export class WarehouseRequirementsService {
     });
 
     return warehousesByLocation;
+  }
+
+  /**
+   * Fetch warehouse requirements and dues with in-memory merging
+   * Reusable helper to fetch warehouse data, requirements, and dues for given warehouse IDs
+   * Returns { warehouses, requirements, duesMap, warehouseRequirementIds }
+   */
+  private async fetchWarehouseRequirementsAndDues(
+    warehouseIds: number[],
+    dateFrom?: string,
+    dateTo?: string
+  ): Promise<{
+    requirements: any[];
+    duesMap: Map<number, any[]>;
+    warehouseRequirementIds: number[];
+  }> {
+    // Query warehouse requirements
+    const requirementsQuery = this.warehouseRequirementsRepository
+      .createQueryBuilder("warehouseRequirement")
+      .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
+      .leftJoinAndSelect("requirement.renewalType", "renewalType")
+      .leftJoinAndSelect("warehouseRequirement.status", "requirementStatus")
+      .leftJoinAndSelect(
+        "warehouseRequirement.warehouseRequirementStarts",
+        "warehouseRequirementStart"
+      )
+      .where("warehouseRequirement.warehouse_id IN (:...warehouseIds)", {
+        warehouseIds,
+      })
+      .andWhere("warehouseRequirement.status_id = :status_id", {
+        status_id: 1,
+      });
+
+    const requirements = await requirementsQuery.getMany();
+    const warehouseRequirementIds: number[] = requirements.map((r) => r.id);
+
+    // Query dues separately with date filtering
+    let duesQuery = this.warehouseRequirementDuesService[
+      "warehouseRequirementDuesRepository"
+    ]
+      .createQueryBuilder("warehouseRequirementDue")
+      .andWhere(
+        "warehouseRequirementDue.warehouse_requirement_id IN (:...warehouseRequirementIds)",
+        { warehouseRequirementIds }
+      );
+
+    // Apply date filtering at database level
+    if (dateFrom && dateTo) {
+      const filterDateFrom = new Date(dateFrom);
+      const filterDateTo = new Date(dateTo);
+
+      duesQuery = duesQuery.andWhere(
+        `(
+          warehouseRequirementDue.warehouse_requirement_due_start >= :filterDateFrom
+          AND warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
+        )`,
+        {
+          filterDateFrom:
+            this.commonUtilitiesService.formatDateString(filterDateFrom),
+          filterDateTo:
+            this.commonUtilitiesService.formatDateString(filterDateTo),
+        }
+      );
+    } else {
+      // If no date filter, get only the most recent due per requirement
+      duesQuery = duesQuery.andWhere(
+        `warehouseRequirementDue.id IN (
+          SELECT MAX(id) FROM warehouse_requirement_dues 
+          WHERE warehouse_requirement_id = warehouseRequirementDue.warehouse_requirement_id
+        )`
+      );
+    }
+
+    const warehouseRequirementDues = await duesQuery.getMany();
+
+    // Map dues by warehouse_requirement_id
+    const duesMap = new Map<number, any[]>();
+    warehouseRequirementDues.forEach((due) => {
+      if (!duesMap.has(due.warehouse_requirement_id)) {
+        duesMap.set(due.warehouse_requirement_id, []);
+      }
+      duesMap.get(due.warehouse_requirement_id).push(due);
+    });
+
+    return { requirements, duesMap, warehouseRequirementIds };
   }
 
   async findAll(accessKeyId?: number): Promise<any[]> {
@@ -645,7 +728,10 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
 
       // Step 2: Build warehouse query conditions
       const warehouseWhere: any = {
@@ -1171,7 +1257,10 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
 
       // Step 2: Build and execute warehouse query
       const warehouseQuery = this.buildBaseWarehouseQuery(
@@ -1193,25 +1282,14 @@ export class WarehouseRequirementsService {
         };
       }
 
-      // Step 3: Get warehouse requirements separately (with their data)
+      // Step 3: Get warehouse requirements and dues (using reusable helper)
       const warehouseIds = warehouses.map((w) => w.id);
-      const requirementsQuery = this.warehouseRequirementsRepository
-        .createQueryBuilder("warehouseRequirement")
-        .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
-        .leftJoinAndSelect("requirement.renewalType", "renewalType")
-        .leftJoinAndSelect("warehouseRequirement.status", "requirementStatus")
-        .leftJoinAndSelect(
-          "warehouseRequirement.warehouseRequirementStarts",
-          "warehouseRequirementStart"
-        )
-        .where("warehouseRequirement.warehouse_id IN (:...warehouseIds)", {
+      const { requirements, duesMap, warehouseRequirementIds } =
+        await this.fetchWarehouseRequirementsAndDues(
           warehouseIds,
-        })
-        .andWhere("warehouseRequirement.status_id = :status_id", {
-          status_id: 1,
-        });
-
-      const requirements = await requirementsQuery.getMany();
+          date_from,
+          date_to
+        );
 
       // Step 4: Attach requirements to warehouses (in-memory)
       const requirementsMap = new Map<number, any[]>();
@@ -1227,72 +1305,14 @@ export class WarehouseRequirementsService {
           requirementsMap.get(warehouse.id) || [];
       });
 
-      // Step 5: Build list of requirement IDs from fetched requirements
-      const warehouseRequirementIds: number[] = requirements.map((r) => r.id);
-
-      // Step 6: Query dues separately with optimized date filtering
-      let duesQuery = this.warehouseRequirementDuesService[
-        "warehouseRequirementDuesRepository"
-      ]
-        .createQueryBuilder("warehouseRequirementDue")
-        .andWhere(
-          "warehouseRequirementDue.warehouse_requirement_id IN (:...warehouseRequirementIds)",
-          { warehouseRequirementIds }
-        );
-
-      // Apply date filtering at database level
-      if (date_from && date_to) {
-        const filterDateFrom = new Date(date_from);
-        const filterDateTo = new Date(date_to);
-
-        console.log(
-          "Filtering requirements from",
-          this.commonUtilitiesService.formatDateString(filterDateFrom),
-          "to",
-          this.commonUtilitiesService.formatDateString(filterDateTo)
-        );
-
-        duesQuery = duesQuery.andWhere(
-          `(
-            warehouseRequirementDue.warehouse_requirement_due_start >= :filterDateFrom
-            AND warehouseRequirementDue.warehouse_requirement_due_start <= :filterDateTo
-          )`,
-          {
-            filterDateFrom:
-              this.commonUtilitiesService.formatDateString(filterDateFrom),
-            filterDateTo:
-              this.commonUtilitiesService.formatDateString(filterDateTo),
-          }
-        );
-      } else {
-        // If no date filter, get only the most recent due per requirement
-        duesQuery = duesQuery.andWhere(
-          `warehouseRequirementDue.id IN (
-            SELECT MAX(id) FROM warehouse_requirement_dues 
-            WHERE warehouse_requirement_id = warehouseRequirementDue.warehouse_requirement_id
-          )`
-        );
-      }
-
-      const warehouseRequirementDues = await duesQuery.getMany();
-
-      // Step 7: Map dues back to requirements (in-memory merge)
-      const duesMap = new Map<number, any[]>();
-      warehouseRequirementDues.forEach((due) => {
-        if (!duesMap.has(due.warehouse_requirement_id)) {
-          duesMap.set(due.warehouse_requirement_id, []);
-        }
-        duesMap.get(due.warehouse_requirement_id).push(due);
-      });
-
-      // Attach dues to requirements
+      // Step 5: Attach dues to requirements
       warehouses.forEach((warehouse) => {
         (warehouse.warehouseRequirements || []).forEach((req) => {
           req.warehouseRequirementDues = duesMap.get(req.id) || [];
         });
       });
 
-      // Step 8: Process base requirements and transacted requirements for each warehouse
+      // Step 6: Process base requirements and transacted requirements for each warehouse
       const result = await Promise.all(
         warehouses.map(async (warehouse) => {
           // Get base requirements with nested dues
@@ -1363,7 +1383,10 @@ export class WarehouseRequirementsService {
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
 
       // Step 2: Get warehouse list (minimal query, no nested relations)
       const warehouseQuery = this.buildBaseWarehouseQuery(
@@ -1561,7 +1584,10 @@ export class WarehouseRequirementsService {
       }
 
       // Step 3: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
 
       // Step 4: Determine final location IDs to use
       let finalLocationIds =
@@ -1661,6 +1687,334 @@ export class WarehouseRequirementsService {
       );
       throw new BadRequestException(
         `Failed to fetch warehouse requirements per location: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Get warehouse requirements detailed report - grouped by warehouse with warehouse_requirement_dues
+   * Shows detailed per-warehouse requirements with transacted requirement counts and drill-down data
+   * Groups requirements by requirement name with transaction details including warehouse_requirement_dues data
+   * location_ids: Optional comma-separated location IDs (defaults to user's allowed locations)
+   */
+  async getWarehouseRequirementsListingDetailedPerStore(
+    warehouse_type_id: number,
+    location_ids?: string,
+    date_from?: string,
+    date_to?: string,
+    status_id?: number,
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number,
+    flatten: boolean = false
+  ): Promise<any> {
+    try {
+      // Step 1: Get active requirements only (status_id = 1)
+      const activeRequirements = await this.requirementsRepository.find({
+        where: { status_id: 1 },
+        order: { id: "ASC" },
+      });
+
+      if (activeRequirements.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: "No active requirements found",
+        };
+      }
+
+      // Step 2: Parse location_ids if provided (comma-separated)
+      let filterLocationIds: number[] = [];
+      if (location_ids) {
+        filterLocationIds = location_ids
+          .split(",")
+          .map((id) => parseInt(id.trim(), 10))
+          .filter((id) => !isNaN(id));
+      }
+
+      // Step 3: Get allowed location IDs based on user and role
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
+
+      // Step 4: Determine final location IDs to use
+      let finalLocationIds =
+        filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
+
+      // Step 5: Build warehouse query
+      const warehouseWhere: any = {
+        warehouse_type_id,
+        rem_status_id: In([8, 9]),
+      };
+
+      if (accessKeyId !== undefined && accessKeyId !== null) {
+        warehouseWhere.access_key_id = accessKeyId;
+      }
+
+      if (finalLocationIds.length > 0) {
+        warehouseWhere.location_id = In(finalLocationIds);
+      }
+
+      // Fetch warehouses with location and type relations
+      const warehouses = await this.warehousesRepository.find({
+        where: warehouseWhere,
+        relations: ["location", "warehouseType", "remStatus"],
+        order: { warehouse_name: "ASC" },
+      });
+
+      if (warehouses.length === 0) {
+        return {
+          success: true,
+          data: [],
+          message: "No warehouses found matching the criteria",
+        };
+      }
+
+      // Step 6: Get warehouse requirements and dues (using reusable helper)
+      const warehouseIds = warehouses.map((w) => w.id);
+      const { requirements: warehouseRequirements, duesMap } =
+        await this.fetchWarehouseRequirementsAndDues(
+          warehouseIds,
+          date_from,
+          date_to
+        );
+
+      // Attach requirements to warehouses (in-memory)
+      const requirementsMap = new Map<number, any[]>();
+      warehouseRequirements.forEach((req) => {
+        if (!requirementsMap.has(req.warehouse_id)) {
+          requirementsMap.set(req.warehouse_id, []);
+        }
+        requirementsMap.get(req.warehouse_id).push(req);
+      });
+
+      warehouses.forEach((warehouse) => {
+        warehouse.warehouseRequirements =
+          requirementsMap.get(warehouse.id) || [];
+      });
+
+      // Attach dues to requirements
+      warehouses.forEach((warehouse) => {
+        (warehouse.warehouseRequirements || []).forEach((req) => {
+          req.warehouseRequirementDues = duesMap.get(req.id) || [];
+        });
+      });
+
+      // Step 7: Fetch transacted requirements with warehouse_requirement_dues data
+      let transactionHeadersQuery = this.reqTransactionHeaderRepository
+        .createQueryBuilder("rth")
+        .leftJoinAndSelect("rth.requirement", "requirement")
+        .leftJoinAndSelect("requirement.renewalType", "renewalType")
+        .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
+        .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
+        .leftJoinAndSelect(
+          "rtd_dues.warehouseRequirementDue",
+          "warehouseRequirementDue"
+        )
+        .where("rth.warehouse_id IN (:...warehouseIds)", {
+          warehouseIds,
+        })
+        .andWhere("rth.status_id = :header_status_id", {
+          header_status_id: status_id || 1,
+        });
+
+      // Apply date filtering on transaction date
+      if (date_from && date_to) {
+        const dateRange = this.buildTransactionDateRangeParams(
+          date_from,
+          date_to
+        );
+        if (dateRange.dateRange) {
+          transactionHeadersQuery = transactionHeadersQuery.andWhere(
+            "rth.trans_date IN (:...dateRange)",
+            { dateRange: dateRange.dateRange }
+          );
+        }
+      }
+
+      const transactionHeaders = await transactionHeadersQuery
+        .orderBy("rth.id", "ASC")
+        .getMany();
+
+      // Step 8: Build map of transactions by warehouse and requirement name
+      const transactionsByWarehouseAndReq = new Map<
+        number,
+        Map<string, any[]>
+      >();
+
+      transactionHeaders.forEach((header) => {
+        if (!transactionsByWarehouseAndReq.has(header.warehouse_id)) {
+          transactionsByWarehouseAndReq.set(
+            header.warehouse_id,
+            new Map<string, any[]>()
+          );
+        }
+
+        // Filter active transaction details
+        const activeDetails = (header.reqTransactionDetails || []).filter(
+          (detail) => detail.status_id === 1
+        );
+
+        if (activeDetails.length === 0) {
+          return;
+        }
+
+        const requirementName =
+          header.requirement?.requirement_name || "UNKNOWN";
+        const reqMap = transactionsByWarehouseAndReq.get(header.warehouse_id)!;
+
+        if (!reqMap.has(requirementName)) {
+          reqMap.set(requirementName, []);
+        }
+
+        // Build transaction object with dues and details
+        const transaction = {
+          trans_header_id: header.id,
+          trans_date: this.commonUtilitiesService.formatDateString(
+            header.trans_date
+          ),
+          trans_due_status_name:
+            header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
+          renewal_type_name:
+            header.requirement?.renewalType?.renewal_type_name || null,
+          req_transaction_due_id:
+            header.reqTransactionDues && header.reqTransactionDues.length > 0
+              ? header.reqTransactionDues[0].id
+              : null,
+          warehouse_requirement_due_id:
+            header.reqTransactionDues && header.reqTransactionDues.length > 0
+              ? header.reqTransactionDues[0].warehouse_requirement_due_id
+              : null,
+          warehouse_requirement_due_start:
+            header.reqTransactionDues &&
+            header.reqTransactionDues.length > 0 &&
+            header.reqTransactionDues[0].warehouseRequirementDue
+              ? this.commonUtilitiesService.formatDateString(
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_start
+                )
+              : null,
+          warehouse_requirement_due_end:
+            header.reqTransactionDues &&
+            header.reqTransactionDues.length > 0 &&
+            header.reqTransactionDues[0].warehouseRequirementDue
+              ? this.commonUtilitiesService.formatDateString(
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_end
+                )
+              : null,
+          warehouse_requirement_due_status_id:
+            header.reqTransactionDues &&
+            header.reqTransactionDues.length > 0 &&
+            header.reqTransactionDues[0].warehouseRequirementDue
+              ? header.reqTransactionDues[0].warehouseRequirementDue.status_id
+              : null,
+          warehouse_requirement_due_status_name:
+            header.reqTransactionDues &&
+            header.reqTransactionDues.length > 0 &&
+            header.reqTransactionDues[0].warehouseRequirementDue
+              ? header.reqTransactionDues[0].warehouseRequirementDue
+                  .status_id === 1
+                ? "FULFILLED"
+                : "NOT FULFILLED"
+              : null,
+          warehouse_requirement_due_reminder_name: "-",
+          warehouse_requirement_due_reminder_days_diff: null,
+          trans_details: activeDetails.map((detail) => ({
+            trans_detail_id: detail.id,
+            requirement_file_path: detail.requirement_file_path || null,
+            requirement_file_name:
+              this.commonUtilitiesService.formatTransFileName(
+                detail.requirement_file_name
+              ) || null,
+          })),
+        };
+
+        reqMap.get(requirementName)!.push(transaction);
+      });
+
+      // Step 9: Get base requirements details
+      const baseRequirementsPromises = warehouses.map((warehouse) =>
+        this.getBaseRequirementsDetailsFromWarehouse(
+          warehouse,
+          date_from,
+          date_to,
+          false,
+          flatten
+        )
+      );
+      const baseRequirementsDataArray = await Promise.all(
+        baseRequirementsPromises
+      );
+
+      // Step 10: Build final response per warehouse
+      const result = warehouses.map((warehouse, idx) => {
+        const baseRequirementsData = baseRequirementsDataArray[idx];
+        const transactionsByReq =
+          transactionsByWarehouseAndReq.get(warehouse.id) ||
+          new Map<string, any[]>();
+
+        // Build requirements object keyed by requirement name
+        const requirementsObj: any = {};
+        let totalTransactedCount = 0;
+        let totalTransactedPercentage = 0;
+
+        for (const requirement of activeRequirements) {
+          const reqName = requirement.requirement_name;
+          const reqTransactions = transactionsByReq.get(reqName) || [];
+          const actualNo = reqTransactions.length;
+
+          requirementsObj[reqName] = {
+            actual_no: actualNo,
+            percentage: actualNo > 0 ? 100 : 0, // 100 if has transactions, 0 if none
+            transactedRequirements: reqTransactions,
+          };
+
+          totalTransactedCount += actualNo;
+        }
+
+        // Calculate overall percentage (transacted / total active requirements)
+        const totalTransactedPercentageCalc =
+          activeRequirements.length > 0
+            ? Math.round(
+                (totalTransactedCount / activeRequirements.length) * 100
+              )
+            : 0;
+
+        return {
+          id: warehouse.id,
+          location_name: warehouse.location?.location_name || null,
+          location_abbr: warehouse.location?.location_abbr || null,
+          warehouse_name: warehouse.warehouse_name,
+          warehouse_ifs: warehouse.warehouse_ifs,
+          warehouse_code: warehouse.warehouse_code,
+          warehouse_type_id: warehouse.warehouse_type_id,
+          warehouse_type_name:
+            warehouse.warehouseType?.warehouse_type_name || null,
+          warehouse_rem_status_name: warehouse.remStatus?.status_name || null,
+          baseRequirements: baseRequirementsData,
+          requirements: requirementsObj,
+          total_transacted_requirements: {
+            actual_no: totalTransactedCount,
+            percentage: totalTransactedPercentageCalc,
+          },
+        };
+      });
+
+      // return {
+      //   success: true,
+      //   data: result,
+      //   total: result.length,
+      // };
+      return result;
+    } catch (error) {
+      logger.error(
+        "Error fetching warehouse requirements detailed listing per store:",
+        error
+      );
+      throw new BadRequestException(
+        `Failed to fetch warehouse requirements detailed listing: ${error.message}`
       );
     }
   }
