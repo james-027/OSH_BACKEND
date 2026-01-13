@@ -911,6 +911,7 @@ export class WarehouseRequirementsService {
       if (baseRequirements.length === 0) {
         return {
           count: 0,
+          base_requirement_with_dues_count: 0,
           base_requirements_details: [],
         };
       }
@@ -924,6 +925,7 @@ export class WarehouseRequirementsService {
       // Process each requirement with its eager-loaded dues
       // (dues are already filtered by date at database level in optimized version)
       let baseRequirementsDetails = [];
+      let totalDuesCount = 0; // Track additional dues count during processing
 
       if (!flatten) {
         // Nested structure: requirements with nested dues array
@@ -935,6 +937,12 @@ export class WarehouseRequirementsService {
 
             // Get warehouse requirement dues (already filtered by database query)
             const filteredDues = baseReq.warehouseRequirementDues || [];
+
+            // Accumulate additional dues count (dues beyond the first per requirement)
+            const duesCount = filteredDues.length;
+            if (duesCount > 1) {
+              totalDuesCount += duesCount - 1;
+            }
 
             // Map dues to response structure with reminder status
             const warehouseRequirementDues = await Promise.all(
@@ -996,6 +1004,12 @@ export class WarehouseRequirementsService {
             [])[0];
           const filteredDues = baseReq.warehouseRequirementDues || [];
 
+          // Accumulate additional dues count
+          const duesCount = filteredDues.length;
+          if (duesCount > 1) {
+            totalDuesCount += duesCount - 1;
+          }
+
           for (const due of filteredDues) {
             // Get reminder status for this due
             const reminderStatus =
@@ -1036,14 +1050,19 @@ export class WarehouseRequirementsService {
         baseRequirementsDetails = flattenedDetails;
       }
 
+      const baseRequirementWithDuesCount =
+        baseRequirements.length + totalDuesCount;
+
       return {
         count: baseRequirements.length,
+        base_requirement_with_dues_count: baseRequirementWithDuesCount,
         base_requirements_details: baseRequirementsDetails,
       };
     } catch (error) {
       console.error("Error processing base requirements details:", error);
       return {
         count: 0,
+        base_requirement_with_dues_count: 0,
         base_requirements_details: [],
       };
     }
@@ -1261,6 +1280,7 @@ export class WarehouseRequirementsService {
         userId,
         roleId
       );
+      // const allowedLocationIds = [1];
 
       // Step 2: Build and execute warehouse query
       const warehouseQuery = this.buildBaseWarehouseQuery(
