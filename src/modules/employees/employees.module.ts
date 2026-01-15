@@ -17,6 +17,7 @@ import { Module as AppModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SSEModule } from "../sse/sse.module";
       UserPermissions,
       AppModule,
       Action,
+      TransactionSequence,
     ]),
     UsersModule,
     LocationsModule,

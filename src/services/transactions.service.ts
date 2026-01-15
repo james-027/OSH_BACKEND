@@ -199,35 +199,33 @@ export class TransactionsService {
         `A transaction already exists for this location, date: ${header.trans_date}, (posted).`
       );
     }
+    const dataToUpdate: any = {
+      status_id: 4,
+      updated_by: user_id,
+    };
     // Generate trans_number if not set
     if (!header.trans_number) {
       // Get location_abbr
       const location_abbr = header.location?.location_abbr || "LOC";
       const access_key_id = header.access_key_id;
-      const year = new Date().getFullYear();
-      // Find max existing trans_number for this location/access_key/year
-      const likePrefix = `${location_abbr}${access_key_id}${year}-`;
-      const prev = await this.headerRepo
-        .createQueryBuilder("h")
-        .where("h.location_id = :location_id", {
+      const trans_date = new Date(header.trans_date);
+
+      // Generate using bulletproof service with database-level locking
+      const trans_number =
+        await this.commonUtilitiesService.generateTransactionNumber({
+          transaction_type: "INCENTIVES",
           location_id: header.location_id,
-        })
-        .andWhere("h.access_key_id = :access_key_id", { access_key_id })
-        .andWhere("h.trans_number LIKE :likePrefix", {
-          likePrefix: `${likePrefix}%`,
-        })
-        .orderBy("h.trans_number", "DESC")
-        .getOne();
-      let nextNum = 1;
-      if (prev && prev.trans_number) {
-        const match = prev.trans_number.match(/-(\d{4})$/);
-        if (match) nextNum = parseInt(match[1], 10) + 1;
-      }
-      const trans_number = `${location_abbr}${access_key_id}${year}-${nextNum.toString().padStart(4, "0")}`;
-      await this.headerRepo.update(id, { trans_number });
+          access_key_id,
+          format: "{abbr}{key}{year}-{seq:4}",
+          reset_per_year: true,
+          currentDate: trans_date,
+          abbr: location_abbr,
+        });
+
+      dataToUpdate.trans_number = trans_number;
       header.trans_number = trans_number;
     }
-    await this.headerRepo.update(id, { status_id: 4, updated_by: user_id });
+    await this.headerRepo.update(id, dataToUpdate);
     await this.userAuditTrailCreateService.create(
       {
         service: "transactions",

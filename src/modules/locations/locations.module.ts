@@ -18,6 +18,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
 import { UserLocations } from "src/entities/UserLocations";
 import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
       UserAuditTrail,
       UserLocations,
       RoleLocationPreset,
+      TransactionSequence,
     ]),
     UsersModule,
     SSEModule,

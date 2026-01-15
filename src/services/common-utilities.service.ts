@@ -1,15 +1,21 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import { UsersService } from "./users.service";
+import { TransactionSequence } from "../entities/TransactionSequence";
 
 /**
  * Common Utilities Service
- * Provides reusable functions for location access control and date operations
+ * Provides reusable functions for location access control, date operations, and transaction number generation
  */
 @Injectable()
 export class CommonUtilitiesService {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    @InjectRepository(TransactionSequence)
+    private sequenceRepo: Repository<TransactionSequence>,
+    private dataSource: DataSource
+  ) {}
 
   /**
    * Get user's allowed location IDs based on user-role relationship
@@ -158,5 +164,148 @@ export class CommonUtilitiesService {
     const date = new Date();
     date.setDate(date.getDate() + days);
     return this.formatDateToString(date);
+  }
+
+  /**
+   * Generate a bulletproof transaction number using database-level locking (SELECT FOR UPDATE)
+   * Prevents race conditions even under high concurrency
+   *
+   * @param params {
+   *   transaction_type: 'SALES' | 'PURCHASE' | 'TRANSFER' | etc. - Type of transaction
+   *   location_id: number - Location identifier
+   *   access_key_id: number - Access key identifier
+   *   format: string - Format template, e.g., "{abbr}{key}{year}-{seq:4}"
+   *   reset_per_year?: boolean - Whether to reset sequence annually (default: true)
+   *   currentDate?: Date - Date to use for year calculation (default: new Date())
+   * }
+   * @returns Generated transaction number as a formatted string
+   *
+   * Format template examples:
+   * - "{abbr}{key}{year}-{seq:4}" => "LOC1202500001"
+   * - "{abbr}{year}{seq:6}" => "LOC202500000001"
+   * - "{type}_{location}_{year}_{seq:4}" => "SALES_1_2025_0001"
+   *
+   * Format variables:
+   * - {abbr} - location_abbr (provided in format)
+   * - {key} - access_key_id
+   * - {year} - 4-digit year
+   * - {seq:N} - Zero-padded sequence number, N = number of digits
+   * - Any other text is included as-is
+   */
+  async generateTransactionNumber(params: {
+    transaction_type: string;
+    location_id: number;
+    access_key_id: number;
+    format: string;
+    reset_per_year?: boolean;
+    currentDate?: Date;
+    abbr?: string;
+    type?: string;
+    location?: string;
+  }): Promise<string> {
+    const {
+      transaction_type,
+      location_id,
+      access_key_id,
+      format,
+      reset_per_year = true,
+      currentDate = new Date(),
+    } = params;
+
+    const year = currentDate.getFullYear();
+
+    // Start a transaction for atomic operation with SELECT FOR UPDATE
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction("SERIALIZABLE");
+
+    try {
+      // Get or create sequence record with row-level lock (SELECT FOR UPDATE)
+      let sequence = await queryRunner.manager.findOne(TransactionSequence, {
+        where: {
+          transaction_type,
+          location_id,
+          access_key_id,
+          ...(reset_per_year ? { year } : {}),
+        },
+        lock: { mode: "pessimistic_write" }, // This translates to SELECT ... FOR UPDATE
+      });
+
+      // If no sequence exists, create it
+      if (!sequence) {
+        sequence = new TransactionSequence();
+        sequence.transaction_type = transaction_type;
+        sequence.location_id = location_id;
+        sequence.access_key_id = access_key_id;
+        sequence.year = year;
+        sequence.current_sequence = 0;
+        sequence.reset_per_year = reset_per_year;
+        sequence.format_template = format;
+        sequence = await queryRunner.manager.save(sequence);
+      }
+      // If reset_per_year is true and year changed, reset the counter
+      else if (reset_per_year && sequence.year !== year) {
+        sequence.year = year;
+        sequence.current_sequence = 0;
+        sequence = await queryRunner.manager.save(sequence);
+      }
+
+      // Increment the sequence
+      sequence.current_sequence++;
+      await queryRunner.manager.save(sequence);
+
+      // Commit transaction to release lock
+      await queryRunner.commitTransaction();
+
+      // Generate the formatted transaction number
+      const nextNum = sequence.current_sequence;
+      const transNumber = this._formatTransactionNumber(format, {
+        seq: nextNum,
+        year: year.toString(),
+        key: access_key_id.toString(),
+        abbr: params.abbr || "LOC",
+        type: params.type || transaction_type,
+        location: params.location || location_id.toString(),
+      });
+
+      return transNumber;
+    } catch (error) {
+      // Rollback on error
+      await queryRunner.rollbackTransaction();
+      throw new Error(
+        `Failed to generate transaction number: ${error.message}`
+      );
+    } finally {
+      // Release connection
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Helper method to format transaction number based on template
+   * @private
+   */
+  private _formatTransactionNumber(
+    template: string,
+    vars: Record<string, string | number>
+  ): string {
+    let result = template;
+
+    // Replace {seq:N} with zero-padded sequence
+    const seqMatch = result.match(/\{seq:(\d+)\}/);
+    if (seqMatch) {
+      const padLength = parseInt(seqMatch[1], 10);
+      const paddedSeq = String(vars.seq).padStart(padLength, "0");
+      result = result.replace(seqMatch[0], paddedSeq);
+    }
+
+    // Replace other variables
+    for (const [key, value] of Object.entries(vars)) {
+      if (key !== "seq") {
+        result = result.replace(new RegExp(`\\{${key}\\}`, "g"), String(value));
+      }
+    }
+
+    return result;
   }
 }

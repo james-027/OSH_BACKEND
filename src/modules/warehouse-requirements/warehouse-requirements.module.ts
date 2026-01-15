@@ -21,6 +21,7 @@ import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { SSEModule } from "../sse/sse.module";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SSEModule } from "../sse/sse.module";
       AppModule,
       Action,
       UserPermissions,
+      TransactionSequence,
     ]),
     UsersModule,
     UserAuditTrailModule,

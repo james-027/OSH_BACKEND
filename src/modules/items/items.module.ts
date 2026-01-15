@@ -32,6 +32,7 @@ import { EmployeeLocation } from "src/entities/EmployeeLocation";
 import { LocationsModule } from "../locations/locations.module";
 import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
       Employee,
       Position,
       EmployeeLocation,
+      TransactionSequence,
     ]),
     LocationsModule,
     SSEModule,

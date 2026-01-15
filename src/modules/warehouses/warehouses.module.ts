@@ -38,6 +38,7 @@ import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse
 import { WarehouseRequirementsController } from "../../controllers/warehouse-requirements.controller";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { SSEModule } from "../sse/sse.module";
       AppModule,
       UserAuditTrail,
       Action,
+      TransactionSequence,
     ]),
     UsersModule,
     StatusModule,

@@ -69,6 +69,7 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
 import { SSEModule } from "./modules/sse/sse.module";
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
+import { TransactionSequence } from "./entities/TransactionSequence";
 @Module({
   imports: [
     // Configuration
@@ -94,6 +95,7 @@ import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
       ModuleEntity,
       Action,
       Location,
+      TransactionSequence,
     ]),
     // Authentication
     PassportModule,

@@ -12,6 +12,7 @@ import { SalesBudgetTransactionsService } from "../../services/sales-budget-tran
 import { SalesBudgetTransactionsDwhService } from "../../services/sales-budget-transactions-dwh.service";
 import { TransactionHeader } from "../../entities/TransactionHeader";
 import { TransactionDetail } from "../../entities/TransactionDetail";
+import { TransactionSequence } from "../../entities/TransactionSequence";
 import { SalesTransaction } from "../../entities/SalesTransaction";
 import { SalesBudgetTransaction } from "../../entities/SalesBudgetTransaction";
 import { UsersModule } from "../users/users.module";
@@ -29,6 +30,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
     TypeOrmModule.forFeature([
       TransactionHeader,
       TransactionDetail,
+      TransactionSequence,
       SalesTransaction,
       SalesBudgetTransaction,
       DwhLog,
