@@ -69,6 +69,9 @@ export class ReqTransactionHeader {
   @Column({ nullable: true })
   location_id: number;
 
+  @Column({ type: "text", nullable: true })
+  cancellation_reason: string;
+
   @ManyToOne(() => AccessKey, {
     eager: false,
     onDelete: "RESTRICT",
