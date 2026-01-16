@@ -4,10 +4,13 @@ export class CreateWarehouseRequirementDueAndReqTransDto {
   @IsInt()
   trans_header_id!: number;
 
-  @IsInt()
-  trans_due_id!: number;
+  // @IsInt()
+  // trans_due_id!: number;
 
   @IsOptional()
   @IsInt()
   status_id?: number;
+
+  @IsOptional()
+  cancellation_reason?: string;
 }
