@@ -75,6 +75,9 @@ export class ReqTransactionHeadersService {
       "warehouse.warehouseType",
       "requirement",
       "transDueStatus",
+      "reqTransactionDetails",
+      "reqTransactionDues",
+      "location",
     ];
   }
 
@@ -94,7 +97,7 @@ export class ReqTransactionHeadersService {
    * Get all req transaction headers grouped by trans_number with minimal response
    * Optional filter by trans_number
    * @param transNumber - Optional filter by specific transaction number
-   * @returns Minimal grouped response: trans_number, trans_date, trans_remarks, location_id, location_name, createdBy, created_date
+   * @returns Minimal grouped response: trans_number, trans_date, trans_remarks, location_id, location_name, createdBy, created_date, header_count
    */
   async findAllByTransNumber(transNumber?: string): Promise<any[]> {
     try {
@@ -102,6 +105,7 @@ export class ReqTransactionHeadersService {
         .createQueryBuilder("header")
         .leftJoinAndSelect("header.location", "location")
         .leftJoinAndSelect("header.createdBy", "createdBy")
+        .leftJoinAndSelect("header.requirement", "requirement")
         .select("header.trans_number", "trans_number")
         .addSelect("DATE_FORMAT(header.trans_date, '%Y-%m-%d')", "trans_date")
         .addSelect("header.trans_remarks", "trans_remarks")
@@ -112,10 +116,14 @@ export class ReqTransactionHeadersService {
           "CONCAT(createdBy.first_name, ' ', createdBy.last_name)",
           "created_by_name"
         )
-        .addSelect("header.created_at", "created_date");
+        .addSelect("header.created_at", "created_at")
+        .addSelect("COUNT(header.id)", "header_count")
+        .addSelect("requirement.requirement_name", "requirement_name")
+        .addSelect("header.status_id", "status_id")
+        .where("header.status_id = 1");
 
       if (transNumber) {
-        query = query.where("header.trans_number = :transNumber", {
+        query = query.andWhere("header.trans_number = :transNumber", {
           transNumber,
         });
       }
@@ -126,6 +134,17 @@ export class ReqTransactionHeadersService {
 
       const response = await query.getRawMany();
       return response;
+      // return response.map((row) => ({
+      //   trans_number: row.trans_number,
+      //   trans_date: row.trans_date,
+      //   trans_remarks: row.trans_remarks || null,
+      //   location_id: row.location_id,
+      //   location_name: row.location_name || null,
+      //   createdBy: row.created_by_name || null,
+      //   created_date: row.created_date,
+      //   header_count: parseInt(row.header_count, 10),
+      //   requirement_name: row.requirement_name || null,
+      // }));
     } catch (error) {
       throw new Error(
         `Failed to fetch req transaction headers grouped by trans_number: ${error.message}`
@@ -146,7 +165,7 @@ export class ReqTransactionHeadersService {
       }
 
       const records = await this.reqTransactionHeadersRepository.find({
-        where: { trans_number: transNumber },
+        where: { trans_number: transNumber, status_id: 1 },
         relations: this.getDataRepoRelations(),
       });
 
@@ -156,7 +175,30 @@ export class ReqTransactionHeadersService {
         );
       }
 
-      return this.responseMapperService.mapEntitiesToResponse(records);
+      return records.map((record) => ({
+        id: record.id,
+        warehouse_id: record.warehouse_id,
+        warehouse_ifs: record.warehouse?.warehouse_ifs || null,
+        warehouse_name: record.warehouse?.warehouse_name || null,
+        requirement_id: record.requirement_id,
+        requirement_name: record.requirement?.requirement_name || null,
+        location_id: record.location_id,
+        location_name: record.location?.location_name || null,
+        trans_date: record.trans_date,
+        trans_remarks: record.trans_remarks,
+        trans_due_status_id: record.trans_due_status_id,
+        status_name: record.status?.status_name,
+        created_by: record.created_by,
+        access_key_id: record.access_key_id,
+        updated_by: record.updated_by,
+        created_at: record.created_at,
+        created_user: record.createdBy
+          ? `${record.createdBy.first_name} ${record.createdBy.last_name}`
+          : null,
+        reqTransactionDetails: record.reqTransactionDetails || [],
+        reqTransactionDues: record.reqTransactionDues || [],
+      }));
+      // return this.responseMapperService.mapEntitiesToResponse(records);
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -341,27 +383,16 @@ export class ReqTransactionHeadersService {
     transHdrId: number,
     userId: number,
     statusId?: number,
-    transDueId?: number
+    cancellationReason?: string
   ): Promise<any> {
     try {
-      // const record = await this.reqTransactionHeadersRepository.findOne({
-      //   where: { id },
-      // });
-
-      const recordDue = await this.reqTransactionDuesRepository.findOne({
-        where: { req_transaction_header_id: transHdrId, id: transDueId },
-        relations: ["warehouseRequirementDue"],
-      });
-
-      if (!recordDue) {
-        throw new NotFoundException(
-          `Req transaction due with header ID ${transHdrId} not found`
-        );
-      }
-
       const recordHdr = await this.reqTransactionHeadersRepository.findOne({
         where: { id: transHdrId },
-        relations: ["reqTransactionDetails"],
+        relations: [
+          "reqTransactionDetails",
+          "reqTransactionDues",
+          "reqTransactionDues.warehouseRequirementDue",
+        ],
       });
 
       if (!recordHdr) {
@@ -371,53 +402,208 @@ export class ReqTransactionHeadersService {
       }
 
       const transStatusId = statusId;
-      const whsDueStatusId = transStatusId === 5 ? 1 : 2; // activate due if connected transaction is cancelled.
 
-      // update trans dues and connected warehouse due
-      recordDue.status_id = transStatusId;
-      recordDue.updated_by = userId;
-      recordDue.warehouseRequirementDue.status_id = whsDueStatusId;
-      recordDue.warehouseRequirementDue.updated_by = userId;
-      const saved = await this.reqTransactionDuesRepository.save(recordDue);
+      // Update header status and cancellation reason
+      recordHdr.status_id = transStatusId;
+      recordHdr.updated_by = userId;
+      if (cancellationReason) {
+        recordHdr.cancellation_reason = cancellationReason;
+      }
+      const savedHdr =
+        await this.reqTransactionHeadersRepository.save(recordHdr);
 
-      let savedDtl = null;
-      if (saved) {
-        // Also update header status and detail status
-        recordHdr.status_id = transStatusId;
-        recordHdr.updated_by = userId;
-        const savedHdr =
-          await this.reqTransactionHeadersRepository.save(recordHdr);
+      if (!savedHdr) {
+        throw new Error("Failed to update header");
+      }
 
-        if (savedHdr) {
-          // Update details status
-          for (const detail of recordHdr.reqTransactionDetails) {
-            detail.status_id = transStatusId;
-            detail.updated_by = userId;
-            savedDtl = await this.reqTransactionDetailsRepository.save(detail);
+      // Update all related transaction details
+      if (
+        recordHdr.reqTransactionDetails &&
+        recordHdr.reqTransactionDetails.length > 0
+      ) {
+        for (const detail of recordHdr.reqTransactionDetails) {
+          detail.status_id = transStatusId;
+          detail.updated_by = userId;
+          await this.reqTransactionDetailsRepository.save(detail);
+        }
+      }
+
+      // Update all related transaction dues and warehouse requirement dues
+      const warehouseRequirementDueIds: number[] = [];
+      if (
+        recordHdr.reqTransactionDues &&
+        recordHdr.reqTransactionDues.length > 0
+      ) {
+        for (const due of recordHdr.reqTransactionDues) {
+          due.status_id = transStatusId;
+          due.updated_by = userId;
+          await this.reqTransactionDuesRepository.save(due);
+
+          // Collect warehouse requirement due IDs
+          if (due.warehouse_requirement_due_id) {
+            warehouseRequirementDueIds.push(due.warehouse_requirement_due_id);
+          }
+
+          // Reactivate warehouse requirement due (set to status 1)
+          if (due.warehouseRequirementDue) {
+            due.warehouseRequirementDue.status_id = 1;
+            due.warehouseRequirementDue.updated_by = userId;
+            await this.warehouseRequirementDuesRepository.save(
+              due.warehouseRequirementDue
+            );
           }
         }
       }
 
-      if (savedDtl) {
-        // Audit trail
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "ReqTransactionHeadersService",
-            method: "toggleStatus",
-            raw_data: JSON.stringify({ transHdrId, transStatusId }),
-            description: `Toggled status for req transaction header ID: ${transHdrId} to status: ${transStatusId} and connected dues: ID: ${transDueId} warehouse due to status: ${whsDueStatusId}`,
-            status_id: 1,
-          },
-          userId
-        );
-      }
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionHeadersService",
+          method: "toggleStatus",
+          raw_data: JSON.stringify({
+            transHdrId,
+            transStatusId,
+            cancellationReason: cancellationReason || null,
+            warehouseRequirementDueIds,
+          }),
+          description: `Toggled status for req transaction header ID: ${transHdrId} to status: ${transStatusId}${cancellationReason ? ` with reason: ${cancellationReason}` : ""}${warehouseRequirementDueIds.length > 0 ? ` | Affected warehouse requirement dues: ${warehouseRequirementDueIds.join(", ")}` : ""}`,
+          status_id: 1,
+        },
+        userId
+      );
 
-      return this.findOne(saved.id);
+      return this.findOne(savedHdr.id);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }
       throw new Error("Failed to toggle req transaction header status");
+    }
+  }
+
+  /**
+   * Cancel all req transaction headers with a specific trans_number
+   * @param transNumber - Transaction number to cancel all headers for
+   * @param userId - User ID performing the cancellation
+   * @param cancellationReason - Reason for cancellation
+   * @returns Summary of cancelled headers and related dues/details
+   */
+  async toggleStatusCancelByTransNumber(
+    transNumber: string,
+    userId: number,
+    cancellationReason: string
+  ): Promise<any> {
+    try {
+      if (!transNumber) {
+        throw new BadRequestException("transNumber is required");
+      }
+
+      if (!cancellationReason) {
+        throw new BadRequestException("cancellationReason is required");
+      }
+
+      // Find all headers with this trans_number
+      const headers = await this.reqTransactionHeadersRepository.find({
+        where: { trans_number: transNumber },
+        relations: [
+          "reqTransactionDetails",
+          "reqTransactionDues",
+          "reqTransactionDues.warehouseRequirementDue",
+        ],
+      });
+
+      if (!headers.length) {
+        throw new NotFoundException(
+          `No req transaction headers found with trans_number ${transNumber}`
+        );
+      }
+
+      const results = {
+        total_headers: headers.length,
+        cancelled_headers: 0,
+        cancelled_details: 0,
+        cancelled_dues: 0,
+        errors: [],
+      };
+
+      // Status ID 5 = Cancelled
+      const cancelledStatusId = 5;
+
+      // Process each header
+      for (const header of headers) {
+        try {
+          // Update header status
+          header.status_id = cancelledStatusId;
+          header.updated_by = userId;
+          header.cancellation_reason = cancellationReason;
+          await this.reqTransactionHeadersRepository.save(header);
+          results.cancelled_headers++;
+
+          // Update all related transaction details
+          if (
+            header.reqTransactionDetails &&
+            header.reqTransactionDetails.length > 0
+          ) {
+            for (const detail of header.reqTransactionDetails) {
+              detail.status_id = cancelledStatusId;
+              detail.updated_by = userId;
+              await this.reqTransactionDetailsRepository.save(detail);
+              results.cancelled_details++;
+            }
+          }
+
+          // Update all related transaction dues and warehouse requirement dues
+          if (
+            header.reqTransactionDues &&
+            header.reqTransactionDues.length > 0
+          ) {
+            for (const due of header.reqTransactionDues) {
+              due.status_id = cancelledStatusId;
+              due.updated_by = userId;
+              await this.reqTransactionDuesRepository.save(due);
+              results.cancelled_dues++;
+
+              // Deactivate warehouse requirement due (set to status 1 = active again)
+              if (due.warehouseRequirementDue) {
+                due.warehouseRequirementDue.status_id = 1;
+                due.warehouseRequirementDue.updated_by = userId;
+                await this.warehouseRequirementDuesRepository.save(
+                  due.warehouseRequirementDue
+                );
+              }
+            }
+          }
+
+          // Audit trail for each header
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "ReqTransactionHeadersService",
+              method: "toggleStatusCancelByTransNumber",
+              raw_data: JSON.stringify({ transNumber, cancellationReason }),
+              description: `Cancelled req transaction header ID: ${header.id} (trans_number: ${transNumber}) with reason: ${cancellationReason}`,
+              status_id: 1,
+            },
+            userId
+          );
+        } catch (headerError) {
+          results.errors.push({
+            header_id: header.id,
+            reason: headerError.message || "Error processing header",
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error(
+        `Failed to cancel req transaction headers by trans_number: ${error.message}`
+      );
     }
   }
 

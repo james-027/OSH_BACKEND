@@ -43,9 +43,7 @@ export class ReqTransactionHeadersController {
 
   @Get("find-by-trans-number")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findOneByTransNumber(
-    @Query("transNumber") transNumber: string
-  ) {
+  async findOneByTransNumber(@Query("trans_number") transNumber: string) {
     return await this.reqTransactionHeadersService.findOneByTransNumber(
       transNumber
     );
@@ -102,6 +100,21 @@ export class ReqTransactionHeadersController {
     return this.reqTransactionHeadersService.toggleStatus(id, userId);
   }
 
+  @Patch(":trans_number/cancel-by-trans-number")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
+  async toggleStatusCancelByTransNumber(
+    @Param("trans_number") transNumber: string,
+    @Body() body: { cancellation_reason: string },
+    @Request() req
+  ) {
+    const userId = req.user.id;
+    return this.reqTransactionHeadersService.toggleStatusCancelByTransNumber(
+      transNumber,
+      userId,
+      body.cancellation_reason
+    );
+  }
+
   @Post("batch-create")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async createWithDetails(
@@ -133,7 +146,7 @@ export class ReqTransactionHeadersController {
       updateDto.trans_header_id,
       userId,
       updateDto.status_id,
-      updateDto.trans_due_id
+      updateDto.cancellation_reason
     );
   }
 }
