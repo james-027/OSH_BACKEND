@@ -30,6 +30,7 @@ import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
 import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "src/config/logger";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class ReqTransactionHeadersService {
@@ -59,7 +60,8 @@ export class ReqTransactionHeadersService {
     private reqTransactionDuesService: ReqTransactionDuesService,
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private requirementRemindersService: RequirementRemindersService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -85,6 +87,84 @@ export class ReqTransactionHeadersService {
       return this.responseMapperService.mapEntitiesToResponse(records);
     } catch (error) {
       throw new Error("Failed to fetch req transaction headers");
+    }
+  }
+
+  /**
+   * Get all req transaction headers grouped by trans_number with minimal response
+   * Optional filter by trans_number
+   * @param transNumber - Optional filter by specific transaction number
+   * @returns Minimal grouped response: trans_number, trans_date, trans_remarks, location_id, location_name, createdBy, created_date
+   */
+  async findAllByTransNumber(transNumber?: string): Promise<any[]> {
+    try {
+      let query = this.reqTransactionHeadersRepository
+        .createQueryBuilder("header")
+        .leftJoinAndSelect("header.location", "location")
+        .leftJoinAndSelect("header.createdBy", "createdBy")
+        .select("header.trans_number", "trans_number")
+        .addSelect("DATE_FORMAT(header.trans_date, '%Y-%m-%d')", "trans_date")
+        .addSelect("header.trans_remarks", "trans_remarks")
+        .addSelect("header.location_id", "location_id")
+        .addSelect("location.location_name", "location_name")
+        .addSelect("header.created_by", "created_by")
+        .addSelect(
+          "CONCAT(createdBy.first_name, ' ', createdBy.last_name)",
+          "created_by_name"
+        )
+        .addSelect("header.created_at", "created_date");
+
+      if (transNumber) {
+        query = query.where("header.trans_number = :transNumber", {
+          transNumber,
+        });
+      }
+
+      query = query
+        .groupBy("header.trans_number")
+        .orderBy("header.trans_number", "DESC");
+
+      const response = await query.getRawMany();
+      return response;
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch req transaction headers grouped by trans_number: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Get full details for a specific trans_number (details page view)
+   * Returns full transaction header details WITHOUT grouping
+   * @param transNumber - Transaction number to retrieve
+   * @returns Array of full header details for the given trans_number
+   */
+  async findOneByTransNumber(transNumber: string): Promise<any[]> {
+    try {
+      if (!transNumber) {
+        throw new BadRequestException("transNumber is required");
+      }
+
+      const records = await this.reqTransactionHeadersRepository.find({
+        where: { trans_number: transNumber },
+        relations: this.getDataRepoRelations(),
+      });
+
+      if (!records.length) {
+        throw new NotFoundException(
+          `Req transaction header(s) with trans_number ${transNumber} not found`
+        );
+      }
+
+      return this.responseMapperService.mapEntitiesToResponse(records);
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to fetch req transaction header by trans_number");
     }
   }
 
@@ -387,6 +467,22 @@ export class ReqTransactionHeadersService {
         warehouses.map((w) => [w.warehouse_ifs, w])
       );
 
+      // Get location_id and location abbreviation from the first warehouse
+      let location_id: number | null = null;
+      let location_abbr: string | null = null;
+      if (warehouses.length > 0) {
+        const firstWarehouse = await this.warehousesRepository.findOne({
+          where: { id: warehouses[0].id },
+          relations: ["location"],
+        });
+        if (firstWarehouse) {
+          location_id = firstWarehouse.location_id;
+          location_abbr = firstWarehouse.location
+            ? firstWarehouse.location.location_abbr || null
+            : null;
+        }
+      }
+
       //* Step 3: Calculate trans_date based on renewal_type_id
       let calculatedTransDate = formatDateToString(new Date());
 
@@ -438,6 +534,18 @@ export class ReqTransactionHeadersService {
         );
         calculatedTransDate = formatDateToString(transDate);
       }
+
+      // Generate using bulletproof service with database-level locking
+      const trans_number =
+        await this.commonUtilitiesService.generateTransactionNumber({
+          transaction_type: "REQUIREMENTS",
+          location_id: location_id,
+          access_key_id: accessKeyId,
+          format: "R{abbr}{key}{year}-{seq:4}",
+          reset_per_year: true,
+          currentDate: new Date(calculatedTransDate),
+          abbr: location_abbr,
+        });
 
       //* Step 4: Validation and header creation per warehouse
       for (const warehouse of warehouses) {
@@ -538,6 +646,7 @@ export class ReqTransactionHeadersService {
           }
 
           //* Step 7: Create transaction header
+
           const headerDto = {
             warehouse_id: warehouse.id,
             requirement_id: createDto.requirement_id,
@@ -547,6 +656,8 @@ export class ReqTransactionHeadersService {
             created_by: userId,
             access_key_id: accessKeyId,
             status_id: 1,
+            trans_number,
+            location_id,
           };
 
           const headerRecord =

@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Query,
 } from "@nestjs/common";
 import { ReqTransactionHeadersService } from "../services/req-transaction-headers.service";
 import { CreateReqTransactionHeaderDto } from "../dto/CreateReqTransactionHeaderDto";
@@ -30,6 +31,24 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAll() {
     return await this.reqTransactionHeadersService.findAll();
+  }
+
+  @Get("group-by-trans-number")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  async findAllByTransNumber(@Query("transNumber") transNumber?: string) {
+    return await this.reqTransactionHeadersService.findAllByTransNumber(
+      transNumber
+    );
+  }
+
+  @Get("find-by-trans-number")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  async findOneByTransNumber(
+    @Query("transNumber") transNumber: string
+  ) {
+    return await this.reqTransactionHeadersService.findOneByTransNumber(
+      transNumber
+    );
   }
 
   @Get(":id")

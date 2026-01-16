@@ -22,6 +22,8 @@ import { RequirementsModule } from "../requirements/requirements.module";
 import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
 import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 import { SSEModule } from "../sse/sse.module";
+import { TransactionSequence } from "src/entities/TransactionSequence";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { SSEModule } from "../sse/sse.module";
       UserPermissions,
       ReqTransactionDue,
       ReqTransactionDetail,
+      TransactionSequence,
     ]),
     UsersModule,
     UserAuditTrailModule,
@@ -48,7 +51,11 @@ import { SSEModule } from "../sse/sse.module";
     SSEModule,
   ],
   controllers: [ReqTransactionHeadersController],
-  providers: [ReqTransactionHeadersService, ResponseMapperService],
+  providers: [
+    ReqTransactionHeadersService,
+    ResponseMapperService,
+    CommonUtilitiesService,
+  ],
   exports: [ReqTransactionHeadersService],
 })
 export class ReqTransactionHeadersModule {}

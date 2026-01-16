@@ -16,6 +16,7 @@ import { Warehouse } from "./Warehouse";
 import { ReqTransactionDetail } from "./ReqTransactionDetail";
 import { ReqTransactionDue } from "./ReqTransactionDue";
 import { AccessKey } from "./AccessKey";
+import { Location } from "./Location";
 
 @Entity("req_transaction_headers")
 export class ReqTransactionHeader {
@@ -61,6 +62,12 @@ export class ReqTransactionHeader {
 
   @Column({ nullable: true })
   access_key_id: number;
+
+  @Column({ type: "varchar", length: 32, nullable: true })
+  trans_number: string;
+
+  @Column({ nullable: true })
+  location_id: number;
 
   @ManyToOne(() => AccessKey, {
     eager: false,
@@ -122,6 +129,14 @@ export class ReqTransactionHeader {
   )
   @JoinColumn({ name: "requirement_id" })
   requirement!: Requirement;
+
+  @ManyToOne(() => Location, (location) => location.reqTransactionHeaders, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "location_id" })
+  location!: Location;
 
   // Reference to entity relations
   @OneToMany(

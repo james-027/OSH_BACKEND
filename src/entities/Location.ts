@@ -13,6 +13,7 @@ import { User } from "./User"; // Import User entity for foreign keys
 import { RoleLocationPreset } from "./RoleLocationPreset";
 import { UserLocations } from "./UserLocations";
 import { Region } from "./Region"; // Import Region entity for foreign key
+import { ReqTransactionHeader } from "./ReqTransactionHeader";
 
 // @Unique(["location_name"]) // Add unique constraint to location_name
 @Entity()
@@ -98,4 +99,10 @@ export class Location {
   // Relationship for location_id in UserLocations
   @OneToMany(() => UserLocations, (userLocations) => userLocations.location)
   userLocations!: UserLocations[];
+
+  @OneToMany(
+    () => ReqTransactionHeader,
+    (reqTransactionHeader) => reqTransactionHeader.location
+  )
+  reqTransactionHeaders!: ReqTransactionHeader[];
 }
