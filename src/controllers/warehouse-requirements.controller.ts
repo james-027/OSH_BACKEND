@@ -118,15 +118,14 @@ export class WarehouseRequirementsController {
     console.log("Role ID:", roleId);
     console.log("Access Key ID:", accessKeyId);
 
-    return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
+    return await this.warehouseRequirementsService.getWarehouseRequirementsListingCounts(
       warehouse_type_id,
       warehouse_id ? Number(warehouse_id) : undefined,
       date_from,
       date_to,
       userId,
       roleId,
-      accessKeyId,
-      flatten
+      accessKeyId
     );
   }
 
