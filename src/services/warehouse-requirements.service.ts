@@ -2000,12 +2000,21 @@ export class WarehouseRequirementsService {
         }
 
         // Calculate overall percentage (transacted / total active requirements)
+        // const totalTransactedPercentageCalc =
+        //   activeRequirements.length > 0
+        //     ? Math.round(
+        //         (totalTransactedCount / activeRequirements.length) * 100
+        //       )
+        //     : 0;
         const totalTransactedPercentageCalc =
-          activeRequirements.length > 0
+          baseRequirementsData.base_requirement_with_dues_count > 0
             ? Math.round(
-                (totalTransactedCount / activeRequirements.length) * 100
+                (totalTransactedCount /
+                  baseRequirementsData.base_requirement_with_dues_count) *
+                  100
               )
             : 0;
+        // console.log("baseRequirementsData:", baseRequirementsData.length);
 
         return {
           id: warehouse.id,
