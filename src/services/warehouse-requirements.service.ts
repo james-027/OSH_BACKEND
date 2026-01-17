@@ -1106,6 +1106,7 @@ export class WarehouseRequirementsService {
             "reqTransactionDetails",
             "requirement.renewalType",
             "reqTransactionDues",
+            "createdBy",
           ],
           order: { id: "ASC" },
         }
@@ -1135,6 +1136,10 @@ export class WarehouseRequirementsService {
             return {
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
+              created_user: header.createdBy
+                ? `${header.createdBy.first_name} ${header.createdBy.last_name}`
+                : null,
+              created_at: header.created_at,
               trans_remarks: header.trans_remarks || null,
               trans_due_status_name:
                 header.trans_due_status_id === 1 ? "ON TIME" : "OVERDUE",
