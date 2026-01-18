@@ -241,8 +241,20 @@ export class WarehouseRequirementDuesService {
             continue;
         }
 
+        const preDueReminderDate = new Date(dueStartDate);
+        preDueReminderDate.setDate(
+          preDueReminderDate.getDate() - requirement.requirement_reminder
+        );
+
+        const postDueReminderDate = new Date(dueEndDate);
+        postDueReminderDate.setDate(
+          postDueReminderDate.getDate() + requirement.requirement_reminder
+        );
+
         const dueStartString = formatDateToString(dueStartDate);
         const dueEndString = formatDateToString(dueEndDate);
+        const preDueReminderString = formatDateToString(preDueReminderDate);
+        const postDueReminderString = formatDateToString(postDueReminderDate);
 
         // Check unique constraint: (warehouse_requirement_id, due_start, due_end)
         const existingDue =
@@ -264,6 +276,8 @@ export class WarehouseRequirementDuesService {
           warehouse_requirement_id: wrId,
           warehouse_requirement_due_start: dueStartString,
           warehouse_requirement_due_end: dueEndString,
+          warehouse_requirement_due_pre_reminder_date: preDueReminderString,
+          warehouse_requirement_due_post_reminder_date: postDueReminderString,
           status_id: 1,
           created_by: userId,
         });
