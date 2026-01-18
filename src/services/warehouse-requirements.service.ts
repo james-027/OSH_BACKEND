@@ -1833,6 +1833,7 @@ export class WarehouseRequirementsService {
         .leftJoinAndSelect("requirement.renewalType", "renewalType")
         .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
         .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
+        .leftJoinAndSelect("rth.createdBy", "createdBy")
         .leftJoinAndSelect(
           "rtd_dues.warehouseRequirementDue",
           "warehouseRequirementDue"
@@ -1896,6 +1897,10 @@ export class WarehouseRequirementsService {
         // Build transaction object with dues and details
         const transaction = {
           trans_header_id: header.id,
+          created_user: header.createdBy
+            ? `${header.createdBy.first_name} ${header.createdBy.last_name}`
+            : null,
+          created_at: header.created_at,
           trans_date: this.commonUtilitiesService.formatDateString(
             header.trans_date
           ),
@@ -1999,13 +2004,6 @@ export class WarehouseRequirementsService {
           totalTransactedCount += actualNo;
         }
 
-        // Calculate overall percentage (transacted / total active requirements)
-        // const totalTransactedPercentageCalc =
-        //   activeRequirements.length > 0
-        //     ? Math.round(
-        //         (totalTransactedCount / activeRequirements.length) * 100
-        //       )
-        //     : 0;
         const totalTransactedPercentageCalc =
           baseRequirementsData.base_requirement_with_dues_count > 0
             ? Math.round(
