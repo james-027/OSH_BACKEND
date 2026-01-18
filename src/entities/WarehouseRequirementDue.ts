@@ -48,6 +48,9 @@ export class WarehouseRequirementDue {
   @Column({ type: "date", nullable: true })
   warehouse_requirement_due_post_reminder_date: string;
 
+  @Column({ type: "date", nullable: true })
+  warehouse_requirement_due_date: string;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",

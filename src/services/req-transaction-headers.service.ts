@@ -849,10 +849,10 @@ export class ReqTransactionHeadersService {
           const reqReminderStatusDetail =
             await this.requirementRemindersService.calculateDueRequirementReminderStatus(
               createDto.requirement_id,
-              currentDue.warehouse_requirement_due_end
+              currentDue.warehouse_requirement_due_date
             );
 
-          console.log("reqReminderStatusDetail", reqReminderStatusDetail);
+          // console.log("reqReminderStatusDetail", reqReminderStatusDetail);
 
           let transDueStatusId = 1; // default: active
           if (createDto.renewal_type_id !== 1) {

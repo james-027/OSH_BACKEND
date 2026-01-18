@@ -348,6 +348,11 @@ export class RequirementRemindersService {
     daysDiff: number;
   } | null> {
     try {
+      // Guard: return null if due_end is null or undefined
+      if (!due_end) {
+        return null;
+      }
+
       // Parse due_end date if string
       const dueEndDate =
         typeof due_end === "string" ? new Date(due_end) : due_end;
@@ -380,9 +385,9 @@ export class RequirementRemindersService {
         return null;
       }
 
-      console.log("Days Difference:", daysDiff);
-      console.log("today:", today);
-      console.log("dueEndDate:", dueEndDate);
+      // console.log("Days Difference:", daysDiff);
+      // console.log("today:", today);
+      // console.log("dueEndDate:", dueEndDate);
 
       // Find the first matching reminder where daysDiff >= reminder_count_day
       for (const reminder of reminders) {

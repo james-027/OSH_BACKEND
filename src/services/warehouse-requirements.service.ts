@@ -951,7 +951,7 @@ export class WarehouseRequirementsService {
                 const reminderStatus =
                   await this.requirementRemindersService.calculateDueRequirementReminderStatus(
                     baseReq.requirement_id,
-                    due.warehouse_requirement_due_end
+                    due.warehouse_requirement_due_date
                   );
 
                 return {
@@ -1015,7 +1015,7 @@ export class WarehouseRequirementsService {
             const reminderStatus =
               await this.requirementRemindersService.calculateDueRequirementReminderStatus(
                 baseReq.requirement_id,
-                due.warehouse_requirement_due_end
+                due.warehouse_requirement_due_date
               );
 
             flattenedDetails.push({
