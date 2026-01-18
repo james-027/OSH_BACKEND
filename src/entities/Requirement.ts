@@ -53,6 +53,11 @@ export class Requirement {
   })
   requirement_start_days: number;
 
+  @Column({
+    comment: "Due days (number of days) to due counting the requirement from.",
+  })
+  requirement_due_days: number;
+
   @Column({ default: 1 })
   status_id: number;
 

@@ -380,9 +380,9 @@ export class RequirementRemindersService {
         return null;
       }
 
-      // console.log("Days Difference:", daysDiff);
-      // console.log("today:", today);
-      // console.log("dueEndDate:", dueEndDate);
+      console.log("Days Difference:", daysDiff);
+      console.log("today:", today);
+      console.log("dueEndDate:", dueEndDate);
 
       // Find the first matching reminder where daysDiff >= reminder_count_day
       for (const reminder of reminders) {

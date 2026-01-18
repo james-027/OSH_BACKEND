@@ -21,6 +21,9 @@ export class CreateRequirementDto {
   @IsInt()
   requirement_start_days!: number;
 
+  @IsInt()
+  requirement_due_days!: number;
+
   @IsOptional()
   @IsInt()
   status_id?: number;
