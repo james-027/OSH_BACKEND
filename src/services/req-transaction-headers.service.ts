@@ -93,14 +93,36 @@ export class ReqTransactionHeadersService {
     }
   }
 
+  private async getAllowedLocationIds(
+    userId?: number,
+    roleId?: number
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+    return await this.commonUtilitiesService.getUserAllowedLocationIds(
+      userId,
+      roleId
+    );
+  }
+
   /**
    * Get all req transaction headers grouped by trans_number with minimal response
    * Optional filter by trans_number
    * @param transNumber - Optional filter by specific transaction number
    * @returns Minimal grouped response: trans_number, trans_date, trans_remarks, location_id, location_name, createdBy, created_date, header_count
    */
-  async findAllByTransNumber(transNumber?: string): Promise<any[]> {
+  async findAllByTransNumber(
+    transNumber?: string,
+    userId?: number,
+    roleId?: number
+  ): Promise<any[]> {
     try {
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId
+      );
+
       let query = this.reqTransactionHeadersRepository
         .createQueryBuilder("header")
         .leftJoinAndSelect("header.location", "location")
@@ -126,6 +148,15 @@ export class ReqTransactionHeadersService {
         query = query.andWhere("header.trans_number = :transNumber", {
           transNumber,
         });
+      }
+
+      if (allowedLocationIds.length > 0) {
+        query = query.andWhere(
+          "header.location_id IN (:...allowedLocationIds)",
+          {
+            allowedLocationIds,
+          }
+        );
       }
 
       query = query
@@ -820,6 +851,8 @@ export class ReqTransactionHeadersService {
               createDto.requirement_id,
               currentDue.warehouse_requirement_due_end
             );
+
+          console.log("reqReminderStatusDetail", reqReminderStatusDetail);
 
           let transDueStatusId = 1; // default: active
           if (createDto.renewal_type_id !== 1) {

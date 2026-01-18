@@ -35,15 +35,25 @@ export class ReqTransactionHeadersController {
 
   @Get("group-by-trans-number")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findAllByTransNumber(@Query("transNumber") transNumber?: string) {
+  async findAllByTransNumber(
+    @Request() req,
+    @Query("transNumber") transNumber?: string
+  ) {
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
     return await this.reqTransactionHeadersService.findAllByTransNumber(
-      transNumber
+      transNumber,
+      userId,
+      roleId
     );
   }
 
   @Get("find-by-trans-number")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findOneByTransNumber(@Query("trans_number") transNumber: string) {
+  async findOneByTransNumber(
+    @Query("trans_number") transNumber: string,
+    @Request() req
+  ) {
     return await this.reqTransactionHeadersService.findOneByTransNumber(
       transNumber
     );
