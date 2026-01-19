@@ -25,14 +25,14 @@ import { UpdateWarehouseRequirementDto } from "../dto/UpdateWarehouseRequirement
 export class WarehouseRequirementsController {
   constructor(
     private readonly warehousesService: WarehousesService,
-    private readonly warehouseRequirementsService: WarehouseRequirementsService
+    private readonly warehouseRequirementsService: WarehouseRequirementsService,
   ) {}
 
   @Get("/stores/:warehouse_type_id")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAll(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
-    @Request() req
+    @Request() req,
   ) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
@@ -41,7 +41,7 @@ export class WarehouseRequirementsController {
       warehouseTypeId,
       accessKeyId,
       userId,
-      roleId
+      roleId,
     );
   }
 
@@ -50,7 +50,7 @@ export class WarehouseRequirementsController {
   async findAllPerStatus(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Param("status_id", ParseIntPipe) statusId: number,
-    @Request() req
+    @Request() req,
   ) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
@@ -60,7 +60,7 @@ export class WarehouseRequirementsController {
       statusId,
       accessKeyId,
       userId,
-      roleId
+      roleId,
     );
   }
 
@@ -83,7 +83,7 @@ export class WarehouseRequirementsController {
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
     @Query("flatten") flatten?: boolean,
-    @Request() req?: any
+    @Request() req?: any,
   ) {
     const userId = req.user?.id;
     const roleId = req.user?.role_id;
@@ -97,7 +97,7 @@ export class WarehouseRequirementsController {
       userId,
       roleId,
       accessKeyId,
-      flatten
+      flatten,
     );
   }
 
@@ -109,14 +109,14 @@ export class WarehouseRequirementsController {
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
     @Query("flatten") flatten?: boolean,
-    @Request() req?: any
+    @Request() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
 
-    console.log("Role ID:", roleId);
-    console.log("Access Key ID:", accessKeyId);
+    // console.log("Role ID:", roleId);
+    // console.log("Access Key ID:", accessKeyId);
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingCounts(
       warehouse_type_id,
@@ -125,7 +125,7 @@ export class WarehouseRequirementsController {
       date_to,
       userId,
       roleId,
-      accessKeyId
+      accessKeyId,
     );
   }
 
@@ -149,7 +149,7 @@ export class WarehouseRequirementsController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findOneRequirement(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     return this.warehouseRequirementsService.findOne(id);
   }
@@ -162,12 +162,12 @@ export class WarehouseRequirementsController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async createRequirement(
     @Body() createWarehouseRequirementDto: CreateWarehouseRequirementDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.create(
       createWarehouseRequirementDto,
-      userId
+      userId,
     );
   }
 
@@ -180,13 +180,13 @@ export class WarehouseRequirementsController {
   async updateRequirement(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateWarehouseRequirementDto: UpdateWarehouseRequirementDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.update(
       id,
       updateWarehouseRequirementDto,
-      userId
+      userId,
     );
   }
 
@@ -198,7 +198,7 @@ export class WarehouseRequirementsController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.toggleStatus(id, userId);

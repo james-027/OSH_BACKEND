@@ -57,7 +57,7 @@ export class RoleActionPresetsService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private usersService: UsersService,
-    private sseEmitterService: SSEEmitterService
+    private sseEmitterService: SSEEmitterService,
   ) {}
 
   async findRolesNotInPresets() {
@@ -79,7 +79,7 @@ export class RoleActionPresetsService {
         existingRoleIdValues.length > 0
           ? "role.id NOT IN (:...existingRoleIds)"
           : "1=1",
-        { existingRoleIds: existingRoleIdValues }
+        { existingRoleIds: existingRoleIdValues },
       )
       .orderBy("role.id", "ASC")
       .getMany();
@@ -256,19 +256,19 @@ export class RoleActionPresetsService {
       role_name: roleActionPreset.role?.role_name || null,
       module_name: [
         ...new Set(
-          allActionPresets.map((p) => p.module?.module_name).filter(Boolean)
+          allActionPresets.map((p) => p.module?.module_name).filter(Boolean),
         ),
       ],
       action_name: [
         ...new Set(
-          allActionPresets.map((p) => p.action?.action_name).filter(Boolean)
+          allActionPresets.map((p) => p.action?.action_name).filter(Boolean),
         ),
       ],
       location_name: [
         ...new Set(
           allLocationPresets
             .map((p) => p.location?.location_name)
-            .filter(Boolean)
+            .filter(Boolean),
         ),
       ],
       status_name: roleActionPreset.status?.status_name || null,
@@ -283,7 +283,7 @@ export class RoleActionPresetsService {
 
   async create(
     createRoleActionPresetDto: CreateRoleActionPresetDto,
-    userId: number
+    userId: number,
   ) {
     const {
       role_id,
@@ -321,7 +321,7 @@ export class RoleActionPresetsService {
     });
     if (existingPreset) {
       throw new BadRequestException(
-        "Role action preset with this combination already exists."
+        "Role action preset with this combination already exists.",
       );
     }
 
@@ -361,7 +361,7 @@ export class RoleActionPresetsService {
         description: `Created role action preset ${savedRoleActionPreset.id}`,
         status_id: 1,
       },
-      userId
+      userId,
     );
 
     // Return data in the same format as findOne
@@ -371,7 +371,7 @@ export class RoleActionPresetsService {
   async update(
     id: number,
     updateRoleActionPresetDto: UpdateRoleActionPresetDto,
-    userId: number
+    userId: number,
   ) {
     const { role_id, module_id, action_id, status_id } =
       updateRoleActionPresetDto;
@@ -447,7 +447,7 @@ export class RoleActionPresetsService {
     roleActionPresetToUpdate.updated_by = updatedByUser.id;
 
     const savedRoleActionPreset = await this.roleActionPresetRepository.save(
-      roleActionPresetToUpdate
+      roleActionPresetToUpdate,
     );
     // Audit trail
     await this.userAuditTrailCreateService.create(
@@ -458,7 +458,7 @@ export class RoleActionPresetsService {
         description: `Updated role action preset ${id}`,
         status_id: 1,
       },
-      userId
+      userId,
     );
 
     return this.findOne(id);
@@ -481,16 +481,16 @@ export class RoleActionPresetsService {
     const authenticatedUserId = Number(userId);
     if (isNaN(role_id)) {
       logger.warn(
-        `Attempted to toggle status for role presets with invalid role_id: ${role_id}`
+        `Attempted to toggle status for role presets with invalid role_id: ${role_id}`,
       );
       throw new BadRequestException(
-        "Invalid role ID provided for status toggle."
+        "Invalid role ID provided for status toggle.",
       );
     }
 
     if (!authenticatedUserId) {
       throw new UnauthorizedException(
-        "Authenticated user ID is required to toggle role preset status."
+        "Authenticated user ID is required to toggle role preset status.",
       );
     }
 
@@ -525,7 +525,7 @@ export class RoleActionPresetsService {
           roleLocationPresets.length === 0
         ) {
           throw new NotFoundException(
-            `No role presets found for role ID ${role_id}.`
+            `No role presets found for role ID ${role_id}.`,
           );
         }
 
@@ -542,7 +542,7 @@ export class RoleActionPresetsService {
           newStatusId = 1; // Set to active
         } else {
           logger.warn(
-            `Role presets for role ${role_id} have an unexpected status_id: ${currentStatusId}. Defaulting to inactive (2).`
+            `Role presets for role ${role_id} have an unexpected status_id: ${currentStatusId}. Defaulting to inactive (2).`,
           );
           newStatusId = 2;
         }
@@ -553,10 +553,10 @@ export class RoleActionPresetsService {
         });
         if (!newStatusEntity) {
           logger.error(
-            `Target status ID ${newStatusId} does not exist in the database.`
+            `Target status ID ${newStatusId} does not exist in the database.`,
           );
           throw new Error(
-            "Target status (active/inactive) not found in the database. Please ensure status with ID 1 and 2 exist."
+            "Target status (active/inactive) not found in the database. Please ensure status with ID 1 and 2 exist.",
           );
         }
 
@@ -576,7 +576,7 @@ export class RoleActionPresetsService {
             status_id: newStatusId,
             updated_by: authenticatedUserId,
             modified_at: new Date(),
-          }
+          },
         );
 
         // Update all role location presets for this role
@@ -587,7 +587,7 @@ export class RoleActionPresetsService {
             status_id: newStatusId,
             updated_by: authenticatedUserId,
             modified_at: new Date(),
-          }
+          },
         );
         await queryRunner.commitTransaction();
 
@@ -679,7 +679,7 @@ export class RoleActionPresetsService {
         };
 
         logger.info(
-          `Successfully toggled status for all role presets with role_id: ${role_id} to ${newStatusEntity.status_name} by user ${authenticatedUserId}. Updated ${updatedRoleActionPresets.length} action presets and ${updatedRoleLocationPresets.length} location presets.`
+          `Successfully toggled status for all role presets with role_id: ${role_id} to ${newStatusEntity.status_name} by user ${authenticatedUserId}. Updated ${updatedRoleActionPresets.length} action presets and ${updatedRoleLocationPresets.length} location presets.`,
         );
 
         // Audit trail
@@ -691,7 +691,7 @@ export class RoleActionPresetsService {
             description: `Toggled status to ${newStatusName} for role action presets of role ${id}`,
             status_id: 1,
           },
-          userId
+          userId,
         );
 
         // SSE Events
@@ -718,7 +718,7 @@ export class RoleActionPresetsService {
     } catch (error) {
       logger.error(
         `Error toggling status for role presets with role_id ${role_id}:`,
-        error
+        error,
       );
       if (
         error instanceof NotFoundException ||
@@ -728,7 +728,7 @@ export class RoleActionPresetsService {
         throw error;
       }
       throw new Error(
-        `Failed to toggle status for role presets with role_id ${role_id}.`
+        `Failed to toggle status for role presets with role_id ${role_id}.`,
       );
     }
   }
@@ -783,7 +783,7 @@ export class RoleActionPresetsService {
           module_name: data.module_name,
           action_ids: data.actions.sort(),
           order_level: data.order_level,
-        })
+        }),
       );
 
       // Build response
@@ -800,7 +800,7 @@ export class RoleActionPresetsService {
     } catch (error) {
       logger.error(
         `Error retrieving role presets for role ID ${role_id}:`,
-        error
+        error,
       );
 
       if (
@@ -810,7 +810,7 @@ export class RoleActionPresetsService {
         throw error;
       }
       throw new Error(
-        `Failed to retrieve role presets for role ID ${role_id}.`
+        `Failed to retrieve role presets for role ID ${role_id}.`,
       );
     }
   }
@@ -848,7 +848,7 @@ export class RoleActionPresetsService {
         const nestedRole = this.createNestedStructure(
           role,
           roleActionPresets,
-          roleLocationPresets
+          roleLocationPresets,
         );
         results.push(nestedRole);
       }
@@ -859,7 +859,7 @@ export class RoleActionPresetsService {
 
   // Helper method to create nested structure (similar to Express createNestedStructure)
   private async createNestedStructureOld(
-    roleActionPresets: RoleActionPreset[]
+    roleActionPresets: RoleActionPreset[],
   ): Promise<any[]> {
     // Get all role location presets for completeness
     const roleLocationPresets = await this.roleLocationPresetRepository.find({
@@ -941,7 +941,7 @@ export class RoleActionPresetsService {
   private async createNestedStructure(
     role: Role,
     roleActionPresets: RoleActionPreset[],
-    roleLocationPresets: RoleLocationPreset[]
+    roleLocationPresets: RoleLocationPreset[],
   ): Promise<any> {
     // Group modules and their actions
     const moduleMap = new Map<number, any>();
@@ -1034,7 +1034,7 @@ export class RoleActionPresetsService {
     locationIds: number[],
     status: Status,
     updatedBy: number,
-    queryRunner: any
+    queryRunner: any,
   ): Promise<RoleLocationPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1048,10 +1048,10 @@ export class RoleActionPresetsService {
     if (locations.length !== locationIds.length) {
       const foundLocationIds = new Set(locations.map((l) => l.id));
       const missingLocationIds = locationIds.filter(
-        (id: number) => !foundLocationIds.has(id)
+        (id: number) => !foundLocationIds.has(id),
       );
       throw new BadRequestException(
-        `Location IDs not found: ${missingLocationIds.join(", ")}`
+        `Location IDs not found: ${missingLocationIds.join(", ")}`,
       );
     }
 
@@ -1063,7 +1063,7 @@ export class RoleActionPresetsService {
         status_id: 2, // inactive
         updated_by: updatedBy,
         modified_at: new Date(),
-      }
+      },
     );
 
     // Step 2: Upsert location presets
@@ -1073,7 +1073,7 @@ export class RoleActionPresetsService {
         RoleLocationPreset,
         {
           where: { role_id: roleId, location_id: locationId },
-        }
+        },
       );
 
       if (existingPreset) {
@@ -1083,7 +1083,7 @@ export class RoleActionPresetsService {
         existingPreset.modified_at = new Date();
         const saved = await queryRunner.manager.save(
           RoleLocationPreset,
-          existingPreset
+          existingPreset,
         );
         savedLocationPresets.push(saved);
       } else {
@@ -1092,7 +1092,7 @@ export class RoleActionPresetsService {
         newLocationPreset.role = role;
         newLocationPreset.role_id = roleId;
         newLocationPreset.location = locations.find(
-          (l) => l.id === locationId
+          (l) => l.id === locationId,
         )!;
         newLocationPreset.location_id = locationId;
         newLocationPreset.status = status;
@@ -1103,7 +1103,7 @@ export class RoleActionPresetsService {
         newLocationPreset.created_by = updatedBy;
         const saved = await queryRunner.manager.save(
           RoleLocationPreset,
-          newLocationPreset
+          newLocationPreset,
         );
         savedLocationPresets.push(saved);
       }
@@ -1118,7 +1118,7 @@ export class RoleActionPresetsService {
     presets: any[],
     status: Status,
     updatedBy: number,
-    queryRunner: any
+    queryRunner: any,
   ): Promise<RoleActionPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1135,7 +1135,7 @@ export class RoleActionPresetsService {
       }
       if (Array.isArray(preset.action_ids)) {
         preset.action_ids.forEach((actionId: number) =>
-          allActionIds.add(actionId)
+          allActionIds.add(actionId),
         );
       }
     });
@@ -1147,10 +1147,10 @@ export class RoleActionPresetsService {
     if (modules.length !== allModuleIds.size) {
       const foundModuleIds = new Set(modules.map((m) => m.id));
       const missingModuleIds = Array.from(allModuleIds).filter(
-        (id) => !foundModuleIds.has(id)
+        (id) => !foundModuleIds.has(id),
       );
       throw new BadRequestException(
-        `Module IDs not found: ${missingModuleIds.join(", ")}`
+        `Module IDs not found: ${missingModuleIds.join(", ")}`,
       );
     }
 
@@ -1161,10 +1161,10 @@ export class RoleActionPresetsService {
     if (actions.length !== allActionIds.size) {
       const foundActionIds = new Set(actions.map((a) => a.id));
       const missingActionIds = Array.from(allActionIds).filter(
-        (id) => !foundActionIds.has(id)
+        (id) => !foundActionIds.has(id),
       );
       throw new BadRequestException(
-        `Action IDs not found: ${missingActionIds.join(", ")}`
+        `Action IDs not found: ${missingActionIds.join(", ")}`,
       );
     }
 
@@ -1176,7 +1176,7 @@ export class RoleActionPresetsService {
         status_id: 2, // inactive
         updated_by: updatedBy,
         modified_at: new Date(),
-      }
+      },
     );
 
     // Step 2: Upsert action presets
@@ -1193,7 +1193,7 @@ export class RoleActionPresetsService {
 
       if (!Array.isArray(actionIds) || actionIds.length === 0) {
         logger.warn(
-          `action_ids must be a non-empty array for module ${moduleId}, skipping`
+          `action_ids must be a non-empty array for module ${moduleId}, skipping`,
         );
         continue;
       }
@@ -1208,13 +1208,13 @@ export class RoleActionPresetsService {
               module_id: moduleId,
               action_id: actionId,
             },
-          }
+          },
         );
 
         if (existingPreset) {
           // Reactivate existing preset (it was marked inactive in Step 1)
           logger.info(
-            `Reactivating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to 1`
+            `Reactivating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to 1`,
           );
           existingPreset.status_id = 1; // active
           existingPreset.updated_by = updatedBy;
@@ -1228,14 +1228,14 @@ export class RoleActionPresetsService {
               status_id: 1,
               updated_by: updatedBy,
               modified_at: new Date(),
-            }
+            },
           );
 
           savedActionPresets.push(existingPreset);
         } else {
           // Create new preset
           logger.info(
-            `Creating new preset: role=${roleId}, module=${moduleId}, action=${actionId}`
+            `Creating new preset: role=${roleId}, module=${moduleId}, action=${actionId}`,
           );
           const newActionPreset = new RoleActionPreset();
           newActionPreset.role = role;
@@ -1250,7 +1250,7 @@ export class RoleActionPresetsService {
           newActionPreset.created_by = updatedBy;
           const saved = await queryRunner.manager.save(
             RoleActionPreset,
-            newActionPreset
+            newActionPreset,
           );
           savedActionPresets.push(saved);
         }
@@ -1258,7 +1258,7 @@ export class RoleActionPresetsService {
     }
 
     logger.info(
-      `Successfully updated ${savedActionPresets.length} role action presets for role_id ${roleId}`
+      `Successfully updated ${savedActionPresets.length} role action presets for role_id ${roleId}`,
     );
 
     return savedActionPresets;
@@ -1267,7 +1267,7 @@ export class RoleActionPresetsService {
   // Create role preset with complex structure (similar to Express create method)
   async createRolePreset(
     createRolePresetDto: CreateRolePresetDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     const {
       role_id,
@@ -1299,7 +1299,7 @@ export class RoleActionPresetsService {
         });
         if (!status) {
           throw new BadRequestException(
-            `Status with ID ${resolvedStatusId} not found.`
+            `Status with ID ${resolvedStatusId} not found.`,
           );
         }
 
@@ -1318,7 +1318,7 @@ export class RoleActionPresetsService {
             location_ids,
             status,
             userId,
-            queryRunner
+            queryRunner,
           );
 
         // Update action presets using helper (mark-inactive-then-upsert)
@@ -1328,7 +1328,7 @@ export class RoleActionPresetsService {
             presets,
             status,
             userId,
-            queryRunner
+            queryRunner,
           );
 
         // Handle user permissions and locations updates if requested
@@ -1349,7 +1349,7 @@ export class RoleActionPresetsService {
                 role_id,
                 presets,
                 accessKeyIds,
-                userId
+                userId,
               );
             }
           }
@@ -1359,7 +1359,7 @@ export class RoleActionPresetsService {
               user_ids,
               role_id,
               location_ids,
-              userId
+              userId,
             );
 
             // SSE Events
@@ -1384,7 +1384,7 @@ export class RoleActionPresetsService {
           }
           if (Array.isArray(preset.action_ids)) {
             preset.action_ids.forEach((actionId: number) =>
-              allActionIds.add(actionId)
+              allActionIds.add(actionId),
             );
           }
         });
@@ -1442,11 +1442,11 @@ export class RoleActionPresetsService {
             description: `Created role action presets for role ${role_id}`,
             status_id: 1,
           },
-          userId
+          userId,
         );
 
         logger.info(
-          `Successfully created ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`
+          `Successfully created ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`,
         );
 
         // SSE Events
@@ -1483,7 +1483,7 @@ export class RoleActionPresetsService {
   async updateRolePreset(
     role_id: number,
     updateRolePresetDto: UpdateRolePresetDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     const {
       location_ids,
@@ -1494,7 +1494,7 @@ export class RoleActionPresetsService {
       apply_locations_to_users = false,
     } = updateRolePresetDto;
 
-    console.log("UpdateRolePresetDto:", updateRolePresetDto);
+    // console.log("UpdateRolePresetDto:", updateRolePresetDto);
 
     try {
       // Start transaction for consistency
@@ -1516,7 +1516,7 @@ export class RoleActionPresetsService {
         });
         if (!status) {
           throw new BadRequestException(
-            `Status with ID ${resolvedStatusId} not found.`
+            `Status with ID ${resolvedStatusId} not found.`,
           );
         }
 
@@ -1535,7 +1535,7 @@ export class RoleActionPresetsService {
             location_ids,
             status,
             userId,
-            queryRunner
+            queryRunner,
           );
 
         // Update action presets using helper (mark-inactive-then-upsert)
@@ -1545,7 +1545,7 @@ export class RoleActionPresetsService {
             presets,
             status,
             userId,
-            queryRunner
+            queryRunner,
           );
 
         // Handle user permissions and locations updates if requested
@@ -1566,7 +1566,7 @@ export class RoleActionPresetsService {
                 role_id,
                 presets,
                 accessKeyIds,
-                userId
+                userId,
               );
             }
           }
@@ -1576,7 +1576,7 @@ export class RoleActionPresetsService {
               user_ids,
               role_id,
               location_ids,
-              userId
+              userId,
             );
           }
         }
@@ -1593,7 +1593,7 @@ export class RoleActionPresetsService {
           }
           if (Array.isArray(preset.action_ids)) {
             preset.action_ids.forEach((actionId: number) =>
-              allActionIds.add(actionId)
+              allActionIds.add(actionId),
             );
           }
         });
@@ -1672,11 +1672,11 @@ export class RoleActionPresetsService {
             description: `Updated role action presets for role ${role_id}`,
             status_id: 1,
           },
-          userId
+          userId,
         );
 
         logger.info(
-          `Successfully updated ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`
+          `Successfully updated ${savedLocationPresets.length} location presets and ${savedActionPresets.length} action presets for role ${role_id} by user ${userId}`,
         );
 
         // SSE Events
@@ -1709,7 +1709,7 @@ export class RoleActionPresetsService {
         throw error;
       }
       throw new BadRequestException(
-        `Failed to update role presets for role ${role_id}.`
+        `Failed to update role presets for role ${role_id}.`,
       );
     }
   }
@@ -1720,14 +1720,14 @@ export class RoleActionPresetsService {
     roleId: number,
     presets: any[],
     accessKeyIds: number[],
-    updatedBy: number
+    updatedBy: number,
   ): Promise<void> {
     for (const userId of userIds) {
       // Validate user exists
       const user = await this.userRepository.findOneBy({ id: userId });
       if (!user) {
         logger.warn(
-          `Skipping user permissions update for non-existent user ID: ${userId}`
+          `Skipping user permissions update for non-existent user ID: ${userId}`,
         );
         continue;
       }
@@ -1739,7 +1739,7 @@ export class RoleActionPresetsService {
           status_id: 2, // inactive
           updated_by: updatedBy,
           modified_at: new Date(),
-        }
+        },
       );
 
       // Iterate through access keys first
@@ -1790,14 +1790,14 @@ export class RoleActionPresetsService {
     userIds: number[],
     roleId: number,
     locationIds: number[],
-    updatedBy: number
+    updatedBy: number,
   ): Promise<void> {
     for (const userId of userIds) {
       // Validate user exists
       const user = await this.userRepository.findOneBy({ id: userId });
       if (!user) {
         logger.warn(
-          `Skipping user locations update for non-existent user ID: ${userId}`
+          `Skipping user locations update for non-existent user ID: ${userId}`,
         );
         continue;
       }
@@ -1809,7 +1809,7 @@ export class RoleActionPresetsService {
           status_id: 2, // inactive
           updated_by: updatedBy,
           modified_at: new Date(),
-        }
+        },
       );
 
       // Iterate through location IDs

@@ -18,7 +18,7 @@ export const FileInterceptor =
 
 // Lazy-loaded diskStorage to avoid loading multer when using Fastify
 export const diskStorage = (options: any) => {
-  console.log("diskStorage called, USE_FASTIFY:", process.env.USE_FASTIFY);
+  // console.log("diskStorage called, USE_FASTIFY:", process.env.USE_FASTIFY);
   if (process.env.USE_FASTIFY === "true") {
     // Fastify mode - just return options as-is (don't call multer)
     // console.log("Returning Fastify-compatible options");

@@ -18,14 +18,14 @@ export class SalesTransactionsService {
   constructor(
     @InjectRepository(SalesTransaction)
     private salesTransactionsRepository: Repository<SalesTransaction>,
-    private userLocationsService: UserLocationsService
+    private userLocationsService: UserLocationsService,
   ) {}
 
   async findAll(
     accessKeyId?: number,
     userId?: number,
     roleId?: number,
-    sales_date?: string
+    sales_date?: string,
   ): Promise<any[]> {
     // Get allowed location IDs for user
     let allowedLocationIds: number[] | undefined = undefined;
@@ -46,7 +46,7 @@ export class SalesTransactionsService {
       .innerJoin(
         "warehouses",
         "warehouse",
-        "st.whs_code = warehouse.warehouse_ifs"
+        "st.whs_code = warehouse.warehouse_ifs",
       )
       .addSelect(["warehouse.access_key_id", "warehouse.location_id"]);
     if (accessKeyId !== undefined) {
@@ -89,7 +89,7 @@ export class SalesTransactionsService {
   }
 
   async create(
-    createDto: CreateSalesTransactionDto
+    createDto: CreateSalesTransactionDto,
   ): Promise<SalesTransaction> {
     const rec = this.salesTransactionsRepository.create(createDto);
     return this.salesTransactionsRepository.save(rec);
@@ -97,7 +97,7 @@ export class SalesTransactionsService {
 
   async update(
     id: number,
-    updateDto: UpdateSalesTransactionDto
+    updateDto: UpdateSalesTransactionDto,
   ): Promise<SalesTransaction> {
     const rec = await this.salesTransactionsRepository.findOne({
       where: { id },
@@ -119,7 +119,7 @@ export class SalesTransactionsService {
     user_id?: number,
     role_id?: number,
     current_access_key?: number,
-    sales_date?: string
+    sales_date?: string,
   ): Promise<any[]> {
     // Get allowed locations for user
     let allowedLocationIds: number[] | undefined = undefined;
@@ -151,7 +151,7 @@ export class SalesTransactionsService {
       .innerJoin(
         "location",
         "location",
-        "sales.bc_code = location.location_code"
+        "sales.bc_code = location.location_code",
       )
       .where("sales.status_id = :statusId", { statusId: 1 });
     if (allowedLocationIds && allowedLocationIds.length > 0) {
@@ -168,12 +168,12 @@ export class SalesTransactionsService {
       qb.andWhere("DATE(sales.doc_date) = :sales_date", { sales_date });
     }
     qb.groupBy(
-      "location.id, DATE_FORMAT(sales.doc_date, '%Y-%m-%d'), sales.status_id"
+      "location.id, DATE_FORMAT(sales.doc_date, '%Y-%m-%d'), sales.status_id",
     )
       .orderBy("location.location_name")
       .addOrderBy("DATE(sales.doc_date)");
 
-    console.log(qb.getSql());
+    // console.log(qb.getSql());
 
     const rows = await qb.getRawMany();
     return rows.map((row) => ({
@@ -193,7 +193,7 @@ export class SalesTransactionsService {
 
   async findOnePerLocation(
     location_id: number,
-    doc_date: string
+    doc_date: string,
   ): Promise<any[]> {
     // Join location to get location_code
     // Then group by whs_code (store)
@@ -213,7 +213,7 @@ export class SalesTransactionsService {
       .innerJoin(
         "location",
         "location",
-        "sales.bc_code = location.location_code"
+        "sales.bc_code = location.location_code",
       )
       .where("location.id = :location_id", { location_id })
       .andWhere("sales.doc_date = :doc_date", { doc_date })

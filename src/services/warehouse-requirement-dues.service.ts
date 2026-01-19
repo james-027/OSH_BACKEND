@@ -23,7 +23,7 @@ export class WarehouseRequirementDuesService {
     private requirementsRepository: Repository<Requirement>,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
-    private responseMapperService: ResponseMapperService
+    private responseMapperService: ResponseMapperService,
   ) {}
 
   /**
@@ -33,7 +33,7 @@ export class WarehouseRequirementDuesService {
    */
   async createDueForWarehouseRequirement(
     warehouseRequirementId: number,
-    userId: number = 1
+    userId: number = 1,
   ): Promise<WarehouseRequirementDue | null> {
     try {
       // Fetch the warehouse requirement with its requirement details
@@ -45,7 +45,7 @@ export class WarehouseRequirementDuesService {
 
       if (!warehouseRequirement) {
         throw new NotFoundException(
-          `Warehouse requirement with ID ${warehouseRequirementId} not found`
+          `Warehouse requirement with ID ${warehouseRequirementId} not found`,
         );
       }
 
@@ -53,7 +53,7 @@ export class WarehouseRequirementDuesService {
 
       if (!requirement) {
         throw new NotFoundException(
-          `Requirement not found for warehouse requirement ID ${warehouseRequirementId}`
+          `Requirement not found for warehouse requirement ID ${warehouseRequirementId}`,
         );
       }
 
@@ -62,7 +62,7 @@ export class WarehouseRequirementDuesService {
       let dueStartDate = new Date(
         currentYear,
         requirement.requirement_start - 1, // Month is 0-indexed in JS Date
-        requirement.requirement_start_days
+        requirement.requirement_start_days,
       );
 
       // Calculate warehouse_requirement_due_end based on renewal_type_id
@@ -91,7 +91,7 @@ export class WarehouseRequirementDuesService {
 
         default:
           throw new BadRequestException(
-            `Invalid renewal_type_id: ${requirement.renewal_type_id}`
+            `Invalid renewal_type_id: ${requirement.renewal_type_id}`,
           );
       }
 
@@ -107,7 +107,7 @@ export class WarehouseRequirementDuesService {
             warehouse_requirement_due_start: dueStartString,
             warehouse_requirement_due_end: dueEndString,
           },
-        }
+        },
       );
 
       if (existingDue) {
@@ -127,9 +127,9 @@ export class WarehouseRequirementDuesService {
       const savedDue =
         await this.warehouseRequirementDuesRepository.save(newDue);
 
-      console.log(
-        `Created warehouse requirement due ID ${savedDue.id} for warehouse_requirement_id ${warehouseRequirementId}`
-      );
+      // console.log(
+      //   `Created warehouse requirement due ID ${savedDue.id} for warehouse_requirement_id ${warehouseRequirementId}`
+      // );
 
       return savedDue;
     } catch (error) {
@@ -166,7 +166,7 @@ export class WarehouseRequirementDuesService {
   async createDuesForWarehouseRequirements(
     warehouseRequirementIds: number[],
     chunkSize: number = 1000,
-    userId: number = 1
+    userId: number = 1,
   ): Promise<{
     created: number;
     skipped: number;
@@ -212,7 +212,7 @@ export class WarehouseRequirementDuesService {
         let dueStartDate = new Date(
           currentYear,
           requirement.requirement_start - 1,
-          requirement.requirement_start_days
+          requirement.requirement_start_days,
         );
 
         let dueEndDate: Date;
@@ -235,7 +235,7 @@ export class WarehouseRequirementDuesService {
             break;
           default:
             result.errors.push(
-              `Invalid renewal_type_id ${requirement.renewal_type_id} for warehouse_requirement ${wrId}`
+              `Invalid renewal_type_id ${requirement.renewal_type_id} for warehouse_requirement ${wrId}`,
             );
             result.skipped++;
             continue;
@@ -243,17 +243,17 @@ export class WarehouseRequirementDuesService {
 
         const preDueReminderDate = new Date(dueStartDate);
         preDueReminderDate.setDate(
-          preDueReminderDate.getDate() - requirement.requirement_reminder
+          preDueReminderDate.getDate() - requirement.requirement_reminder,
         );
 
         const DueReminderDueDate = new Date(dueStartDate);
         DueReminderDueDate.setDate(
-          DueReminderDueDate.getDate() + requirement.requirement_due_days
+          DueReminderDueDate.getDate() + requirement.requirement_due_days,
         );
 
         const postDueReminderDate = new Date(dueEndDate);
         postDueReminderDate.setDate(
-          postDueReminderDate.getDate() + requirement.requirement_reminder
+          postDueReminderDate.getDate() + requirement.requirement_reminder,
         );
 
         const dueStartString = formatDateToString(dueStartDate);
@@ -301,7 +301,7 @@ export class WarehouseRequirementDuesService {
           result.created += savedChunk.length;
         } catch (chunkError) {
           result.errors.push(
-            `Failed to batch insert dues chunk: ${chunkError.message}`
+            `Failed to batch insert dues chunk: ${chunkError.message}`,
           );
         }
       }
@@ -335,7 +335,7 @@ export class WarehouseRequirementDuesService {
 
       if (!warehouseRequirement) {
         throw new NotFoundException(
-          `Warehouse requirement with ID ${id} not found`
+          `Warehouse requirement with ID ${id} not found`,
         );
       }
 
@@ -344,7 +344,7 @@ export class WarehouseRequirementDuesService {
 
       if (!warehouseRequirement) {
         throw new NotFoundException(
-          `Warehouse requirement with ID ${id} not found`
+          `Warehouse requirement with ID ${id} not found`,
         );
       }
 
@@ -354,7 +354,7 @@ export class WarehouseRequirementDuesService {
       await this.warehouseRequirementsRepository.save(warehouseRequirement);
 
       return this.responseMapperService.mapEntityToResponse(
-        warehouseRequirement
+        warehouseRequirement,
       );
     } catch (error) {
       console.error("Error toggling warehouse requirement status:", error);
