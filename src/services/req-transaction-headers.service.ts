@@ -61,7 +61,7 @@ export class ReqTransactionHeadersService {
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private requirementRemindersService: RequirementRemindersService,
     private sseEventEmitter: SSEEventEmitterHelper,
-    private commonUtilitiesService: CommonUtilitiesService
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -95,14 +95,14 @@ export class ReqTransactionHeadersService {
 
   private async getAllowedLocationIds(
     userId?: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
     }
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
-      roleId
+      roleId,
     );
   }
 
@@ -115,12 +115,12 @@ export class ReqTransactionHeadersService {
   async findAllByTransNumber(
     transNumber?: string,
     userId?: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
-        roleId
+        roleId,
       );
 
       let query = this.reqTransactionHeadersRepository
@@ -136,7 +136,7 @@ export class ReqTransactionHeadersService {
         .addSelect("header.created_by", "created_by")
         .addSelect(
           "CONCAT(createdBy.first_name, ' ', createdBy.last_name)",
-          "created_by_name"
+          "created_by_name",
         )
         .addSelect("header.created_at", "created_at")
         .addSelect("COUNT(header.id)", "header_count")
@@ -155,7 +155,7 @@ export class ReqTransactionHeadersService {
           "header.location_id IN (:...allowedLocationIds)",
           {
             allowedLocationIds,
-          }
+          },
         );
       }
 
@@ -178,7 +178,7 @@ export class ReqTransactionHeadersService {
       // }));
     } catch (error) {
       throw new Error(
-        `Failed to fetch req transaction headers grouped by trans_number: ${error.message}`
+        `Failed to fetch req transaction headers grouped by trans_number: ${error.message}`,
       );
     }
   }
@@ -202,7 +202,7 @@ export class ReqTransactionHeadersService {
 
       if (!records.length) {
         throw new NotFoundException(
-          `Req transaction header(s) with trans_number ${transNumber} not found`
+          `Req transaction header(s) with trans_number ${transNumber} not found`,
         );
       }
 
@@ -226,7 +226,15 @@ export class ReqTransactionHeadersService {
         created_user: record.createdBy
           ? `${record.createdBy.first_name} ${record.createdBy.last_name}`
           : null,
-        reqTransactionDetails: record.reqTransactionDetails || [],
+        reqTransactionDetails: (record.reqTransactionDetails || []).map(
+          (detail) => ({
+            ...detail,
+            requirement_file_name:
+              this.commonUtilitiesService.formatTransFileName(
+                detail.requirement_file_name,
+              ) || null,
+          }),
+        ),
         reqTransactionDues: record.reqTransactionDues || [],
       }));
       // return this.responseMapperService.mapEntitiesToResponse(records);
@@ -250,7 +258,7 @@ export class ReqTransactionHeadersService {
 
       if (!record) {
         throw new NotFoundException(
-          `Req transaction header with ID ${id} not found`
+          `Req transaction header with ID ${id} not found`,
         );
       }
 
@@ -265,7 +273,7 @@ export class ReqTransactionHeadersService {
 
   async create(
     createDto: CreateReqTransactionHeaderDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check unique constraint: (warehouse_id, requirement_id, trans_date, status_id)
@@ -277,12 +285,12 @@ export class ReqTransactionHeadersService {
             trans_date: createDto.trans_date,
             status_id: createDto.status_id || 1,
           },
-        }
+        },
       );
 
       if (existingRecord) {
         throw new BadRequestException(
-          "This req transaction header combination already exists"
+          "This req transaction header combination already exists",
         );
       }
 
@@ -315,7 +323,7 @@ export class ReqTransactionHeadersService {
           description: `Created req transaction header ID: ${savedRecord.id}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return response;
@@ -330,7 +338,7 @@ export class ReqTransactionHeadersService {
   async update(
     id: number,
     updateDto: UpdateReqTransactionHeaderDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const record = await this.reqTransactionHeadersRepository.findOne({
@@ -339,7 +347,7 @@ export class ReqTransactionHeadersService {
 
       if (!record) {
         throw new NotFoundException(
-          `Req transaction header with ID ${id} not found`
+          `Req transaction header with ID ${id} not found`,
         );
       }
 
@@ -368,7 +376,7 @@ export class ReqTransactionHeadersService {
 
         if (duplicateCheck && duplicateCheck.id !== id) {
           throw new BadRequestException(
-            "This req transaction header combination already exists"
+            "This req transaction header combination already exists",
           );
         }
       }
@@ -395,7 +403,7 @@ export class ReqTransactionHeadersService {
           description: `Updated req transaction header ID: ${id}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return this.findOne(savedRecord.id);
@@ -414,7 +422,7 @@ export class ReqTransactionHeadersService {
     transHdrId: number,
     userId: number,
     statusId?: number,
-    cancellationReason?: string
+    cancellationReason?: string,
   ): Promise<any> {
     try {
       const recordHdr = await this.reqTransactionHeadersRepository.findOne({
@@ -428,7 +436,7 @@ export class ReqTransactionHeadersService {
 
       if (!recordHdr) {
         throw new NotFoundException(
-          `Req transaction header ID ${transHdrId} not found`
+          `Req transaction header ID ${transHdrId} not found`,
         );
       }
 
@@ -480,7 +488,7 @@ export class ReqTransactionHeadersService {
             due.warehouseRequirementDue.status_id = 1;
             due.warehouseRequirementDue.updated_by = userId;
             await this.warehouseRequirementDuesRepository.save(
-              due.warehouseRequirementDue
+              due.warehouseRequirementDue,
             );
           }
         }
@@ -500,7 +508,7 @@ export class ReqTransactionHeadersService {
           description: `Toggled status for req transaction header ID: ${transHdrId} to status: ${transStatusId}${cancellationReason ? ` with reason: ${cancellationReason}` : ""}${warehouseRequirementDueIds.length > 0 ? ` | Affected warehouse requirement dues: ${warehouseRequirementDueIds.join(", ")}` : ""}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return this.findOne(savedHdr.id);
@@ -522,7 +530,7 @@ export class ReqTransactionHeadersService {
   async toggleStatusCancelByTransNumber(
     transNumber: string,
     userId: number,
-    cancellationReason: string
+    cancellationReason: string,
   ): Promise<any> {
     try {
       if (!transNumber) {
@@ -545,7 +553,7 @@ export class ReqTransactionHeadersService {
 
       if (!headers.length) {
         throw new NotFoundException(
-          `No req transaction headers found with trans_number ${transNumber}`
+          `No req transaction headers found with trans_number ${transNumber}`,
         );
       }
 
@@ -599,7 +607,7 @@ export class ReqTransactionHeadersService {
                 due.warehouseRequirementDue.status_id = 1;
                 due.warehouseRequirementDue.updated_by = userId;
                 await this.warehouseRequirementDuesRepository.save(
-                  due.warehouseRequirementDue
+                  due.warehouseRequirementDue,
                 );
               }
             }
@@ -614,7 +622,7 @@ export class ReqTransactionHeadersService {
               description: `Cancelled req transaction header ID: ${header.id} (trans_number: ${transNumber}) with reason: ${cancellationReason}`,
               status_id: 1,
             },
-            userId
+            userId,
           );
         } catch (headerError) {
           results.errors.push({
@@ -633,7 +641,7 @@ export class ReqTransactionHeadersService {
         throw error;
       }
       throw new Error(
-        `Failed to cancel req transaction headers by trans_number: ${error.message}`
+        `Failed to cancel req transaction headers by trans_number: ${error.message}`,
       );
     }
   }
@@ -645,7 +653,7 @@ export class ReqTransactionHeadersService {
   async createWithDetails(
     createDto: CreateReqTransactionWithDetailsDto,
     userId: number,
-    accessKeyId: number
+    accessKeyId: number,
   ): Promise<any> {
     const successResults: any[] = [];
     const errors: any[] = [];
@@ -664,7 +672,7 @@ export class ReqTransactionHeadersService {
 
       if (!requirement) {
         throw new BadRequestException(
-          `Requirement with ID ${createDto.requirement_id} not found`
+          `Requirement with ID ${createDto.requirement_id} not found`,
         );
       }
 
@@ -675,13 +683,13 @@ export class ReqTransactionHeadersService {
 
       if (warehouses.length === 0) {
         throw new BadRequestException(
-          `No warehouses found for provided warehouse_ids`
+          `No warehouses found for provided warehouse_ids`,
         );
       }
 
       // Create a map of warehouse_ifs to warehouse for file mapping
       const warehouseByIfs = new Map(
-        warehouses.map((w) => [w.warehouse_ifs, w])
+        warehouses.map((w) => [w.warehouse_ifs, w]),
       );
 
       // Get location_id and location abbreviation from the first warehouse
@@ -710,21 +718,21 @@ export class ReqTransactionHeadersService {
         // ANNUAL: year only from transaction_date, add to current year
         if (!createDto.transaction_date) {
           throw new BadRequestException(
-            "transaction_date (year) is required for ANNUAL renewal type"
+            "transaction_date (year) is required for ANNUAL renewal type",
           );
         }
         const year = parseInt(createDto.transaction_date, 10);
         const transDate = new Date(
           year,
           requirement.requirement_start - 1,
-          requirement.requirement_start_days
+          requirement.requirement_start_days,
         );
         calculatedTransDate = formatDateToString(transDate);
       } else if (createDto.renewal_type_id === 3) {
         // QUARTERLY: year + quarter
         if (!createDto.transaction_date || createDto.quarter === undefined) {
           throw new BadRequestException(
-            "transaction_date (year) and quarter are required for QUARTERLY renewal type"
+            "transaction_date (year) and quarter are required for QUARTERLY renewal type",
           );
         }
         const year = parseInt(createDto.transaction_date, 10);
@@ -733,21 +741,21 @@ export class ReqTransactionHeadersService {
         const transDate = new Date(
           year,
           quarterMonth - 1,
-          requirement.requirement_start_days
+          requirement.requirement_start_days,
         );
         calculatedTransDate = formatDateToString(transDate);
       } else if (createDto.renewal_type_id === 4) {
         // MONTHLY: year + month
         if (!createDto.transaction_date) {
           throw new BadRequestException(
-            "transaction_date (YYYY-MM) is required for MONTHLY renewal type"
+            "transaction_date (YYYY-MM) is required for MONTHLY renewal type",
           );
         }
         const [year, month] = createDto.transaction_date.split("-").map(Number);
         const transDate = new Date(
           year,
           month - 1,
-          requirement.requirement_start_days
+          requirement.requirement_start_days,
         );
         calculatedTransDate = formatDateToString(transDate);
       }
@@ -809,7 +817,7 @@ export class ReqTransactionHeadersService {
                 "due.warehouse_requirement_id = :wrId and due.status_id = 1",
                 {
                   wrId: warehouseRequirement.id,
-                }
+                },
               )
               .andWhere("due.warehouse_requirement_due_start <= :today", {
                 today,
@@ -849,7 +857,7 @@ export class ReqTransactionHeadersService {
           const reqReminderStatusDetail =
             await this.requirementRemindersService.calculateDueRequirementReminderStatus(
               createDto.requirement_id,
-              currentDue.warehouse_requirement_due_date
+              currentDue.warehouse_requirement_due_date,
             );
 
           // console.log("reqReminderStatusDetail", reqReminderStatusDetail);
@@ -893,7 +901,7 @@ export class ReqTransactionHeadersService {
               description: `Created req transaction header ID: ${savedHeader.id} with cascade details`,
               status_id: 1,
             },
-            userId
+            userId,
           );
 
           let saveReqTransactionDue: any;
@@ -945,7 +953,7 @@ export class ReqTransactionHeadersService {
 
               const savedNewDue =
                 await this.warehouseRequirementDuesRepository.save(
-                  newDueRecord
+                  newDueRecord,
                 );
 
               //* Step 9A: Create req_transaction_due linking to the new warehouse_requirement_due
@@ -958,7 +966,7 @@ export class ReqTransactionHeadersService {
               saveReqTransactionDue =
                 await this.reqTransactionDuesService.create(
                   transactionDueDto,
-                  userId
+                  userId,
                 );
 
               //* Step 9B: Deactivate currentDue after successful transaction due creation
@@ -989,7 +997,7 @@ export class ReqTransactionHeadersService {
               saveReqTransactionDue =
                 await this.reqTransactionDuesService.create(
                   transactionDueDto,
-                  userId
+                  userId,
                 );
 
               //* Step 9B: Deactivate currentDue after successful transaction due creation
@@ -1057,7 +1065,7 @@ export class ReqTransactionHeadersService {
 
           //* Find the corresponding header created for this warehouse
           const correspondingHeader = successResults.find(
-            (s) => s.warehouse_id === warehouseFromFile.id
+            (s) => s.warehouse_id === warehouseFromFile.id,
           );
 
           if (!correspondingHeader) {
@@ -1072,7 +1080,7 @@ export class ReqTransactionHeadersService {
           //* Validate file before saving
           const validation = FileUploadHandler.validateFile(
             file.filename,
-            file.buffer
+            file.buffer,
           );
           if (!validation.valid) {
             errors.push({
@@ -1088,7 +1096,7 @@ export class ReqTransactionHeadersService {
             file.buffer,
             file.filename,
             correspondingHeader.req_transaction_header_id,
-            "uploads/req-transactions"
+            "uploads/req-transactions",
           );
 
           //* Create transaction detail with saved file path
@@ -1116,7 +1124,7 @@ export class ReqTransactionHeadersService {
           warehouse_ids: successResults.map((s) => s.warehouse_id),
           warehouse_names: successResults.map((s) => s.warehouse_name),
           req_transaction_header_ids: successResults.map(
-            (s) => s.req_transaction_header_id
+            (s) => s.req_transaction_header_id,
           ),
           req_transaction_header_count: successResults.length,
           message: `Successfully created ${successResults.length} transaction(s)`,
@@ -1152,7 +1160,7 @@ export class ReqTransactionHeadersService {
       }
 
       throw new BadRequestException(
-        `Transaction creation failed: ${error.message}`
+        `Transaction creation failed: ${error.message}`,
       );
     }
   }

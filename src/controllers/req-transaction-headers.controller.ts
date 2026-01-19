@@ -24,7 +24,7 @@ import { CreateWarehouseRequirementDueAndReqTransDto } from "src/dto/CreateWareh
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ReqTransactionHeadersController {
   constructor(
-    private readonly reqTransactionHeadersService: ReqTransactionHeadersService
+    private readonly reqTransactionHeadersService: ReqTransactionHeadersService,
   ) {}
 
   @Get()
@@ -37,25 +37,22 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAllByTransNumber(
     @Request() req,
-    @Query("transNumber") transNumber?: string
+    @Query("transNumber") transNumber?: string,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     return await this.reqTransactionHeadersService.findAllByTransNumber(
       transNumber,
       userId,
-      roleId
+      roleId,
     );
   }
 
   @Get("find-by-trans-number")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findOneByTransNumber(
-    @Query("trans_number") transNumber: string,
-    @Request() req
-  ) {
+  async findOneByTransNumber(@Query("trans_number") transNumber: string) {
     return await this.reqTransactionHeadersService.findOneByTransNumber(
-      transNumber
+      transNumber,
     );
   }
 
@@ -69,7 +66,7 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async create(
     @Body() createDto: CreateReqTransactionHeaderDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user?.id || 1;
     return await this.reqTransactionHeadersService.create(createDto, userId);
@@ -80,13 +77,13 @@ export class ReqTransactionHeadersController {
   async update(
     @Param("id") id: number,
     @Body() updateDto: UpdateReqTransactionHeaderDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user?.id || 1;
     return await this.reqTransactionHeadersService.update(
       id,
       updateDto,
-      userId
+      userId,
     );
   }
 
@@ -94,7 +91,7 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.reqTransactionHeadersService.toggleStatus(id, userId);
@@ -104,7 +101,7 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.reqTransactionHeadersService.toggleStatus(id, userId);
@@ -115,13 +112,13 @@ export class ReqTransactionHeadersController {
   async toggleStatusCancelByTransNumber(
     @Param("trans_number") transNumber: string,
     @Body() body: { cancellation_reason: string },
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.reqTransactionHeadersService.toggleStatusCancelByTransNumber(
       transNumber,
       userId,
-      body.cancellation_reason
+      body.cancellation_reason,
     );
   }
 
@@ -129,14 +126,14 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async createWithDetails(
     @Body() createDto: CreateReqTransactionWithDetailsDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user?.id || 1;
     const accessKeyId = req.user.current_access_key;
     return await this.reqTransactionHeadersService.createWithDetails(
       createDto,
       userId,
-      accessKeyId
+      accessKeyId,
     );
   }
 
@@ -149,14 +146,14 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
   async toggleStatusCancel(
     @Body() updateDto: CreateWarehouseRequirementDueAndReqTransDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.reqTransactionHeadersService.toggleStatus(
       updateDto.trans_header_id,
       userId,
       updateDto.status_id,
-      updateDto.cancellation_reason
+      updateDto.cancellation_reason,
     );
   }
 }
