@@ -42,7 +42,7 @@ async function bootstrap() {
     // Set payload limits FIRST before any middleware (800MB to allow Guard to enforce limits)
     expressApp.use(json({ limit: "800mb", strict: true }));
     expressApp.use(
-      urlencoded({ limit: "800mb", extended: true, parameterLimit: 50 })
+      urlencoded({ limit: "800mb", extended: true, parameterLimit: 50 }),
     );
 
     // Now create the NestJS app
@@ -60,16 +60,20 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-    })
+    }),
   );
 
-  const port = configService.get<number>("port") || 3000;
+  const port =
+    configService.get<number>("PORT") ||
+    configService.get<number>("port") ||
+    3000;
   const host = USE_FASTIFY ? "0.0.0.0" : undefined;
 
   await app.listen(port, host);
 
   logger.info(`🚀 NestJS Application is running on: http://localhost:${port}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+  logger.info(`🔌 DB: ${process.env.DB_DATABASE || "no database configured"}`);
   logger.info(`🔌 Platform: ${USE_FASTIFY ? "Fastify" : "Express"}`);
 }
 
@@ -94,7 +98,7 @@ async function setupExpress(app: any, configService: ConfigService) {
         logger.error(`❌ CORS: Rejecting origin: ${origin}`);
         return callback(
           new Error(`CORS policy violation: Origin ${origin} not allowed`),
-          false
+          false,
         );
       },
       methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -122,7 +126,7 @@ async function setupExpress(app: any, configService: ConfigService) {
       ],
       credentials: true,
       maxAge: 86400,
-    })
+    }),
   );
 
   // ===== SECURITY CONFIGURATIONS =====
@@ -131,7 +135,7 @@ async function setupExpress(app: any, configService: ConfigService) {
   // EXCEPT for SSE endpoints which need persistent connections
   app.use((req, res, next) => {
     // SSE endpoints need NO timeout (or very long timeout)
-    if (req.path && req.path.startsWith('/sse/')) {
+    if (req.path && req.path.startsWith("/sse/")) {
       req.setTimeout(0); // No timeout for SSE
       res.setTimeout(0);
     } else {
@@ -148,7 +152,7 @@ async function setupExpress(app: any, configService: ConfigService) {
     res.setHeader("X-XSS-Protection", "1; mode=block");
     res.setHeader(
       "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains"
+      "max-age=31536000; includeSubDomains",
     );
     next();
   });
@@ -182,7 +186,7 @@ async function setupFastify(app: any, configService: ConfigService) {
       logger.error(`❌ CORS: Rejecting origin: ${origin}`);
       return callback(
         new Error(`CORS policy violation: Origin ${origin} not allowed`),
-        false
+        false,
       );
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
