@@ -23,6 +23,7 @@ import { UserSessionService } from "src/services/user-session.service";
 import { UserPermissionsService } from "src/services/user-permissions.service";
 import { UserAccessKeyController } from "src/controllers/user-access-key.controller";
 import { SSEModule } from "../sse/sse.module";
+import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { SSEModule } from "../sse/sse.module";
     UsersService,
     UserAuditTrailCreateService,
     EmailService,
+    FrontendUrlUtil,
     UserLocationsService,
     UserAccessKeyService,
     JwtService,

@@ -33,6 +33,7 @@ import { LocationsModule } from "../locations/locations.module";
 import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     UsersService,
     UserAuditTrailCreateService,
     EmailService,
+    FrontendUrlUtil,
     EmployeesService,
     EmployeeLocationsService,
     PositionsService,

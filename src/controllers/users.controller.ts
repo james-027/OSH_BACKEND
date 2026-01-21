@@ -73,6 +73,17 @@ export class UsersController {
     });
   }
 
+  @Get("view-email-template")
+  async viewEmailTemplate(@Request() req) {
+    return this.usersService.viewEmailTemplate(
+      "test@example.com",
+      "Test",
+      "User",
+      "password123",
+      req,
+    );
+  }
+
   @Get(":id")
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ module: "USERS", action: "VIEW" })
@@ -85,7 +96,7 @@ export class UsersController {
   @RequirePermissions({ module: "USERS", action: "ADD" })
   async create(@Body() createUserDto: CreateUserDto, @Request() req) {
     createUserDto.created_by = req.user.id;
-    return this.usersService.create(createUserDto);
+    return this.usersService.create(createUserDto, req);
   }
 
   @Put(":id")
@@ -94,7 +105,7 @@ export class UsersController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
-    @Request() req
+    @Request() req,
   ) {
     updateUserDto.updated_by = req.user.id;
     return this.usersService.update(id, updateUserDto);
@@ -112,7 +123,7 @@ export class UsersController {
   @RequirePermissions({ module: "USERS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     return this.usersService.toggleStatus(id, req.user.id);
   }
@@ -122,7 +133,7 @@ export class UsersController {
   @RequirePermissions({ module: "USERS", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     return this.usersService.toggleStatus(id, req.user.id);
   }
@@ -140,12 +151,12 @@ export class UsersController {
       }),
       fileFilter: imageFileFilter,
       limits: { fileSize: FILE_SIZE_LIMITS.IMAGE_5MB },
-    })
+    }),
   )
   async uploadProfilePicture(
     @Param("id", ParseIntPipe) id: number,
     @UploadedFile() file: FileType,
-    @Request() req
+    @Request() req,
   ) {
     if (!file)
       throw new BadRequestException("No file uploaded or invalid file type.");
@@ -162,7 +173,7 @@ export class UsersController {
   async updatePassword(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Body() body: { current_password: string; new_password: string },
-    @Request() req
+    @Request() req,
   ) {
     if (
       !body.current_password ||
@@ -170,7 +181,7 @@ export class UsersController {
       body.new_password.length < 8
     ) {
       throw new BadRequestException(
-        "Current and new password required. New password must be at least 8 characters."
+        "Current and new password required. New password must be at least 8 characters.",
       );
     }
     // Get user from DB (raw entity, not flattened)
@@ -191,11 +202,11 @@ export class UsersController {
   async updateTempPassword(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Body() body: { new_password: string },
-    @Request() req
+    @Request() req,
   ) {
     if (body.new_password.length < 8) {
       throw new BadRequestException(
-        "Current and new password required. New password must be at least 8 characters."
+        "Current and new password required. New password must be at least 8 characters.",
       );
     }
     // Get user from DB (raw entity, not flattened)
@@ -218,11 +229,11 @@ export class UsersController {
   async resetPassword(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Body() body: { password: string },
-    @Request() req
+    @Request() req,
   ) {
     if (!body.password || body.password.length < 6) {
       throw new BadRequestException(
-        "New password must be at least 6 characters."
+        "New password must be at least 6 characters.",
       );
     }
     // Get user from DB (raw entity, not flattened)
@@ -241,12 +252,13 @@ export class UsersController {
       throw new BadRequestException("Failed to reset password.");
     }
 
-    await this.usersService.send_reset_email(
+    await this.usersService.sendResetEmail(
       email,
       firstName,
       lastName,
       body.password,
-      req.user.id
+      req.user.id,
+      req,
     );
     return { message: "Password reset successfully." };
   }
@@ -255,7 +267,7 @@ export class UsersController {
   async updateProfile(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Body() body: { first_name: string; last_name: string },
-    @Request() req
+    @Request() req,
   ) {
     if (!body.first_name || !body.last_name) {
       throw new BadRequestException("First name and last name are required.");
@@ -276,16 +288,18 @@ export class UsersController {
       first_name: string;
       last_name: string;
       password: string;
-    }
+    },
+    @Request() req,
   ) {
     if (!body.first_name || !body.last_name) {
       throw new BadRequestException("First name and last name are required.");
     }
-    await this.usersService.test_email(
+    await this.usersService.testEmail(
       body.email,
       body.first_name,
       body.last_name,
-      body.password
+      body.password,
+      req,
     );
     return { message: "Test email sent." };
   }
@@ -303,7 +317,7 @@ export class UsersController {
       }),
       fileFilter: excelFileFilter,
       limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
-    })
+    }),
   )
   async uploadExcelUsers(@UploadedFile() file: FileType, @Request() req) {
     if (!file)
@@ -312,34 +326,35 @@ export class UsersController {
       file.path,
       req.user.id,
       req.user.role_id,
-      req.user.role.role_level
+      req.user.role.role_level,
+      req,
     );
   }
 
   @Get("/user-permissions-by-role/:role_id")
   async getUserPermissionsByRole(
-    @Param("role_id", ParseIntPipe) role_id: number
+    @Param("role_id", ParseIntPipe) role_id: number,
   ) {
     return this.usersService.getUserPermissionsByRole(role_id);
   }
 
   @Get("/user-permissions-by-module/:module_id")
   async getUserPermissionsByModule(
-    @Param("module_id", ParseIntPipe) module_id: number
+    @Param("module_id", ParseIntPipe) module_id: number,
   ) {
     return this.usersService.getUserPermissionsByModule(module_id);
   }
 
   @Get("/user-permissions-by-access-key/:access_key_id")
   async getUserPermissionsByAccessKey(
-    @Param("access_key_id", ParseIntPipe) access_key_id: number
+    @Param("access_key_id", ParseIntPipe) access_key_id: number,
   ) {
     return this.usersService.getUserPermissionsByAccessKey(access_key_id);
   }
 
   @Get("/user-locations-by-location/:location_id")
   async getUserLocationsByLocation(
-    @Param("location_id", ParseIntPipe) location_id: number
+    @Param("location_id", ParseIntPipe) location_id: number,
   ) {
     return this.usersService.getUserLocationsByLocation(location_id);
   }
@@ -347,11 +362,11 @@ export class UsersController {
   @Get(":user_id/:access_key_id/permissions-roles-systems")
   async getUserPermissionsWithRolesAndSystems(
     @Param("user_id", ParseIntPipe) user_id: number,
-    @Param("access_key_id", ParseIntPipe) access_key_id: number
+    @Param("access_key_id", ParseIntPipe) access_key_id: number,
   ) {
     return this.usersService.getUserPermissionsWithRolesAndSystems(
       user_id,
-      access_key_id
+      access_key_id,
     );
   }
 }

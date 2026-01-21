@@ -28,6 +28,7 @@ import { UserLoginSession } from "./entities/UserLoginSession";
 import { EmailService } from "./services/email.service";
 import { ResponseMapperService } from "./services/response-mapper.service";
 import { CommonUtilitiesService } from "./services/common-utilities.service";
+import { FrontendUrlUtil } from "./utils/frontend-url.util";
 
 // Modules
 import { UsersModule } from "./modules/users/users.module";
@@ -146,6 +147,7 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     DynamicPermissionsGuard,
     ResponseMapperService,
     CommonUtilitiesService,
+    FrontendUrlUtil,
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,

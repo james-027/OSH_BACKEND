@@ -24,6 +24,7 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { EmailService } from "./email.service";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { FrontendUrlUtil } from "../utils/frontend-url.util";
 
 @Injectable()
 export class UsersService {
@@ -50,7 +51,8 @@ export class UsersService {
     private locationRepository: Repository<Location>,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private emailService: EmailService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private frontendUrlUtil: FrontendUrlUtil,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -67,7 +69,7 @@ export class UsersService {
       });
 
       const flattenedUsers = await Promise.all(
-        users.map((user) => this.createFlattenedResponse(user))
+        users.map((user) => this.createFlattenedResponse(user)),
       );
 
       logger.info("Successfully retrieved all users.");
@@ -180,7 +182,7 @@ export class UsersService {
           : "";
 
       logger.info(
-        `Successfully retrieved ${basicUsers.length} users with basic info${filterDescription}.`
+        `Successfully retrieved ${basicUsers.length} users with basic info${filterDescription}.`,
       );
       return basicUsers;
     } catch (error) {
@@ -264,7 +266,7 @@ export class UsersService {
           : "";
 
       logger.info(
-        `Successfully retrieved ${basicUsers.length} unique users with basic info${filterDescription}.`
+        `Successfully retrieved ${basicUsers.length} unique users with basic info${filterDescription}.`,
       );
       return basicUsers;
     } catch (error) {
@@ -294,7 +296,7 @@ export class UsersService {
       const nestedData = await this.createNestedStructureForUsers(
         users,
         false,
-        false
+        false,
       );
 
       logger.info("Successfully retrieved all nested user data.");
@@ -302,7 +304,7 @@ export class UsersService {
     } catch (error) {
       logger.error("Error retrieving nested user data:", error);
       throw new Error(
-        "Internal server error occurred while retrieving nested user data."
+        "Internal server error occurred while retrieving nested user data.",
       );
     }
   }
@@ -336,11 +338,11 @@ export class UsersService {
       false,
       true,
       false,
-      true
+      true,
     );
 
     logger.info(
-      `Successfully retrieved nested user data for user_id: ${user_id}.`
+      `Successfully retrieved nested user data for user_id: ${user_id}.`,
     );
     return nestedData[0] || null; // Return single user object or null
   }
@@ -372,24 +374,27 @@ export class UsersService {
     const nestedData = await this.createNestedStructureForUsers([user], true);
 
     logger.info(
-      `Successfully retrieved nested user data for user_id: ${user_id}.`
+      `Successfully retrieved nested user data for user_id: ${user_id}.`,
     );
     return nestedData[0] || null; // Return single user object or null
   }
 
-  async test_email(
+  async testEmail(
     email: string,
     first_name: string,
     last_name: string,
-    password: string
+    password: string,
+    request?: any,
   ): Promise<void> {
     if (email) {
+      const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
       const companyName = process.env.COMPANY_NAME || "CTGI";
       const projectAbbr = process.env.PROJECT_ABBR || "SPA";
       const html = this.emailService.generateUserResetEmail({
         userName: `${first_name} ${last_name}`,
         email: email,
-        password: password, // Only for first-time notification
+        password: password,
+        loginUrl,
       });
       await this.emailService.sendMail({
         to: email,
@@ -399,24 +404,50 @@ export class UsersService {
     }
   }
 
-  async send_reset_email(
+  async viewEmailTemplate(
     email: string,
     first_name: string,
     last_name: string,
     password: string,
-    userId: number
+    request?: any,
+  ): Promise<string> {
+    if (email) {
+      // console.log("request basis:", request);
+      const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
+      const companyName = process.env.COMPANY_NAME || "CTGI";
+      const projectAbbr = process.env.PROJECT_ABBR || "SPA";
+      const html = this.emailService.generateUserResetEmail({
+        userName: `${first_name} ${last_name}`,
+        email: email,
+        password: password,
+        loginUrl,
+      });
+
+      return html;
+    }
+  }
+
+  async sendResetEmail(
+    email: string,
+    first_name: string,
+    last_name: string,
+    password: string,
+    userId: number,
+    request?: any,
   ): Promise<void> {
     if (email) {
       let emailStatus = "success";
       let emailError = null;
+      const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
       const companyName = process.env.COMPANY_NAME || "CTGI";
       const projectAbbr = process.env.PROJECT_ABBR || "SPA";
       const subject = `${companyName} ${projectAbbr} - Your Account Credentials`;
       const html = this.emailService.generateUserResetEmail({
         userName: `${first_name} ${last_name}`,
         email: email,
-        password: password, // Only for first-time notification
-      });
+        password: password,
+        loginUrl,
+      }); // Only for first-time notification
 
       try {
         await this.emailService.sendMail({
@@ -445,12 +476,12 @@ export class UsersService {
           description: `Reset email ${emailStatus} for user (${first_name} ${last_name})`,
           status_id: 1,
         },
-        userId
+        userId,
       );
     }
   }
 
-  async create(createUserDto: CreateUserDto): Promise<any> {
+  async create(createUserDto: CreateUserDto, request?: any): Promise<any> {
     const {
       user_name,
       first_name,
@@ -486,7 +517,7 @@ export class UsersService {
       });
       if (existingUser) {
         throw new BadRequestException(
-          "User with this username already exists."
+          "User with this username already exists.",
         );
       }
 
@@ -530,7 +561,7 @@ export class UsersService {
           });
           if (!ak) {
             throw new BadRequestException(
-              `Access key with ID ${akId} not found`
+              `Access key with ID ${akId} not found`,
             );
           }
           accessKeys.push(ak);
@@ -577,7 +608,7 @@ export class UsersService {
           savedUser.id,
           accessKeys.map((ak) => ak.id),
           user_permission_presets,
-          created_by
+          created_by,
         );
       }
 
@@ -586,14 +617,14 @@ export class UsersService {
         await this.createUserLocationsFromPresets(
           savedUser.id,
           user_location_presets,
-          created_by
+          created_by,
         );
       } else if (location_ids && location_ids.length > 0) {
         await this.createUserLocationsForMultipleRoles(
           savedUser.id,
           allRoleIds,
           location_ids,
-          created_by
+          created_by,
         );
       }
 
@@ -606,13 +637,15 @@ export class UsersService {
           description: `Created user ${savedUser.id} - ${savedUser.user_name} | ${savedUser.first_name} ${savedUser.last_name}`,
           status_id: 1,
         },
-        savedUser.created_by
+        savedUser.created_by,
       );
 
       logger.info(`User created successfully with ID: ${savedUser.id}`);
 
       // Send email notification to user
       if (savedUser.email) {
+        const loginUrl =
+          this.frontendUrlUtil.getFrontendUrlFromRequest(request);
         const companyName = process.env.COMPANY_NAME || "CTGI";
         const projectName = process.env.PROJECT_NAME || "Success Perks Awards";
         const projectAbbr = process.env.PROJECT_ABBR || "SPA";
@@ -620,6 +653,7 @@ export class UsersService {
           userName: `${savedUser.first_name} ${savedUser.last_name}`,
           email: savedUser.email,
           password: password,
+          loginUrl,
         });
         let emailStatus = "success";
         let emailError = null;
@@ -634,7 +668,7 @@ export class UsersService {
           emailError = emailErr?.message || String(emailErr);
           logger.error(
             `Failed to send welcome email to ${savedUser.email}:`,
-            emailErr
+            emailErr,
           );
         }
         // Audit trail for email sending (success or error)
@@ -652,7 +686,7 @@ export class UsersService {
             description: `Welcome email ${emailStatus} for user (id ${savedUser.id})`,
             status_id: 1,
           },
-          savedUser.created_by
+          savedUser.created_by,
         );
       }
 
@@ -680,7 +714,7 @@ export class UsersService {
     userId: number,
     accessKeyIds: number[],
     userPermissionPresets: any[],
-    updatedBy: number
+    updatedBy: number,
   ): Promise<void> {
     // Step 1: Mark all existing permissions for this user as inactive (status_id = 2)
     await this.userPermissionsRepository.update(
@@ -689,7 +723,7 @@ export class UsersService {
         status_id: 2, // inactive
         updated_by: updatedBy,
         modified_at: new Date(),
-      }
+      },
     );
 
     // Step 2: Upsert permissions from presets
@@ -701,7 +735,7 @@ export class UsersService {
 
         if (!Array.isArray(actionIds)) {
           logger.warn(
-            `action_ids must be an array for module ${moduleId}, skipping`
+            `action_ids must be an array for module ${moduleId}, skipping`,
           );
           continue;
         }
@@ -748,7 +782,7 @@ export class UsersService {
   private async createUserLocationsFromPresets(
     userId: number,
     userLocationPresets: any[],
-    updatedBy: number
+    updatedBy: number,
   ): Promise<void> {
     // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
     await this.userLocationsRepository.update(
@@ -757,14 +791,14 @@ export class UsersService {
         status_id: 2, // inactive
         updated_by: updatedBy,
         modified_at: new Date(),
-      }
+      },
     );
 
     // Step 2: Validate unique location IDs across all presets and verify they exist
     const uniqueLocationIds = Array.from(
       new Set(
-        userLocationPresets.flatMap((preset) => preset.location_ids || [])
-      )
+        userLocationPresets.flatMap((preset) => preset.location_ids || []),
+      ),
     );
 
     if (uniqueLocationIds.length > 0) {
@@ -775,7 +809,7 @@ export class UsersService {
         });
         if (!location) {
           throw new BadRequestException(
-            `Location with ID ${locationId} not found`
+            `Location with ID ${locationId} not found`,
           );
         }
       }
@@ -788,7 +822,7 @@ export class UsersService {
 
       if (!Array.isArray(locationIds)) {
         logger.warn(
-          `location_ids must be an array for role ${roleId}, skipping`
+          `location_ids must be an array for role ${roleId}, skipping`,
         );
         continue;
       }
@@ -830,7 +864,7 @@ export class UsersService {
     userId: number,
     roleIds: number[],
     locationIds: number[],
-    updatedBy: number
+    updatedBy: number,
   ): Promise<void> {
     // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
     await this.userLocationsRepository.update(
@@ -839,7 +873,7 @@ export class UsersService {
         status_id: 2, // inactive
         updated_by: updatedBy,
         modified_at: new Date(),
-      }
+      },
     );
 
     // Step 2: Upsert locations from presets
@@ -934,7 +968,7 @@ export class UsersService {
           });
           if (!accessKey) {
             throw new BadRequestException(
-              `Access key with ID ${accessKeyId} not found`
+              `Access key with ID ${accessKeyId} not found`,
             );
           }
         }
@@ -946,7 +980,7 @@ export class UsersService {
           });
           if (!module) {
             throw new BadRequestException(
-              `Module with ID ${preset.module_ids} not found`
+              `Module with ID ${preset.module_ids} not found`,
             );
           }
           for (const actionId of preset.action_ids) {
@@ -955,7 +989,7 @@ export class UsersService {
             });
             if (!action) {
               throw new BadRequestException(
-                `Action with ID ${actionId} not found`
+                `Action with ID ${actionId} not found`,
               );
             }
           }
@@ -970,7 +1004,7 @@ export class UsersService {
           });
           if (!location) {
             throw new BadRequestException(
-              `Location with ID ${locationId} not found`
+              `Location with ID ${locationId} not found`,
             );
           }
         }
@@ -984,7 +1018,7 @@ export class UsersService {
           });
           if (existingUser && existingUser.id !== id) {
             throw new BadRequestException(
-              "User with this username already exists."
+              "User with this username already exists.",
             );
           }
         }
@@ -998,7 +1032,7 @@ export class UsersService {
           });
           if (existingEmail && existingEmail.id !== id) {
             throw new BadRequestException(
-              "User with this email already exists."
+              "User with this email already exists.",
             );
           }
         }
@@ -1046,7 +1080,7 @@ export class UsersService {
           description: `Updated user ${id} - ${userToUpdate.user_name} | ${userToUpdate.first_name} ${userToUpdate.last_name}`,
           status_id: 1,
         },
-        updateUserDto.updated_by
+        updateUserDto.updated_by,
       );
 
       // Handle UserPermissions updates if provided
@@ -1060,7 +1094,7 @@ export class UsersService {
           id,
           access_key_id,
           user_permission_presets,
-          updated_by
+          updated_by,
         );
 
         // Count active permissions for message
@@ -1076,7 +1110,7 @@ export class UsersService {
         await this.createUserLocationsFromPresets(
           id,
           user_location_presets,
-          updated_by
+          updated_by,
         );
 
         // Count active locations for message
@@ -1096,7 +1130,7 @@ export class UsersService {
           id,
           allRoleIds,
           location_ids,
-          updated_by
+          updated_by,
         );
 
         // Count active locations for message
@@ -1187,7 +1221,7 @@ export class UsersService {
   async toggleStatus(id: number, authenticatedUserId: number): Promise<any> {
     if (isNaN(id)) {
       throw new BadRequestException(
-        "Invalid user ID provided for status toggle."
+        "Invalid user ID provided for status toggle.",
       );
     }
 
@@ -1246,7 +1280,7 @@ export class UsersService {
             status_id: newStatusId,
             updated_by: userId,
             modified_at: new Date(),
-          }
+          },
         );
 
       // Update all UserLocations for this user
@@ -1256,7 +1290,7 @@ export class UsersService {
           status_id: newStatusId,
           updated_by: userId,
           modified_at: new Date(),
-        }
+        },
       );
 
       // Fetch the updated user with relations for flattened response
@@ -1272,7 +1306,7 @@ export class UsersService {
         ],
       });
       const flattenedUser = await this.createFlattenedResponse(
-        userWithRelations!
+        userWithRelations!,
       );
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -1283,7 +1317,7 @@ export class UsersService {
           description: `Toggled status for user ${id} to ${newStatusName} by user ${userId}`,
           status_id: 1,
         },
-        authenticatedUserId
+        authenticatedUserId,
       );
 
       const statusText =
@@ -1307,7 +1341,7 @@ export class UsersService {
         new_status: newStatusId,
       };
       logger.info(
-        `Successfully toggled status for user with ID ${id} and all related records.`
+        `Successfully toggled status for user with ID ${id} and all related records.`,
       );
 
       // SSE Events
@@ -1336,7 +1370,7 @@ export class UsersService {
     roleId: number,
     accessKeyIds: number[],
     userPermissionPresets: any[],
-    createdBy: number
+    createdBy: number,
   ): Promise<void> {
     for (const accessKeyId of accessKeyIds) {
       for (const preset of userPermissionPresets) {
@@ -1376,7 +1410,7 @@ export class UsersService {
     userId: number,
     roleId: number,
     locationIds: number[],
-    createdBy: number
+    createdBy: number,
   ): Promise<void> {
     for (const locationId of locationIds) {
       // Check if this combination already exists
@@ -1422,8 +1456,8 @@ export class UsersService {
       new Set(
         userPermissions
           .map((up) => (up.module ? up.module.module_name : null))
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     );
 
     // Extract unique action names
@@ -1431,8 +1465,8 @@ export class UsersService {
       new Set(
         userPermissions
           .map((up) => (up.action ? up.action.action_name : null))
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     );
 
     // Get user locations for this user
@@ -1446,13 +1480,13 @@ export class UsersService {
       new Set(
         userLocations
           .map((ul) => (ul.location ? ul.location.location_name : null))
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     );
 
     // Extract unique role_ids from user permissions
     const uniqueRoleIds = Array.from(
-      new Set(userPermissions.map((up) => up.role_id).filter(Boolean))
+      new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
     );
 
     // Get role names for all unique role_ids
@@ -1552,7 +1586,7 @@ export class UsersService {
     perAccessKey: boolean = false,
     includeUserRoles: boolean = false,
     includeUserSystems: boolean = false,
-    includeAllModules: boolean = false
+    includeAllModules: boolean = false,
   ): Promise<any[]> {
     const nestedUsers = [];
 
@@ -1588,7 +1622,7 @@ export class UsersService {
 
       // Extract unique role_ids from user permissions
       const uniqueRoleIds = Array.from(
-        new Set(userPermissions.map((up) => up.role_id).filter(Boolean))
+        new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
       );
 
       // Get role names and build role-aware structures
@@ -1615,7 +1649,7 @@ export class UsersService {
           // Collect unique systems from roles
           if (includeUserSystems && role.system_id) {
             const existingSystem = userSystems.find(
-              (sys) => sys.system_id === role.system_id
+              (sys) => sys.system_id === role.system_id,
             );
             if (!existingSystem) {
               userSystems.push({
@@ -1657,7 +1691,7 @@ export class UsersService {
               up.role_id === roleId &&
               (includeAllModules
                 ? up.status_id === 1 || up.status_id === 2
-                : up.status_id === 1)
+                : up.status_id === 1),
           );
 
           // Build modules for this role
@@ -1715,7 +1749,7 @@ export class UsersService {
             role_id: role.id,
             role_name: role.role_name,
             modules: Array.from(roleModuleMap.values()).sort(
-              (a, b) => a.order_level - b.order_level
+              (a, b) => a.order_level - b.order_level,
             ),
             locations: roleLocations,
           });
@@ -1777,7 +1811,7 @@ export class UsersService {
       // Get the current access key name if current_access_key exists
       const currentAccessKeyName = user.current_access_key
         ? Array.from(accessKeyMap.values()).find(
-            (ak) => ak.id === user.current_access_key
+            (ak) => ak.id === user.current_access_key,
           )?.access_key_name || null
         : null;
 
@@ -1829,7 +1863,7 @@ export class UsersService {
         access_keys: Array.from(accessKeyMap.values()),
         ...(!includeUserRoles && {
           modules: Array.from(moduleMap.values()).sort(
-            (a, b) => a.order_level - b.order_level
+            (a, b) => a.order_level - b.order_level,
           ),
         }),
         ...(!includeUserRoles && {
@@ -1903,7 +1937,8 @@ export class UsersService {
     filePath: string,
     created_by: number,
     role_id: number,
-    role_level: number
+    role_level: number,
+    request?: any,
   ): Promise<any> {
     const XLSX = require("xlsx");
     const fs = require("fs");
@@ -1950,7 +1985,7 @@ export class UsersService {
         });
         if (accessKeys.length !== accessKeyAbbrs.length) {
           throw new Error(
-            "Some Access Keys not found: " + accessKeyAbbrs.join(", ")
+            "Some Access Keys not found: " + accessKeyAbbrs.join(", "),
           );
         }
         // 2. Lookup multiple roles (comma separated)
@@ -1980,7 +2015,7 @@ export class UsersService {
           // Check if user uploading has permission to create this role
           if (role.role_level < role_level) {
             throw new Error(
-              `Role level too low: ${roleName} requires level ${role.role_level}. Your role level hierarchy is only: ${role_level}`
+              `Role level too low: ${roleName} requires level ${role.role_level}. Your role level hierarchy is only: ${role_level}`,
             );
           }
 
@@ -2038,21 +2073,21 @@ export class UsersService {
               if (locations.length < locationNames.length) {
                 const foundNames = locations.map((loc) => loc.location_name);
                 const notFound = locationNames.filter(
-                  (name) => !foundNames.includes(name)
+                  (name) => !foundNames.includes(name),
                 );
                 logger.warn(
-                  `Some locations not found: ${notFound.join(", ")}. Using only the matched locations.`
+                  `Some locations not found: ${notFound.join(", ")}. Using only the matched locations.`,
                 );
               }
             } else {
               // No locations found at all, log the issue and fall back to presets
               logger.warn(
-                `No locations matched from: ${locationNames.join(", ")}. Falling back to role location presets.`
+                `No locations matched from: ${locationNames.join(", ")}. Falling back to role location presets.`,
               );
             }
           } catch (locError) {
             logger.warn(
-              `Error processing location names: ${locError.message}. Falling back to role location presets.`
+              `Error processing location names: ${locError.message}. Falling back to role location presets.`,
             );
           }
         }
@@ -2065,7 +2100,7 @@ export class UsersService {
               .find({ where: { role_id: role.id, status_id: 1 } });
 
             const roleLocationIds = roleLocationPresets.map(
-              (preset) => preset.location_id
+              (preset) => preset.location_id,
             );
 
             if (roleLocationIds.length > 0) {
@@ -2129,7 +2164,7 @@ export class UsersService {
               description: `User updated via Excel upload (row ${rowNum})`,
               status_id: 1,
             },
-            created_by
+            created_by,
           );
           try {
             // Option 2: WITHOUT data
@@ -2170,7 +2205,7 @@ export class UsersService {
               description: `User created via Excel upload (row ${rowNum})`,
               status_id: 1,
             },
-            created_by
+            created_by,
           );
 
           // Create user_permissions for all access keys and all presets (which have role_ids)
@@ -2179,7 +2214,7 @@ export class UsersService {
               savedUser.id,
               accessKeys.map((k) => k.id),
               allRoleActionPresets,
-              created_by
+              created_by,
             );
           }
 
@@ -2188,13 +2223,15 @@ export class UsersService {
             await this.createUserLocationsFromPresets(
               savedUser.id,
               userLocationPresets,
-              created_by
+              created_by,
             );
           }
 
           inserted_count++;
           // Send email notification to user
           if (savedUser.email) {
+            const loginUrl =
+              this.frontendUrlUtil.getFrontendUrlFromRequest(request);
             const companyName = process.env.COMPANY_NAME || "CTGI";
             const projectName =
               process.env.PROJECT_NAME || "Success Perks Awards";
@@ -2203,6 +2240,7 @@ export class UsersService {
               userName: `${savedUser.first_name} ${savedUser.last_name}`,
               email: savedUser.email,
               password: row["Password"],
+              loginUrl,
             });
             let emailStatus = "success";
             let emailError = null;
@@ -2218,7 +2256,7 @@ export class UsersService {
               // Optionally log email sending error, but do not fail the import
               logger.error(
                 `Failed to send welcome email to ${savedUser.email}:`,
-                emailErr
+                emailErr,
               );
             }
             // Audit trail for email sending (success or error)
@@ -2236,7 +2274,7 @@ export class UsersService {
                 description: `Welcome email ${emailStatus} for user (row ${rowNum})`,
                 status_id: 1,
               },
-              created_by
+              created_by,
             );
           }
           inserted_row_numbers.push(rowNum);
@@ -2276,7 +2314,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by role: ${error.message}`
+        `Failed to get user ids permissions by role: ${error.message}`,
       );
     }
   }
@@ -2292,13 +2330,13 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by module: ${error.message}`
+        `Failed to get user ids permissions by module: ${error.message}`,
       );
     }
   }
 
   async getUserPermissionsByAccessKey(
-    access_key_id: number
+    access_key_id: number,
   ): Promise<number[]> {
     try {
       const userPermissions = await this.userPermissionsRepository.find({
@@ -2310,7 +2348,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by access key: ${error.message}`
+        `Failed to get user ids permissions by access key: ${error.message}`,
       );
     }
   }
@@ -2326,14 +2364,14 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids locations by location: ${error.message}`
+        `Failed to get user ids locations by location: ${error.message}`,
       );
     }
   }
 
   async getUserPermissionsWithRolesAndSystems(
     user_id: number,
-    access_key_id: number
+    access_key_id: number,
   ): Promise<any> {
     if (isNaN(user_id)) {
       throw new BadRequestException("Invalid user ID provided.");
@@ -2374,7 +2412,7 @@ export class UsersService {
 
         // Check if this access key is allowed for this system
         return permission.role.system.system_access_keys.some(
-          (sak: any) => sak.access_key_id === access_key_id
+          (sak: any) => sak.access_key_id === access_key_id,
         );
       });
 
@@ -2398,7 +2436,7 @@ export class UsersService {
         // Add role to this system (avoid duplicates by role_id)
         const systemData = systemsMap.get(systemKey);
         const existingRole = systemData.roles.find(
-          (r: any) => r.role_id === permission.role.id
+          (r: any) => r.role_id === permission.role.id,
         );
 
         if (!existingRole && permission.role) {
@@ -2424,7 +2462,7 @@ export class UsersService {
       });
 
       logger.info(
-        `Successfully retrieved permissions with roles and systems for user ID ${user_id}`
+        `Successfully retrieved permissions with roles and systems for user ID ${user_id}`,
       );
 
       return {
@@ -2434,7 +2472,7 @@ export class UsersService {
     } catch (error) {
       logger.error(
         `Error retrieving permissions with roles and systems for user ID ${user_id}:`,
-        error
+        error,
       );
       if (
         error instanceof NotFoundException ||
@@ -2443,7 +2481,7 @@ export class UsersService {
         throw error;
       }
       throw new Error(
-        `Failed to retrieve permissions with roles and systems for user ID ${user_id}.`
+        `Failed to retrieve permissions with roles and systems for user ID ${user_id}.`,
       );
     }
   }
