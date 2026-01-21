@@ -1,15 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
+import { FrontendUrlUtil } from "../utils/frontend-url.util";
 
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
 
-  constructor() {
+  constructor(private frontendUrlUtil: FrontendUrlUtil) {
     // Gmail SMTP: host = 'smtp.gmail.com', port = 465 (secure: true) or 587 (secure: false)
     const smtpHost = (process.env.SMTP_HOST || "smtp.example.com").replace(
       /^ssl:\/\//,
-      ""
+      "",
     );
     const smtpPort = Number(process.env.SMTP_PORT) || 587;
     const isSecure = smtpPort === 465; // true for 465, false for 587
@@ -46,6 +47,51 @@ export class EmailService {
     });
   }
 
+  generateEmailTemplateHeader(
+    projectName: string,
+    projectAbbr: string,
+  ): string {
+    return `
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; background: linear-gradient(90deg, #2d6cdf 0%, #4f8cff 100%);">
+        <tr>
+          <td style="padding: 40px 20px 30px 20px; text-align: center; font-family: Arial, sans-serif;">
+            <!-- Badge Circle -->
+            <table cellpadding="0" cellspacing="0" style="margin: 0 auto; border-collapse: collapse;">
+              <tr>
+                <td style="background: #fff; color: #2d6cdf; font-size: 28px; font-weight: bold; border-radius: 50%; width: 80px; height: 80px; text-align: center; line-height: 80px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: Arial, sans-serif;">
+                  ${projectAbbr?.toUpperCase()}
+                </td>
+              </tr>
+            </table>
+            <!-- Project Name -->
+            <div style="font-size: 24px; color: #fff; font-weight: 700; margin-top: 16px; line-height: 1.3; font-family: Arial, sans-serif; letter-spacing: 0.5px;">
+              ${projectName}
+            </div>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+
+  generateEmailTemplateFooter(
+    supportEmail: string,
+    companyName: string,
+  ): string {
+    const projectYear = process.env.PROJECT_YEAR || new Date().getFullYear();
+    return `
+      <p>If you have any questions, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
+      <p style="color: #888; font-size: 13px;">&copy; ${projectYear} ${companyName}. All rights reserved.</p>
+    `;
+  }
+
+  generateLoginButtonHtml(loginUrl: string): string {
+    return `
+      <div style="margin: 24px 0;">
+        <a href="${loginUrl}" style="background: #2d6cdf; color: #fff; padding: 12px 28px; border-radius: 4px; text-decoration: none; font-weight: bold;">Login Now</a>
+      </div>
+    `;
+  }
+
   /**
    * Generates a reusable HTML email template for user welcome/notification.
    * You can extend this for other email types as needed.
@@ -55,7 +101,7 @@ export class EmailService {
     userName: string;
     email: string;
     password?: string;
-    loginUrl?: string;
+    loginUrl: string;
     supportEmail?: string;
     companyName?: string;
     projectName?: string;
@@ -65,19 +111,19 @@ export class EmailService {
       userName,
       email,
       password,
-      loginUrl = process.env.FRONTEND_URL || "http://localhost:5173",
+      loginUrl,
       supportEmail = process.env.SUPPORT_EMAIL || "support@bavi.com",
       companyName = process.env.COMPANY_NAME || "Your Company",
       projectName = process.env.PROJECT_NAME || "Your Project",
       projectAbbr = process.env.PROJECT_ABBR || "Your Project",
     } = options;
+    const header = this.generateEmailTemplateHeader(projectName, projectAbbr);
+    const footer = this.generateEmailTemplateFooter(supportEmail, companyName);
+    const loginButton = this.generateLoginButtonHtml(loginUrl);
     return `
       <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 32px;">
         <div style="max-width: 480px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 0 0 32px 0;">
-          <div style="background: linear-gradient(90deg, #2d6cdf 0%, #4f8cff 100%); padding: 28px 0 18px 0; border-radius: 8px 8px 0 0; text-align: center;">
-            <span style="display: inline-block; background: #fff; color: #2d6cdf; font-size: 2.1rem; font-weight: bold; border-radius: 50%; width: 64px; height: 64px; line-height: 64px; box-shadow: 0 2px 8px #0002; margin-bottom: 10px;">${projectAbbr?.toUpperCase()}</span>
-            <div style="font-size: 1.35rem; color: #fff; font-weight: 600; margin-top: 6px;">${projectName}</div>
-          </div>
+          ${header}
           <div style="padding: 32px;">
             <h2 style="color: #2d6cdf; margin-top: 0;">Welcome to ${companyName} - ${projectAbbr}!</h2>
             <p>Hi <b>${userName}</b>,</p>
@@ -86,11 +132,8 @@ export class EmailService {
               <li><b>Email:</b> ${email}</li>
               ${password ? `<li><b>Password:</b> ${password}</li>` : ""}
             </ul>
-            <div style="margin: 24px 0;">
-              <a href="${loginUrl}" style="background: #2d6cdf; color: #fff; padding: 12px 28px; border-radius: 4px; text-decoration: none; font-weight: bold;">Login Now</a>
-            </div>
-            <p>If you have any questions, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
-            <p style="color: #888; font-size: 13px;">&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+            ${loginButton}
+            ${footer}
           </div>
         </div>
       </div>
@@ -106,7 +149,7 @@ export class EmailService {
     userName: string;
     email: string;
     password?: string;
-    loginUrl?: string;
+    loginUrl: string;
     supportEmail?: string;
     companyName?: string;
     projectName?: string;
@@ -116,19 +159,19 @@ export class EmailService {
       userName,
       email,
       password,
-      loginUrl = process.env.FRONTEND_URL || "http://localhost:5173",
+      loginUrl,
       supportEmail = process.env.SUPPORT_EMAIL || "support@bavi.com",
       companyName = process.env.COMPANY_NAME || "Your Company",
       projectName = process.env.PROJECT_NAME || "Your Project",
       projectAbbr = process.env.PROJECT_ABBR || "Your Project",
     } = options;
+    const header = this.generateEmailTemplateHeader(projectName, projectAbbr);
+    const footer = this.generateEmailTemplateFooter(supportEmail, companyName);
+    const loginButton = this.generateLoginButtonHtml(loginUrl);
     return `
       <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 32px;">
         <div style="max-width: 480px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 0 0 32px 0;">
-          <div style="background: linear-gradient(90deg, #2d6cdf 0%, #4f8cff 100%); padding: 28px 0 18px 0; border-radius: 8px 8px 0 0; text-align: center;">
-            <span style="display: inline-block; background: #fff; color: #2d6cdf; font-size: 2.1rem; font-weight: bold; border-radius: 50%; width: 64px; height: 64px; line-height: 64px; box-shadow: 0 2px 8px #0002; margin-bottom: 10px;">${projectAbbr?.toUpperCase()}</span>
-            <div style="font-size: 1.35rem; color: #fff; font-weight: 600; margin-top: 6px;">${projectName}</div>
-          </div>
+          ${header}
           <div style="padding: 32px;">
             <h2 style="color: #2d6cdf; margin-top: 0;">Password Reset Notification - ${companyName} ${projectAbbr}</h2>
             <p>Hi <b>${userName}</b>,</p>
@@ -137,11 +180,8 @@ export class EmailService {
               <li><b>Email:</b> ${email}</li>
               ${password ? `<li><b>Temporary Password:</b> ${password}</li>` : ""}
             </ul>
-            <div style="margin: 24px 0;">
-              <a href="${loginUrl}" style="background: #2d6cdf; color: #fff; padding: 12px 28px; border-radius: 4px; text-decoration: none; font-weight: bold;">Login Now</a>
-            </div>
-            <p>If you did not request this change or have any questions, contact us at <a href="mailto:${supportEmail}">${supportEmail}</a>.</p>
-            <p style="color: #888; font-size: 13px;">&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+            ${loginButton}
+            ${footer}
           </div>
         </div>
       </div>
