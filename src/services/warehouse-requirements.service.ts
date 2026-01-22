@@ -179,12 +179,17 @@ export class WarehouseRequirementsService {
     const requirements = await requirementsQuery.getMany();
     const warehouseRequirementIds: number[] = requirements.map((r) => r.id);
 
+    // If no requirements found, return empty result
+    if (warehouseRequirementIds.length === 0) {
+      return { requirements: [], duesMap: new Map(), warehouseRequirementIds: [] };
+    }
+
     // Query dues separately with date filtering
     let duesQuery = this.warehouseRequirementDuesService[
       "warehouseRequirementDuesRepository"
     ]
       .createQueryBuilder("warehouseRequirementDue")
-      .andWhere(
+      .where(
         "warehouseRequirementDue.warehouse_requirement_id IN (:...warehouseRequirementIds)",
         { warehouseRequirementIds },
       );
@@ -210,8 +215,9 @@ export class WarehouseRequirementsService {
       // If no date filter, get only the most recent due per requirement
       duesQuery = duesQuery.andWhere(
         `warehouseRequirementDue.id IN (
-          SELECT MAX(id) FROM warehouse_requirement_dues 
-          WHERE warehouse_requirement_id = warehouseRequirementDue.warehouse_requirement_id
+          SELECT MAX(wrd.id) FROM warehouse_requirement_dues wrd
+          WHERE wrd.warehouse_requirement_id = warehouseRequirementDue.warehouse_requirement_id
+          GROUP BY wrd.warehouse_requirement_id
         )`,
       );
     }
