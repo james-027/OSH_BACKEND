@@ -1966,7 +1966,7 @@ export class UsersService {
           "Email",
           "Password",
           "Access Keys",
-          "Role",
+          "Role(s)",
         ];
         for (const field of required) {
           if (!row[field] || String(row[field]).trim() === "") {
