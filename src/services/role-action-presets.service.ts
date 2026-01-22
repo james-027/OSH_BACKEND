@@ -216,7 +216,7 @@ export class RoleActionPresetsService {
 
   async findOne(id: number) {
     const roleActionPreset = await this.roleActionPresetRepository.findOne({
-      where: { id },
+      where: { id, status_id: 1 },
       relations: [
         "role",
         "module",
@@ -741,7 +741,7 @@ export class RoleActionPresetsService {
     try {
       // Get role location presets
       const roleLocationPresets = await this.roleLocationPresetRepository.find({
-        where: { role_id },
+        where: { role_id, status_id: 1 },
         relations: ["location"],
       });
 
@@ -1077,15 +1077,21 @@ export class RoleActionPresetsService {
       );
 
       if (existingPreset) {
-        // Reactivate existing preset
-        existingPreset.status_id = 1; // active
+        // Update existing preset with the provided status
+        await queryRunner.manager.update(
+          RoleLocationPreset,
+          { id: existingPreset.id },
+          {
+            status_id: status.id,
+            updated_by: updatedBy,
+            modified_at: new Date(),
+          },
+        );
+        // Sync in-memory object with database updates
+        existingPreset.status_id = status.id;
         existingPreset.updated_by = updatedBy;
         existingPreset.modified_at = new Date();
-        const saved = await queryRunner.manager.save(
-          RoleLocationPreset,
-          existingPreset,
-        );
-        savedLocationPresets.push(saved);
+        savedLocationPresets.push(existingPreset);
       } else {
         // Create new preset
         const newLocationPreset = new RoleLocationPreset();
@@ -1212,25 +1218,26 @@ export class RoleActionPresetsService {
         );
 
         if (existingPreset) {
-          // Reactivate existing preset (it was marked inactive in Step 1)
+          // Update existing preset with the provided status
           logger.info(
-            `Reactivating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to 1`,
+            `Updating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to ${status.id}`,
           );
-          existingPreset.status_id = 1; // active
-          existingPreset.updated_by = updatedBy;
-          existingPreset.modified_at = new Date();
 
           // Use queryRunner to update directly via query (more reliable in transaction)
           await queryRunner.manager.update(
             RoleActionPreset,
             { id: existingPreset.id },
             {
-              status_id: 1,
+              status_id: status.id,
               updated_by: updatedBy,
               modified_at: new Date(),
             },
           );
 
+          // Sync in-memory object with database updates
+          existingPreset.status_id = status.id;
+          existingPreset.updated_by = updatedBy;
+          existingPreset.modified_at = new Date();
           savedActionPresets.push(existingPreset);
         } else {
           // Create new preset

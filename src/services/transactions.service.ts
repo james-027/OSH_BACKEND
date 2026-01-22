@@ -28,7 +28,7 @@ export class TransactionsService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private userLocationsService: UserLocationsService,
     private commonUtilitiesService: CommonUtilitiesService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   // HEADER CRUD
@@ -39,14 +39,14 @@ export class TransactionsService {
   async findAllHeaders(
     user_id?: number,
     role_id?: number,
-    current_access_key?: number
+    current_access_key?: number,
   ) {
     let allowedLocationIds: number[] | undefined = undefined;
     if (user_id && role_id) {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           user_id,
-          role_id
+          role_id,
         );
     }
     const where: any = {};
@@ -168,7 +168,7 @@ export class TransactionsService {
         description: `Toggled status to ${status_id} for transaction header ${id}`,
         status_id: 1,
       },
-      user_id
+      user_id,
     );
     return this.findHeaderById(id);
   }
@@ -196,7 +196,7 @@ export class TransactionsService {
     });
     if (duplicate) {
       throw new Error(
-        `A transaction already exists for this location, date: ${header.trans_date}, (posted).`
+        `A transaction already exists for this location, date: ${header.trans_date}, (posted).`,
       );
     }
     const dataToUpdate: any = {
@@ -234,12 +234,12 @@ export class TransactionsService {
         description: `Posted transaction header ${id}`,
         status_id: 1,
       },
-      user_id
+      user_id,
     );
     // Update all related details status
     await this.detailRepo.update(
       { transaction_header_id: id },
-      { status_id: 4 }
+      { status_id: 4 },
     );
     // SSE Events
     try {
@@ -275,12 +275,12 @@ export class TransactionsService {
         description: `Cancelled transaction header ${id}, with reason: ${cancel_reason}`,
         status_id: 1,
       },
-      user_id
+      user_id,
     );
     // Update all related details status
     await this.detailRepo.update(
       { transaction_header_id: id },
-      { status_id: 5 }
+      { status_id: 5 },
     );
     // SSE Events
     try {
@@ -316,7 +316,7 @@ export class TransactionsService {
     });
     if (duplicate) {
       throw new Error(
-        `A transaction already exists for this location, date: ${header.trans_date}, (not cancelled).`
+        `A transaction already exists for this location, date: ${header.trans_date}, (not cancelled).`,
       );
     }
     // Update header status
@@ -333,12 +333,12 @@ export class TransactionsService {
         description: `Reverted transaction header ${id}, with reason: ${undo_reason}`,
         status_id: 1,
       },
-      user_id
+      user_id,
     );
     // Update all related details status
     await this.detailRepo.update(
       { transaction_header_id: id },
-      { status_id: 3 }
+      { status_id: 3 },
     );
     // SSE Events
     try {
@@ -416,7 +416,7 @@ export class TransactionsService {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           user_id,
-          role_id
+          role_id,
         );
     }
     const filteredLocationIds = allowedLocationIds
@@ -424,7 +424,7 @@ export class TransactionsService {
       : location_ids;
     if (filteredLocationIds.length === 0) {
       throw new Error(
-        "You are not allowed to create transactions for the selected locations."
+        "You are not allowed to create transactions for the selected locations.",
       );
     }
 
@@ -522,7 +522,7 @@ export class TransactionsService {
         GROUP BY a.bc_code, a.ifs_code, sales_quarter
         ORDER BY a.bc_code
       `,
-        [year, quarter, location_code]
+        [year, quarter, location_code],
       );
 
       const budgetRowsMonthly = await this.dataSource.query(
@@ -553,7 +553,7 @@ export class TransactionsService {
         GROUP BY a.bc_code, a.ifs_code, a.sales_month
         ORDER BY a.bc_code
       `,
-        [trans_date, location_code]
+        [trans_date, location_code],
       );
       // 3. Query sales_transactions
       const salesRows = await this.dataSource.query(
@@ -585,7 +585,7 @@ export class TransactionsService {
         WHERE a.status_id = 1 and a.doc_date = ? and a.bc_code = ?
         GROUP by a.bc_code, a.whs_code, c.id
       `,
-        [trans_date, location_code]
+        [trans_date, location_code],
       );
       // 4. Merge by whs_code (sales) as base, match to ifs_code (budget)
       const budgetMap = new Map();
@@ -640,7 +640,7 @@ export class TransactionsService {
           sales_qty: row.converted_qty,
           rate: row.rate,
           status_id: 3,
-        })
+        }),
       );
       await this.detailRepo.save(detailEntities);
 
@@ -658,7 +658,7 @@ export class TransactionsService {
           a.assigned_grh = b.assigned_grh
         WHERE b.status_id = 1 AND a.transaction_header_id = ?
       `,
-        [header.id]
+        [header.id],
       );
 
       // Audit trail for transaction creation
@@ -670,7 +670,7 @@ export class TransactionsService {
           description: `Created transaction header ${header.id} with ${merged.length} details for location ${location_id} (${location_code})`,
           status_id: 1,
         },
-        created_by
+        created_by,
       );
       results.push({
         location_id,
@@ -721,7 +721,7 @@ export class TransactionsService {
         if (Object.keys(updateFields).length > 0) {
           await this.detailRepo.update(
             { transaction_header_id: upd.transaction_header_id },
-            updateFields
+            updateFields,
           );
           results.detail_updates.push({
             transaction_header_id: upd.transaction_header_id,
@@ -807,7 +807,7 @@ export class TransactionsService {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           filters.user_id,
-          filters.role_id
+          filters.role_id,
         );
     }
 
@@ -899,6 +899,7 @@ export class TransactionsService {
         // Transaction header info
         trans_number: header?.trans_number,
         location_name: header?.location?.location_name,
+        location_abbr: header?.location?.location_abbr,
         location_id: header?.location_id,
         trans_date: header?.trans_date,
         trans_year: header?.trans_date
