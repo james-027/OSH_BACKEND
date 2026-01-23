@@ -39,6 +39,7 @@
     "@nestjs/schedule": "^6.0.0",
     "@nestjs/throttler": "^5.0.0",
     "@nestjs/typeorm": "^10.0.0",
+    "@types/sharp": "^0.31.1",
     "axios": "^1.10.0",
     "bcrypt": "^5.1.0",
     "class-transformer": "^0.5.1",
@@ -53,6 +54,7 @@
     "passport-local": "^1.0.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
+    "sharp": "^0.34.5",
     "typeorm": "^0.3.20",
     "winston": "^3.8.0",
     "xlsx": "^0.18.5"

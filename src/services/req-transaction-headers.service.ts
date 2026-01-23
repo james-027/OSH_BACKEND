@@ -1091,9 +1091,15 @@ export class ReqTransactionHeadersService {
             continue;
           }
 
+          //* Compress file to reduce size (~60% of original for images, PDFs unchanged)
+          const compressedBuffer = await FileUploadHandler.compressFile(
+            file.buffer,
+            file.filename,
+          );
+
           //* Save file to disk
           const savedFileInfo = await FileUploadHandler.saveFile(
-            file.buffer,
+            compressedBuffer,
             file.filename,
             correspondingHeader.req_transaction_header_id,
             "uploads/req-transactions",

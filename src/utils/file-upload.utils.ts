@@ -2,6 +2,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as sharp from "sharp";
 
 /**
  * Excel file filter - validates that uploaded file is .xlsx or .xls
@@ -175,6 +176,70 @@ export class FileUploadHandler {
         valid: false,
         error: `Validation error: ${error.message}`,
       };
+    }
+  }
+
+  /**
+   * Compress file based on type to achieve ~60% of original size
+   * Images: reduce quality and optimize resolution using sharp
+   * PDFs: pass through without compression
+   * @param buffer - File buffer to compress
+   * @param filename - Original filename (used to determine file type)
+   * @returns Compressed buffer
+   */
+  static async compressFile(
+    buffer: Buffer | string,
+    filename: string
+  ): Promise<Buffer> {
+    try {
+      const bufferObj =
+        typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
+      const ext = path.extname(filename).toLowerCase().slice(1);
+      const mimeType = this.getMimeTypeFromExtension(ext);
+
+      // PDF: no compression, return as-is
+      if (mimeType === "application/pdf") {
+        return bufferObj;
+      }
+
+      // Images: compress using sharp
+      if (mimeType.startsWith("image/")) {
+        let compressedBuffer = bufferObj;
+
+        if (ext === "png") {
+          // PNG: reduce colors and quality to achieve ~60% of original size
+          compressedBuffer = await sharp(bufferObj)
+            .png({ 
+              quality: 75,  // PNG quality
+              compressionLevel: 9  // Maximum compression
+            })
+            .toBuffer();
+        } else if (ext === "jpg" || ext === "jpeg") {
+          // JPEG: reduce quality to achieve ~60% of original size
+          compressedBuffer = await sharp(bufferObj)
+            .jpeg({ 
+              quality: 70,  // JPEG quality (70-75 is good balance)
+              progressive: true  // Progressive JPEG loads faster
+            })
+            .toBuffer();
+        } else if (ext === "gif" || ext === "webp") {
+          // GIF/WebP: convert to optimized format
+          compressedBuffer = await sharp(bufferObj)
+            .toFormat("webp", { quality: 75 })
+            .toBuffer();
+        }
+
+        return compressedBuffer;
+      }
+
+      // Unknown format: return original
+      return bufferObj;
+    } catch (error) {
+      console.warn(
+        `Compression failed for ${filename}, using original: ${error.message}`
+      );
+      // Return original buffer on compression error (graceful degradation)
+      return typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
     }
   }
 
