@@ -56,6 +56,8 @@ import { ReqTransactionDue } from "../entities/ReqTransactionDue";
 import { System } from "../entities/System";
 import { SystemAccessKey } from "../entities/SystemAccessKey";
 import { TransactionSequence } from "../entities/TransactionSequence";
+import { LocationHurdleCategory } from "../entities/LocationHurdleCategory";
+import { LocationHurdle } from "../entities/LocationHurdle";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -115,6 +117,8 @@ export const entities = [
   System,
   SystemAccessKey,
   TransactionSequence,
+  LocationHurdle,
+  LocationHurdleCategory,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
