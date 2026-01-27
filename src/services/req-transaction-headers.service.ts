@@ -790,7 +790,7 @@ export class ReqTransactionHeadersService {
             errors.push({
               warehouse_id: warehouse.id,
               reason:
-                "Warehouse requirement not found for this warehouse and requirement",
+                "Store requirement not found for this store and requirement",
               field: "warehouse_id",
             });
             continue;
@@ -831,7 +831,7 @@ export class ReqTransactionHeadersService {
           if (!currentDue) {
             errors.push({
               warehouse_id: warehouse.id,
-              reason: "Current warehouse requirement due not found",
+              reason: "Current store requirement cycle not found",
               field: "warehouse_requirement_due",
             });
             continue;
@@ -918,43 +918,86 @@ export class ReqTransactionHeadersService {
                   order: { id: "DESC" },
                 });
 
-              const newDueStart = lastDue
-                ? lastDue.warehouse_requirement_due_end
-                : today;
+              const createCycle = lastDue.id === currentDue.id ? true : false;
 
-              //* Calculate new due end date based on renewal_type
-              let newDueEnd: string;
-              const startDate = new Date(newDueStart);
+              if (createCycle) {
+                //* Create new warehouse requirement due cycle
+                const newDueStart = lastDue
+                  ? lastDue.warehouse_requirement_due_end
+                  : today;
 
-              if (createDto.renewal_type_id === 2) {
-                //* ANNUAL
-                startDate.setFullYear(startDate.getFullYear() + 1);
-                newDueEnd = formatDateToString(startDate);
-              } else if (createDto.renewal_type_id === 3) {
-                //* QUARTERLY
-                startDate.setMonth(startDate.getMonth() + 3);
-                newDueEnd = formatDateToString(startDate);
-              } else if (createDto.renewal_type_id === 4) {
-                //* MONTHLY
-                startDate.setMonth(startDate.getMonth() + 1);
-                newDueEnd = formatDateToString(startDate);
-              } else {
-                newDueEnd = newDueStart;
-              }
+                //* Calculate new due end date based on renewal_type
+                let newDueEnd: string;
+                const startDate = new Date(newDueStart);
 
-              const newDueRecord =
-                this.warehouseRequirementDuesRepository.create({
-                  warehouse_requirement_id: warehouseRequirement.id,
-                  warehouse_requirement_due_start: newDueStart,
-                  warehouse_requirement_due_end: newDueEnd,
-                  status_id: 1,
-                  created_by: userId,
+                if (createDto.renewal_type_id === 2) {
+                  //* ANNUAL
+                  startDate.setFullYear(startDate.getFullYear() + 1);
+                  newDueEnd = formatDateToString(startDate);
+                } else if (createDto.renewal_type_id === 3) {
+                  //* QUARTERLY
+                  startDate.setMonth(startDate.getMonth() + 3);
+                  newDueEnd = formatDateToString(startDate);
+                } else if (createDto.renewal_type_id === 4) {
+                  //* MONTHLY
+                  startDate.setMonth(startDate.getMonth() + 1);
+                  newDueEnd = formatDateToString(startDate);
+                } else {
+                  newDueEnd = newDueStart;
+                }
+
+                const preDueReminderDate = new Date(startDate);
+                preDueReminderDate.setDate(
+                  preDueReminderDate.getDate() -
+                    requirement.requirement_reminder,
+                );
+
+                const DueReminderDueDate = new Date(startDate);
+                DueReminderDueDate.setDate(
+                  DueReminderDueDate.getDate() +
+                    requirement.requirement_due_days,
+                );
+
+                const postDueReminderDate = new Date(startDate);
+                postDueReminderDate.setDate(
+                  postDueReminderDate.getDate() +
+                    requirement.requirement_reminder,
+                );
+
+                const preDueReminderString =
+                  formatDateToString(preDueReminderDate);
+                const postDueReminderString =
+                  formatDateToString(postDueReminderDate);
+                const dueReminderDueString =
+                  formatDateToString(DueReminderDueDate);
+
+                console.log("Due Dates Calculation:", {
+                  newDueStart,
+                  newDueEnd,
+                  preDueReminderString,
+                  postDueReminderString,
+                  dueReminderDueString,
                 });
 
-              const savedNewDue =
-                await this.warehouseRequirementDuesRepository.save(
-                  newDueRecord,
-                );
+                const newDueRecord =
+                  this.warehouseRequirementDuesRepository.create({
+                    warehouse_requirement_id: warehouseRequirement.id,
+                    warehouse_requirement_due_start: newDueStart,
+                    warehouse_requirement_due_end: newDueEnd,
+                    warehouse_requirement_due_pre_reminder_date:
+                      preDueReminderString,
+                    warehouse_requirement_due_post_reminder_date:
+                      postDueReminderString,
+                    warehouse_requirement_due_date: dueReminderDueString,
+                    status_id: 1,
+                    created_by: userId,
+                  });
+
+                const savedNewDue =
+                  await this.warehouseRequirementDuesRepository.save(
+                    newDueRecord,
+                  );
+              }
 
               //* Step 9A: Create req_transaction_due linking to the new warehouse_requirement_due
               const transactionDueDto = {
@@ -979,7 +1022,7 @@ export class ReqTransactionHeadersService {
                 module: "ReqTransactionHeadersService",
                 type: "createWithDetails",
                 action: "create_warehouse_requirement_due",
-                message: `Error creating warehouse requirement due: ${dueError.message}`,
+                message: `Error creating store requirement due: ${dueError.message}`,
                 row_data: JSON.stringify({
                   warehouse_requirement_id: warehouseRequirement.id,
                 }),
@@ -1056,7 +1099,7 @@ export class ReqTransactionHeadersService {
           if (!warehouseFromFile) {
             errors.push({
               file: file.filename,
-              reason: "Warehouse IFS not found in provided warehouses",
+              reason: "Store IFS not found in provided warehouses",
               field: "warehouse_ifs",
               warehouse_ifs: warehouseIfs,
             });
@@ -1071,7 +1114,7 @@ export class ReqTransactionHeadersService {
           if (!correspondingHeader) {
             errors.push({
               file: file.filename,
-              reason: `No transaction header created for warehouse ${warehouseFromFile.id}`,
+              reason: `No transaction header created for store ${warehouseFromFile.id}`,
               field: "req_transaction_header_id",
             });
             continue;
