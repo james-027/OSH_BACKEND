@@ -251,7 +251,7 @@ export class WarehouseRequirementDuesService {
           DueReminderDueDate.getDate() + requirement.requirement_due_days,
         );
 
-        const postDueReminderDate = new Date(dueEndDate);
+        const postDueReminderDate = new Date(dueStartDate);
         postDueReminderDate.setDate(
           postDueReminderDate.getDate() + requirement.requirement_reminder,
         );
