@@ -760,6 +760,10 @@ export class ReqTransactionHeadersService {
         calculatedTransDate = formatDateToString(transDate);
       }
 
+      console.log("Calculated trans date:", {
+        calculatedTransDate,
+      });
+
       // Generate using bulletproof service with database-level locking
       const trans_number =
         await this.commonUtilitiesService.generateTransactionNumber({
@@ -819,12 +823,18 @@ export class ReqTransactionHeadersService {
                   wrId: warehouseRequirement.id,
                 },
               )
-              .andWhere("due.warehouse_requirement_due_start <= :today", {
-                today,
-              })
-              .andWhere("due.warehouse_requirement_due_end >= :today", {
-                today,
-              })
+              .andWhere(
+                "due.warehouse_requirement_due_start <= :calculatedTransDate",
+                {
+                  calculatedTransDate,
+                },
+              )
+              .andWhere(
+                "due.warehouse_requirement_due_end >= :calculatedTransDate",
+                {
+                  calculatedTransDate,
+                },
+              )
               .getOne();
           }
 
@@ -839,13 +849,10 @@ export class ReqTransactionHeadersService {
 
           //* Step 5: Validate advance trans (if renewal_type ≠ ONE_TIME)
           if (createDto.renewal_type_id !== 1) {
-            if (
-              calculatedTransDate > currentDue.warehouse_requirement_due_end
-            ) {
+            if (calculatedTransDate > today) {
               errors.push({
                 warehouse_id: warehouse.id,
-                reason:
-                  "Advanced Date Transaction is not allowed. Please transact the previous deadline first.",
+                reason: "Advanced Date Transaction is not allowed.",
                 field: "trans_date",
                 trans_date: calculatedTransDate,
               });
@@ -923,28 +930,17 @@ export class ReqTransactionHeadersService {
               if (createCycle) {
                 //* Create new warehouse requirement due cycle
                 const newDueStart = lastDue
-                  ? lastDue.warehouse_requirement_due_end
+                  ? formatDateToString(
+                      this.commonUtilitiesService.addDaysFromDate(
+                        lastDue.warehouse_requirement_due_end,
+                        1,
+                      ),
+                    )
                   : today;
 
                 //* Calculate new due end date based on renewal_type
                 let newDueEnd: string;
                 const startDate = new Date(newDueStart);
-
-                if (createDto.renewal_type_id === 2) {
-                  //* ANNUAL
-                  startDate.setFullYear(startDate.getFullYear() + 1);
-                  newDueEnd = formatDateToString(startDate);
-                } else if (createDto.renewal_type_id === 3) {
-                  //* QUARTERLY
-                  startDate.setMonth(startDate.getMonth() + 3);
-                  newDueEnd = formatDateToString(startDate);
-                } else if (createDto.renewal_type_id === 4) {
-                  //* MONTHLY
-                  startDate.setMonth(startDate.getMonth() + 1);
-                  newDueEnd = formatDateToString(startDate);
-                } else {
-                  newDueEnd = newDueStart;
-                }
 
                 const preDueReminderDate = new Date(startDate);
                 preDueReminderDate.setDate(
@@ -964,20 +960,37 @@ export class ReqTransactionHeadersService {
                     requirement.requirement_reminder,
                 );
 
+                if (createDto.renewal_type_id === 2) {
+                  //* ANNUAL
+                  startDate.setFullYear(startDate.getFullYear() + 1);
+                  newDueEnd = formatDateToString(startDate);
+                } else if (createDto.renewal_type_id === 3) {
+                  //* QUARTERLY
+                  startDate.setMonth(startDate.getMonth() + 3);
+                  newDueEnd = formatDateToString(startDate);
+                } else if (createDto.renewal_type_id === 4) {
+                  //* MONTHLY
+                  startDate.setMonth(startDate.getMonth() + 1);
+                  newDueEnd = formatDateToString(startDate);
+                } else {
+                  newDueEnd = newDueStart;
+                }
+
+                //* Deduct one day to the end of cycle.
+                newDueEnd = formatDateToString(
+                  this.commonUtilitiesService.deductDaysFromDate(newDueEnd, 1),
+                );
+
+                console.log("new cycle end date:", {
+                  newDueEnd,
+                });
+
                 const preDueReminderString =
                   formatDateToString(preDueReminderDate);
                 const postDueReminderString =
                   formatDateToString(postDueReminderDate);
                 const dueReminderDueString =
                   formatDateToString(DueReminderDueDate);
-
-                console.log("Due Dates Calculation:", {
-                  newDueStart,
-                  newDueEnd,
-                  preDueReminderString,
-                  postDueReminderString,
-                  dueReminderDueString,
-                });
 
                 const newDueRecord =
                   this.warehouseRequirementDuesRepository.create({

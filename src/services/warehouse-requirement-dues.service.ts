@@ -11,6 +11,7 @@ import { Requirement } from "../entities/Requirement";
 import { SyncLog } from "../entities/syncLog";
 import { formatDateToString } from "../utils/date.utils";
 import { ResponseMapperService } from "./response-mapper.service";
+import { CommonUtilitiesService } from "./common-utilities.service";
 
 @Injectable()
 export class WarehouseRequirementDuesService {
@@ -24,6 +25,7 @@ export class WarehouseRequirementDuesService {
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
     private responseMapperService: ResponseMapperService,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   /**
@@ -255,6 +257,14 @@ export class WarehouseRequirementDuesService {
         postDueReminderDate.setDate(
           postDueReminderDate.getDate() + requirement.requirement_reminder,
         );
+
+        if (requirement.renewal_type_id !== 1) {
+          //* Deduct one day to the end of cycle.
+          dueEndDate = this.commonUtilitiesService.deductDaysFromDate(
+            dueEndDate,
+            1,
+          );
+        }
 
         const dueStartString = formatDateToString(dueStartDate);
         const dueEndString = formatDateToString(dueEndDate);

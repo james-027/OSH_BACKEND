@@ -14,7 +14,7 @@ export class CommonUtilitiesService {
     private usersService: UsersService,
     @InjectRepository(TransactionSequence)
     private sequenceRepo: Repository<TransactionSequence>,
-    private dataSource: DataSource
+    private dataSource: DataSource,
   ) {}
 
   /**
@@ -25,8 +25,11 @@ export class CommonUtilitiesService {
    */
   async getUserAllowedLocationIds(
     userId: number,
-    roleId: number
+    roleId: number,
   ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
     try {
       const userLocations = await this.usersService[
         "userLocationsRepository"
@@ -80,6 +83,18 @@ export class CommonUtilitiesService {
   formatDateToString(date: Date | string): string {
     const dateObj = typeof date === "string" ? new Date(date) : date;
     return dateObj.toISOString().split("T")[0];
+  }
+
+  deductDaysFromDate(date: Date | string, days: number): Date {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    dateObj.setDate(dateObj.getDate() - days);
+    return dateObj;
+  }
+
+  addDaysFromDate(date: Date | string, days: number): Date {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    dateObj.setDate(dateObj.getDate() + days);
+    return dateObj;
   }
 
   /**
@@ -273,7 +288,7 @@ export class CommonUtilitiesService {
       // Rollback on error
       await queryRunner.rollbackTransaction();
       throw new Error(
-        `Failed to generate transaction number: ${error.message}`
+        `Failed to generate transaction number: ${error.message}`,
       );
     } finally {
       // Release connection
@@ -287,7 +302,7 @@ export class CommonUtilitiesService {
    */
   private _formatTransactionNumber(
     template: string,
-    vars: Record<string, string | number>
+    vars: Record<string, string | number>,
   ): string {
     let result = template;
 
