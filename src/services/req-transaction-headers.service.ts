@@ -760,9 +760,9 @@ export class ReqTransactionHeadersService {
         calculatedTransDate = formatDateToString(transDate);
       }
 
-      console.log("Calculated trans date:", {
-        calculatedTransDate,
-      });
+      // console.log("Calculated trans date:", {
+      //   calculatedTransDate,
+      // });
 
       // Generate using bulletproof service with database-level locking
       const trans_number =
@@ -981,9 +981,9 @@ export class ReqTransactionHeadersService {
                   this.commonUtilitiesService.deductDaysFromDate(newDueEnd, 1),
                 );
 
-                console.log("new cycle end date:", {
-                  newDueEnd,
-                });
+                // console.log("new cycle end date:", {
+                //   newDueEnd,
+                // });
 
                 const preDueReminderString =
                   formatDateToString(preDueReminderDate);
@@ -1100,7 +1100,7 @@ export class ReqTransactionHeadersService {
             errors.push({
               file: file.filename,
               reason:
-                "Invalid filename format. Expected format: 'warehouse_ifs - filename'",
+                "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
               field: "filename",
             });
             continue;
