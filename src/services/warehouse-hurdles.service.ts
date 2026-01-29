@@ -21,6 +21,7 @@ import * as dayjs from "dayjs";
 import * as utc from "dayjs/plugin/utc";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "src/config/logger";
+import { CommonUtilitiesService } from "./common-utilities.service";
 dayjs.extend(utc);
 
 @Injectable()
@@ -37,24 +38,16 @@ export class WarehouseHurdlesService {
     private itemCategoriesService: ItemCategoriesService,
     @Inject(ActionLogsService)
     private ActionLogsService: ActionLogsService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   async findAll(
     accessKeyId?: number,
     userId?: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<any[]> {
-    let allowedLocationIds: number[] | undefined = undefined;
-    if (userId && roleId) {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
-    }
+    const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
     const query = this.warehouseHurdlesRepository
       .createQueryBuilder("wh")
       .innerJoinAndSelect("wh.warehouse", "warehouse")
@@ -64,11 +57,11 @@ export class WarehouseHurdlesService {
       .leftJoinAndSelect("wh.updatedBy", "updatedBy")
       .leftJoinAndSelect(
         "wh.warehouseHurdleCategories",
-        "warehouseHurdleCategories"
+        "warehouseHurdleCategories",
       )
       .leftJoinAndSelect(
         "warehouseHurdleCategories.itemCategory",
-        "itemCategory"
+        "itemCategory",
       );
     if (accessKeyId !== undefined) {
       query.andWhere("warehouse.access_key_id = :accessKeyId", { accessKeyId });
@@ -111,7 +104,7 @@ export class WarehouseHurdlesService {
         hurdle.warehouseHurdleCategories
           ?.filter(
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7
+              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
           )
           .map((cat) => ({
             id: cat.id,
@@ -160,7 +153,7 @@ export class WarehouseHurdlesService {
         hurdle.warehouseHurdleCategories
           ?.filter(
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7
+              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
           )
           .map((cat) => ({
             id: cat.id,
@@ -175,7 +168,7 @@ export class WarehouseHurdlesService {
 
   async create(
     createDto: CreateWarehouseHurdleDto,
-    userId: number
+    userId: number,
   ): Promise<WarehouseHurdle[]> {
     const { warehouse_ids, item_category_ids, ...mainDto } = createDto;
     const hurdles: WarehouseHurdle[] = [];
@@ -187,7 +180,7 @@ export class WarehouseHurdlesService {
       });
       if (exists) {
         throw new BadRequestException(
-          `Duplicate hurdle for warehouse_id ${warehouse_id} and hurdle_date ${mainDto.hurdle_date}`
+          `Duplicate hurdle for warehouse_id ${warehouse_id} and hurdle_date ${mainDto.hurdle_date}`,
         );
       }
       const hurdle = this.warehouseHurdlesRepository.create({
@@ -202,7 +195,7 @@ export class WarehouseHurdlesService {
           saved.id,
           [warehouse_id],
           item_category_ids,
-          userId
+          userId,
         );
       }
       // Action log
@@ -226,7 +219,7 @@ export class WarehouseHurdlesService {
         description: `Created warehouse hurdles for warehouse_ids: [${warehouse_ids}] and item_category_ids: [${item_category_ids}]`,
         status_id: 1,
       },
-      userId
+      userId,
     );
 
     // SSE Events
@@ -242,7 +235,7 @@ export class WarehouseHurdlesService {
   async update(
     id: number,
     updateDto: UpdateWarehouseHurdleDto,
-    userId: number
+    userId: number,
   ): Promise<WarehouseHurdle> {
     const {
       warehouse_ids,
@@ -270,7 +263,7 @@ export class WarehouseHurdlesService {
       });
       if (exists) {
         throw new BadRequestException(
-          `Duplicate hurdle for warehouse_id ${warehouse_ids[0]} and hurdle_date ${mainDto.hurdle_date}`
+          `Duplicate hurdle for warehouse_id ${warehouse_ids[0]} and hurdle_date ${mainDto.hurdle_date}`,
         );
       }
       hurdle.warehouse_id = warehouse_ids[0];
@@ -287,7 +280,7 @@ export class WarehouseHurdlesService {
           saved.id,
           warehouse_ids,
           item_category_ids,
-          userId
+          userId,
         );
       }
       // Audit trail
@@ -299,7 +292,7 @@ export class WarehouseHurdlesService {
           description: `Updated warehouse hurdle id: ${id}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const status_change =
@@ -345,7 +338,7 @@ export class WarehouseHurdlesService {
     id: number,
     userId: number,
     status_id: number,
-    undo_reason?: string
+    undo_reason?: string,
   ): Promise<any> {
     const hurdle = await this.warehouseHurdlesRepository.findOne({
       where: { id },
@@ -369,7 +362,7 @@ export class WarehouseHurdlesService {
     await this.whcService.updateStatusByWarehouseHurdleId(
       id,
       newStatusId,
-      userId
+      userId,
     );
     // Audit trail
     await this.auditTrailService.create(
@@ -380,7 +373,7 @@ export class WarehouseHurdlesService {
         description: `Toggled status for warehouse hurdle id: ${id} to ${newStatusName}`,
         status_id: 1,
       },
-      userId
+      userId,
     );
 
     // Get action ID from status
@@ -399,7 +392,9 @@ export class WarehouseHurdlesService {
     try {
       logger.info(`[SSE] Emitting UPDATE signal for warehouse_hurdles:${id}`);
       this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", id);
-      logger.info(`[SSE] Successfully emitted UPDATE signal for warehouse_hurdles:${id}`);
+      logger.info(
+        `[SSE] Successfully emitted UPDATE signal for warehouse_hurdles:${id}`,
+      );
     } catch (err) {
       logger.error("[SSE] SSE event failed for update:", err);
     }
@@ -410,7 +405,7 @@ export class WarehouseHurdlesService {
     ids: number[],
     status_id: number,
     userId: number,
-    undo_reason?: string
+    undo_reason?: string,
   ): Promise<any[]> {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       throw new BadRequestException("No warehouse hurdle IDs provided");
@@ -432,7 +427,7 @@ export class WarehouseHurdlesService {
     await this.whcService.updateStatusByWarehouseHurdleIds(
       ids,
       status_id,
-      userId
+      userId,
     );
 
     // Action log for each hurdle
@@ -469,7 +464,7 @@ export class WarehouseHurdlesService {
         description: `Bulk toggled status for warehouse hurdle ids: [${ids.join(", ")}] to status_id: ${status_id}`,
         status_id: 1,
       },
-      userId
+      userId,
     );
     // SSE Events
     try {
@@ -487,17 +482,23 @@ export class WarehouseHurdlesService {
     return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
-  async getUserLocationIds(userId: number, roleId: number) {
-    return this.usersService["userLocationsRepository"].find({
-      where: { user_id: userId, role_id: roleId, status_id: 1 },
-      select: ["location_id"],
-    });
+  async getAllowedLocationIds(
+    userId?: number,
+    roleId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+    return await this.commonUtilitiesService.getUserAllowedLocationIds(
+      userId,
+      roleId,
+    );
   }
 
   async bulkUploadFromExcel(
     records: any[],
     userId: number,
-    allowedLocationIds?: number[]
+    allowedLocationIds?: number[],
   ) {
     let inserted_count = 0;
     let updated_count = 0;
@@ -512,7 +513,7 @@ export class WarehouseHurdlesService {
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
       const warehouse = warehouses.find(
-        (w) => w.warehouse_ifs == row.warehouse_ifs
+        (w) => w.warehouse_ifs == row.warehouse_ifs,
       );
       if (!warehouse) {
         errors.push({
@@ -533,7 +534,7 @@ export class WarehouseHurdlesService {
         continue;
       }
       const itemCategory = itemCategories.find(
-        (c) => c.code == row.item_category_code
+        (c) => c.code == row.item_category_code,
       );
       if (!itemCategory) {
         errors.push({
@@ -561,7 +562,7 @@ export class WarehouseHurdlesService {
               item_category_ids: [itemCategory.id],
               status_id: 3, // pending status
             },
-            userId
+            userId,
           );
           inserted_count++;
           inserted_row_numbers.push(i + 2);
@@ -597,7 +598,7 @@ export class WarehouseHurdlesService {
                     item_category_ids: [itemCategory.id],
                     status_id: 3, // pending status
                   },
-                  userId
+                  userId,
                 );
                 updated_count++;
                 updated_row_numbers.push(i + 2);

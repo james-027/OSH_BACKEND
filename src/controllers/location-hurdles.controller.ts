@@ -17,9 +17,9 @@ import {
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../guards/permissions.guard";
 import { RequirePermissions } from "../decorators/permissions.decorator";
-import { WarehouseHurdlesService } from "../services/warehouse-hurdles.service";
-import { CreateWarehouseHurdleDto } from "../dto/CreateWarehouseHurdleDto";
-import { UpdateWarehouseHurdleDto } from "../dto/UpdateWarehouseHurdleDto";
+import { LocationHurdlesService } from "../services/location-hurdles.service";
+import { CreateLocationHurdleDto } from "../dto/CreateLocationHurdleDto";
+import { UpdateLocationHurdleDto } from "../dto/UpdateLocationHurdleDto";
 import {
   FileInterceptor,
   diskStorage,
@@ -29,66 +29,64 @@ import { excelFileFilter, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
 import * as XLSX from "xlsx";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
-import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
-@Controller("warehouse-hurdles")
+@Controller("location-hurdles")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-export class WarehouseHurdlesController {
+export class LocationHurdlesController {
   constructor(
-    private readonly warehouseHurdlesService: WarehouseHurdlesService,
+    private readonly locationHurdlesService: LocationHurdlesService,
     private readonly auditTrailService: UserAuditTrailCreateService,
   ) {}
 
   @Get()
-  // @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
   async findAll(@Request() req) {
-    const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
     const roleId = req.user.role_id;
-    return this.warehouseHurdlesService.findAll(accessKeyId, userId, roleId);
+    return this.locationHurdlesService.findAll(undefined, userId, roleId);
   }
 
   @Get("history/:id")
-  @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
-    return this.warehouseHurdlesService.findOneHistory(id);
+    return this.locationHurdlesService.findOneHistory(id);
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.warehouseHurdlesService.findOne(id);
+    return this.locationHurdlesService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "STORE HURDLES", action: "ADD" })
-  async create(@Body() createDto: CreateWarehouseHurdleDto, @Request() req) {
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "ADD" })
+  async create(@Body() createDto: CreateLocationHurdleDto, @Request() req) {
     const userId = req.user.id;
-    return this.warehouseHurdlesService.create(createDto, userId);
+    return this.locationHurdlesService.create(createDto, userId);
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STORE HURDLES", action: "EDIT" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
-    @Body() updateDto: UpdateWarehouseHurdleDto,
+    @Body() updateDto: UpdateLocationHurdleDto,
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.warehouseHurdlesService.update(id, updateDto, userId);
+    return this.locationHurdlesService.update(id, updateDto, userId);
   }
 
   @Delete(":id")
-  @RequirePermissions({ module: "STORE HURDLES", action: "CANCEL" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "CANCEL" })
   async remove(@Param("id", ParseIntPipe) id: number) {
-    return this.warehouseHurdlesService.remove(id);
+    return this.locationHurdlesService.remove(id);
   }
 
   @Post("/change-bulk-status")
-  @RequirePermissions({ module: "STORE HURDLES", action: "ADD" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "ADD" })
   async toggleBulkStatus(
     @Body() body: { ids: number[]; status_id: number; undo_reason?: string },
     @Request() req,
@@ -100,7 +98,7 @@ export class WarehouseHurdlesController {
         "Invalid payload: ids and status_id are required.",
       );
     }
-    return this.warehouseHurdlesService.toggleBulkStatus(
+    return this.locationHurdlesService.toggleBulkStatus(
       ids,
       status_id,
       userId,
@@ -109,27 +107,27 @@ export class WarehouseHurdlesController {
   }
 
   @Patch(":id/toggle-status-approved")
-  @RequirePermissions({ module: "STORE HURDLES", action: "APPROVE" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "APPROVE" })
   async toggleStatusApproved(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
     const userId = req.user.id;
     const status_id = 7; // Approved status
-    return this.warehouseHurdlesService.toggleStatus(id, userId, status_id);
+    return this.locationHurdlesService.toggleStatus(id, userId, status_id);
   }
 
   @Patch(":id/toggle-status-back-to-pending")
-  @RequirePermissions({ module: "STORE HURDLES", action: "ACTIVATE" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "ACTIVATE" })
   async toggleStatusBackToPending(
     @Param("id", ParseIntPipe) id: number,
-    @Body() body: any, // Assuming body may contain undo_reason
+    @Body() body: any,
     @Request() req,
   ) {
     const userId = req.user.id;
     const status_id = 3; // Pending status
     const undo_reason = body.undo_reason || null;
-    return this.warehouseHurdlesService.toggleStatus(
+    return this.locationHurdlesService.toggleStatus(
       id,
       userId,
       status_id,
@@ -138,29 +136,29 @@ export class WarehouseHurdlesController {
   }
 
   @Patch(":id/toggle-status-for-approval")
-  @RequirePermissions({ module: "STORE HURDLES", action: "EDIT" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "EDIT" })
   async toggleStatusForApproval(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
     const userId = req.user.id;
     const status_id = 6; // For Approval status
-    return this.warehouseHurdlesService.toggleStatus(id, userId, status_id);
+    return this.locationHurdlesService.toggleStatus(id, userId, status_id);
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STORE HURDLES", action: "ACTIVATE" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
     const userId = req.user.id;
     const status_id = 2; // Active status
-    return this.warehouseHurdlesService.toggleStatus(id, userId, status_id);
+    return this.locationHurdlesService.toggleStatus(id, userId, status_id);
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STORE HURDLES", action: "DEACTIVATE" })
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: any,
@@ -168,14 +166,14 @@ export class WarehouseHurdlesController {
   ) {
     const userId = req.user.id;
     const status_id = 2; // Inactive status
-    return this.warehouseHurdlesService.toggleStatus(id, userId, status_id);
+    return this.locationHurdlesService.toggleStatus(id, userId, status_id);
   }
 
   @Post("upload-excel")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
-        destination: "./uploads/warehouse-hurdles",
+        destination: "./uploads/location-hurdles",
         filename: (req, file, cb) => {
           const uniqueSuffix =
             Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -197,10 +195,9 @@ export class WarehouseHurdlesController {
     const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
     const userId = req.user.id;
     const roleId = req.user.role_id;
-
     // Get allowed location_ids for this user/role
     const allowedLocationIds =
-      await this.warehouseHurdlesService.getAllowedLocationIds(userId, roleId);
+      await this.locationHurdlesService.getAllowedLocationIds(userId, roleId);
     // Map Excel columns to DTOs
     const records = json.map((row) => {
       let hurdle_date = null;
@@ -230,22 +227,25 @@ export class WarehouseHurdlesController {
             ? Number(row["HURDLE QTY"])
             : null,
         hurdle_date,
-        warehouse_ifs: row["STORE IFS"],
+        location_name: row["LOCATION NAME"],
+        location_code: row["LOCATION CODE"],
         item_category_code: row["ITEM CATEGORY CODE"],
+        location_rate: row["LOCATION RATE"],
       };
     });
+
     // Audit trail
     await this.auditTrailService.create(
       {
-        service: "WarehouseHurdlesController",
+        service: "LocationHurdlesController",
         method: "uploadExcel",
-        raw_data: JSON.stringify(records).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
-        description: `Bulk upload warehouse hurdles from Excel. Rows: ${records.length}`,
+        raw_data: JSON.stringify(records).slice(0, 65535),
+        description: `Bulk upload location hurdles from Excel. Rows: ${records.length}`,
         status_id: 1,
       },
       userId,
     );
-    return this.warehouseHurdlesService.bulkUploadFromExcel(
+    return this.locationHurdlesService.bulkUploadFromExcel(
       records,
       userId,
       allowedLocationIds,

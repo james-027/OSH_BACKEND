@@ -8,6 +8,8 @@ import { ApiAuthAccess } from "../../entities/ApiAuthAccess";
 import { ApiLogs } from "../../entities/ApiLogs";
 import { WarehouseHurdle } from "../../entities/WarehouseHurdle";
 import { WarehouseHurdleCategory } from "../../entities/WarehouseHurdleCategory";
+import { LocationHurdle } from "../../entities/LocationHurdle";
+import { LocationHurdleCategory } from "../../entities/LocationHurdleCategory";
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { WarehouseHurdleCategory } from "../../entities/WarehouseHurdleCategory"
       ApiLogs,
       WarehouseHurdle,
       WarehouseHurdleCategory,
+      LocationHurdle,
+      LocationHurdleCategory,
     ]),
   ],
   controllers: [ApiController],

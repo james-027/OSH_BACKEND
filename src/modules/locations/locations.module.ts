@@ -19,12 +19,25 @@ import { SSEModule } from "../sse/sse.module";
 import { UserLocations } from "src/entities/UserLocations";
 import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { LocationHurdlesController } from "src/controllers/location-hurdles.controller";
+import { LocationHurdleCategoriesController } from "src/controllers/location-hurdle-categories.controller";
+import { LocationHurdlesService } from "src/services/location-hurdles.service";
+import { LocationHurdleCategoriesService } from "src/services/location-hurdle-categories.service";
+import { LocationHurdle } from "src/entities/LocationHurdle";
+import { LocationHurdleCategory } from "src/entities/LocationHurdleCategory";
+import { ItemCategoriesService } from "src/services/item-categories.service";
+import { ActionLogsService } from "src/services/action-logs.service";
+import { SyncLog } from "src/entities/syncLog";
+import { ItemCategory } from "src/entities/ItemCategory";
+import { ActionLog } from "src/entities/ActionLog";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Location,
       LocationType,
+      LocationHurdle,
+      LocationHurdleCategory,
       User,
       Status,
       UserPermissions,
@@ -34,17 +47,34 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
       UserLocations,
       RoleLocationPreset,
       TransactionSequence,
+      SyncLog,
+      ItemCategory,
+      ActionLog,
     ]),
     UsersModule,
     SSEModule,
   ],
-  controllers: [LocationsController, LocationTypesController],
+  controllers: [
+    LocationsController,
+    LocationTypesController,
+    LocationHurdlesController,
+    LocationHurdleCategoriesController,
+  ],
   providers: [
     LocationsService,
     LocationTypesService,
+    LocationHurdlesService,
+    LocationHurdleCategoriesService,
     UserAuditTrailCreateService,
     CommonUtilitiesService,
+    ItemCategoriesService,
+    ActionLogsService,
   ],
-  exports: [LocationsService, LocationTypesService],
+  exports: [
+    LocationsService,
+    LocationTypesService,
+    LocationHurdlesService,
+    LocationHurdleCategoriesService,
+  ],
 })
 export class LocationsModule {}
