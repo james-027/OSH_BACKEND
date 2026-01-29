@@ -5,6 +5,8 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In } from "typeorm";
+import { promises as fs } from "fs";
+import * as path from "path";
 
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
@@ -632,6 +634,61 @@ export class ReqTransactionHeadersService {
         }
       }
 
+      // Step: Rename folder to mark as cancelled after successful database updates
+      if (results.cancelled_headers > 0) {
+        try {
+          const folderPath = path.join(
+            process.cwd(),
+            "uploads/req-transactions",
+            transNumber,
+          );
+          const newFolderPath = path.join(
+            process.cwd(),
+            "uploads/req-transactions",
+            `xx-${transNumber}`,
+          );
+
+          // Check if folder exists before renaming
+          try {
+            await fs.access(folderPath);
+            // Folder exists, rename it
+            await fs.rename(folderPath, newFolderPath);
+            results["folder_renamed"] = true;
+            results["folder_old_name"] = transNumber;
+            results["folder_new_name"] = `xx-${transNumber}`;
+
+            // Log folder rename in audit trail
+            await this.userAuditTrailCreateService.create(
+              {
+                service: "ReqTransactionHeadersService",
+                method: "toggleStatusCancelByTransNumber",
+                raw_data: JSON.stringify({
+                  transNumber,
+                  oldFolderName: transNumber,
+                  newFolderName: `xx-${transNumber}`,
+                }),
+                description: `Marked batch folder as cancelled: renamed 'uploads/req-transactions/${transNumber}' to 'uploads/req-transactions/xx-${transNumber}' for trans_number: ${transNumber}`,
+                status_id: 1,
+              },
+              userId,
+            );
+          } catch (accessError) {
+            // Folder doesn't exist, skip rename gracefully
+            results["folder_renamed"] = false;
+            results["folder_not_found"] = true;
+            logger.warn(
+              `Folder for trans_number ${transNumber} not found at ${folderPath}, skipping rename`,
+            );
+          }
+        } catch (folderError) {
+          // Log any unexpected errors but don't fail the cancellation
+          logger.error(
+            `Error renaming folder for trans_number ${transNumber}: ${folderError.message}`,
+          );
+          results["folder_rename_error"] = folderError.message;
+        }
+      }
+
       return results;
     } catch (error) {
       if (
@@ -1158,7 +1215,7 @@ export class ReqTransactionHeadersService {
             compressedBuffer,
             file.filename,
             correspondingHeader.req_transaction_header_id,
-            "uploads/req-transactions",
+            "uploads/req-transactions/" + trans_number,
           );
 
           //* Create transaction detail with saved file path
