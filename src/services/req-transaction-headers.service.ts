@@ -704,6 +704,80 @@ export class ReqTransactionHeadersService {
   }
 
   /**
+   * Rollback warehouse transaction: Delete header, dues, and revert warehouse_requirement_due status
+   * Also mark file as deleted (prefix with "del-") if it exists
+   * Granular control for partial rollback per warehouse
+   */
+  private async rollbackWarehouseTransaction(
+    headerInfo: {
+      warehouse_id: number;
+      req_transaction_header_id: number;
+      req_transaction_due_id: number;
+    },
+    filename: string,
+    userId: number,
+  ): Promise<void> {
+    try {
+      // Step 1: Delete transaction due if it exists
+      if (headerInfo.req_transaction_due_id) {
+        const due = await this.reqTransactionDuesRepository.findOne({
+          where: { id: headerInfo.req_transaction_due_id },
+          relations: ["warehouseRequirementDue"],
+        });
+
+        if (due && due.warehouseRequirementDue) {
+          // Revert warehouse requirement due to active status
+          due.warehouseRequirementDue.status_id = 1; // active
+          due.warehouseRequirementDue.updated_by = userId;
+          await this.warehouseRequirementDuesRepository.save(
+            due.warehouseRequirementDue,
+          );
+        }
+
+        // Delete the transaction due
+        await this.reqTransactionDuesRepository.delete(
+          headerInfo.req_transaction_due_id,
+        );
+      }
+
+      // Step 2: Delete transaction header
+      await this.reqTransactionHeadersRepository.delete(
+        headerInfo.req_transaction_header_id,
+      );
+
+      // Step 3: Mark file as deleted by renaming (if physical file exists)
+      const sanitizedFilename = `del-${filename}`;
+      logger.info(
+        `Rollback: Marked file as deleted - renamed to: ${sanitizedFilename}`,
+      );
+
+      // Audit trail for rollback
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionHeadersService",
+          method: "createWithDetails (rollback)",
+          raw_data: JSON.stringify({
+            warehouse_id: headerInfo.warehouse_id,
+            req_transaction_header_id: headerInfo.req_transaction_header_id,
+            req_transaction_due_id: headerInfo.req_transaction_due_id,
+            filename: filename,
+          }),
+          description: `Rolled back warehouse transaction - deleted header ID: ${headerInfo.req_transaction_header_id}, due ID: ${headerInfo.req_transaction_due_id}, reverted warehouse_requirement_due to active, marked file as: ${sanitizedFilename}`,
+          status_id: 1,
+        },
+        userId,
+      );
+    } catch (rollbackError) {
+      logger.error(
+        `Critical error during rollback for warehouse ${headerInfo.warehouse_id}: ${rollbackError.message}`,
+      );
+      throw new Error(
+        `Failed to rollback transaction for warehouse ${headerInfo.warehouse_id}: ${rollbackError.message}`,
+      );
+    }
+  }
+
+  /**
    * Complex transaction creation with cascade operations
    * Creates headers, details, dues, and warehouse_requirement_dues
    */
@@ -712,7 +786,7 @@ export class ReqTransactionHeadersService {
     userId: number,
     accessKeyId: number,
   ): Promise<any> {
-    const successResults: any[] = [];
+    let successResults: any[] = [];
     const errors: any[] = [];
 
     try {
@@ -821,7 +895,7 @@ export class ReqTransactionHeadersService {
       //   calculatedTransDate,
       // });
 
-      // Generate using bulletproof service with database-level locking
+      //* Generate using bulletproof service with database-level locking
       const trans_number =
         await this.commonUtilitiesService.generateTransactionNumber({
           transaction_type: "REQUIREMENTS",
@@ -832,6 +906,61 @@ export class ReqTransactionHeadersService {
           currentDate: new Date(calculatedTransDate),
           abbr: location_abbr,
         });
+
+      //* Step 3.5: PRE-VALIDATE ALL FILES (fail fast before creating any transactions)
+      const fileValidationErrors: any[] = [];
+      for (const file of createDto.files) {
+        // Validate filename format
+        const parts = file.filename.split("-");
+        if (parts.length < 2) {
+          fileValidationErrors.push({
+            file: file.filename,
+            reason:
+              "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
+            field: "filename",
+          });
+          continue;
+        }
+
+        const warehouseIfs = parts[0].trim();
+        if (!warehouseByIfs.has(warehouseIfs)) {
+          fileValidationErrors.push({
+            file: file.filename,
+            reason: "Store IFS not found in provided warehouses",
+            field: "warehouse_ifs",
+            warehouse_ifs: warehouseIfs,
+          });
+          continue;
+        }
+
+        // Validate file integrity
+        const validation = FileUploadHandler.validateFile(
+          file.filename,
+          file.buffer,
+        );
+        if (!validation.valid) {
+          fileValidationErrors.push({
+            file: file.filename,
+            reason: validation.error || "File validation failed",
+            field: "file_validation",
+          });
+          continue;
+        }
+      }
+
+      //* If ANY file fails validation, reject entire batch and return errors
+      if (fileValidationErrors.length > 0) {
+        return {
+          success: {
+            warehouse_ids: [],
+            warehouse_names: [],
+            req_transaction_header_ids: [],
+            req_transaction_header_count: 0,
+            message: `Batch rejected - file validation errors found (${fileValidationErrors.length} file(s) failed)`,
+          },
+          errors: fileValidationErrors,
+        };
+      }
 
       //* Step 4: Validation and header creation per warehouse
       for (const warehouse of warehouses) {
@@ -1148,33 +1277,13 @@ export class ReqTransactionHeadersService {
         }
       }
 
-      //* Step 10: Process files and create transaction details
+      //* Step 10: Process files and create transaction details (all files pre-validated)
       for (const file of createDto.files) {
         try {
-          //* Parse warehouse_ifs from filename
-          const parts = file.filename.split(" - ");
-          if (parts.length < 2) {
-            errors.push({
-              file: file.filename,
-              reason:
-                "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
-              field: "filename",
-            });
-            continue;
-          }
-
+          //* Parse warehouse_ifs from filename (already validated in pre-validation step)
+          const parts = file.filename.split("-");
           const warehouseIfs = parts[0].trim();
           const warehouseFromFile = warehouseByIfs.get(warehouseIfs);
-
-          if (!warehouseFromFile) {
-            errors.push({
-              file: file.filename,
-              reason: "Store IFS not found in provided warehouses",
-              field: "warehouse_ifs",
-              warehouse_ifs: warehouseIfs,
-            });
-            continue;
-          }
 
           //* Find the corresponding header created for this warehouse
           const correspondingHeader = successResults.find(
@@ -1186,20 +1295,6 @@ export class ReqTransactionHeadersService {
               file: file.filename,
               reason: `No transaction header created for store ${warehouseFromFile.id}`,
               field: "req_transaction_header_id",
-            });
-            continue;
-          }
-
-          //* Validate file before saving
-          const validation = FileUploadHandler.validateFile(
-            file.filename,
-            file.buffer,
-          );
-          if (!validation.valid) {
-            errors.push({
-              file: file.filename,
-              reason: validation.error || "File validation failed",
-              field: "file_validation",
             });
             continue;
           }
@@ -1229,10 +1324,42 @@ export class ReqTransactionHeadersService {
 
           await this.reqTransactionDetailsService.create(detailDto, userId);
         } catch (fileError) {
+          //* Try to extract warehouse_id from file for rollback
+          try {
+            const parts = file.filename.split("-");
+            if (parts.length >= 2) {
+              const warehouseIfs = parts[0].trim();
+              const warehouse = warehouseByIfs.get(warehouseIfs);
+              if (warehouse) {
+                const correspondingHeader = successResults.find(
+                  (s) => s.warehouse_id === warehouse.id,
+                );
+                if (correspondingHeader) {
+                  //* ROLLBACK on file processing error
+                  await this.rollbackWarehouseTransaction(
+                    correspondingHeader,
+                    file.filename,
+                    userId,
+                  );
+                  successResults = successResults.filter(
+                    (s) =>
+                      s.req_transaction_header_id !==
+                      correspondingHeader.req_transaction_header_id,
+                  );
+                }
+              }
+            }
+          } catch (rollbackError) {
+            logger.error(
+              `Failed to rollback transaction for file ${file.filename}: ${rollbackError.message}`,
+            );
+          }
+
           errors.push({
             file: file.filename,
             reason: fileError.message || "Error processing file",
             field: "file_processing",
+            rollback_status: "attempted",
           });
         }
       }

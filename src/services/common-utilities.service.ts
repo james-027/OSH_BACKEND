@@ -117,8 +117,8 @@ export class CommonUtilitiesService {
 
     const parts = fileName.split("-");
     let newFileName = "";
-    if (parts.length === 5) {
-      newFileName = `${parts[3].trim()} - ${parts[4].trim()}`;
+    for (let i = 3; i < parts.length; i++) {
+      newFileName += (i > 3 ? " - " : "") + parts[i].trim();
     }
     return newFileName;
   }
