@@ -24,9 +24,14 @@ export class CreateLocationHurdleDto {
   @IsArray()
   @ArrayNotEmpty()
   location_ids: number[];
+
+  @IsArray()
+  @ArrayNotEmpty()
   item_category_ids: number[];
 
   @IsOptional()
   status_id?: number;
+
+  @IsOptional()
   remarks?: string;
 }

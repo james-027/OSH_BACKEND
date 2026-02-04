@@ -170,7 +170,6 @@ export class LocationHurdlesService {
         ...mainDto,
         location_id,
         created_by: userId,
-        status_id: 1,
       });
       const saved = await this.locationHurdlesRepository.save(newHurdle);
       hurdles.push(saved);
@@ -216,13 +215,8 @@ export class LocationHurdlesService {
     updateDto: UpdateLocationHurdleDto,
     userId: number,
   ): Promise<LocationHurdle> {
-    const {
-      location_ids,
-      item_category_ids,
-      status_id,
-      ss_hurdle_qty,
-      ...mainDto
-    } = updateDto;
+    const { location_ids, item_category_ids } = updateDto;
+
     const hurdle = await this.locationHurdlesRepository.findOne({
       where: { id },
     });
@@ -230,13 +224,12 @@ export class LocationHurdlesService {
       throw new NotFoundException(`Location hurdle with ID ${id} not found`);
     }
 
-    const old_status_id = hurdle.status_id;
-
-    if (location_ids && location_ids.length === 1 && mainDto.hurdle_date) {
+    // Duplicate check if updating hurdle_date or location
+    if (location_ids && location_ids.length === 1 && updateDto.hurdle_date) {
       const checkDuplicate = await this.locationHurdlesRepository.findOne({
         where: {
           location_id: location_ids[0],
-          hurdle_date: mainDto.hurdle_date,
+          hurdle_date: updateDto.hurdle_date,
           id: Not(id),
         },
       });
@@ -246,9 +239,12 @@ export class LocationHurdlesService {
         );
       }
     }
-    Object.assign(hurdle, mainDto, {
+
+    // Update all provided fields from updateDto
+    Object.assign(hurdle, updateDto, {
       updated_by: userId,
     });
+
     try {
       const saved = await this.locationHurdlesRepository.save(hurdle);
 
