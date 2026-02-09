@@ -162,11 +162,13 @@ export class WarehouseRequirementDuesService {
   /**
    * Batch create dues for multiple warehouse requirements with bulk insertion
    * @param warehouseRequirementIds Array of warehouse requirement IDs
+   * @param year Specific year for due dates (default: current year)
    * @param chunkSize Batch size for bulk insertion (default 1000)
    * @param userId User ID for audit (default 1)
    */
   async createDuesForWarehouseRequirements(
     warehouseRequirementIds: number[],
+    year: number = new Date().getFullYear(),
     chunkSize: number = 1000,
     userId: number = 1,
   ): Promise<{
@@ -210,18 +212,18 @@ export class WarehouseRequirementDuesService {
         const requirement = warehouseRequirement.requirement;
 
         // Calculate dates
-        const currentYear = new Date().getFullYear();
         let dueStartDate = new Date(
-          currentYear,
+          year,
           requirement.requirement_start - 1,
           requirement.requirement_start_days,
         );
 
         let dueEndDate: Date;
         switch (requirement.renewal_type_id) {
-          case 1: // ONE TIME
-            dueStartDate = new Date();
-            dueEndDate = new Date();
+          case 1: // ONE TIME - use today's month/day in specified year
+            const today = new Date();
+            dueStartDate = new Date(year, today.getMonth(), today.getDate());
+            dueEndDate = new Date(year, today.getMonth(), today.getDate());
             break;
           case 2: // ANNUAL
             dueEndDate = new Date(dueStartDate);

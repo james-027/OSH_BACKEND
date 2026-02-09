@@ -181,7 +181,11 @@ export class WarehouseRequirementsService {
 
     // If no requirements found, return empty result
     if (warehouseRequirementIds.length === 0) {
-      return { requirements: [], duesMap: new Map(), warehouseRequirementIds: [] };
+      return {
+        requirements: [],
+        duesMap: new Map(),
+        warehouseRequirementIds: [],
+      };
     }
 
     // Query dues separately with date filtering
@@ -499,7 +503,7 @@ export class WarehouseRequirementsService {
    * Runs every minute to check warehouses with rem_status_id of 8 or 9
    * and creates warehouse_requirements for all active requirements
    */
-  async syncWarehouseRequirements(): Promise<{
+  async syncWarehouseRequirements(year: number = 2025): Promise<{
     inserted: number;
     skipped: number;
     errors: string[];
@@ -649,6 +653,7 @@ export class WarehouseRequirementsService {
           const duesResult =
             await this.warehouseRequirementDuesService.createDuesForWarehouseRequirements(
               insertedWrIds,
+              year,
               1000,
               1,
             );
@@ -665,6 +670,7 @@ export class WarehouseRequirementsService {
           const startsResult =
             await this.warehouseRequirementStartsService.createStartsForWarehouseRequirements(
               insertedWrIds,
+              year,
               1000,
               1,
             );

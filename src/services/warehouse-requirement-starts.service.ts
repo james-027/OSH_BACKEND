@@ -127,11 +127,13 @@ export class WarehouseRequirementStartsService {
    * Batch create starts for multiple warehouse requirements with bulk insertion
    * One start per warehouse_requirement_id (non-recurring)
    * @param warehouseRequirementIds Array of warehouse requirement IDs
+   * @param year Specific year for start dates (default: current year)
    * @param chunkSize Batch size for bulk insertion (default 1000)
    * @param userId User ID for audit (default 1)
    */
   async createStartsForWarehouseRequirements(
     warehouseRequirementIds: number[],
+    year: number = new Date().getFullYear(),
     chunkSize: number = 1000,
     userId: number = 1
   ): Promise<{
@@ -178,13 +180,13 @@ export class WarehouseRequirementStartsService {
         let startDate: Date;
 
         if (requirement.renewal_type_id === 1) {
-          // ONE TIME: use today
-          startDate = new Date();
+          // ONE TIME: use today's month/day in specified year
+          const today = new Date();
+          startDate = new Date(year, today.getMonth(), today.getDate());
         } else {
-          // OTHER TYPES: use requirement_start month/day + current year
-          const currentYear = new Date().getFullYear();
+          // OTHER TYPES: use requirement_start month/day + specified year
           startDate = new Date(
-            currentYear,
+            year,
             requirement.requirement_start - 1,
             requirement.requirement_start_days
           );
