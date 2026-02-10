@@ -22,7 +22,7 @@ import { UpdateWarehouseRequirementDto } from "../dto/UpdateWarehouseRequirement
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class WarehouseRequirementsSyncController {
   constructor(
-    private readonly warehouseRequirementsService: WarehouseRequirementsService
+    private readonly warehouseRequirementsService: WarehouseRequirementsService,
   ) {}
 
   @Get()
@@ -41,12 +41,12 @@ export class WarehouseRequirementsSyncController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async create(
     @Body() createWarehouseRequirementDto: CreateWarehouseRequirementDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.create(
       createWarehouseRequirementDto,
-      userId
+      userId,
     );
   }
 
@@ -55,13 +55,13 @@ export class WarehouseRequirementsSyncController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateWarehouseRequirementDto: UpdateWarehouseRequirementDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.update(
       id,
       updateWarehouseRequirementDto,
-      userId
+      userId,
     );
   }
 
@@ -69,7 +69,7 @@ export class WarehouseRequirementsSyncController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.toggleStatus(id, userId);
@@ -79,7 +79,7 @@ export class WarehouseRequirementsSyncController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseRequirementsService.toggleStatus(id, userId);
@@ -88,6 +88,7 @@ export class WarehouseRequirementsSyncController {
   @Post("sync")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async manualSync(@Request() req) {
-    return this.warehouseRequirementsService.syncWarehouseRequirements();
+    const year = Number(process.env.SYNC_YEAR) || new Date().getFullYear();
+    return this.warehouseRequirementsService.syncWarehouseRequirements(year);
   }
 }

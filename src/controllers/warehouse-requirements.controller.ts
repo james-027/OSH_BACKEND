@@ -213,4 +213,24 @@ export class WarehouseRequirementsController {
   async manualSync(@Request() req) {
     return this.warehouseRequirementsService.syncWarehouseRequirements();
   }
+
+  /**
+   * Sync warehouse requirement dues periodically for recurring requirements
+   * POST /warehouse-requirements/periodic-sync
+   * Expects warehouse_requirements and warehouse_requirement_starts already created
+   * Creates dues for all recurring requirements (non-ONE TIME) for specified year
+   */
+  @Post("periodic-sync")
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
+  async periodicSync(
+    @Query("year") year?: string,
+    @Request() req?,
+  ) {
+    const userId = req?.user?.id || 1;
+    const yearParam = year ? parseInt(year, 10) : new Date().getFullYear();
+    return this.warehouseRequirementsService.syncWarehouseRequirementsPeriodically(
+      yearParam,
+      userId,
+    );
+  }
 }
