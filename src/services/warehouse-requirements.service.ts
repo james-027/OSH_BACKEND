@@ -726,6 +726,122 @@ export class WarehouseRequirementsService {
   }
 
   /**
+   * Create warehouse requirement dues for all recurring requirements (non-ONE TIME)
+   * Triggered manually via POST endpoint when needed
+   * Expects warehouse_requirements and warehouse_requirement_starts already exist
+   * Filters out ONE TIME (renewal_type_id = 1) at DATABASE LEVEL for optimal performance
+   * Checks for existing combination of (warehouse_requirement_id, due_start, due_end) before insertion
+   */
+  async syncWarehouseRequirementsPeriodically(
+    year: number = new Date().getFullYear(),
+    userId: number = 1,
+  ): Promise<{
+    created: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const result = {
+      created: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    logger.info("Starting warehouse requirements periodic sync...");
+
+    try {
+      // Query for active warehouse requirements with recurring requirements (renewal_type_id !== 1)
+      // Filter at database level for optimal performance
+      const recurringRequirementIds = await this.warehouseRequirementsRepository
+        .createQueryBuilder("wr")
+        .select("wr.id", "id")
+        .innerJoinAndSelect("wr.requirement", "requirement")
+        .where("wr.status_id = :status_id", { status_id: 1 })
+        .andWhere("requirement.renewal_type_id != :renewal_type_id", {
+          renewal_type_id: 1,
+        })
+        .getRawMany();
+
+      if (recurringRequirementIds.length === 0) {
+        return result;
+      }
+
+      // Extract IDs from query results
+      const wrIds = recurringRequirementIds.map((r) => r.id);
+
+      // Call the existing createDuesForWarehouseRequirements method
+      // It handles date calculations, unique constraint checking, and batch insertion
+      const duesResult =
+        await this.warehouseRequirementDuesService.createDuesForWarehouseRequirements(
+          wrIds,
+          year,
+          1000, // chunkSize
+          userId,
+        );
+
+      // Map results
+      result.created = duesResult.created;
+      result.skipped = duesResult.skipped;
+      result.errors = duesResult.errors;
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "WarehouseRequirementsService",
+          method: "syncWarehouseRequirementsPeriodically",
+          raw_data: JSON.stringify({
+            year,
+            recurringRequirementCount: wrIds.length,
+          }),
+          description: `Created warehouse requirement dues for ${result.created} requirements, skipped ${result.skipped} (year: ${year})`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      logger.info(
+        `Periodic sync completed: created ${result.created} dues, skipped ${result.skipped}, errors: ${result.errors.length}`,
+      );
+
+      // Log summary to sync_logs
+      try {
+        await this.syncLogRepository.save({
+          module: "WAREHOUSE REQUIREMENT DUE (PERIODIC)",
+          type: "success",
+          action: "data insertion",
+          message: `Created ${result.created} dues, skipped ${result.skipped}`,
+          row_data: JSON.stringify({
+            year,
+            created: result.created,
+            skipped: result.skipped,
+            errors: result.errors.length,
+          }),
+        });
+      } catch (logErr) {
+        // ignore logging failure
+      }
+
+      return result;
+    } catch (error) {
+      result.errors.push(`Periodic sync failed: ${error.message}`);
+
+      // Log fatal sync error
+      try {
+        await this.syncLogRepository.save({
+          module: "WAREHOUSE REQUIREMENT DUE (PERIODIC)",
+          type: "error",
+          action: "data insertion",
+          message: error.message || String(error),
+          row_data: JSON.stringify({ year: year }),
+        });
+      } catch (logErr) {
+        // ignore logging failure
+      }
+
+      return result;
+    }
+  }
+
+  /**
    * Get warehouses with base requirements and transacted requirements listing
    * Used to display warehouse overview with requirement counts and details
    */
