@@ -21,7 +21,7 @@ export class WarehouseRequirementStartsService {
     @InjectRepository(Requirement)
     private requirementsRepository: Repository<Requirement>,
     @InjectRepository(SyncLog)
-    private syncLogRepository: Repository<SyncLog>
+    private syncLogRepository: Repository<SyncLog>,
   ) {}
 
   /**
@@ -30,7 +30,7 @@ export class WarehouseRequirementStartsService {
    */
   async createStartForWarehouseRequirement(
     warehouseRequirementId: number,
-    userId: number = 1
+    userId: number = 1,
   ): Promise<WarehouseRequirementStart | null> {
     try {
       // Check if a start record already exists for this warehouse_requirement_id (unique check)
@@ -53,7 +53,7 @@ export class WarehouseRequirementStartsService {
 
       if (!warehouseRequirement) {
         throw new NotFoundException(
-          `Warehouse requirement with ID ${warehouseRequirementId} not found`
+          `Warehouse requirement with ID ${warehouseRequirementId} not found`,
         );
       }
 
@@ -61,7 +61,7 @@ export class WarehouseRequirementStartsService {
 
       if (!requirement) {
         throw new NotFoundException(
-          `Requirement not found for warehouse requirement ID ${warehouseRequirementId}`
+          `Requirement not found for warehouse requirement ID ${warehouseRequirementId}`,
         );
       }
 
@@ -77,7 +77,7 @@ export class WarehouseRequirementStartsService {
         startDate = new Date(
           currentYear,
           requirement.requirement_start - 1, // Month is 0-indexed in JS Date
-          requirement.requirement_start_days
+          requirement.requirement_start_days,
         );
       }
 
@@ -135,7 +135,7 @@ export class WarehouseRequirementStartsService {
     warehouseRequirementIds: number[],
     year: number = new Date().getFullYear(),
     chunkSize: number = 1000,
-    userId: number = 1
+    userId: number = 1,
   ): Promise<{
     created: number;
     skipped: number;
@@ -158,7 +158,7 @@ export class WarehouseRequirementStartsService {
           where: {
             id: In(warehouseRequirementIds),
           },
-          relations: ["requirement"],
+          relations: ["requirement", "warehouse"],
         });
 
       // Map for quick lookup
@@ -175,6 +175,13 @@ export class WarehouseRequirementStartsService {
         }
 
         const requirement = warehouseRequirement.requirement;
+        const warehouse = warehouseRequirement.warehouse;
+
+        // Get the year from warehouse.created_at and use the higher year
+        const warehouseCreatedYear = warehouse?.created_at
+          ? new Date(warehouse.created_at).getFullYear()
+          : year;
+        const effectiveYear = Math.max(year, warehouseCreatedYear);
 
         // Calculate start date based on renewal_type_id
         let startDate: Date;
@@ -182,13 +189,17 @@ export class WarehouseRequirementStartsService {
         if (requirement.renewal_type_id === 1) {
           // ONE TIME: use today's month/day in specified year
           const today = new Date();
-          startDate = new Date(year, today.getMonth(), today.getDate());
+          startDate = new Date(
+            effectiveYear,
+            today.getMonth(),
+            today.getDate(),
+          );
         } else {
           // OTHER TYPES: use requirement_start month/day + specified year
           startDate = new Date(
-            year,
+            effectiveYear,
             requirement.requirement_start - 1,
-            requirement.requirement_start_days
+            requirement.requirement_start_days,
           );
         }
 
@@ -228,7 +239,7 @@ export class WarehouseRequirementStartsService {
           result.created += savedChunk.length;
         } catch (chunkError) {
           result.errors.push(
-            `Failed to batch insert starts chunk: ${chunkError.message}`
+            `Failed to batch insert starts chunk: ${chunkError.message}`,
           );
         }
       }
