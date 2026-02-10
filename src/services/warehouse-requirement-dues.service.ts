@@ -193,7 +193,7 @@ export class WarehouseRequirementDuesService {
           where: {
             id: In(warehouseRequirementIds),
           },
-          relations: ["requirement", "requirement.renewalType"],
+          relations: ["requirement", "warehouse", "requirement.renewalType"],
         });
 
       // Map for quick lookup
@@ -210,10 +210,17 @@ export class WarehouseRequirementDuesService {
         }
 
         const requirement = warehouseRequirement.requirement;
+        const warehouse = warehouseRequirement.warehouse;
+
+        // Get the year from warehouse.created_at and use the higher year
+        const warehouseCreatedYear = warehouse?.created_at
+          ? new Date(warehouse.created_at).getFullYear()
+          : year;
+        const effectiveYear = Math.max(year, warehouseCreatedYear);
 
         // Calculate dates
         let dueStartDate = new Date(
-          year,
+          effectiveYear,
           requirement.requirement_start - 1,
           requirement.requirement_start_days,
         );
@@ -222,8 +229,16 @@ export class WarehouseRequirementDuesService {
         switch (requirement.renewal_type_id) {
           case 1: // ONE TIME - use today's month/day in specified year
             const today = new Date();
-            dueStartDate = new Date(year, today.getMonth(), today.getDate());
-            dueEndDate = new Date(year, today.getMonth(), today.getDate());
+            dueStartDate = new Date(
+              effectiveYear,
+              today.getMonth(),
+              today.getDate(),
+            );
+            dueEndDate = new Date(
+              effectiveYear,
+              today.getMonth(),
+              today.getDate(),
+            );
             break;
           case 2: // ANNUAL
             dueEndDate = new Date(dueStartDate);
