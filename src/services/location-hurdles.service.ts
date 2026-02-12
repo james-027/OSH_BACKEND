@@ -10,7 +10,9 @@ import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 
 import { LocationHurdle } from "src/entities/LocationHurdle";
+import { WarehouseHurdle } from "src/entities/WarehouseHurdle";
 import { Location } from "src/entities/Location";
+import { Warehouse } from "src/entities/Warehouse";
 import { CreateLocationHurdleDto } from "src/dto/CreateLocationHurdleDto";
 import { UpdateLocationHurdleDto } from "src/dto/UpdateLocationHurdleDto";
 import { ResponseMapperService } from "./response-mapper.service";
@@ -31,6 +33,10 @@ export class LocationHurdlesService {
   constructor(
     @InjectRepository(LocationHurdle)
     private locationHurdlesRepository: Repository<LocationHurdle>,
+    @InjectRepository(WarehouseHurdle)
+    private warehouseHurdlesRepository: Repository<WarehouseHurdle>,
+    @InjectRepository(Warehouse)
+    private warehousesRepository: Repository<Warehouse>,
     private usersService: UsersService,
     private lhcService: LocationHurdleCategoriesService,
     private auditTrailService: UserAuditTrailCreateService,
@@ -186,6 +192,16 @@ export class LocationHurdlesService {
       } else {
         result.push({ hurdle: saved, categories: [] });
       }
+
+      // Action log
+      await this.ActionLogsService.logAction({
+        action_id: 1, // add
+        ref_id: saved.id,
+        module_id: 31, // LOCATION HURDLES
+        description: `Created location hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${saved.status_id === 3 ? "Pending" : "For Approval"}`,
+        raw_data: JSON.stringify(mainDto),
+        created_by: userId,
+      });
     }
 
     // Audit trail
@@ -215,7 +231,8 @@ export class LocationHurdlesService {
     updateDto: UpdateLocationHurdleDto,
     userId: number,
   ): Promise<LocationHurdle> {
-    const { location_ids, item_category_ids } = updateDto;
+    const { location_ids, item_category_ids, status_id, ss_hurdle_qty } =
+      updateDto;
 
     const hurdle = await this.locationHurdlesRepository.findOne({
       where: { id },
@@ -223,6 +240,8 @@ export class LocationHurdlesService {
     if (!hurdle) {
       throw new NotFoundException(`Location hurdle with ID ${id} not found`);
     }
+
+    const old_status_id = hurdle.status_id;
 
     // Duplicate check if updating hurdle_date or location
     if (location_ids && location_ids.length === 1 && updateDto.hurdle_date) {
@@ -238,6 +257,10 @@ export class LocationHurdlesService {
           "Location hurdle with this date already exists",
         );
       }
+    } else {
+      throw new BadRequestException(
+        "Multiple location are not allowed in update operation",
+      );
     }
 
     // Update all provided fields from updateDto
@@ -270,6 +293,25 @@ export class LocationHurdlesService {
         },
         userId,
       );
+
+      const status_change =
+        old_status_id !== status_id && status_id !== undefined;
+      let description = `Updated warehouse hurdle with hurdle qty ${ss_hurdle_qty}`;
+      if (status_change) {
+        const newStatusName = status_id === 3 ? "Pending" : "For Approval";
+        const oldStatusName = old_status_id === 3 ? "Pending" : "For Approval";
+        description = `Updated status from ${oldStatusName} to ${newStatusName} with hurdle qty ${ss_hurdle_qty}`;
+      }
+
+      // Action log
+      await this.ActionLogsService.logAction({
+        action_id: 2, // edit
+        ref_id: saved.id,
+        module_id: 31, // LOCATION HURDLES
+        description: description,
+        raw_data: JSON.stringify(updateDto),
+        created_by: userId,
+      });
 
       // SSE Events
       try {
@@ -342,7 +384,7 @@ export class LocationHurdlesService {
     await this.ActionLogsService.logAction({
       action_id: action_id,
       ref_id: id,
-      module_id: 17, // Assuming location hurdles has module_id 17
+      module_id: 31,
       description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} location hurdle.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
@@ -413,7 +455,7 @@ export class LocationHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: action_id,
         ref_id: hurdle.id,
-        module_id: 17,
+        module_id: 31,
         description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} location hurdle.`,
         raw_data: JSON.stringify({
           id: hurdle.id,
@@ -436,9 +478,8 @@ export class LocationHurdlesService {
   }
 
   async findOneHistory(ref_id: number) {
-    // Note: SyncLog doesn't have ref_id field, filter records from action logs or audit trail instead
-    // For now, return empty array or implement with audit trail service
-    return [];
+    const module_id = 31;
+    return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
   async bulkUploadFromExcel(
@@ -547,6 +588,7 @@ export class LocationHurdlesService {
                 hurdle_date: formattedDate,
                 location_rate: record.location_rate || 0,
                 item_category_ids: [itemCategory.id],
+                status_id: 3,
               },
               userId,
             );
@@ -599,5 +641,200 @@ export class LocationHurdlesService {
       userId,
       roleId,
     );
+  }
+
+  /**
+   * Generate Location Hurdles vs Warehouse Hurdles comparison report
+   * Compares location_hurdles (declared) vs warehouse_hurdles (actual operations)
+   * All filtering done at database level for optimal performance
+   *
+   * Filters: location_ids, region, year, trans_date (YYYY-MM-01), status_id
+   * trans_date filters to exact month using hurdle_date = trans_date
+   * year filters using YEAR(hurdle_date) = year
+   */
+  async generateReport(filters?: {
+    location_ids?: number[];
+    region?: string;
+    year?: number;
+    trans_date?: string; // YYYY-MM-01 format, optional
+    status_ids?: number[];
+    user_id?: number;
+    role_id?: number;
+  }): Promise<any[]> {
+    try {
+      const statusIds = filters?.status_ids || [3, 6, 7]; // pending, for-approval, approved
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        filters?.user_id,
+        filters?.role_id,
+      );
+
+      // Build location hurdles query with all filters at database level
+      let locationQuery = this.locationHurdlesRepository
+        .createQueryBuilder("lh")
+        .innerJoinAndSelect("lh.location", "location")
+        .leftJoinAndSelect("location.region", "region")
+        .leftJoinAndSelect("lh.status", "status")
+        .where("lh.status_id IN (:...statusIds)", { statusIds });
+
+      if (allowedLocationIds && allowedLocationIds.length > 0) {
+        locationQuery = locationQuery.andWhere(
+          "lh.location_id IN (:...allowedLocationIds)",
+          { allowedLocationIds },
+        );
+      }
+
+      if (filters?.location_ids && filters.location_ids.length > 0) {
+        locationQuery = locationQuery.andWhere(
+          "lh.location_id IN (:...locationIds)",
+          { locationIds: filters.location_ids },
+        );
+      }
+
+      if (filters?.region) {
+        locationQuery = locationQuery.andWhere(
+          "LOWER(region.region_name) = LOWER(:region)",
+          { region: filters.region },
+        );
+      }
+
+      if (filters?.year) {
+        locationQuery = locationQuery.andWhere("YEAR(lh.hurdle_date) = :year", {
+          year: filters.year,
+        });
+      }
+
+      if (filters?.trans_date) {
+        locationQuery = locationQuery.andWhere("lh.hurdle_date = :trans_date", {
+          trans_date: filters.trans_date,
+        });
+      }
+
+      const locationHurdles = await locationQuery.getMany();
+
+      // Build warehouse hurdles query with same filters at database level
+      let warehouseQuery = this.warehouseHurdlesRepository
+        .createQueryBuilder("wh")
+        .innerJoinAndSelect("wh.warehouse", "warehouse")
+        .innerJoinAndSelect("warehouse.location", "location")
+        .leftJoinAndSelect("location.region", "region")
+        .where("wh.status_id IN (:...statusIds)", { statusIds });
+
+      if (allowedLocationIds && allowedLocationIds.length > 0) {
+        warehouseQuery = warehouseQuery.andWhere(
+          "warehouse.location_id IN (:...allowedLocationIds)",
+          { allowedLocationIds },
+        );
+      }
+
+      if (filters?.location_ids && filters.location_ids.length > 0) {
+        warehouseQuery = warehouseQuery.andWhere(
+          "warehouse.location_id IN (:...locationIds)",
+          { locationIds: filters.location_ids },
+        );
+      }
+
+      if (filters?.region) {
+        warehouseQuery = warehouseQuery.andWhere(
+          "LOWER(region.region_name) = LOWER(:region)",
+          { region: filters.region },
+        );
+      }
+
+      if (filters?.year) {
+        warehouseQuery = warehouseQuery.andWhere(
+          "YEAR(wh.hurdle_date) = :year",
+          { year: filters.year },
+        );
+      }
+
+      if (filters?.trans_date) {
+        warehouseQuery = warehouseQuery.andWhere(
+          "wh.hurdle_date = :trans_date",
+          { trans_date: filters.trans_date },
+        );
+      }
+
+      const warehouseHurdles = await warehouseQuery.getMany();
+
+      // Get all warehouses by location for quick lookup
+      const warehousesByLocation = new Map<number, number[]>(); // location_id -> [warehouse_ids]
+      for (const wh of warehouseHurdles) {
+        const locationId = wh.warehouse.location_id;
+        if (!warehousesByLocation.has(locationId)) {
+          warehousesByLocation.set(locationId, []);
+        }
+        warehousesByLocation.get(locationId).push(wh.warehouse_id);
+      }
+
+      // Build report by iterating location hurdles
+      // Since all date filtering is done in DB, no need for year/month comparison
+      const report = [];
+      const monthNames = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+
+      for (const lh of locationHurdles) {
+        const hurdleDate = new Date(lh.hurdle_date);
+        const year = hurdleDate.getFullYear();
+        const month = hurdleDate.getMonth() + 1; // 1-indexed
+        const quarter = Math.ceil(month / 3);
+        const monthName = monthNames[month - 1];
+
+        // Get warehouses in this location
+        const warehouseIds = warehousesByLocation.get(lh.location_id) || [];
+
+        // Sum warehouse hurdles for this location
+        let totalWarehouseHurdleQty = 0;
+        for (const wh of warehouseHurdles) {
+          if (warehouseIds.includes(wh.warehouse_id)) {
+            totalWarehouseHurdleQty += wh.ss_hurdle_qty;
+          }
+        }
+
+        // Determine trend
+        const trend =
+          lh.ss_hurdle_qty <= totalWarehouseHurdleQty ? "UPWARD" : "DOWNWARD";
+
+        report.push({
+          year,
+          quarter,
+          month_no: month,
+          month: monthName,
+          region: lh.location.region?.region_name || null,
+          business_center: lh.location.location_name,
+          bc_hurdle_qty: lh.ss_hurdle_qty,
+          operations_total_hurdle_qty: totalWarehouseHurdleQty,
+          trend,
+          status: lh.status?.status_name || null,
+        });
+      }
+
+      // Sort by year, quarter, month
+      report.sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        if (a.quarter !== b.quarter) return a.quarter - b.quarter;
+        return a.month_no - b.month_no;
+      });
+
+      return report;
+    } catch (error) {
+      logger.error(
+        `Error generating location hurdles comparison report: ${error.message}`,
+      );
+      throw new Error(
+        `Failed to generate location hurdles comparison report: ${error.message}`,
+      );
+    }
   }
 }
