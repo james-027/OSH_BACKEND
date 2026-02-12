@@ -7,6 +7,7 @@ import { ActionsModule } from "../actions/actions.module";
 import { Action } from "src/entities/Action";
 import { TransactionsModule } from "../transactions/transactions.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
+import { LocationsModule } from "../locations/locations.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse
     ActionsModule,
     TransactionsModule,
     WarehouseRequirementsModule,
+    LocationsModule,
   ],
   controllers: [ReportsController],
 })

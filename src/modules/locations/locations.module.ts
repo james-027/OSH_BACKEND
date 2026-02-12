@@ -25,6 +25,8 @@ import { LocationHurdlesService } from "src/services/location-hurdles.service";
 import { LocationHurdleCategoriesService } from "src/services/location-hurdle-categories.service";
 import { LocationHurdle } from "src/entities/LocationHurdle";
 import { LocationHurdleCategory } from "src/entities/LocationHurdleCategory";
+import { WarehouseHurdle } from "src/entities/WarehouseHurdle";
+import { Warehouse } from "src/entities/Warehouse";
 import { ItemCategoriesService } from "src/services/item-categories.service";
 import { ActionLogsService } from "src/services/action-logs.service";
 import { SyncLog } from "src/entities/syncLog";
@@ -38,6 +40,8 @@ import { ActionLog } from "src/entities/ActionLog";
       LocationType,
       LocationHurdle,
       LocationHurdleCategory,
+      WarehouseHurdle,
+      Warehouse,
       User,
       Status,
       UserPermissions,

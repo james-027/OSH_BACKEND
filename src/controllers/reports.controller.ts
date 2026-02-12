@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
 } from "@nestjs/common";
 import { TransactionsService } from "../services/transactions.service";
+import { LocationHurdlesService } from "../services/location-hurdles.service";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -17,7 +18,8 @@ import { WarehouseRequirementsService } from "../services/warehouse-requirements
 export class ReportsController {
   constructor(
     private readonly service: TransactionsService,
-    private readonly warehouseRequirementsService: WarehouseRequirementsService
+    private readonly locationHurdlesService: LocationHurdlesService,
+    private readonly warehouseRequirementsService: WarehouseRequirementsService,
   ) {}
 
   /**
@@ -35,7 +37,7 @@ export class ReportsController {
     @Query("trans_date") trans_date?: string,
     @Query("warehouse_id") warehouse_id?: number,
     @Query("status_id") status_id?: number,
-    @Req() req?: any
+    @Req() req?: any,
   ) {
     // Parse location_ids as array of numbers if provided
     let locationIdsArr: number[] | undefined = undefined;
@@ -73,7 +75,7 @@ export class ReportsController {
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
-    @Req() req?: any
+    @Req() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
@@ -87,7 +89,7 @@ export class ReportsController {
       status_id,
       userId,
       roleId,
-      accessKeyId
+      accessKeyId,
     );
   }
 
@@ -110,7 +112,7 @@ export class ReportsController {
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
     @Query("flatten") flatten?: boolean,
-    @Req() req?: any
+    @Req() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
@@ -125,7 +127,59 @@ export class ReportsController {
       userId,
       roleId,
       accessKeyId,
-      flatten
+      flatten,
     );
+  }
+
+  /**
+   * GET /reports/location-hurdles-comparison
+   * Compare location hurdles (declared) vs warehouse hurdles (actual operations)
+   * Query params: location_ids (comma-separated), region, year, month, status_ids (comma-separated)
+   * Example: /reports/location-hurdles-comparison?location_ids=1,2&year=2025&month=5&status_ids=3,6,7
+   */
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({
+    module: "LOCATION HURDLES COMPARISON REPORTS",
+    action: "VIEW",
+  })
+  @Get("location-hurdles-comparison")
+  async getLocationHurdlesComparisonReport(
+    @Query("location_ids") location_ids?: string,
+    @Query("region") region?: string,
+    @Query("year") year?: string,
+    @Query("trans_date") trans_date?: string,
+    @Query("status_ids") status_ids?: string,
+    @Req() req?: any,
+  ) {
+    // Parse location_ids as array of numbers if provided
+    let locationIdsArr: number[] | undefined = undefined;
+    if (location_ids) {
+      locationIdsArr = location_ids
+        .split(",")
+        .map((id) => parseInt(id, 10))
+        .filter((id) => !isNaN(id));
+    }
+
+    // Parse status_ids as array of numbers if provided
+    let statusIdsArr: number[] | undefined = undefined;
+    if (status_ids) {
+      statusIdsArr = status_ids
+        .split(",")
+        .map((id) => parseInt(id, 10))
+        .filter((id) => !isNaN(id));
+    }
+
+    const userId = req?.user?.id;
+    const roleId = req?.user?.role_id;
+
+    return await this.locationHurdlesService.generateReport({
+      location_ids: locationIdsArr,
+      region,
+      year: year ? parseInt(year, 10) : undefined,
+      trans_date,
+      status_ids: statusIdsArr,
+      user_id: userId,
+      role_id: roleId,
+    });
   }
 }
