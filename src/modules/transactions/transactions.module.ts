@@ -24,6 +24,7 @@ import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
 import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { Location } from "src/entities/Location";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
       UserPermissions,
       AppModule,
       Action,
+      Location,
     ]),
     UsersModule,
     LocationsModule,

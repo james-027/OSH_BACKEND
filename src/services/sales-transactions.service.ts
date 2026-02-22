@@ -173,7 +173,7 @@ export class SalesTransactionsService {
       .orderBy("location.location_name")
       .addOrderBy("DATE(sales.doc_date)");
 
-    // console.log(qb.getSql());
+    console.log(qb.getSql());
 
     const rows = await qb.getRawMany();
     return rows.map((row) => ({

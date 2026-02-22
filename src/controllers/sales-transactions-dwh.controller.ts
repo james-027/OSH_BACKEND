@@ -13,14 +13,14 @@ export class SalesTransactionsDwhController {
       endDate: string;
       batchSize?: number;
       category?: string;
-    }
+    },
   ) {
     // Example body: { startDate: '2025-05-01', endDate: '2025-05-31', batchSize: 1000 }
     return this.dwhService.pullAndInsertFromDwh({
       startDate: body.startDate,
       endDate: body.endDate,
       batchSize: body.batchSize || 1000,
-      category: body.category || "RC",
+      category: body.category || "ROASTED CHICKEN",
     });
   }
 }

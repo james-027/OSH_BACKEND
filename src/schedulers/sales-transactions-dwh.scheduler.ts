@@ -15,14 +15,22 @@ export class SalesTransactionsDwhScheduler {
     logger.info("Starting scheduled DWH pull for sales transactions...");
     // Default: previous day
     const today = new Date();
-    const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    const start = startDate.toISOString().slice(0, 10);
-    const end = endDate.toISOString().slice(0, 10);
-    // await this.dwhService.pullAndInsertFromDwh({
-    //   startDate: start,
-    //   endDate: end,
-    // });
-    logger.info("Finished scheduled DWH pull for sales transactions.");
+    const isFifteenth = today.getDate() === 15;
+    if (isFifteenth) {
+      const startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const start = startDate.toISOString().slice(0, 10);
+      const end = endDate.toISOString().slice(0, 10);
+      // await this.dwhService.pullAndInsertFromDwh({
+      //   startDate: start,
+      //   endDate: end,
+      // });
+      logger.info(
+        "Finished scheduled DWH pull for sales transactions. for the date range: " +
+          start +
+          " to " +
+          end,
+      );
+    }
   }
 }
