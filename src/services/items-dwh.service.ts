@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import * as mysql from "mysql2/promise";
 import { Item } from "../entities/Item";
 import { ItemCategory } from "../entities/ItemCategory";
 import { DwhLog } from "../entities/dwhLog";
+import { getCtgiItemsConnection } from "../utils/dwh-datasources";
 
 @Injectable()
 export class ItemsDwhService {
@@ -20,12 +20,7 @@ export class ItemsDwhService {
   async pullAndInsertFromDwh(
     batchSize = 1000
   ): Promise<{ success: number; failed: number }> {
-    const sourceConn = await mysql.createConnection({
-      host: "192.168.74.214",
-      user: "dba_remote",
-      password: "Wdwaxwdadz#07",
-      database: "ctgi",
-    });
+    const sourceConn = await getCtgiItemsConnection();
     const [rows] = await sourceConn.execute(
       `select i.ITEMCODE, i.ITEMDESC, i.ITEMGROUP, i.UOM, i.UOMSA, i.U_CAT01, i.U_CAT02, i.U_SALESCONV, i.U_SALESUNITEQ
         from items i
@@ -94,7 +89,7 @@ export class ItemsDwhService {
         }
       }
     }
-    await sourceConn.end();
+    await sourceConn.release();
     return { success, failed };
   }
 }
