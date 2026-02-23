@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import * as mysql from "mysql2/promise";
 import { Warehouse } from "../entities/Warehouse";
 import { WarehouseDwhLog } from "../entities/WarehouseDwhLog";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { getCtgiSemsConnection } from "../utils/dwh-datasources";
 import logger from "src/config/logger";
 
 @Injectable()
@@ -26,12 +26,7 @@ export class WarehouseDwhService {
     fullUniqueUpdates: number;
     individualUpdates: number;
   }> {
-    const sourceConn = await mysql.createConnection({
-      host: "192.168.74.121",
-      user: "ctgi_cms_rem_usr",
-      password: "B@v1CM$r3m0t3Localdba@C3sS",
-      database: "ctgi_sems",
-    });
+    const sourceConn = await getCtgiSemsConnection();
     const [rows] = await sourceConn.execute(
       `SELECT outletIFS, outletCode, outletDesc, brnID, ownID, address, status FROM outlets where status < 7`
     );
@@ -208,7 +203,7 @@ export class WarehouseDwhService {
       }
     }
 
-    await sourceConn.end();
+    await sourceConn.release();
     return { inserted, failed, fullUniqueUpdates, individualUpdates };
   }
 
