@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import * as mysql from "mysql2/promise";
 import { SalesTransaction } from "../entities/SalesTransaction";
 import { DwhLog } from "../entities/dwhLog";
 import { Location } from "../entities/Location";
+import { getCtgiBosDwhConnection } from "../utils/dwh-datasources";
 
 @Injectable()
 export class SalesTransactionsDwhService {
@@ -53,12 +53,7 @@ export class SalesTransactionsDwhService {
         });
       });
 
-      const sourceConn = await mysql.createConnection({
-        host: "10.2.4.122",
-        user: "akatok",
-        password: "nF+G5-M%",
-        database: "ctgi",
-      });
+      const sourceConn = await getCtgiBosDwhConnection();
       // Build dynamic WHERE clauses based on parameters
       const whereClauses = [
         "(DOCSTATUS = 'O' OR DOCSTATUS = 'C')",
@@ -87,7 +82,7 @@ export class SalesTransactionsDwhService {
         ROUND( SUM( arinvoiceitems.QUANTITY * arinvoiceitems.UNITPRICE), 6 ) AS GROSSSALES,
         SUM( arinvoiceitems.LINETOTAL - arinvoiceitems.VATAMOUNT ) AS NETSALES,
         SUM( arinvoiceitems.QUANTITY ) AS QUANTITY,
-        ROUND( SUM( arinvoiceitems.QUANTITY * s.U_AMOUNT), 6 ) AS CONVERTED_QUANTITY,
+        ROUND( SUM( arinvoiceitems.QUANTITY * s.U_QUANTITY), 6 ) AS CONVERTED_QUANTITY,
         SUM( arinvoiceitems.LINETOTAL ) AS LINETOTAL,
         arinvoiceitems.UNITPRICE AS UNITPRICE,
         SUM( arinvoiceitems.VATAMOUNT ) AS VATAMOUNT,
@@ -97,7 +92,7 @@ export class SalesTransactionsDwhService {
         arinvoiceitems.VATRATE AS VATRATE,
         s.U_VARIANT as U_CAT01,
         s.U_PRDCLASS as U_CAT02,
-        s.U_AMOUNT as U_SALESCONV,
+        s.U_QUANTITY as U_SALESCONV,
         0 as U_SALESUNITEQ,
         i.ITEMGROUP,
         i.UOM 
@@ -218,7 +213,7 @@ export class SalesTransactionsDwhService {
           success += toInsert.length;
         }
       }
-      await sourceConn.end();
+      await sourceConn.release();
     } catch (err) {
       logError = err?.message || String(err);
       failed = 1;
