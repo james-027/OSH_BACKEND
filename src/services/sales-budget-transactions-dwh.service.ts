@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import * as mysql from "mysql2/promise";
 import { SalesBudgetTransaction } from "../entities/SalesBudgetTransaction";
 import { DwhLog } from "../entities/dwhLog";
+import { getCtgiBudgetingConnection } from "../utils/dwh-datasources";
 
 @Injectable()
 export class SalesBudgetTransactionsDwhService {
@@ -34,12 +34,7 @@ export class SalesBudgetTransactionsDwhService {
     let success = 0;
     let failed = 0;
     try {
-      const sourceConn = await mysql.createConnection({
-        host: "192.168.74.41",
-        user: "bud_remote",
-        password: "B@v1-r3mot3-dba@cct",
-        database,
-      });
+      const sourceConn = await getCtgiBudgetingConnection(database);
       // Build dynamic IN clause for materialGroups
       const materialGroupIn =
         materialGroups && materialGroups.length > 0
@@ -115,7 +110,7 @@ export class SalesBudgetTransactionsDwhService {
           success += toInsert.length;
         }
       }
-      await sourceConn.end();
+      await sourceConn.release();
     } catch (err) {
       logError = err?.message || String(err);
       failed = 1;
