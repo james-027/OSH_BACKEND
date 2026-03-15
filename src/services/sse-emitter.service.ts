@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Subject, Observable, Subscription, interval } from "rxjs";
 import { tap } from "rxjs/operators";
 import logger from "src/config/logger";
+import { getLocalISOTimestamp } from "src/utils/date.utils";
 
 /**
  * SSE Event interface for pure broadcast architecture
@@ -25,6 +26,7 @@ export interface SubscriptionDetail {
   resource: string;
   resourceId?: number; // e.g., ["users", 3] where 3 is userId
   queryKey: string; // e.g., "users" or "users:3"
+  userId?: number; // Track which user owns this subscription for cleanup on disconnect
 }
 
 /**
@@ -37,8 +39,7 @@ export interface SubscriptionStats {
 }
 
 @Injectable()
-// export class SSEEmitterService implements OnModuleInit {
-export class SSEEmitterService {
+export class SSEEmitterService implements OnModuleInit {
   // private readonly logger = new Logger(SSEEmitterService.name);
 
   // Single global broadcast subject for all connected clients
@@ -64,23 +65,25 @@ export class SSEEmitterService {
   /**
    * Initialize heartbeat on module startup
    */
-  // onModuleInit() {
-  //   this.startHeartbeat();
-  // }
+  onModuleInit() {
+    this.startHeartbeat();
+  }
 
   /**
-   * Start sending heartbeat events every 15 seconds to keep connections alive
-   * Without this, browsers close idle EventSource connections after ~30 seconds
+   * Start sending heartbeat events every 45 minutes to keep connections alive
+   * Nginx is configured to keep SSE connections alive for 1 hour
+   * Heartbeat sent every 45 minutes to prevent connection drop before timeout
+   * 45 minutes = 2700000 milliseconds
    */
   private startHeartbeat(): void {
-    this.heartbeatSubscription = interval(15000).subscribe(() => {
+    this.heartbeatSubscription = interval(2700000).subscribe(() => {
       this.broadcastSubject.next({
         type: "UPDATE",
         resource: "heartbeat",
-        timestamp: new Date().toISOString(),
+        timestamp: getLocalISOTimestamp(),
       });
-      logger.debug(
-        `[SSE] Heartbeat sent (keeping ${this.subscriptionRegistry.size} connections alive)`
+      logger.info(
+        `[SSE] Heartbeat sent at ${getLocalISOTimestamp()} (keeping ${this.subscriptionRegistry.size} connections alive)`,
       );
     });
   }
@@ -91,19 +94,21 @@ export class SSEEmitterService {
    * React Query on client filters events by resource type
    *
    * Tracks subscription in registry for monitoring and invalidation
+   * @param userId - Optional userId to track for cleanup on disconnect
    */
-  subscribeToEvents(): Observable<SSEEvent> {
+  subscribeToEvents(userId?: number): Observable<SSEEvent> {
     const subscriptionId = this.generateSubscriptionId();
     const subscriptionDetail: SubscriptionDetail = {
       subscriptionId,
       subscribedAt: new Date(),
       resource: "broadcast", // Broadcast subscription
       queryKey: "broadcast",
+      userId, // Store userId for cleanup on disconnect
     };
 
     this.subscriptionRegistry.set(subscriptionId, subscriptionDetail);
     logger.info(
-      `[SSE] New subscription: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
+      `[SSE] New subscription: ${subscriptionId} (User: ${userId || "unknown"}, Total: ${this.subscriptionRegistry.size})`,
     );
 
     return this.broadcastSubject.asObservable().pipe(
@@ -111,13 +116,46 @@ export class SSEEmitterService {
         complete: () => {
           this.subscriptionRegistry.delete(subscriptionId);
           logger.info(
-            `[SSE] Subscription removed: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`
+            `[SSE] Subscription removed: ${subscriptionId} (Total: ${this.subscriptionRegistry.size})`,
           );
         },
         error: () => {
           this.subscriptionRegistry.delete(subscriptionId);
         },
-      })
+      }),
+    );
+  }
+
+  /**
+   * Clean up all subscriptions for a user when they disconnect
+   * Called from SSE controller when @Res() close event fires
+   *
+   * Usage: When browser closes or connection drops
+   * this.sseEmitterService.cleanupUserConnection(userId, 'browser_closed');
+   *
+   * @param userId - The user ID whose subscriptions to cleanup
+   * @param reason - Reason for cleanup (browser_closed, nginx_timeout, network_error, etc.)
+   */
+  cleanupUserConnection(
+    userId: number,
+    reason: string = "client_disconnect",
+  ): void {
+    // Find all subscriptions for this user
+    const subscriptionsToRemove: string[] = [];
+
+    this.subscriptionRegistry.forEach((sub, key) => {
+      if (sub.userId === userId) {
+        subscriptionsToRemove.push(key);
+      }
+    });
+
+    // Remove all subscriptions for this user
+    subscriptionsToRemove.forEach((key) => {
+      this.subscriptionRegistry.delete(key);
+    });
+
+    logger.info(
+      `[SSE] User ${userId} disconnected (reason: ${reason}) - Removed ${subscriptionsToRemove.length} subscriptions (Total remaining: ${this.subscriptionRegistry.size})`,
     );
   }
 
@@ -141,14 +179,14 @@ export class SSEEmitterService {
     logger.info(
       `[SSE] Event emitted: ${event.type} - ${event.resource}${
         event.resourceId ? `:${event.resourceId}` : ""
-      } | Active subscriptions: ${this.subscriptionRegistry.size}`
+      } | Active subscriptions: ${this.subscriptionRegistry.size}`,
     );
 
     // Emit to all subscribers
     this.broadcastSubject.next(event);
 
     logger.info(
-      `[SSE] Broadcast complete for ${event.resource}:${event.resourceId || "N/A"}`
+      `[SSE] Broadcast complete for ${event.resource}:${event.resourceId || "N/A"}`,
     );
   }
 
@@ -198,7 +236,7 @@ export class SSEEmitterService {
    */
   listSubscriptionsByResource(
     resource: string,
-    resourceId?: number
+    resourceId?: number,
   ): SubscriptionDetail[] {
     return this.listAllSubscriptions().filter((sub) => {
       if (sub.resource !== resource) return false;
@@ -227,7 +265,7 @@ export class SSEEmitterService {
     logger.info(
       `[SSE] Invalidating resource: ${resource}${
         resourceId ? `:${resourceId}` : ""
-      }`
+      }`,
     );
 
     // Broadcast invalidation event to all clients
@@ -237,7 +275,7 @@ export class SSEEmitterService {
       type: "INVALIDATE",
       resource,
       resourceId,
-      timestamp: new Date().toISOString(),
+      timestamp: getLocalISOTimestamp(),
     };
 
     this.broadcastEvent(event);
@@ -262,7 +300,7 @@ export class SSEEmitterService {
     logger.info(
       `[SSE] Updating resource: ${resource}${
         resourceId ? `:${resourceId}` : ""
-      }`
+      }`,
     );
 
     // Broadcast update event to all clients
@@ -272,7 +310,7 @@ export class SSEEmitterService {
       type: "UPDATE",
       resource,
       resourceId,
-      timestamp: new Date().toISOString(),
+      timestamp: getLocalISOTimestamp(),
     };
 
     this.broadcastEvent(event);
@@ -301,13 +339,13 @@ export class SSEEmitterService {
 
     if (affectedResources.size === 0) {
       logger.warn(
-        `[SSE] No subscriptions found for resource ID: ${resourceId}`
+        `[SSE] No subscriptions found for resource ID: ${resourceId}`,
       );
       return;
     }
 
     logger.info(
-      `[SSE] Invalidating ${affectedResources.size} resource types for ID ${resourceId}`
+      `[SSE] Invalidating ${affectedResources.size} resource types for ID ${resourceId}`,
     );
 
     // Broadcast invalidation for each affected resource
@@ -316,7 +354,7 @@ export class SSEEmitterService {
         type: "INVALIDATE",
         resource,
         resourceId,
-        timestamp: new Date().toISOString(),
+        timestamp: getLocalISOTimestamp(),
       };
       this.broadcastEvent(event);
     });
@@ -333,7 +371,7 @@ export class SSEEmitterService {
    */
   invalidateMultipleResourceIds(resourceIds: number[]): void {
     logger.info(
-      `[SSE] Invalidating ${resourceIds.length} resource IDs: ${resourceIds.join(", ")}`
+      `[SSE] Invalidating ${resourceIds.length} resource IDs: ${resourceIds.join(", ")}`,
     );
     resourceIds.forEach((id) => {
       this.invalidateAllSubscriptionsForResourceId(id);
@@ -371,7 +409,7 @@ export class SSEEmitterService {
     }
 
     logger.info(
-      `[SSE] Invalidating all ${emittedResources.length} emitted resources:`
+      `[SSE] Invalidating all ${emittedResources.length} emitted resources:`,
     );
 
     // Log each resource being invalidated
@@ -392,7 +430,7 @@ export class SSEEmitterService {
       .join(", ");
 
     logger.info(
-      `[SSE] Successfully invalidated all ${emittedResources.length} emitted resources: ${resourcesList}`
+      `[SSE] Successfully invalidated all ${emittedResources.length} emitted resources: ${resourcesList}`,
     );
   }
 
@@ -411,7 +449,7 @@ export class SSEEmitterService {
    * @param resources - Array of resources to invalidate: [{ resource: string, resourceId?: number }, ...]
    */
   invalidateSpecificResources(
-    resources: Array<{ resource: string; resourceId?: number }>
+    resources: Array<{ resource: string; resourceId?: number }>,
   ): void {
     if (!resources || resources.length === 0) {
       logger.warn(`[SSE] No resources provided to invalidate`);
@@ -438,7 +476,7 @@ export class SSEEmitterService {
       .join(", ");
 
     logger.info(
-      `[SSE] Successfully invalidated ${resources.length} specific resources: ${resourcesList}`
+      `[SSE] Successfully invalidated ${resources.length} specific resources: ${resourcesList}`,
     );
   }
 
@@ -457,7 +495,7 @@ export class SSEEmitterService {
    * @param resources - Array of resources to invalidate: [{ resource: string, resourceId?: number }, ...]
    */
   updateSpecificResources(
-    resources: Array<{ resource: string; resourceId?: number }>
+    resources: Array<{ resource: string; resourceId?: number }>,
   ): void {
     if (!resources || resources.length === 0) {
       logger.warn(`[SSE] No resources provided to update`);
@@ -484,7 +522,7 @@ export class SSEEmitterService {
       .join(", ");
 
     logger.info(
-      `[SSE] Successfully updated ${resources.length} specific resources: ${resourcesList}`
+      `[SSE] Successfully updated ${resources.length} specific resources: ${resourcesList}`,
     );
   }
 
@@ -533,12 +571,12 @@ export class SSEEmitterService {
    */
   registerSubscriptionResources(
     subscriptionId: string,
-    resources: Array<{ resource: string; resourceId?: number }>
+    resources: Array<{ resource: string; resourceId?: number }>,
   ): void {
     const existing = this.subscriptionRegistry.get(subscriptionId);
     if (!existing) {
       logger.warn(
-        `[SSE] Subscription ${subscriptionId} not found for registration`
+        `[SSE] Subscription ${subscriptionId} not found for registration`,
       );
       return;
     }
@@ -558,7 +596,7 @@ export class SSEEmitterService {
     });
 
     logger.info(
-      `[SSE] Registered ${resources.length} resources for subscription ${subscriptionId}`
+      `[SSE] Registered ${resources.length} resources for subscription ${subscriptionId}`,
     );
   }
 
