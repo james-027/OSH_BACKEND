@@ -17,4 +17,8 @@ export class CreateActionDto {
   @IsOptional() // status_id has a default in entity, but can be provided
   @IsInt({ message: "Status ID must be an integer" })
   status_id?: number;
+
+  @IsNotEmpty({ message: "Action level is required" }) // Make action_level required since it doesn't have a default value in the entity
+  @IsInt({ message: "Action level must be an integer" })
+  action_level!: number;
 }
