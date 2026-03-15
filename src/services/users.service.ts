@@ -575,9 +575,9 @@ export class UsersService {
       // Create new user with default role_id
       const user = new User();
       user.user_name = user_name;
-      user.first_name = first_name;
-      user.middle_name = middle_name || null;
-      user.last_name = last_name;
+      user.first_name = first_name.toUpperCase();
+      user.middle_name = middle_name ? middle_name.toUpperCase() : null;
+      user.last_name = last_name.toUpperCase();
       user.role_id = role_id; // Default role
       user.emp_number = emp_number || null;
       user.email = email || null;
@@ -1040,9 +1040,12 @@ export class UsersService {
       }
 
       // Update other fields
-      if (first_name !== undefined) userToUpdate.first_name = first_name;
-      if (middle_name !== undefined) userToUpdate.middle_name = middle_name;
-      if (last_name !== undefined) userToUpdate.last_name = last_name;
+      if (first_name !== undefined)
+        userToUpdate.first_name = first_name.toUpperCase();
+      if (middle_name !== undefined)
+        userToUpdate.middle_name = middle_name.toUpperCase();
+      if (last_name !== undefined)
+        userToUpdate.last_name = last_name.toUpperCase();
       if (role_id !== undefined) {
         userToUpdate.role_id = role_id;
         // Also update the relation to ensure TypeORM persists the change

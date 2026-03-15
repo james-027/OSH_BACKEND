@@ -29,20 +29,20 @@ export class EmployeesService {
     private locationsService: LocationsService,
     private positionsService: PositionsService,
     private commonUtilitiesService: CommonUtilitiesService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async findAll(
     accessKeyId?: number,
     userId?: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
-          roleId
+          roleId,
         );
     }
     const employees = await this.employeesRepository.find({
@@ -62,8 +62,8 @@ export class EmployeesService {
           (employee.employee_locations || []).some(
             (el) =>
               (el.status_id === 1 || el.status_id === 2) &&
-              allowedLocationIds!.includes(el.location_id)
-          )
+              allowedLocationIds!.includes(el.location_id),
+          ),
         )
       : employees;
     return filtered.map((employee) => ({
@@ -142,7 +142,7 @@ export class EmployeesService {
   async create(
     createEmployeeDto: CreateEmployeeDto,
     userId: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<Employee> {
     const { location_ids, ...employeeData } = createEmployeeDto;
     // Validate allowed locations
@@ -150,18 +150,20 @@ export class EmployeesService {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
-          roleId
+          roleId,
         );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
           throw new BadRequestException(
-            `You are not allowed to assign location_id ${locId}`
+            `You are not allowed to assign location_id ${locId}`,
           );
         }
       }
     }
     const employee = this.employeesRepository.create({
       ...employeeData,
+      employee_first_name: employeeData.employee_first_name?.toUpperCase(),
+      employee_last_name: employeeData.employee_last_name?.toUpperCase(),
       access_key_id: createEmployeeDto.access_key_id,
       created_by: userId,
       updated_by: userId,
@@ -189,7 +191,7 @@ export class EmployeesService {
           description: `Created employee ${saved.id} - ${saved.employee_number} | ${saved.employee_last_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
       // SSE Events
       try {
@@ -207,7 +209,7 @@ export class EmployeesService {
     id: number,
     updateEmployeeDto: UpdateEmployeeDto,
     userId: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<Employee> {
     const { location_ids, ...employeeData } = updateEmployeeDto;
     // Validate allowed locations
@@ -215,18 +217,22 @@ export class EmployeesService {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
-          roleId
+          roleId,
         );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
           throw new BadRequestException(
-            `You are not allowed to assign location_id ${locId}`
+            `You are not allowed to assign location_id ${locId}`,
           );
         }
       }
     }
     const employee = await this.findOne(id);
-    Object.assign(employee, employeeData, { updated_by: userId });
+    Object.assign(employee, employeeData, {
+      employee_first_name: employeeData.employee_first_name?.toUpperCase(),
+      employee_last_name: employeeData.employee_last_name?.toUpperCase(),
+      updated_by: userId,
+    });
     try {
       const saved = await this.employeesRepository.save(employee);
       // Handle employee_locations
@@ -263,7 +269,7 @@ export class EmployeesService {
           description: `Updated employee ${saved.id} - ${saved.employee_number} | ${saved.employee_last_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
       // SSE Events
       try {
@@ -285,7 +291,7 @@ export class EmployeesService {
   async toggleStatus(
     id: number,
     status_id: number,
-    userId: number
+    userId: number,
   ): Promise<Employee> {
     const employee = await this.findOne(id);
     employee.status_id = status_id;
@@ -308,7 +314,7 @@ export class EmployeesService {
         description: `Toggled status for employee ${saved.id} - ${saved.employee_number} | ${saved.employee_last_name} to ${newStatusName}`,
         status_id: 1,
       },
-      userId
+      userId,
     );
 
     // SSE Events
@@ -324,7 +330,7 @@ export class EmployeesService {
     filePath: string,
     userId: number,
     roleId?: number,
-    accessKeyId?: number
+    accessKeyId?: number,
   ) {
     const XLSX = require("xlsx");
     const fs = require("fs");
@@ -347,7 +353,7 @@ export class EmployeesService {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
-          roleId
+          roleId,
         );
     }
     // --- Preprocess for batch duplicate checks ---
@@ -365,16 +371,18 @@ export class EmployeesService {
     // Fetch all existing employees for fast lookup
     const allExisting = await this.employeesRepository.find();
     const dbEmployeeNumbers = new Set(
-      allExisting.map((e) => e.employee_number)
+      allExisting.map((e) => e.employee_number),
     );
     const dbCompositeKeys = new Set(
       allExisting.map(
         (e) =>
-          `${e.employee_number}|${e.employee_first_name}|${e.employee_last_name}`
-      )
+          `${e.employee_number}|${e.employee_first_name}|${e.employee_last_name}`,
+      ),
     );
     const dbEmails = new Set(
-      allExisting.filter((e) => !!e.employee_email).map((e) => e.employee_email)
+      allExisting
+        .filter((e) => !!e.employee_email)
+        .map((e) => e.employee_email),
     );
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -404,7 +412,7 @@ export class EmployeesService {
           for (const locName of locationNames) {
             const foundLoc = allLocations.find(
               (l: any) =>
-                l.location_name.toLowerCase() === locName.toLowerCase()
+                l.location_name.toLowerCase() === locName.toLowerCase(),
             );
             if (!foundLoc) {
               throw new Error(`Location not found: ${locName}`);
@@ -419,7 +427,7 @@ export class EmployeesService {
           for (const locId of location_ids) {
             if (!allowedLocationIds.includes(locId)) {
               throw new Error(
-                `You are not allowed to assign location_id ${locId}`
+                `You are not allowed to assign location_id ${locId}`,
               );
             }
           }
@@ -429,7 +437,7 @@ export class EmployeesService {
         if (typeof row["POSITION"] === "string") {
           const foundPos = allPositions.find(
             (p: any) =>
-              p.position_name.toLowerCase() === row["POSITION"].toLowerCase()
+              p.position_name.toLowerCase() === row["POSITION"].toLowerCase(),
           );
           if (!foundPos) {
             throw new Error(`Position not found: ${row["POSITION"]}`);
@@ -457,17 +465,17 @@ export class EmployeesService {
         // Check batch duplicates
         if (batchEmployeeNumbers.has(employee_number)) {
           throw new Error(
-            `Duplicate employee_number in batch: ${employee_number}`
+            `Duplicate employee_number in batch: ${employee_number}`,
           );
         }
         if (batchCompositeKeys.has(compositeKey)) {
           throw new Error(
-            `Duplicate employee_number+first_name+last_name in batch: ${compositeKey}`
+            `Duplicate employee_number+first_name+last_name in batch: ${compositeKey}`,
           );
         }
         if (employee_email && batchEmails.has(employee_email)) {
           throw new Error(
-            `Duplicate employee_email in batch: ${employee_email}`
+            `Duplicate employee_email in batch: ${employee_email}`,
           );
         }
         batchEmployeeNumbers.add(employee_number);
@@ -476,19 +484,19 @@ export class EmployeesService {
         batchMap.set(employee_number, rowNum);
         // Check DB duplicates
         let existing = allExisting.find(
-          (e) => e.employee_number === employee_number
+          (e) => e.employee_number === employee_number,
         );
         if (!existing) {
           existing = allExisting.find(
             (e) =>
               e.employee_number === employee_number &&
               e.employee_first_name === employee_first_name &&
-              e.employee_last_name === employee_last_name
+              e.employee_last_name === employee_last_name,
           );
         }
         if (!existing && employee_email) {
           existing = allExisting.find(
-            (e) => e.employee_email === employee_email
+            (e) => e.employee_email === employee_email,
           );
         }
         // Prepare employee data
@@ -564,7 +572,7 @@ export class EmployeesService {
           // Reactivate or add
           for (const location_id of upd.location_ids) {
             const found = existingLocs.find(
-              (el) => el.location_id === location_id
+              (el) => el.location_id === location_id,
             );
             if (found) {
               await this.employeeLocationsService.toggleStatus(found.id, 1);
