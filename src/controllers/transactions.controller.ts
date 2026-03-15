@@ -40,7 +40,7 @@ export class TransactionsController {
     return this.service.findAllHeaders(
       user.id,
       user.role_id,
-      user.current_access_key
+      user.current_access_key,
     );
   }
 
@@ -52,7 +52,7 @@ export class TransactionsController {
   @Put("headers/:id")
   updateHeader(
     @Param("id") id: number,
-    @Body() dto: UpdateTransactionHeaderDto
+    @Body() dto: UpdateTransactionHeaderDto,
   ) {
     return this.service.updateHeader(id, dto);
   }
@@ -67,7 +67,7 @@ export class TransactionsController {
   toggleStatus(
     @Param("id") id: number,
     @Body("status_id") status_id: number,
-    @Req() req: any
+    @Req() req: any,
   ) {
     const user = req.user || {};
     return this.service.toggleStatus(id, status_id, user.id);
@@ -89,19 +89,19 @@ export class TransactionsController {
   cancelTransaction(
     @Param("id") id: number,
     @Req() req: any,
-    @Body("cancel_reason") cancel_reason: string
+    @Body("cancel_reason") cancel_reason: string,
   ) {
     const user = req.user || {};
     return this.service.cancelTransaction(id, user.id, cancel_reason);
   }
 
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ module: "INCENTIVE TRANSACTIONS", action: "ACTIVATE" })
+  @RequirePermissions({ module: "INCENTIVE TRANSACTIONS", action: "REVERT" })
   @Patch("headers/:id/revert")
   revertTransaction(
     @Param("id") id: number,
     @Req() req: any,
-    @Body("undo_reason") undo_reason: string
+    @Body("undo_reason") undo_reason: string,
   ) {
     const user = req.user || {};
     return this.service.revertTransaction(id, user.id, undo_reason);
@@ -126,7 +126,7 @@ export class TransactionsController {
   @Put("details/:id")
   updateDetail(
     @Param("id") id: number,
-    @Body() dto: UpdateTransactionDetailDto
+    @Body() dto: UpdateTransactionDetailDto,
   ) {
     return this.service.updateDetail(id, dto);
   }
@@ -142,7 +142,7 @@ export class TransactionsController {
   @Post("create-merged-transaction")
   createMergedTransaction(
     @Body() dto: { location_ids: number[]; trans_date: string },
-    @Req() req: any
+    @Req() req: any,
   ) {
     // JWT payload user info
     const user = req.user || {};
@@ -175,7 +175,7 @@ export class TransactionsController {
         ss_hurdle_qty?: number;
         budget_volume?: number;
       }>;
-    }
+    },
   ) {
     return this.service.batchUpdateTransactions(payload);
   }
@@ -195,7 +195,7 @@ export class TransactionsController {
     @Query("trans_date") trans_date?: string,
     @Query("warehouse_id") warehouse_id?: number,
     @Query("status_id") status_id?: number,
-    @Req() req?: any
+    @Req() req?: any,
   ) {
     // Parse location_ids as array of numbers if provided
     let locationIdsArr: number[] | undefined = undefined;

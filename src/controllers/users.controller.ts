@@ -226,6 +226,8 @@ export class UsersController {
   }
 
   @Put(":user_id/reset-password")
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ module: "USERS", action: "REVERT" })
   async resetPassword(
     @Param("user_id", ParseIntPipe) user_id: number,
     @Body() body: { password: string },

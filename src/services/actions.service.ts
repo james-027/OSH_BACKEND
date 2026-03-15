@@ -17,6 +17,9 @@ export class ActionsService {
     try {
       const actions = await this.actionsRepository.find({
         relations: ["status"],
+        order: {
+          action_level: "ASC",
+        },
       });
 
       return actions.map((action) => ({
