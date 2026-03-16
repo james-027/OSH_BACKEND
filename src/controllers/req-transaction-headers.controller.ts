@@ -19,6 +19,8 @@ import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { CreateWarehouseRequirementDueAndReqTransDto } from "src/dto/CreateWarehouseRequirementDueAndReqTransDto";
+import { WhReqListingDto } from "src/dto/query-params/CommonQueryDtos";
+import { validateDateParam } from "src/utils/query-validators";
 
 @Controller("req-transaction-headers")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -37,20 +39,33 @@ export class ReqTransactionHeadersController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAllByTransNumber(
     @Request() req,
-    @Query("transNumber") transNumber?: string,
+    @Query() queryParams: WhReqListingDto,
   ) {
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.date_from
+      ? validateDateParam(queryParams.date_from, "date_from")
+      : null;
+    const dateFrom = validatedDate ? validatedDate : undefined;
+    validatedDate = queryParams.date_to
+      ? validateDateParam(queryParams.date_to, "date_to")
+      : null;
+    const dateTo = validatedDate ? validatedDate : undefined;
+    const transNumber = queryParams.trans_number;
     const userId = req.user.id;
     const roleId = req.user.role_id;
     return await this.reqTransactionHeadersService.findAllByTransNumber(
       transNumber,
       userId,
       roleId,
+      dateFrom,
+      dateTo,
     );
   }
 
   @Get("find-by-trans-number")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
-  async findOneByTransNumber(@Query("trans_number") transNumber: string) {
+  async findOneByTransNumber(@Query() queryParams: WhReqListingDto) {
+    const transNumber = queryParams.trans_number;
     return await this.reqTransactionHeadersService.findOneByTransNumber(
       transNumber,
     );

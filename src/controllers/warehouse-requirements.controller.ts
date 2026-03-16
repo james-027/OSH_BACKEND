@@ -19,6 +19,8 @@ import { WarehousesService } from "../services/warehouses.service";
 import { WarehouseRequirementsService } from "../services/warehouse-requirements.service";
 import { CreateWarehouseRequirementDto } from "../dto/CreateWarehouseRequirementDto";
 import { UpdateWarehouseRequirementDto } from "../dto/UpdateWarehouseRequirementDto";
+import { WhReqListingDto } from "src/dto/query-params/CommonQueryDtos";
+import { validateDateParam } from "src/utils/query-validators";
 
 @Controller("warehouse-requirements")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -105,15 +107,24 @@ export class WarehouseRequirementsController {
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async getWarehouseRequirementsListingCounts(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
-    @Query("warehouse_id") warehouse_id?: number,
-    @Query("date_from") date_from?: string,
-    @Query("date_to") date_to?: string,
-    @Query("flatten") flatten?: boolean,
+    @Query() queryParams: WhReqListingDto,
     @Request() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
+
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.date_from
+      ? validateDateParam(queryParams.date_from, "date_from")
+      : null;
+    const date_from = validatedDate ? validatedDate : undefined;
+    validatedDate = queryParams.date_to
+      ? validateDateParam(queryParams.date_to, "date_to")
+      : null;
+    const date_to = validatedDate ? validatedDate : undefined;
+    const warehouse_id = Number(queryParams.warehouse_id) || undefined;
+    const flatten = queryParams.flatten || false;
 
     // console.log("Role ID:", roleId);
     // console.log("Access Key ID:", accessKeyId);
@@ -222,10 +233,7 @@ export class WarehouseRequirementsController {
    */
   @Post("periodic-sync")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
-  async periodicSync(
-    @Query("year") year?: string,
-    @Request() req?,
-  ) {
+  async periodicSync(@Query("year") year?: string, @Request() req?) {
     const userId = req?.user?.id || 1;
     const yearParam = year ? parseInt(year, 10) : new Date().getFullYear();
     return this.warehouseRequirementsService.syncWarehouseRequirementsPeriodically(

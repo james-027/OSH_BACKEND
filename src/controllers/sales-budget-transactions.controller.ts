@@ -11,6 +11,7 @@ import {
   UseGuards,
   UploadedFile,
   BadRequestException,
+  Query,
 } from "@nestjs/common";
 import { SalesBudgetTransactionsService } from "../services/sales-budget-transactions.service";
 import { CreateSalesBudgetTransactionDto } from "../dto/CreateSalesBudgetTransactionDto";
@@ -20,19 +21,31 @@ import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import * as XLSX from "xlsx";
 import { UseInterceptors } from "@nestjs/common";
-import { FileInterceptor, diskStorage, UploadedFile as FileType } from "../adapters";
-import { excelFileFilter, generateTimestampFilename, FILE_SIZE_LIMITS } from "../utils/file-upload.utils";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../adapters";
+import {
+  excelFileFilter,
+  generateTimestampFilename,
+  FILE_SIZE_LIMITS,
+} from "../utils/file-upload.utils";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
+import { DateFilterQueryDto } from "src/dto/query-params/DateFilterQueryDto";
+import { validateNumericParam } from "src/utils/query-validators";
 
 @Controller("sales-budget-transactions")
 @UseGuards(JwtAuthGuard)
 export class SalesBudgetTransactionsController {
   constructor(
     private readonly salesBudgetTransactionsService: SalesBudgetTransactionsService,
-    private readonly userAuditTrailCreateService: UserAuditTrailCreateService
+    private readonly userAuditTrailCreateService: UserAuditTrailCreateService,
   ) {}
 
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({ module: "SALES BUDGET TRANSACTIONS", action: "VIEW" })
   @Get()
   async findAll(@Req() req: any) {
     const accessKeyId = req.user?.current_access_key;
@@ -46,23 +59,28 @@ export class SalesBudgetTransactionsController {
       accessKeyId,
       userId,
       roleId,
-      sales_year !== undefined ? sales_year : new Date().getFullYear() - 1
+      sales_year !== undefined ? sales_year : new Date().getFullYear() - 1,
     );
   }
 
   @UseGuards(PermissionsGuard)
   @RequirePermissions({ module: "SALES BUDGET TRANSACTIONS", action: "VIEW" })
   @Get("per-location")
-  async findAllPerLocation(@Req() req: any) {
+  async findAllPerLocation(
+    @Req() req: any,
+    @Query() queryParams: DateFilterQueryDto,
+  ) {
     const user = req.user || {};
-    const sales_year = req.query?.sales_year
-      ? Number(req.query.sales_year)
-      : undefined;
+    let validatedDate: number | null = null;
+    validatedDate = queryParams.sales_year
+      ? validateNumericParam(queryParams.sales_year, "sales_year")
+      : null;
+    const sales_year = validatedDate || undefined;
     return this.salesBudgetTransactionsService.findAllPerLocation(
       user.id,
       user.role_id,
       user.current_access_key,
-      sales_year !== undefined ? sales_year : new Date().getFullYear() - 1
+      sales_year !== undefined ? sales_year : new Date().getFullYear() - 1,
     );
   }
 
@@ -71,11 +89,11 @@ export class SalesBudgetTransactionsController {
   @Get("per-location/:location_id/:sales_date")
   async findOnePerLocation(
     @Param("location_id", ParseIntPipe) location_id: number,
-    @Param("sales_date") sales_date: string
+    @Param("sales_date") sales_date: string,
   ) {
     return this.salesBudgetTransactionsService.findOnePerLocation(
       location_id,
-      sales_date
+      sales_date,
     );
   }
 
@@ -92,7 +110,7 @@ export class SalesBudgetTransactionsController {
   @Put(":id")
   async update(
     @Param("id", ParseIntPipe) id: number,
-    @Body() updateDto: UpdateSalesBudgetTransactionDto
+    @Body() updateDto: UpdateSalesBudgetTransactionDto,
   ) {
     return this.salesBudgetTransactionsService.update(id, updateDto);
   }
@@ -127,12 +145,9 @@ export class SalesBudgetTransactionsController {
       }),
       fileFilter: excelFileFilter,
       limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
-    })
+    }),
   )
-  async uploadExcel(
-    @UploadedFile() file: FileType,
-    @Req() req: any
-  ) {
+  async uploadExcel(@UploadedFile() file: FileType, @Req() req: any) {
     if (!file) {
       throw new BadRequestException("No file uploaded or invalid file type.");
     }
@@ -142,7 +157,7 @@ export class SalesBudgetTransactionsController {
     const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
     // Add __rowNum__ for error reporting (Excel row = index+2)
     const jsonWithRowNum = json.map((row, idx) =>
-      Object.assign({}, row, { __rowNum__: idx + 2 })
+      Object.assign({}, row, { __rowNum__: idx + 2 }),
     );
     const user = req.user || {};
     const summary = await this.salesBudgetTransactionsService.uploadBatch(
@@ -151,7 +166,7 @@ export class SalesBudgetTransactionsController {
         id: user.id,
         role_id: user.role_id,
         current_access_key: user.current_access_key,
-      }
+      },
     );
     // --- Audit Trail Logging ---
     await this.userAuditTrailCreateService.create(
@@ -165,10 +180,8 @@ export class SalesBudgetTransactionsController {
         description: `Sales Budget upload via Excel: ${summary.inserted_count} inserted, ${summary.updated_count} updated, ${summary.errors.length} errors.`,
         status_id: summary.errors.length === 0 ? 1 : 2,
       },
-      user.id
+      user.id,
     );
     return summary;
   }
 }
-
-

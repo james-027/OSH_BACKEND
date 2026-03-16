@@ -7,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   ParseIntPipe,
   UseGuards,
   Request,
@@ -20,6 +21,8 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { WarehouseHurdlesService } from "../services/warehouse-hurdles.service";
 import { CreateWarehouseHurdleDto } from "../dto/CreateWarehouseHurdleDto";
 import { UpdateWarehouseHurdleDto } from "../dto/UpdateWarehouseHurdleDto";
+import { DateFilterQueryDto } from "../dto/query-params";
+import { validateDateParam } from "../utils/query-validators";
 import {
   FileInterceptor,
   diskStorage,
@@ -43,12 +46,24 @@ export class WarehouseHurdlesController {
   ) {}
 
   @Get()
-  // @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
-  async findAll(@Request() req) {
+  @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
+  async findAll(@Request() req, @Query() queryParams: DateFilterQueryDto) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
     const roleId = req.user.role_id;
-    return this.warehouseHurdlesService.findAll(accessKeyId, userId, roleId);
+
+    // Validate and sanitize hurdle_date query parameter using utility function
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.hurdle_date
+      ? validateDateParam(queryParams.hurdle_date, "hurdle_date")
+      : null;
+    const hurdle_date = validatedDate ? validatedDate : undefined;
+    return this.warehouseHurdlesService.findAll(
+      accessKeyId,
+      userId,
+      roleId,
+      hurdle_date,
+    );
   }
 
   @Get("history/:id")
