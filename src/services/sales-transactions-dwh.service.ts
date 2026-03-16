@@ -5,6 +5,8 @@ import { SalesTransaction } from "../entities/SalesTransaction";
 import { DwhLog } from "../entities/dwhLog";
 import { Location } from "../entities/Location";
 import { getCtgiBosDwhConnection } from "../utils/dwh-datasources";
+import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 
 @Injectable()
 export class SalesTransactionsDwhService {
@@ -15,6 +17,7 @@ export class SalesTransactionsDwhService {
     private dwhLogRepository: Repository<DwhLog>,
     @InjectRepository(Location)
     private locationsRepository: Repository<Location>,
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async pullAndInsertFromDwh({
@@ -245,6 +248,14 @@ export class SalesTransactionsDwhService {
           ),
         }),
       });
+    }
+    if (success > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("sales_transactions", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
     }
     return { success, failed };
   }

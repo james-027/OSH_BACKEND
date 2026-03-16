@@ -24,7 +24,7 @@ export class RenewalTypesService {
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -63,7 +63,7 @@ export class RenewalTypesService {
 
   async create(
     createRenewalTypeDto: CreateRenewalTypeDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check if renewal type with this name already exists
@@ -73,7 +73,7 @@ export class RenewalTypesService {
 
       if (existingRenewalType) {
         throw new BadRequestException(
-          "Renewal Type with this name already exists"
+          "Renewal Type with this name already exists",
         );
       }
 
@@ -100,7 +100,7 @@ export class RenewalTypesService {
           description: `Created renewal type ${savedRenewalType.id} - ${savedRenewalType.renewal_type_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const renewalTypeWithRelations =
@@ -114,12 +114,13 @@ export class RenewalTypesService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        renewalTypeWithRelations
+        renewalTypeWithRelations,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("renewal_types", response.id, response);
+        this.sseEventEmitter.emitCreateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -136,7 +137,7 @@ export class RenewalTypesService {
   async update(
     id: number,
     updateRenewalTypeDto: UpdateRenewalTypeDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const renewalType = await this.renewalTypesRepository.findOne({
@@ -163,7 +164,7 @@ export class RenewalTypesService {
 
         if (existingRenewalType && existingRenewalType.id !== id) {
           throw new BadRequestException(
-            "Renewal Type with this name already exists"
+            "Renewal Type with this name already exists",
           );
         }
       }
@@ -192,7 +193,7 @@ export class RenewalTypesService {
           description: `Updated renewal type ${renewalType.id} - ${renewalType.renewal_type_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const renewalTypeWithRelations =
@@ -206,12 +207,13 @@ export class RenewalTypesService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        renewalTypeWithRelations
+        renewalTypeWithRelations,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -261,7 +263,7 @@ export class RenewalTypesService {
           description: `Toggled status for renewal type ${id} - ${renewalType.renewal_type_name} to ${newStatusName}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const response =
@@ -270,6 +272,7 @@ export class RenewalTypesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

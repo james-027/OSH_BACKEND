@@ -23,7 +23,7 @@ export class ReminderTypesService {
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -62,7 +62,7 @@ export class ReminderTypesService {
 
   async create(
     createReminderTypeDto: CreateReminderTypeDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check if reminder type with this name already exists
@@ -72,7 +72,7 @@ export class ReminderTypesService {
 
       if (existingReminderType) {
         throw new BadRequestException(
-          "Reminder Type with this name already exists"
+          "Reminder Type with this name already exists",
         );
       }
 
@@ -100,7 +100,7 @@ export class ReminderTypesService {
           description: `Created reminder type ${savedReminderType.id} - ${savedReminderType.reminder_type_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const reminderTypeWithRelations =
@@ -114,7 +114,7 @@ export class ReminderTypesService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        reminderTypeWithRelations
+        reminderTypeWithRelations,
       );
 
       // SSE Events
@@ -122,8 +122,9 @@ export class ReminderTypesService {
         this.sseEventEmitter.emitCreate(
           "reminder_types",
           response.id,
-          response
+          response,
         );
+        this.sseEventEmitter.emitCreateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -140,7 +141,7 @@ export class ReminderTypesService {
   async update(
     id: number,
     updateReminderTypeDto: UpdateReminderTypeDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const reminderType = await this.reminderTypesRepository.findOne({
@@ -164,12 +165,12 @@ export class ReminderTypesService {
         const existingReminderType = await this.reminderTypesRepository.findOne(
           {
             where: whereConditions,
-          }
+          },
         );
 
         if (existingReminderType && existingReminderType.id !== id) {
           throw new BadRequestException(
-            "Reminder Type with this name already exists"
+            "Reminder Type with this name already exists",
           );
         }
       }
@@ -198,7 +199,7 @@ export class ReminderTypesService {
           description: `Updated reminder type ${reminderType.id} - ${reminderType.reminder_type_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const reminderTypeWithRelations =
@@ -212,7 +213,7 @@ export class ReminderTypesService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        reminderTypeWithRelations
+        reminderTypeWithRelations,
       );
 
       // SSE Events
@@ -220,8 +221,9 @@ export class ReminderTypesService {
         this.sseEventEmitter.emitUpdate(
           "reminder_types",
           response.id,
-          response
+          response,
         );
+        this.sseEventEmitter.emitUpdateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -271,7 +273,7 @@ export class ReminderTypesService {
           description: `Toggled status for reminder type ${id} - ${reminderType.reminder_type_name} to ${newStatusName}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const response =
@@ -282,8 +284,9 @@ export class ReminderTypesService {
         this.sseEventEmitter.emitUpdate(
           "reminder_types",
           response.id,
-          response
+          response,
         );
+        this.sseEventEmitter.emitUpdateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

@@ -4,6 +4,8 @@ import { Repository } from "typeorm";
 import { SalesBudgetTransaction } from "../entities/SalesBudgetTransaction";
 import { DwhLog } from "../entities/dwhLog";
 import { getCtgiBudgetingConnection } from "../utils/dwh-datasources";
+import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import logger from "src/config/logger";
 
 @Injectable()
 export class SalesBudgetTransactionsDwhService {
@@ -11,7 +13,8 @@ export class SalesBudgetTransactionsDwhService {
     @InjectRepository(SalesBudgetTransaction)
     private salesBudgetTransactionsRepository: Repository<SalesBudgetTransaction>,
     @InjectRepository(DwhLog)
-    private dwhLogRepository: Repository<DwhLog>
+    private dwhLogRepository: Repository<DwhLog>,
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async pullAndInsertFromDwh({
@@ -35,19 +38,22 @@ export class SalesBudgetTransactionsDwhService {
     let failed = 0;
     try {
       const sourceConn = await getCtgiBudgetingConnection(database);
-      // Build dynamic IN clause for materialGroups
-      const materialGroupIn =
-        materialGroups && materialGroups.length > 0
-          ? materialGroups.join(",")
-          : "5,6";
-      const query = `SELECT bc_name, bc_code, ifs_code, outlet_name, material_code, material_desc, material_group_name, SUM(sales_det_qty) AS sales_det_qty, SUM(sales_det_qty_2) AS sales_det_qty_2, MONTH(sales_det_date) AS sales_month, sales_det_date FROM ( SELECT g.bc_name, g.bc_code, d.ifs_code, d.outlet_name, f.brand_name, c.material_code, c.material_desc, i.vat_type_name, j.material_group_name, h.sales_det_date, h.sales_det_qty, h.sales_det_asp, c.material_id, h.sales_det_qty * IFNULL(( SELECT y.sales_live_alw_det_value FROM sales_live_alw_tbl x, sales_live_alw_detail_tbl y WHERE x.sales_live_alw_id = y.sales_live_alw_id AND x.bc_id = g.bc_id AND x.sales_live_alw_status = 1 AND y.sales_live_alw_det_status = 1 AND c.material_code = '9100100' AND x.sales_live_alw_year = ? AND y.sales_live_alw_det_date = h.sales_det_date ), 1 ) AS sales_det_qty_2, IFNULL(( SELECT z.sales_tactical_det_price FROM sales_tactical_tbl x, sales_tactical_item_tbl y, sales_tactical_details_tbl z WHERE d.outlet_id = x.outlet_id AND x.sales_tactical_id = y.sales_tactical_id AND b.material_id = y.material_id AND y.sales_tactical_item_id = z.sales_tactical_item_id AND h.sales_det_date = z.sales_tactical_det_date AND x.sales_tactical_status = 1 AND y.sales_tactical_item_status = 1 AND z.sales_tactical_det_status = 1 ), 0 ) AS tactical, j.material_group_id, IFNULL(( SELECT y.sales_live_alw_det_value FROM sales_live_alw_tbl x, sales_live_alw_detail_tbl y WHERE x.sales_live_alw_id = y.sales_live_alw_id AND x.bc_id = g.bc_id AND x.sales_live_alw_status = 1 AND y.sales_live_alw_det_status = 1 AND c.material_code = '9100100' AND x.sales_live_alw_year = ? AND y.sales_live_alw_det_date = h.sales_det_date ), 1 ) AS alw, IFNULL(( SELECT x.sales_unit_equivalent FROM material_unit_tbl x WHERE c.material_id = x.material_id AND x.material_unit_status = 1 LIMIT 1 ), 0 ) AS sales_unit FROM sales_tbl a JOIN sales_item_tbl b ON a.sales_id = b.sales_id AND a.sales_status = 1 AND b.sales_item_status = 1 JOIN material_tbl c ON b.material_id = c.material_id JOIN outlet_tbl d ON a.outlet_id = d.outlet_id JOIN outlet_brand_tbl e ON d.outlet_id = e.outlet_id JOIN brand_tbl f ON e.brand_id = f.brand_id JOIN bc_tbl g ON d.bc_id = g.bc_id JOIN sales_details_tbl h ON b.sales_item_id = h.sales_item_id JOIN vat_type_tbl i ON c.vat_type_id = i.vat_type_id JOIN material_group_tbl j ON c.material_group_id = j.material_group_id AND a.sales_year = ? AND j.material_group_id IN (${materialGroupIn}) WHERE e.outlet_brand_status = 1 ) x GROUP BY bc_code, material_code, MONTH(sales_det_date), ifs_code ORDER BY ifs_code, material_code, sales_month`;
-      const [rows] = await sourceConn.execute(query, [
+
+      // Use named parameters with spread for IN clause - SAFE FROM SQL INJECTION
+      const materialGroupsToUse =
+        materialGroups && materialGroups.length > 0 ? materialGroups : [5, 6];
+
+      const query = `SELECT bc_name, bc_code, ifs_code, outlet_name, material_code, material_desc, material_group_name, SUM(sales_det_qty) AS sales_det_qty, SUM(sales_det_qty_2) AS sales_det_qty_2, MONTH(sales_det_date) AS sales_month, sales_det_date FROM ( SELECT g.bc_name, g.bc_code, d.ifs_code, d.outlet_name, f.brand_name, c.material_code, c.material_desc, i.vat_type_name, j.material_group_name, h.sales_det_date, h.sales_det_qty, h.sales_det_asp, c.material_id, h.sales_det_qty * IFNULL(( SELECT y.sales_live_alw_det_value FROM sales_live_alw_tbl x, sales_live_alw_detail_tbl y WHERE x.sales_live_alw_id = y.sales_live_alw_id AND x.bc_id = g.bc_id AND x.sales_live_alw_status = 1 AND y.sales_live_alw_det_status = 1 AND c.material_code = '9100100' AND x.sales_live_alw_year = :salesYear AND y.sales_live_alw_det_date = h.sales_det_date ), 1 ) AS sales_det_qty_2, IFNULL(( SELECT z.sales_tactical_det_price FROM sales_tactical_tbl x, sales_tactical_item_tbl y, sales_tactical_details_tbl z WHERE d.outlet_id = x.outlet_id AND x.sales_tactical_id = y.sales_tactical_id AND b.material_id = y.material_id AND y.sales_tactical_item_id = z.sales_tactical_item_id AND h.sales_det_date = z.sales_tactical_det_date AND x.sales_tactical_status = 1 AND y.sales_tactical_item_status = 1 AND z.sales_tactical_det_status = 1 ), 0 ) AS tactical, j.material_group_id, IFNULL(( SELECT y.sales_live_alw_det_value FROM sales_live_alw_tbl x, sales_live_alw_detail_tbl y WHERE x.sales_live_alw_id = y.sales_live_alw_id AND x.bc_id = g.bc_id AND x.sales_live_alw_status = 1 AND y.sales_live_alw_det_status = 1 AND c.material_code = '9100100' AND x.sales_live_alw_year = :salesYear AND y.sales_live_alw_det_date = h.sales_det_date ), 1 ) AS alw, IFNULL(( SELECT x.sales_unit_equivalent FROM material_unit_tbl x WHERE c.material_id = x.material_id AND x.material_unit_status = 1 LIMIT 1 ), 0 ) AS sales_unit FROM sales_tbl a JOIN sales_item_tbl b ON a.sales_id = b.sales_id AND a.sales_status = 1 AND b.sales_item_status = 1 JOIN material_tbl c ON b.material_id = c.material_id JOIN outlet_tbl d ON a.outlet_id = d.outlet_id JOIN outlet_brand_tbl e ON d.outlet_id = e.outlet_id JOIN brand_tbl f ON e.brand_id = f.brand_id JOIN bc_tbl g ON d.bc_id = g.bc_id JOIN sales_details_tbl h ON b.sales_item_id = h.sales_item_id JOIN vat_type_tbl i ON c.vat_type_id = i.vat_type_id JOIN material_group_tbl j ON c.material_group_id = j.material_group_id AND a.sales_year = :salesYear AND j.material_group_id IN (:...materialGroups) WHERE e.outlet_brand_status = 1 ) x GROUP BY bc_code, material_code, MONTH(sales_det_date), ifs_code ORDER BY ifs_code, material_code, sales_month`;
+
+      // Named parameters object with spread operator for IN clause
+      const queryParams = {
         salesYear,
-        salesYear,
-        salesYear,
-      ]);
+        materialGroups: materialGroupsToUse,
+      };
+
+      const [rows] = await sourceConn.execute(query, queryParams);
       const rowsArray = rows as any[];
-      logMessage = `Pulled ${rowsArray.length} rows from DWH with params: db=${database}, year=${salesYear}, groups=${materialGroups}`;
+      logMessage = `Pulled ${rowsArray.length} rows from DWH with params: db=${database}, year=${salesYear}, groups=${materialGroupsToUse}`;
       const total = rowsArray.length;
       for (let i = 0; i < total; i += batchSize) {
         const batch = rowsArray.slice(i, i + batchSize);
@@ -68,7 +74,7 @@ export class SalesBudgetTransactionsDwhService {
               keys
                 .map(
                   (k, idx) =>
-                    `(bc_code = :bc_code${idx} AND sales_month = :sales_month${idx} AND ifs_code = :ifs_code${idx} AND material_code = :material_code${idx})`
+                    `(bc_code = :bc_code${idx} AND sales_month = :sales_month${idx} AND ifs_code = :ifs_code${idx} AND material_code = :material_code${idx})`,
                 )
                 .join(" OR "),
               Object.assign(
@@ -78,8 +84,8 @@ export class SalesBudgetTransactionsDwhService {
                   [`sales_month${idx}`]: k.sales_month,
                   [`ifs_code${idx}`]: k.ifs_code,
                   [`material_code${idx}`]: k.material_code,
-                }))
-              )
+                })),
+              ),
             )
             .execute();
         }
@@ -105,7 +111,7 @@ export class SalesBudgetTransactionsDwhService {
               await manager
                 .getRepository(SalesBudgetTransaction)
                 .insert(toInsert);
-            }
+            },
           );
           success += toInsert.length;
         }
@@ -127,6 +133,14 @@ export class SalesBudgetTransactionsDwhService {
           materialGroups,
         }),
       });
+    }
+    if (success > 0) {
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitCreateSignal("sales_budget_transactions", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
     }
     return { success, failed };
   }
