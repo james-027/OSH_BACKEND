@@ -705,6 +705,16 @@ export class WarehouseRequirementsService {
         // ignore logging failure
       }
 
+      if (result.inserted > 0) {
+        // SSE Events
+        try {
+          this.sseEventEmitter.emitCreateSignal("req_transactions", 0);
+          this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
+
       return result;
     } catch (error) {
       // Log fatal sync error
@@ -818,6 +828,16 @@ export class WarehouseRequirementsService {
         });
       } catch (logErr) {
         // ignore logging failure
+      }
+
+      if (result.created > 0) {
+        // SSE Events
+        try {
+          this.sseEventEmitter.emitCreateSignal("req_transactions", 0);
+          this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
       }
 
       return result;

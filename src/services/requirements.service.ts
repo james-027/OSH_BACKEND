@@ -26,7 +26,7 @@ export class RequirementsService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private requirementRemindersService: RequirementRemindersService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -77,7 +77,7 @@ export class RequirementsService {
 
   async create(
     createRequirementDto: CreateRequirementDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check if requirement with this name already exists
@@ -87,7 +87,7 @@ export class RequirementsService {
 
       if (existingRequirement) {
         throw new BadRequestException(
-          "Requirement with this name already exists"
+          "Requirement with this name already exists",
         );
       }
 
@@ -113,7 +113,7 @@ export class RequirementsService {
       await this.requirementRemindersService.createOrUpdateBulk(
         savedRequirement.id,
         createRequirementDto,
-        userId
+        userId,
       );
 
       // Audit trail
@@ -125,7 +125,7 @@ export class RequirementsService {
           description: `Created requirement ${savedRequirement.id} - ${savedRequirement.requirement_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const requirementWithRelations =
@@ -139,12 +139,13 @@ export class RequirementsService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        requirementWithRelations
+        requirementWithRelations,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("requirements", response.id, response);
+        this.sseEventEmitter.emitCreateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -161,7 +162,7 @@ export class RequirementsService {
   async update(
     id: number,
     updateRequirementDto: UpdateRequirementDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const requirement = await this.requirementsRepository.findOne({
@@ -188,7 +189,7 @@ export class RequirementsService {
 
         if (existingRequirement && existingRequirement.id !== id) {
           throw new BadRequestException(
-            "Requirement with this name already exists"
+            "Requirement with this name already exists",
           );
         }
       }
@@ -218,7 +219,7 @@ export class RequirementsService {
       await this.requirementRemindersService.createOrUpdateBulk(
         requirement.id,
         updateRequirementDto,
-        userId
+        userId,
       );
 
       // Audit trail
@@ -230,7 +231,7 @@ export class RequirementsService {
           description: `Updated requirement ${requirement.id} - ${requirement.requirement_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const requirementWithRelations =
@@ -244,12 +245,13 @@ export class RequirementsService {
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        requirementWithRelations
+        requirementWithRelations,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -288,7 +290,7 @@ export class RequirementsService {
       await this.requirementRemindersService.toggleStatusByRequirementId(
         id,
         newStatusId,
-        userId
+        userId,
       );
 
       const updatedRequirement = await this.requirementsRepository.findOne({
@@ -307,7 +309,7 @@ export class RequirementsService {
           description: `Toggled status for requirement ${id} - ${requirement.requirement_name} to ${newStatusName}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const response =
@@ -316,6 +318,7 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
