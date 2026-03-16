@@ -118,6 +118,8 @@ export class ReqTransactionHeadersService {
     transNumber?: string,
     userId?: number,
     roleId?: number,
+    dateFrom?: string,
+    dateTo?: string,
   ): Promise<any[]> {
     try {
       const allowedLocationIds = await this.getAllowedLocationIds(
@@ -150,6 +152,12 @@ export class ReqTransactionHeadersService {
         query = query.andWhere("header.trans_number = :transNumber", {
           transNumber,
         });
+      }
+      if (dateFrom && dateTo) {
+        query = query.andWhere(
+          "header.trans_date BETWEEN :dateFrom AND :dateTo",
+          { dateFrom, dateTo },
+        );
       }
 
       if (allowedLocationIds.length > 0) {

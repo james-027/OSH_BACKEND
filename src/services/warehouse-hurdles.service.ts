@@ -46,6 +46,7 @@ export class WarehouseHurdlesService {
     accessKeyId?: number,
     userId?: number,
     roleId?: number,
+    hurdleDate?: string,
   ): Promise<any[]> {
     const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
     const query = this.warehouseHurdlesRepository
@@ -70,6 +71,10 @@ export class WarehouseHurdlesService {
       query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
       });
+    }
+    // Filter by hurdle_date if provided
+    if (hurdleDate) {
+      query.andWhere("wh.hurdle_date = :hurdle_date", { hurdleDate });
     }
     const hurdles = await query.getMany();
     return hurdles.map((hurdle) => ({
