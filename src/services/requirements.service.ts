@@ -145,7 +145,6 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("requirements", response.id, response);
-        this.sseEventEmitter.emitCreateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -251,7 +250,6 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
-        this.sseEventEmitter.emitUpdateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -318,7 +316,6 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
-        this.sseEventEmitter.emitUpdateSignal("requirements", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

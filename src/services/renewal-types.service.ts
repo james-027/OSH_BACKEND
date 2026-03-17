@@ -120,7 +120,6 @@ export class RenewalTypesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("renewal_types", response.id, response);
-        this.sseEventEmitter.emitCreateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -213,7 +212,6 @@ export class RenewalTypesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
-        this.sseEventEmitter.emitUpdateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -272,7 +270,6 @@ export class RenewalTypesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("renewal_types", response.id, response);
-        this.sseEventEmitter.emitUpdateSignal("renewal_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

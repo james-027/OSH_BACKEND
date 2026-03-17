@@ -124,7 +124,6 @@ export class ReminderTypesService {
           response.id,
           response,
         );
-        this.sseEventEmitter.emitCreateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -223,7 +222,6 @@ export class ReminderTypesService {
           response.id,
           response,
         );
-        this.sseEventEmitter.emitUpdateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -286,7 +284,6 @@ export class ReminderTypesService {
           response.id,
           response,
         );
-        this.sseEventEmitter.emitUpdateSignal("reminder_types", response.id);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

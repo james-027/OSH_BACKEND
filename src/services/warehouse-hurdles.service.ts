@@ -74,7 +74,7 @@ export class WarehouseHurdlesService {
     }
     // Filter by hurdle_date if provided
     if (hurdleDate) {
-      query.andWhere("wh.hurdle_date = :hurdle_date", { hurdleDate });
+      query.andWhere("wh.hurdle_date = :hurdleDate", { hurdleDate });
     }
     const hurdles = await query.getMany();
     return hurdles.map((hurdle) => ({
