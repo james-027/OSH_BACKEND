@@ -1035,7 +1035,7 @@ export class ReqTransactionHeadersService {
           if (!currentDue) {
             errors.push({
               warehouse_id: warehouse.id,
-              reason: "Current store requirement cycle not found",
+              reason: "Store requirement for this cycle not found",
               field: "warehouse_requirement_due",
             });
             continue;
@@ -1064,7 +1064,7 @@ export class ReqTransactionHeadersService {
           // console.log("reqReminderStatusDetail", reqReminderStatusDetail);
 
           let transDueStatusId = 1; // default: active
-          if (createDto.renewal_type_id !== 1) {
+          if (createDto.renewal_type_id !== 0) {
             if (
               reqReminderStatusDetail?.reminderTypeName.toLowerCase() ===
               "overdue"
@@ -1301,7 +1301,7 @@ export class ReqTransactionHeadersService {
           if (!correspondingHeader) {
             errors.push({
               file: file.filename,
-              reason: `No transaction header created for store ${warehouseFromFile.id}`,
+              reason: `No transaction created for store ${warehouseFromFile.warehouse_name}`,
               field: "req_transaction_header_id",
             });
             continue;
