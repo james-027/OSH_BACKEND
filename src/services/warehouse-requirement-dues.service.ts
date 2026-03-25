@@ -219,16 +219,26 @@ export class WarehouseRequirementDuesService {
         const effectiveYear = Math.max(year, warehouseCreatedYear);
 
         // Calculate dates
+        const today = new Date();
         let dueStartDate = new Date(
           effectiveYear,
-          requirement.requirement_start - 1,
-          requirement.requirement_start_days,
+          today.getMonth(),
+          today.getDate(),
         );
+        if (
+          requirement.requirement_start >= 1 &&
+          requirement.requirement_start <= 12
+        ) {
+          dueStartDate = new Date(
+            effectiveYear,
+            requirement.requirement_start - 1,
+            requirement.requirement_start_days,
+          );
+        }
 
         let dueEndDate: Date;
         switch (requirement.renewal_type_id) {
           case 1: // ONE TIME - use today's month/day in specified year
-            const today = new Date();
             dueStartDate = new Date(
               effectiveYear,
               today.getMonth(),
