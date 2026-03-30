@@ -14,12 +14,12 @@ export class WarehouseDwhService {
     private warehouseRepository: Repository<Warehouse>,
     @InjectRepository(WarehouseDwhLog)
     private logRepository: Repository<WarehouseDwhLog>,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async pullAndInsertFromOutlets(
     batchSize = 1000,
-    accessKeyId: number = 1
+    accessKeyId: number = 1,
   ): Promise<{
     inserted: number;
     failed: number;
@@ -28,7 +28,7 @@ export class WarehouseDwhService {
   }> {
     const sourceConn = await getCtgiSemsConnection();
     const [rows] = await sourceConn.execute(
-      `SELECT outletIFS, outletCode, outletDesc, brnID, ownID, address, status FROM outlets where status < 7`
+      `SELECT outletIFS, outletCode, outletDesc, brnID, ownID, address, status FROM outlets where status < 7`,
     );
     let inserted = 0;
     let failed = 0;
@@ -180,7 +180,7 @@ export class WarehouseDwhService {
             this.logRepository.create({
               error: err.message,
               row_data: JSON.stringify(row),
-            })
+            }),
           );
         }
       }
@@ -190,6 +190,7 @@ export class WarehouseDwhService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -198,6 +199,7 @@ export class WarehouseDwhService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouses", 0);
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
@@ -209,7 +211,7 @@ export class WarehouseDwhService {
 
   async scheduledPullAndInsertFromOutlets(
     batchSize: number,
-    accessKeyId: number
+    accessKeyId: number,
   ): Promise<void> {
     await this.pullAndInsertFromOutlets(batchSize, accessKeyId);
   }

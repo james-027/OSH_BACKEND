@@ -521,6 +521,13 @@ export class ReqTransactionHeadersService {
         userId,
       );
 
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", savedHdr.id);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
       return this.findOne(savedHdr.id);
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -694,6 +701,15 @@ export class ReqTransactionHeadersService {
             `Error renaming folder for trans_number ${transNumber}: ${folderError.message}`,
           );
           results["folder_rename_error"] = folderError.message;
+        }
+      }
+
+      if (results.cancelled_headers > 0) {
+        // SSE Events
+        try {
+          this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        } catch (err) {
+          logger.error("SSE event failed:", err);
         }
       }
 
