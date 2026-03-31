@@ -20,9 +20,11 @@ export class ResponseMapperService {
           "createdBy",
           "updatedBy",
           "status",
+          "category",
           "renewalType",
           "requirementType",
           "requirementReminders",
+          "categoryTypes",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -67,7 +69,28 @@ export class ResponseMapperService {
 
     // Map requirementType relation
     if (entity.requirementType && typeof entity.requirementType === "object") {
-      response.requirement_type_name = entity.requirementType.requirement_type_name || null;
+      response.requirement_type_name =
+        entity.requirementType.requirement_type_name || null;
+    }
+
+    // Map category relation
+    if (entity.category && typeof entity.category === "object") {
+      response.category_name = entity.category.category_name || null;
+    }
+
+    // Flatten categoryTypes if present
+    if (entity.categoryTypes && Array.isArray(entity.categoryTypes)) {
+      response.category_types = entity.categoryTypes.map((catType: any) => ({
+        id: catType.id,
+        category_type_name: catType.category_type_name,
+        category_id: catType.category_id,
+        status_id: catType.status_id,
+        created_by: catType.created_by,
+        updated_by: catType.updated_by,
+        created_at: catType.created_at,
+        modified_at: catType.modified_at,
+        status_name: catType.status?.status_name || null,
+      }));
     }
 
     // Flatten requirementReminders if present
@@ -88,7 +111,7 @@ export class ResponseMapperService {
           modified_at: reminder.modified_at,
           reminder_type_name: reminder.reminderType?.reminder_type_name || null,
           reminder_status_name: reminder.status?.status_name || null,
-        })
+        }),
       );
     }
 

@@ -44,6 +44,9 @@ import { ApiAuthAccess } from "../entities/ApiAuthAccess";
 import { ApiLogs } from "../entities/ApiLogs";
 import { ReminderType } from "../entities/ReminderType";
 import { RequirementType } from "../entities/RequirementType";
+import { Category } from "../entities/Category";
+import { CategoryType } from "../entities/CategoryType";
+import { Vendor } from "../entities/Vendor";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
 import { RequirementReminder } from "../entities/RequirementReminder";
@@ -107,6 +110,9 @@ export const entities = [
   ApiLogs,
   ReminderType,
   RequirementType,
+  Category,
+  CategoryType,
+  Vendor,
   RenewalType,
   Requirement,
   RequirementReminder,
