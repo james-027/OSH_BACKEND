@@ -25,6 +25,8 @@ export class ResponseMapperService {
           "location",
           "vendor",
           "staff",
+          "brand",
+          "categoryType",
           "position",
           "renewalType",
           "requirementType",
@@ -108,6 +110,17 @@ export class ResponseMapperService {
         entity.staff.first_name && entity.staff.last_name
           ? `${entity.staff.first_name} ${entity.staff.last_name}`
           : null;
+    }
+
+    // Map brand relation
+    if (entity.brand && typeof entity.brand === "object") {
+      response.brand_name = entity.brand.brand_name || null;
+    }
+
+    // Map categoryType relation
+    if (entity.categoryType && typeof entity.categoryType === "object") {
+      response.category_type_name =
+        entity.categoryType.category_type_name || null;
     }
 
     // Map position relation

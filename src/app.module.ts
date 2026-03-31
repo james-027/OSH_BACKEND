@@ -75,6 +75,8 @@ import { ReqTransactionDetailsModule } from "./modules/req-transaction-details/r
 import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-transaction-dues.module";
 import { SSEModule } from "./modules/sse/sse.module";
 import { StaffVendorSalariesModule } from "./modules/staff-vendor-salaries/staff-vendor-salaries.module";
+import { StaffBrandsModule } from "./modules/staff-brands/staff-brands.module";
+import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { TransactionSequence } from "./entities/TransactionSequence";
@@ -153,6 +155,8 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     ReqTransactionDuesModule,
     SSEModule,
     StaffVendorSalariesModule,
+    StaffBrandsModule,
+    StaffCategoryTypesModule,
   ],
   providers: [
     EmailService,
