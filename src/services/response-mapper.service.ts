@@ -21,6 +21,7 @@ export class ResponseMapperService {
           "updatedBy",
           "status",
           "renewalType",
+          "requirementType",
           "requirementReminders",
         ].includes(key)
       ) {
@@ -62,6 +63,11 @@ export class ResponseMapperService {
     // Map renewalType relation
     if (entity.renewalType && typeof entity.renewalType === "object") {
       response.renewal_type_name = entity.renewalType.renewal_type_name || null;
+    }
+
+    // Map requirementType relation
+    if (entity.requirementType && typeof entity.requirementType === "object") {
+      response.requirement_type_name = entity.requirementType.requirement_type_name || null;
     }
 
     // Flatten requirementReminders if present

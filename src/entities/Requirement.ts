@@ -12,6 +12,7 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { RenewalType } from "./RenewalType";
+import { RequirementType } from "./RequirementType";
 import { RequirementReminder } from "./RequirementReminder";
 import { WarehouseRequirement } from "./WarehouseRequirement";
 import { ReqTransactionHeader } from "./ReqTransactionHeader";
@@ -30,6 +31,9 @@ export class Requirement {
 
   @Column()
   renewal_type_id: number;
+
+  @Column({ nullable: true })
+  requirement_type_id: number;
 
   /**
    * The number of days before the requirement is due to send a reminder.
@@ -112,6 +116,19 @@ export class Requirement {
   })
   @JoinColumn({ name: "renewal_type_id" })
   renewalType!: RenewalType;
+
+  // Foreign key to requirement type entity
+  @ManyToOne(
+    () => RequirementType,
+    (requirementType) => requirementType.requirements,
+    {
+      eager: false,
+      onDelete: "RESTRICT",
+      onUpdate: "CASCADE",
+    }
+  )
+  @JoinColumn({ name: "requirement_type_id" })
+  requirementType!: RequirementType;
 
   @OneToMany(
     () => RequirementReminder,

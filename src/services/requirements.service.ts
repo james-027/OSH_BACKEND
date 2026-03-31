@@ -35,6 +35,7 @@ export class RequirementsService {
       "createdBy",
       "updatedBy",
       "renewalType",
+      "requirementType",
       "requirementReminders",
       "requirementReminders.reminderType",
       "requirementReminders.status",

@@ -67,4 +67,8 @@ export class CreateRequirementDto {
   @IsOptional()
   @IsInt()
   reminder_type_10?: number;
+
+  @IsOptional()
+  @IsInt()
+  requirement_type_id?: number;
 }
