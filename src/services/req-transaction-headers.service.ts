@@ -654,12 +654,12 @@ export class ReqTransactionHeadersService {
         try {
           const folderPath = path.join(
             process.cwd(),
-            "uploads/req-transactions",
+            "uploads/" + process.env.UPLOAD_REQ_DIR,
             transNumber,
           );
           const newFolderPath = path.join(
             process.cwd(),
-            "uploads/req-transactions",
+            "uploads/" + process.env.UPLOAD_REQ_DIR,
             `xx-${transNumber}`,
           );
 
@@ -682,7 +682,7 @@ export class ReqTransactionHeadersService {
                   oldFolderName: transNumber,
                   newFolderName: `xx-${transNumber}`,
                 }),
-                description: `Marked batch folder as cancelled: renamed 'uploads/req-transactions/${transNumber}' to 'uploads/req-transactions/xx-${transNumber}' for trans_number: ${transNumber}`,
+                description: `Marked batch folder as cancelled: renamed 'uploads/${process.env.UPLOAD_REQ_DIR}/${transNumber}' to 'uploads/${process.env.UPLOAD_REQ_DIR}/xx-${transNumber}' for trans_number: ${transNumber}`,
                 status_id: 1,
               },
               userId,
@@ -1334,7 +1334,7 @@ export class ReqTransactionHeadersService {
             compressedBuffer,
             file.filename,
             correspondingHeader.req_transaction_header_id,
-            "uploads/req-transactions/" + trans_number,
+            "uploads/" + process.env.UPLOAD_REQ_DIR + "/" + trans_number,
           );
 
           //* Create transaction detail with saved file path
