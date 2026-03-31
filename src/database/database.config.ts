@@ -64,6 +64,7 @@ import { TransactionSequence } from "../entities/TransactionSequence";
 import { LocationHurdleCategory } from "../entities/LocationHurdleCategory";
 import { LocationHurdle } from "../entities/LocationHurdle";
 import { SystemDocumentation } from "../entities/SystemDocumentation";
+import { StaffVendorSalary } from "../entities/StaffVendorSalary";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -131,6 +132,7 @@ export const entities = [
   LocationHurdle,
   LocationHurdleCategory,
   SystemDocumentation,
+  StaffVendorSalary,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

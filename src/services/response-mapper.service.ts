@@ -24,6 +24,7 @@ export class ResponseMapperService {
           "category",
           "location",
           "vendor",
+          "staff",
           "position",
           "renewalType",
           "requirementType",
@@ -99,6 +100,14 @@ export class ResponseMapperService {
     // Map vendor relation
     if (entity.vendor && typeof entity.vendor === "object") {
       response.vendor_name = entity.vendor.vendor_name || null;
+    }
+
+    // Map staff relation
+    if (entity.staff && typeof entity.staff === "object") {
+      response.staff_name =
+        entity.staff.first_name && entity.staff.last_name
+          ? `${entity.staff.first_name} ${entity.staff.last_name}`
+          : null;
     }
 
     // Map position relation
