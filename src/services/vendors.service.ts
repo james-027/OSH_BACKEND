@@ -112,9 +112,8 @@ export class VendorsService {
         throw new Error("Failed to retrieve created vendor");
       }
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        vendorWithRelations,
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(vendorWithRelations);
 
       // SSE Events
       try {
@@ -198,9 +197,8 @@ export class VendorsService {
         throw new Error("Failed to retrieve updated vendor");
       }
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        vendorWithRelations,
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(vendorWithRelations);
 
       // SSE Events
       try {
@@ -260,9 +258,8 @@ export class VendorsService {
         userId,
       );
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        updatedVendor,
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedVendor);
 
       // SSE Events
       try {
