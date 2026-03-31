@@ -64,6 +64,7 @@ import { RequirementTypesModule } from "./modules/requirement-types/requirement-
 import { CategoriesModule } from "./modules/categories/categories.module";
 import { CategoryTypesModule } from "./modules/category-types/category-types.module";
 import { VendorsModule } from "./modules/vendors/vendors.module";
+import { StaffsModule } from "./modules/staffs/staffs.module";
 import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
 import { SystemsModule } from "./modules/systems/systems.module";
 import { SystemDocumentationsModule } from "./modules/system-documentations/system-documentations.module";
@@ -140,6 +141,7 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     CategoriesModule,
     CategoryTypesModule,
     VendorsModule,
+    StaffsModule,
     RenewalTypesModule,
     SystemsModule,
     SystemDocumentationsModule,

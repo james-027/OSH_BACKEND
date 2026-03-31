@@ -20,7 +20,11 @@ export class ResponseMapperService {
           "createdBy",
           "updatedBy",
           "status",
+          "assignmentStatus",
           "category",
+          "location",
+          "vendor",
+          "position",
           "renewalType",
           "requirementType",
           "requirementReminders",
@@ -76,6 +80,30 @@ export class ResponseMapperService {
     // Map category relation
     if (entity.category && typeof entity.category === "object") {
       response.category_name = entity.category.category_name || null;
+    }
+
+    // Map assignmentStatus relation
+    if (
+      entity.assignmentStatus &&
+      typeof entity.assignmentStatus === "object"
+    ) {
+      response.assignment_status_name =
+        entity.assignmentStatus.status_name || null;
+    }
+
+    // Map location relation
+    if (entity.location && typeof entity.location === "object") {
+      response.location_name = entity.location.location_name || null;
+    }
+
+    // Map vendor relation
+    if (entity.vendor && typeof entity.vendor === "object") {
+      response.vendor_name = entity.vendor.vendor_name || null;
+    }
+
+    // Map position relation
+    if (entity.position && typeof entity.position === "object") {
+      response.position_name = entity.position.position_name || null;
     }
 
     // Flatten categoryTypes if present

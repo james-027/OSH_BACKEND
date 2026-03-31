@@ -47,6 +47,7 @@ import { RequirementType } from "../entities/RequirementType";
 import { Category } from "../entities/Category";
 import { CategoryType } from "../entities/CategoryType";
 import { Vendor } from "../entities/Vendor";
+import { Staff } from "../entities/Staff";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
 import { RequirementReminder } from "../entities/RequirementReminder";
@@ -113,6 +114,7 @@ export const entities = [
   Category,
   CategoryType,
   Vendor,
+  Staff,
   RenewalType,
   Requirement,
   RequirementReminder,
