@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -9,6 +11,8 @@ import { Repository } from "typeorm";
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { RequirementRemindersService } from "./requirement-reminders.service";
+import { WarehouseRequirementStartsService } from "./warehouse-requirement-starts.service";
+import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.service";
 
 import { Requirement } from "src/entities/Requirement";
 import { CreateRequirementDto } from "src/dto/CreateRequirementDto";
@@ -26,6 +30,10 @@ export class RequirementsService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private requirementRemindersService: RequirementRemindersService,
+    @Inject(forwardRef(() => WarehouseRequirementStartsService))
+    private warehouseRequirementStartsService: WarehouseRequirementStartsService,
+    @Inject(forwardRef(() => WarehouseRequirementDuesService))
+    private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
@@ -199,6 +207,36 @@ export class RequirementsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      // Store old values for date-related fields to check if they changed
+      const oldDateValues = {
+        requirement_reminder: requirement.requirement_reminder,
+        requirement_start: requirement.requirement_start,
+        requirement_start_days: requirement.requirement_start_days,
+        requirement_due_days: requirement.requirement_due_days,
+        renewal_type_id: requirement.renewal_type_id,
+      };
+
+      // Check if any date values actually changed (not just present in DTO)
+      const hasDateChanges =
+        (updateRequirementDto.requirement_reminder !== undefined &&
+          updateRequirementDto.requirement_reminder !==
+            oldDateValues.requirement_reminder) ||
+        (updateRequirementDto.requirement_start !== undefined &&
+          updateRequirementDto.requirement_start !==
+            oldDateValues.requirement_start) ||
+        (updateRequirementDto.requirement_start_days !== undefined &&
+          updateRequirementDto.requirement_start_days !==
+            oldDateValues.requirement_start_days) ||
+        (updateRequirementDto.requirement_due_days !== undefined &&
+          updateRequirementDto.requirement_due_days !==
+            oldDateValues.requirement_due_days) ||
+        (updateRequirementDto.renewal_type_id !== undefined &&
+          updateRequirementDto.renewal_type_id !==
+            oldDateValues.renewal_type_id);
+
+      const shouldUpdateWarehouseDates =
+        updateRequirementDto.update_date_details === true && hasDateChanges;
+
       if (updateRequirementDto.requirement_name) {
         updateRequirementDto.requirement_name =
           updateRequirementDto.requirement_name.toUpperCase();
@@ -221,6 +259,67 @@ export class RequirementsService {
         updateRequirementDto,
         userId,
       );
+
+      // Update warehouse requirement dates if needed
+      if (shouldUpdateWarehouseDates) {
+        const newValues = {
+          renewal_type_id:
+            updateRequirementDto.renewal_type_id ??
+            oldDateValues.renewal_type_id,
+          requirement_start:
+            updateRequirementDto.requirement_start ??
+            oldDateValues.requirement_start,
+          requirement_start_days:
+            updateRequirementDto.requirement_start_days ??
+            oldDateValues.requirement_start_days,
+          requirement_reminder:
+            updateRequirementDto.requirement_reminder ??
+            oldDateValues.requirement_reminder,
+          requirement_due_days:
+            updateRequirementDto.requirement_due_days ??
+            oldDateValues.requirement_due_days,
+        };
+
+        try {
+          const year = updateRequirementDto.year ?? new Date().getFullYear();
+          // const updateStrategy =
+          //   updateRequirementDto.update_strategy ?? "allYears";
+          const updateStrategy = "currentOnly";
+
+          // Update warehouse requirement starts
+          await this.warehouseRequirementStartsService.updateStartsForRequirement(
+            requirement.id,
+            newValues.renewal_type_id,
+            newValues.requirement_start,
+            newValues.requirement_start_days,
+            year,
+            updateStrategy,
+          );
+
+          // Update warehouse requirement dues
+          await this.warehouseRequirementDuesService.updateDuesForRequirement(
+            requirement.id,
+            newValues.renewal_type_id,
+            newValues.requirement_start,
+            newValues.requirement_start_days,
+            newValues.requirement_reminder,
+            newValues.requirement_due_days,
+            year,
+            updateStrategy,
+          );
+
+          logger.info(
+            `Updated warehouse requirement dates for requirement ${requirement.id}`,
+          );
+        } catch (warehouseError) {
+          logger.error(
+            `Error updating warehouse requirement dates for requirement ${requirement.id}:`,
+            warehouseError,
+          );
+          // Don't throw - warehouse date update failure shouldn't fail the entire requirement update
+          // Log the error for audit purposes
+        }
+      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -251,6 +350,7 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

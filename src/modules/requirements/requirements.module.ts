@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../../services/user-audit-trail-create.service";
@@ -14,6 +14,7 @@ import { RequirementRemindersService } from "../../services/requirement-reminder
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { RenewalType } from "../../entities/RenewalType";
 import { SSEModule } from "../sse/sse.module";
+import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SSEModule } from "../sse/sse.module";
     ]),
     UsersModule,
     SSEModule,
+    forwardRef(() => WarehouseRequirementsModule),
   ],
   controllers: [RequirementsController],
   providers: [

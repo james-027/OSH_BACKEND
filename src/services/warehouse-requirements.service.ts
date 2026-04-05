@@ -551,6 +551,7 @@ export class WarehouseRequirementsService {
       const activeRequirements = await this.requirementsRepository.find({
         where: {
           status_id: 1,
+          requirement_type_id: In([1]), // Only regulatory requirement types
         },
       });
 
@@ -622,14 +623,15 @@ export class WarehouseRequirementsService {
           insertedWrIds.push(...savedChunk.map((wr) => wr.id));
         } catch (chunkError) {
           // Skip duplicate key errors silently
+          const chunkErr = chunkError as Error;
           if (
-            chunkError.message &&
-            chunkError.message.includes("Duplicate entry")
+            chunkErr.message &&
+            chunkErr.message.includes("Duplicate entry")
           ) {
             result.skipped += chunk.length;
           } else {
             result.errors.push(
-              `Failed to batch insert warehouse requirements chunk: ${chunkError.message}`,
+              `Failed to batch insert warehouse requirements chunk: ${chunkErr.message}`,
             );
             // Log to sync_logs
             try {
@@ -637,7 +639,7 @@ export class WarehouseRequirementsService {
                 module: "WAREHOUSE REQUIREMENT",
                 type: "error",
                 action: "data insertion",
-                message: chunkError.message || String(chunkError),
+                message: chunkErr.message || String(chunkError),
                 row_data: JSON.stringify({}),
               });
             } catch (logErr) {
@@ -661,8 +663,9 @@ export class WarehouseRequirementsService {
           result.duesSkipped += duesResult.skipped;
           result.errors.push(...duesResult.errors);
         } catch (dueError) {
+          const dueErr = dueError as Error;
           result.errors.push(
-            `Failed to create dues for inserted warehouse requirements: ${dueError.message}`,
+            `Failed to create dues for inserted warehouse requirements: ${dueErr.message}`,
           );
         }
 
@@ -678,8 +681,9 @@ export class WarehouseRequirementsService {
           result.startsSkipped += startsResult.skipped;
           result.errors.push(...startsResult.errors);
         } catch (startError) {
+          const startErr = startError as Error;
           result.errors.push(
-            `Failed to create starts for inserted warehouse requirements: ${startError.message}`,
+            `Failed to create starts for inserted warehouse requirements: ${startErr.message}`,
           );
         }
       }
@@ -718,19 +722,20 @@ export class WarehouseRequirementsService {
       return result;
     } catch (error) {
       // Log fatal sync error
+      const err = error as Error;
       try {
         await this.syncLogRepository.save({
           module: "WAREHOUSE REQUIREMENT",
           type: "error",
           action: "data insertion",
-          message: error.message || String(error),
+          message: err.message || String(error),
           row_data: JSON.stringify({}),
         });
       } catch (logErr) {
         // ignore
       }
 
-      result.errors.push(`Sync failed: ${error.message}`);
+      result.errors.push(`Sync failed: ${(error as Error).message}`);
       return result;
     }
   }
@@ -842,7 +847,7 @@ export class WarehouseRequirementsService {
 
       return result;
     } catch (error) {
-      result.errors.push(`Periodic sync failed: ${error.message}`);
+      result.errors.push(`Periodic sync failed: ${(error as Error).message}`);
 
       // Log fatal sync error
       try {
@@ -850,7 +855,7 @@ export class WarehouseRequirementsService {
           module: "WAREHOUSE REQUIREMENT DUE (PERIODIC)",
           type: "error",
           action: "data insertion",
-          message: error.message || String(error),
+          message: (error as Error).message || String(error),
           row_data: JSON.stringify({ year: year }),
         });
       } catch (logErr) {
@@ -1032,7 +1037,7 @@ export class WarehouseRequirementsService {
     } catch (error) {
       console.error("Error fetching warehouse requirements listing:", error);
       throw new BadRequestException(
-        `Failed to fetch warehouse requirements: ${error.message}`,
+        `Failed to fetch warehouse requirements: ${(error as Error).message}`,
       );
     }
   }
@@ -1133,6 +1138,7 @@ export class WarehouseRequirementsService {
               requirement_name: baseReq.requirement?.requirement_name || null,
               renewal_type_name:
                 baseReq.requirement?.renewalType?.renewal_type_name || null,
+              warehouse_requirement_id: baseReq.id,
               warehouse_requirement_start: requirementStart
                 ? this.commonUtilitiesService.formatDateString(
                     requirementStart.warehouse_requirement_start,
@@ -1174,6 +1180,7 @@ export class WarehouseRequirementsService {
               requirement_name: baseReq.requirement?.requirement_name || null,
               renewal_type_name:
                 baseReq.requirement?.renewalType?.renewal_type_name || null,
+              warehouse_requirement_id: baseReq.id,
               warehouse_requirement_start: requirementStart
                 ? this.commonUtilitiesService.formatDateString(
                     requirementStart.warehouse_requirement_start,
@@ -1543,7 +1550,7 @@ export class WarehouseRequirementsService {
         error,
       );
       throw new BadRequestException(
-        `Failed to fetch warehouse requirements: ${error.message}`,
+        `Failed to fetch warehouse requirements: ${(error as Error).message}`,
       );
     }
   }
@@ -1724,7 +1731,7 @@ export class WarehouseRequirementsService {
         error,
       );
       throw new BadRequestException(
-        `Failed to fetch warehouse requirements counts: ${error.message}`,
+        `Failed to fetch warehouse requirements counts: ${(error as Error).message}`,
       );
     }
   }
@@ -1867,7 +1874,7 @@ export class WarehouseRequirementsService {
         error,
       );
       throw new BadRequestException(
-        `Failed to fetch warehouse requirements per location: ${error.message}`,
+        `Failed to fetch warehouse requirements per location: ${(error as Error).message}`,
       );
     }
   }
@@ -2211,7 +2218,7 @@ export class WarehouseRequirementsService {
         error,
       );
       throw new BadRequestException(
-        `Failed to fetch warehouse requirements detailed listing: ${error.message}`,
+        `Failed to fetch warehouse requirements detailed listing: ${(error as Error).message}`,
       );
     }
   }

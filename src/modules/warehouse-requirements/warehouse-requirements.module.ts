@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { WarehouseRequirement } from "../../entities/WarehouseRequirement";
 import { WarehouseRequirementDue } from "../../entities/WarehouseRequirementDue";
@@ -41,7 +41,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     ]),
     UsersModule,
     UserAuditTrailModule,
-    RequirementsModule,
+    forwardRef(() => RequirementsModule),
     SSEModule,
   ],
   controllers: [],

@@ -10,6 +10,7 @@ import { WarehouseRequirement } from "../entities/WarehouseRequirement";
 import { Requirement } from "../entities/Requirement";
 import { SyncLog } from "../entities/syncLog";
 import { formatDateToString } from "../utils/date.utils";
+import logger from "src/config/logger";
 
 @Injectable()
 export class WarehouseRequirementStartsService {
@@ -44,11 +45,11 @@ export class WarehouseRequirementStartsService {
         return null;
       }
 
-      // Fetch the warehouse requirement with its requirement details
+      // Fetch the warehouse requirement with its requirement and warehouse details
       const warehouseRequirement =
         await this.warehouseRequirementsRepository.findOne({
           where: { id: warehouseRequirementId },
-          relations: ["requirement"],
+          relations: ["requirement", "warehouse"],
         });
 
       if (!warehouseRequirement) {
@@ -58,6 +59,7 @@ export class WarehouseRequirementStartsService {
       }
 
       const requirement = warehouseRequirement.requirement;
+      const warehouse = warehouseRequirement.warehouse;
 
       if (!requirement) {
         throw new NotFoundException(
@@ -65,21 +67,20 @@ export class WarehouseRequirementStartsService {
         );
       }
 
-      // Calculate warehouse_requirement_start based on renewal_type_id
-      let startDate: Date;
+      // Calculate effectiveYear based on warehouse.created_at
+      const year = new Date().getFullYear();
+      const warehouseCreatedYear = warehouse?.created_at
+        ? new Date(warehouse.created_at).getFullYear()
+        : year;
+      const effectiveYear = Math.max(year, warehouseCreatedYear);
 
-      if (requirement.renewal_type_id === 1) {
-        // ONE TIME: use today
-        startDate = new Date();
-      } else {
-        // OTHER TYPES: use requirement_start month/day + current year
-        const currentYear = new Date().getFullYear();
-        startDate = new Date(
-          currentYear,
-          requirement.requirement_start - 1, // Month is 0-indexed in JS Date
-          requirement.requirement_start_days,
-        );
-      }
+      // Use extracted method for start date calculation (DRY principle)
+      const startDate = this.calculateStartDate(
+        requirement.renewal_type_id,
+        requirement.requirement_start,
+        requirement.requirement_start_days,
+        effectiveYear,
+      );
 
       // Convert date to YYYY-MM-DD format for database (local date, not UTC)
       const startDateString = formatDateToString(startDate);
@@ -100,7 +101,8 @@ export class WarehouseRequirementStartsService {
       return savedStart;
     } catch (error) {
       // Skip duplicate key errors silently (expected when syncing repeatedly)
-      if (error.message && error.message.includes("Duplicate entry")) {
+      const err = error as Error;
+      if (err.message && err.message.includes("Duplicate entry")) {
         return null; // Silently skip
       }
 
@@ -110,7 +112,7 @@ export class WarehouseRequirementStartsService {
           module: "WAREHOUSE REQUIREMENT START",
           type: "error",
           action: "data insertion",
-          message: error.message || String(error),
+          message: err.message || String(error),
           row_data: JSON.stringify({
             warehouseRequirementId,
           }),
@@ -183,26 +185,13 @@ export class WarehouseRequirementStartsService {
           : year;
         const effectiveYear = Math.max(year, warehouseCreatedYear);
 
-        // Calculate start date based on renewal_type_id
-        let startDate: Date;
-
-        if (requirement.renewal_type_id === 1) {
-          // ONE TIME: use today's month/day in specified year
-          const today = new Date();
-          startDate = new Date(
-            effectiveYear,
-            today.getMonth(),
-            today.getDate(),
-          );
-        } else {
-          // OTHER TYPES: use requirement_start month/day + specified year
-          startDate = new Date(
-            effectiveYear,
-            requirement.requirement_start - 1,
-            requirement.requirement_start_days,
-          );
-        }
-
+        // Calculate start date
+        const startDate = this.calculateStartDate(
+          requirement.renewal_type_id,
+          requirement.requirement_start,
+          requirement.requirement_start_days,
+          effectiveYear,
+        );
         const startDateString = formatDateToString(startDate);
 
         // Check unique constraint: (warehouse_requirement_id, start)
@@ -238,22 +227,24 @@ export class WarehouseRequirementStartsService {
             await this.warehouseRequirementStartsRepository.save(chunk);
           result.created += savedChunk.length;
         } catch (chunkError) {
+          const chunkErr = chunkError as Error;
           result.errors.push(
-            `Failed to batch insert starts chunk: ${chunkError.message}`,
+            `Failed to batch insert starts chunk: ${chunkErr.message}`,
           );
         }
       }
 
       return result;
     } catch (error) {
-      result.errors.push(`Failed to create starts: ${error.message}`);
+      const err = error as Error;
+      result.errors.push(`Failed to create starts: ${err.message}`);
       // Log to sync_logs
       try {
         await this.syncLogRepository.save({
           module: "WAREHOUSE REQUIREMENT START",
           type: "error",
           action: "data insertion",
-          message: error.message || String(error),
+          message: err.message || String(error),
           row_data: JSON.stringify({ warehouseRequirementIds }),
         });
       } catch (logErr) {
@@ -261,6 +252,142 @@ export class WarehouseRequirementStartsService {
       }
 
       return result;
+    }
+  }
+
+  /**
+   * Calculate start date for a requirement
+   * Used by both creation and update flows
+   * @param renewalTypeId The renewal type ID
+   * @param requirementStart Month (1-12)
+   * @param requirementStartDays Day of month
+   * @returns Calculated date
+   */
+  private calculateStartDate(
+    renewalTypeId: number,
+    requirementStart: number,
+    requirementStartDays: number,
+    effectiveYear: number = new Date().getFullYear(),
+  ): Date {
+    if (renewalTypeId === 1) {
+      // ONE TIME: use today
+      return new Date();
+    } else {
+      // OTHER TYPES: use requirement_start month/day + effective year
+      return new Date(
+        effectiveYear,
+        requirementStart - 1, // Month is 0-indexed in JS Date
+        requirementStartDays,
+      );
+    }
+  }
+
+  /**
+   * Update warehouse requirement start dates when requirement details change
+   * Supports two strategies:
+   * - 'allYears': Use dynamic year based on warehouse.created_at (original behavior - updates all)
+   * - 'currentOnly': Use passed year parameter, filter by status_id=1 + year match
+   * @param requirementId The requirement ID to update starts for
+   * @param renewalTypeId New renewal type ID
+   * @param requirementStart New requirement start month
+   * @param requirementStartDays New requirement start day
+   * @param year Year parameter (used for calculation in currentOnly strategy)
+   * @param updateStrategy 'allYears' | 'currentOnly' (default: 'allYears')
+   */
+  async updateStartsForRequirement(
+    requirementId: number,
+    renewalTypeId: number,
+    requirementStart: number,
+    requirementStartDays: number,
+    year: number = new Date().getFullYear(),
+    updateStrategy: "allYears" | "currentOnly" = "allYears",
+  ): Promise<{ updated: number }> {
+    try {
+      // Get all warehouse requirements with warehouse info for dynamic year calculation
+      const warehouseRequirements = await this.warehouseRequirementsRepository
+        .createQueryBuilder("wr")
+        .leftJoinAndSelect("wr.warehouse", "w")
+        .where("wr.requirement_id = :requirementId", { requirementId })
+        .select(["wr.id", "w.created_at"])
+        .getMany();
+
+      if (warehouseRequirements.length === 0) {
+        return { updated: 0 };
+      }
+
+      let totalUpdated = 0;
+
+      if (updateStrategy === "currentOnly") {
+        // Strategy: Use passed year, filter by year + status_id=1
+        const yearStart = `${year}-01-01`;
+        const yearEnd = `${year}-12-31`;
+
+        const warehouseRequirementIds = warehouseRequirements.map(
+          (wr) => wr.id,
+        );
+
+        // Calculate date using passed year
+        const newStartDate = this.calculateStartDate(
+          renewalTypeId,
+          requirementStart,
+          requirementStartDays,
+          year,
+        );
+        const newStartDateString = formatDateToString(newStartDate);
+
+        const result = await this.warehouseRequirementStartsRepository
+          .createQueryBuilder()
+          .update(WarehouseRequirementStart)
+          .set({ warehouse_requirement_start: newStartDateString })
+          .where("warehouse_requirement_id IN (:...warehouseRequirementIds)", {
+            warehouseRequirementIds,
+          })
+          .andWhere("status_id = 1")
+          .andWhere(
+            "warehouse_requirement_start BETWEEN :yearStart AND :yearEnd",
+            {
+              yearStart,
+              yearEnd,
+            },
+          )
+          .execute();
+
+        totalUpdated = result.affected || 0;
+      } else {
+        // Strategy 'allYears': Use dynamic year per warehouse (original behavior)
+        for (const wr of warehouseRequirements) {
+          // Calculate effectiveYear based on warehouse.created_at (original logic)
+          const warehouseCreatedYear = wr.warehouse?.created_at
+            ? new Date(wr.warehouse.created_at).getFullYear()
+            : year;
+          const effectiveYear = Math.max(year, warehouseCreatedYear);
+
+          // Calculate new start date using effectiveYear
+          const newStartDate = this.calculateStartDate(
+            renewalTypeId,
+            requirementStart,
+            requirementStartDays,
+            effectiveYear,
+          );
+          const newStartDateString = formatDateToString(newStartDate);
+
+          // Update all starts for this warehouse requirement
+          const result = await this.warehouseRequirementStartsRepository.update(
+            { warehouse_requirement_id: wr.id },
+            { warehouse_requirement_start: newStartDateString },
+          );
+
+          totalUpdated += result.affected || 0;
+        }
+      }
+
+      return { updated: totalUpdated };
+    } catch (error) {
+      logger.error(
+        `Error updating starts for requirement ${requirementId}:`,
+        error,
+      );
+      throw error;
     }
   }
 }
