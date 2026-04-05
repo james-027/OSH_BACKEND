@@ -25,13 +25,13 @@ export class RequirementTypesController {
   ) {}
 
   @Get()
-  @RequirePermissions({ module: "REQUIREMENT TYPES", action: "VIEW" })
+  @RequirePermissions({ module: "REQUIREMENT TYPES", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     return this.requirementTypesService.findAll();
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "REQUIREMENT TYPES", action: "VIEW" })
+  @RequirePermissions({ module: "REQUIREMENT TYPES", action: "DATA ACCESS" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.requirementTypesService.findOne(id);
   }
