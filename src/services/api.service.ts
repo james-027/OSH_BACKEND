@@ -112,8 +112,9 @@ export class ApiService {
     try {
       responseData = await this.getDataByEndpoint(endpoint, queryParams);
     } catch (error) {
-      statusCode = error.status || 500;
-      responseData = { error: error.message };
+      const err = error as any;
+      statusCode = err.status || 500;
+      responseData = { error: err.message };
       // Truncate params for store-crew-assignments
       let logResponse = responseData;
       if (
@@ -187,8 +188,9 @@ export class ApiService {
     try {
       responseData = await this.createDataByEndpoint(endpoint, data);
     } catch (error) {
-      statusCode = error.status || 500;
-      responseData = { error: error.message };
+      const err = error as any;
+      statusCode = err.status || 500;
+      responseData = { error: err.message };
       await this.logApiRequest(
         apiKeyEntity.id,
         endpoint,
@@ -243,8 +245,9 @@ export class ApiService {
     try {
       responseData = await this.updateDataByEndpoint(endpoint, id, data);
     } catch (error) {
-      statusCode = error.status || 500;
-      responseData = { error: error.message };
+      const err = error as any;
+      statusCode = err.status || 500;
+      responseData = { error: err.message };
       await this.logApiRequest(
         apiKeyEntity.id,
         endpoint,
@@ -298,8 +301,9 @@ export class ApiService {
     try {
       responseData = await this.deleteDataByEndpoint(endpoint, id);
     } catch (error) {
-      statusCode = error.status || 500;
-      responseData = { error: error.message };
+      const err = error as any;
+      statusCode = err.status || 500;
+      responseData = { error: err.message };
       await this.logApiRequest(
         apiKeyEntity.id,
         endpoint,

@@ -188,7 +188,7 @@ export class ReqTransactionHeadersService {
       // }));
     } catch (error) {
       throw new Error(
-        `Failed to fetch req transaction headers grouped by trans_number: ${error.message}`,
+        `Failed to fetch req transaction headers grouped by trans_number: ${(error as Error).message}`,
       );
     }
   }
@@ -642,9 +642,10 @@ export class ReqTransactionHeadersService {
             userId,
           );
         } catch (headerError) {
+          const headerErr = headerError as Error;
           results.errors.push({
             header_id: header.id,
-            reason: headerError.message || "Error processing header",
+            reason: headerErr.message || "Error processing header",
           });
         }
       }
@@ -697,10 +698,11 @@ export class ReqTransactionHeadersService {
           }
         } catch (folderError) {
           // Log any unexpected errors but don't fail the cancellation
+          const folderErr = folderError as Error;
           logger.error(
-            `Error renaming folder for trans_number ${transNumber}: ${folderError.message}`,
+            `Error renaming folder for trans_number ${transNumber}: ${folderErr.message}`,
           );
-          results["folder_rename_error"] = folderError.message;
+          results["folder_rename_error"] = folderErr.message;
         }
       }
 
@@ -722,7 +724,7 @@ export class ReqTransactionHeadersService {
         throw error;
       }
       throw new Error(
-        `Failed to cancel req transaction headers by trans_number: ${error.message}`,
+        `Failed to cancel req transaction headers by trans_number: ${(error as Error).message}`,
       );
     }
   }
@@ -792,11 +794,12 @@ export class ReqTransactionHeadersService {
         userId,
       );
     } catch (rollbackError) {
+      const rollbackErr = rollbackError as Error;
       logger.error(
-        `Critical error during rollback for warehouse ${headerInfo.warehouse_id}: ${rollbackError.message}`,
+        `Critical error during rollback for warehouse ${headerInfo.warehouse_id}: ${rollbackErr.message}`,
       );
       throw new Error(
-        `Failed to rollback transaction for warehouse ${headerInfo.warehouse_id}: ${rollbackError.message}`,
+        `Failed to rollback transaction for warehouse ${headerInfo.warehouse_id}: ${rollbackErr.message}`,
       );
     }
   }
@@ -1241,11 +1244,12 @@ export class ReqTransactionHeadersService {
               await this.warehouseRequirementDuesRepository.save(currentDue);
             } catch (dueError) {
               //* Log due creation error but continue with file processing
+              const dueErr = dueError as Error;
               await this.syncLogRepository.save({
                 module: "ReqTransactionHeadersService",
                 type: "createWithDetails",
                 action: "create_warehouse_requirement_due",
-                message: `Error creating store requirement due: ${dueError.message}`,
+                message: `Error creating store requirement due: ${dueErr.message}`,
                 row_data: JSON.stringify({
                   warehouse_requirement_id: warehouseRequirement.id,
                 }),
@@ -1272,11 +1276,12 @@ export class ReqTransactionHeadersService {
               await this.warehouseRequirementDuesRepository.save(currentDue);
             } catch (dueError) {
               //* Log due linking error but continue
+              const dueErr = dueError as Error;
               await this.syncLogRepository.save({
                 module: "ReqTransactionHeadersService",
                 type: "createWithDetails",
                 action: "create_transaction_due",
-                message: `Error linking transaction due: ${dueError.message}`,
+                message: `Error linking transaction due: ${dueErr.message}`,
                 row_data: JSON.stringify({
                   req_transaction_header_id: savedHeader.id,
                   warehouse_requirement_due_id: currentDue.id,
@@ -1293,9 +1298,10 @@ export class ReqTransactionHeadersService {
             req_transaction_due_id: saveReqTransactionDue.id,
           });
         } catch (warehouseError) {
+          const warehouseErr = warehouseError as Error;
           errors.push({
             warehouse_id: warehouse.id,
-            reason: warehouseError.message || "Error processing warehouse",
+            reason: warehouseErr.message || "Error processing warehouse",
             field: "warehouse_processing",
           });
         }
@@ -1374,14 +1380,15 @@ export class ReqTransactionHeadersService {
               }
             }
           } catch (rollbackError) {
+            const rollbackErr = rollbackError as Error;
             logger.error(
-              `Failed to rollback transaction for file ${file.filename}: ${rollbackError.message}`,
+              `Failed to rollback transaction for file ${file.filename}: ${rollbackErr.message}`,
             );
           }
 
           errors.push({
             file: file.filename,
-            reason: fileError.message || "Error processing file",
+            reason: (fileError as Error).message || "Error processing file",
             field: "file_processing",
             rollback_status: "attempted",
           });
@@ -1414,11 +1421,12 @@ export class ReqTransactionHeadersService {
       return response;
     } catch (error) {
       // Log fatal error
+      const err = error as Error;
       await this.syncLogRepository.save({
         module: "ReqTransactionHeadersService",
         type: "createWithDetails",
         action: "error",
-        message: error.message || "Unknown error in createWithDetails",
+        message: err.message || "Unknown error in createWithDetails",
         row_data: JSON.stringify({
           warehouse_ids: createDto.warehouse_ids,
           requirement_id: createDto.requirement_id,
@@ -1430,7 +1438,7 @@ export class ReqTransactionHeadersService {
       }
 
       throw new BadRequestException(
-        `Transaction creation failed: ${error.message}`,
+        `Transaction creation failed: ${(error as Error).message}`,
       );
     }
   }

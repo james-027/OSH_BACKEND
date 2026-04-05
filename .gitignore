@@ -1,5 +1,6 @@
 dist/*
 node_modules/*
 logs/*
+DB/*
 uploads/req-transactions/*
 *.log

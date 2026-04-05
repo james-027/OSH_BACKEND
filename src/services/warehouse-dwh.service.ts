@@ -176,9 +176,10 @@ export class WarehouseDwhService {
           inserted++;
         } catch (err) {
           failed++;
+          const error = err as Error;
           await this.logRepository.save(
             this.logRepository.create({
-              error: err.message,
+              error: error.message,
               row_data: JSON.stringify(row),
             }),
           );

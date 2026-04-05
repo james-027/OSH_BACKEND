@@ -17,11 +17,12 @@ import { WarehousesService } from "./warehouses.service";
 import { ItemCategoriesService } from "./item-categories.service";
 import { ActionLogsService } from "./action-logs.service";
 
-import * as dayjs from "dayjs";
-import * as utc from "dayjs/plugin/utc";
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "./common-utilities.service";
+
 dayjs.extend(utc);
 
 @Injectable()
@@ -327,7 +328,7 @@ export class WarehouseHurdlesService {
 
       return saved;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
@@ -616,7 +617,8 @@ export class WarehouseHurdlesService {
                   __rowNum__: i + 2,
                 });
               } catch (updateErr) {
-                errors.push({ row: i + 2, error: updateErr.message });
+                const updateError = updateErr as Error;
+                errors.push({ row: i + 2, error: updateError.message });
               }
             } else {
               errors.push({
@@ -625,11 +627,13 @@ export class WarehouseHurdlesService {
               });
             }
           } else {
-            errors.push({ row: i + 2, error: err.message });
+            const rowErr = err as Error;
+            errors.push({ row: i + 2, error: rowErr.message });
           }
         }
       } catch (err) {
-        errors.push({ row: i + 2, error: err.message });
+        const error = err as Error;
+        errors.push({ row: i + 2, error: error.message });
       }
     }
     if (inserted_count > 0 || updated_count > 0) {
