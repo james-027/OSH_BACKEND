@@ -418,7 +418,7 @@ export class UsersService {
     request?: any,
   ): Promise<string> {
     if (email) {
-      // console.log("request basis:", request);
+      // logger.log("request basis:", request);
       const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
       const companyName = process.env.COMPANY_NAME || "CTGI";
       const projectAbbr = process.env.PROJECT_ABBR || "SPA";
@@ -650,49 +650,12 @@ export class UsersService {
 
       // Send email notification to user
       if (savedUser.email) {
-        const loginUrl =
-          this.frontendUrlUtil.getFrontendUrlFromRequest(request);
-        const companyName = process.env.COMPANY_NAME || "CTGI";
-        const projectName = process.env.PROJECT_NAME || "Success Perks Awards";
-        const projectAbbr = process.env.PROJECT_ABBR || "SPA";
-        const html = this.emailService.generateUserWelcomeEmail({
-          userName: `${savedUser.first_name} ${savedUser.last_name}`,
-          email: savedUser.email,
-          password: password,
-          loginUrl,
-        });
-        let emailStatus = "success";
-        let emailError = null;
-        try {
-          await this.emailService.sendMail({
-            to: savedUser.email,
-            subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
-            html,
-          });
-        } catch (emailErr) {
-          emailStatus = "error";
-          emailError = this.getErrorMessage(emailErr);
-          logger.error(
-            `Failed to send welcome email to ${savedUser.email}:`,
-            emailErr,
-          );
-        }
-        // Audit trail for email sending (success or error)
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "UsersService",
-            method: "create:sendMail",
-            raw_data: JSON.stringify({
-              to: savedUser.email,
-              subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
-              html,
-              status: emailStatus,
-              error: emailError,
-            }),
-            description: `Welcome email ${emailStatus} for user (id ${savedUser.id})`,
-            status_id: 1,
-          },
-          savedUser.created_by,
+        await this.sendUserWelcomeEmail(
+          savedUser,
+          password,
+          0,
+          created_by,
+          request,
         );
       }
 
@@ -703,7 +666,7 @@ export class UsersService {
         this.sseEventEmitter.emitCreateSignal("users", 0);
         await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        logger.warn("SSE event failed:", err);
       }
 
       return this.createFlattenedResponse(savedUser);
@@ -1047,12 +1010,17 @@ export class UsersService {
       }
 
       // Update other fields
-      if (first_name !== undefined)
-        userToUpdate.first_name = first_name.toUpperCase();
-      if (middle_name !== undefined)
-        userToUpdate.middle_name = middle_name.toUpperCase();
-      if (last_name !== undefined)
-        userToUpdate.last_name = last_name.toUpperCase();
+      if (first_name !== undefined && first_name) {
+        userToUpdate.first_name = String(first_name).toUpperCase();
+      }
+      if (middle_name !== undefined && middle_name) {
+        userToUpdate.middle_name = String(middle_name).toUpperCase();
+      } else if (middle_name === null || middle_name === "") {
+        userToUpdate.middle_name = null; // Allow clearing middle name
+      }
+      if (last_name !== undefined && last_name) {
+        userToUpdate.last_name = String(last_name).toUpperCase();
+      }
       if (role_id !== undefined) {
         userToUpdate.role_id = role_id;
         // Also update the relation to ensure TypeORM persists the change
@@ -1172,7 +1140,7 @@ export class UsersService {
         this.sseEventEmitter.emitUpdateSignal("users", 0);
         await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
-        console.warn("SSE event failed for update:", err);
+        logger.warn("SSE event failed for update:", err);
       }
 
       logger.info(`User updated successfully with ID: ${id}`);
@@ -1362,7 +1330,7 @@ export class UsersService {
         this.sseEventEmitter.emitUpdateSignal("users", id);
         await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
-        console.warn("SSE event failed for update:", err);
+        logger.warn("SSE event failed for update:", err);
       }
       return response;
     } catch (error) {
@@ -1946,6 +1914,81 @@ export class UsersService {
     }
   }
 
+  /**
+   * Helper method to send welcome email to user
+   * Used by uploadExcelUsers in both create and update blocks
+   * Generates HTML email, sends via email service, and creates audit trail
+   */
+  private async sendUserWelcomeEmail(
+    user: User,
+    password: string,
+    rowNum: number,
+    created_by: number,
+    request: any,
+  ): Promise<void> {
+    if (!user.email) {
+      return;
+    }
+
+    try {
+      const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
+      const companyName = process.env.COMPANY_NAME || "CTGI";
+      const projectAbbr = process.env.PROJECT_ABBR || "SPA";
+
+      const html = this.emailService.generateUserWelcomeEmail({
+        userName: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        password: password,
+        loginUrl,
+      });
+
+      let emailStatus = "success";
+      let emailError = null;
+
+      try {
+        await this.emailService.sendMail({
+          to: user.email,
+          subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
+          html,
+        });
+      } catch (emailErr) {
+        emailStatus = "error";
+        emailError = this.getErrorMessage(emailErr);
+        logger.error(
+          `Failed to send welcome email to ${user.email}:`,
+          emailErr,
+        );
+      }
+
+      const method =
+        rowNum > 0
+          ? "uploadExcelUsers:sendWelcomeEmail"
+          : "create:sendWelcomeEmail";
+      const description =
+        rowNum > 0
+          ? `Welcome email ${emailStatus} for user created via Excel upload (row: ${rowNum} id: ${user.id})`
+          : `Welcome email ${emailStatus} for user created (id: ${user.id})`;
+      // Audit trail for email sending (success or error)
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "UsersService",
+          method: method,
+          raw_data: JSON.stringify({
+            to: user.email,
+            subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
+            status: emailStatus,
+            error: emailError,
+          }),
+          description: description,
+          status_id: 1,
+        },
+        created_by,
+      );
+    } catch (err) {
+      logger.error(`Error in sendUserWelcomeEmail for user ${user.id}:`, err);
+    }
+  }
+
   async uploadExcelUsers(
     filePath: string,
     created_by: number,
@@ -2185,8 +2228,20 @@ export class UsersService {
             this.sseEventEmitter.emitUpdateSignal("users", 0);
             await this.cacheInvalidationService.invalidateFindAll("users");
           } catch (err) {
-            console.warn("SSE event failed:", err);
+            logger.warn("SSE event failed:", err);
           }
+
+          // Send welcome email if requested
+          if (row["Send Email Notif"]) {
+            await this.sendUserWelcomeEmail(
+              existingUser,
+              row["Password"],
+              rowNum,
+              created_by,
+              request,
+            );
+          }
+
           updated_count++;
           updated_row_numbers.push(rowNum);
           success.push({ ...row, __rowNum__: rowNum });
@@ -2242,55 +2297,18 @@ export class UsersService {
           }
 
           inserted_count++;
-          // Send email notification to user
-          if (savedUser.email) {
-            const loginUrl =
-              this.frontendUrlUtil.getFrontendUrlFromRequest(request);
-            const companyName = process.env.COMPANY_NAME || "CTGI";
-            const projectName =
-              process.env.PROJECT_NAME || "Success Perks Awards";
-            const projectAbbr = process.env.PROJECT_ABBR || "SPA";
-            const html = this.emailService.generateUserWelcomeEmail({
-              userName: `${savedUser.first_name} ${savedUser.last_name}`,
-              email: savedUser.email,
-              password: row["Password"],
-              loginUrl,
-            });
-            let emailStatus = "success";
-            let emailError = null;
-            try {
-              await this.emailService.sendMail({
-                to: savedUser.email,
-                subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
-                html,
-              });
-            } catch (emailErr) {
-              emailStatus = "error";
-              emailError = this.getErrorMessage(emailErr);
-              // Optionally log email sending error, but do not fail the import
-              logger.error(
-                `Failed to send welcome email to ${savedUser.email}:`,
-                emailErr,
-              );
-            }
-            // Audit trail for email sending (success or error)
-            await this.userAuditTrailCreateService.create(
-              {
-                service: "UsersService",
-                method: "uploadExcelUsers:sendMail",
-                raw_data: JSON.stringify({
-                  to: savedUser.email,
-                  subject: `Welcome to ${companyName} ${projectAbbr} - Your Account Credentials`,
-                  html,
-                  status: emailStatus,
-                  error: emailError,
-                }),
-                description: `Welcome email ${emailStatus} for user (row ${rowNum})`,
-                status_id: 1,
-              },
+
+          // Send welcome email if requested
+          if (row["Send Email Notif"]) {
+            await this.sendUserWelcomeEmail(
+              savedUser,
+              row["Password"],
+              rowNum,
               created_by,
+              request,
             );
           }
+
           inserted_row_numbers.push(rowNum);
           success.push({ ...row, __rowNum__: rowNum });
         }
@@ -2304,7 +2322,7 @@ export class UsersService {
         this.sseEventEmitter.emitCreateSignal("users", 0);
         await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
-        console.warn("SSE event failed:", err);
+        logger.warn("SSE event failed:", err);
       }
     }
     return {
