@@ -725,6 +725,7 @@ export class WarehouseRequirementsService {
         try {
           this.sseEventEmitter.emitCreateSignal("req_transactions", 0);
           this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+          await this.cacheInvalidationService.invalidateWarehouseRequirements();
         } catch (err) {
           logger.error("SSE event failed:", err);
         }
@@ -851,6 +852,7 @@ export class WarehouseRequirementsService {
         try {
           this.sseEventEmitter.emitCreateSignal("req_transactions", 0);
           this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+          await this.cacheInvalidationService.invalidateWarehouseRequirements();
         } catch (err) {
           logger.error("SSE event failed:", err);
         }
