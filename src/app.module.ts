@@ -3,6 +3,7 @@ import {
   NestModule,
   MiddlewareConsumer,
   RequestMethod,
+  OnModuleInit,
 } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
@@ -15,6 +16,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 // Configuration
 import configuration from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
+import { initializeRedisClient } from "./config/cache.config";
 
 // Entities
 import { User } from "./entities/User";
@@ -81,6 +83,7 @@ import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehous
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { TransactionSequence } from "./entities/TransactionSequence";
+import { CacheInvalidationModule } from "./modules/cache/cache.module";
 @Module({
   imports: [
     // Configuration
@@ -159,6 +162,7 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     StaffBrandsModule,
     StaffCategoryTypesModule,
     StaffWarehousesModule,
+    CacheInvalidationModule,
   ],
   providers: [
     EmailService,
@@ -178,7 +182,12 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     },
   ],
 })
-export class AppModule implements NestModule {
+export class AppModule implements NestModule, OnModuleInit {
+  async onModuleInit() {
+    // Initialize Redis client for caching
+    await initializeRedisClient();
+  }
+
   configure(consumer: MiddlewareConsumer) {
     // Parse cookies first (before SSE middleware)
     consumer.apply(cookieParser).forRoutes("*");
