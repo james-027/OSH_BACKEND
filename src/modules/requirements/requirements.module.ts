@@ -15,6 +15,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 import { RenewalType } from "../../entities/RenewalType";
 import { SSEModule } from "../sse/sse.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse
     UsersModule,
     SSEModule,
     forwardRef(() => WarehouseRequirementsModule),
+    CacheInvalidationModule,
   ],
   controllers: [RequirementsController],
   providers: [

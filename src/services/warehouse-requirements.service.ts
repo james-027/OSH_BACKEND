@@ -10,6 +10,7 @@ import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CommonUtilitiesService } from "./common-utilities.service";
 import { RequirementRemindersService } from "./requirement-reminders.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 import { WarehouseRequirement } from "src/entities/WarehouseRequirement";
 import { Warehouse } from "src/entities/Warehouse";
@@ -46,6 +47,7 @@ export class WarehouseRequirementsService {
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private warehouseRequirementStartsService: WarehouseRequirementStartsService,
     private requirementRemindersService: RequirementRemindersService,
+    private cacheInvalidationService: CacheInvalidationService,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
     private sseEventEmitter: SSEEventEmitterHelper,
@@ -333,6 +335,9 @@ export class WarehouseRequirementsService {
           savedWarehouseRequirement.id,
           response,
         );
+
+        // Clear warehouse requirements caches (DRY: SSE + cache invalidation)
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
       } catch (sseError) {
         logger.warn(
           "SSE event emission failed for warehouse requirement creation:",
@@ -423,6 +428,9 @@ export class WarehouseRequirementsService {
       try {
         const response = await this.findOne(savedWarehouseRequirement.id);
         this.sseEventEmitter.emitUpdate("warehouse_requirements", id, response);
+
+        // Clear warehouse requirements caches (DRY: SSE + cache invalidation)
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
       } catch (sseError) {
         logger.warn(
           "SSE event emission failed for warehouse requirement update:",
@@ -475,6 +483,9 @@ export class WarehouseRequirementsService {
 
       const saved =
         await this.warehouseRequirementsRepository.save(warehouseRequirement);
+
+      // Clear warehouse requirements caches (DRY: SSE + cache invalidation)
+      await this.cacheInvalidationService.invalidateWarehouseRequirements();
 
       // Audit trail
       await this.userAuditTrailCreateService.create(

@@ -22,6 +22,7 @@ import { Action } from "src/entities/Action";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     UserAuditTrailModule,
     forwardRef(() => RequirementsModule),
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [],
   providers: [

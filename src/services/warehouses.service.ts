@@ -229,7 +229,9 @@ export class WarehousesService {
       );
       return saved;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      const message =
+        error instanceof Error ? error.message : "Failed to create warehouse";
+      throw new BadRequestException(message);
     }
   }
 

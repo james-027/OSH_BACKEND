@@ -39,6 +39,7 @@ import { WarehouseRequirementsController } from "../../controllers/warehouse-req
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     ItemsModule,
     WarehouseRequirementsModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [
     WarehousesController,

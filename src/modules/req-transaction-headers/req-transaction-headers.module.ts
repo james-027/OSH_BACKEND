@@ -24,6 +24,7 @@ import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
     WarehouseRequirementsModule,
     RequirementsModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [ReqTransactionHeadersController],
   providers: [

@@ -22,6 +22,7 @@ const utc = require("dayjs/plugin/utc");
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "./common-utilities.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 dayjs.extend(utc);
 
@@ -41,6 +42,7 @@ export class WarehouseHurdlesService {
     private ActionLogsService: ActionLogsService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async findAll(
@@ -231,6 +233,7 @@ export class WarehouseHurdlesService {
     // SSE Events
     try {
       this.sseEventEmitter.emitCreateSignal("warehouse_hurdles", 0);
+      await this.cacheInvalidationService.invalidateWarehouseHurdles();
     } catch (err) {
       logger.error("SSE event failed:", err);
     }
@@ -322,6 +325,7 @@ export class WarehouseHurdlesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", saved.id);
+        await this.cacheInvalidationService.invalidateWarehouseHurdles();
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
@@ -396,11 +400,8 @@ export class WarehouseHurdlesService {
     });
     // SSE Events
     try {
-      logger.info(`[SSE] Emitting UPDATE signal for warehouse_hurdles:${id}`);
       this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", id);
-      logger.info(
-        `[SSE] Successfully emitted UPDATE signal for warehouse_hurdles:${id}`,
-      );
+      await this.cacheInvalidationService.invalidateWarehouseHurdles();
     } catch (err) {
       logger.error("[SSE] SSE event failed for update:", err);
     }
@@ -475,6 +476,7 @@ export class WarehouseHurdlesService {
     // SSE Events
     try {
       this.sseEventEmitter.emitUpdateSignal("warehouse_hurdles", 0);
+      await this.cacheInvalidationService.invalidateWarehouseHurdles();
     } catch (err) {
       logger.error("SSE event failed for update:", err);
     }
@@ -640,6 +642,7 @@ export class WarehouseHurdlesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreateSignal("warehouse_hurdles", 0);
+        await this.cacheInvalidationService.invalidateWarehouseHurdles();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

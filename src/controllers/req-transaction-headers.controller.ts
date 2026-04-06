@@ -11,6 +11,12 @@ import {
   ParseIntPipe,
   Query,
 } from "@nestjs/common";
+import { CacheTransactions } from "src/decorators/cache.decorator";
+import {
+  CACHE_KEYS,
+  buildReqTransHeaderGroupKey,
+  buildReqTransHeaderFindByTransKey,
+} from "src/config/cache.config";
 import { ReqTransactionHeadersService } from "../services/req-transaction-headers.service";
 import { CreateReqTransactionHeaderDto } from "../dto/CreateReqTransactionHeaderDto";
 import { UpdateReqTransactionHeaderDto } from "../dto/UpdateReqTransactionHeaderDto";
@@ -30,12 +36,14 @@ export class ReqTransactionHeadersController {
   ) {}
 
   @Get()
+  @CacheTransactions(CACHE_KEYS.REQ_TRANSACTION_HEADERS_ALL)
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAll() {
     return await this.reqTransactionHeadersService.findAll();
   }
 
   @Get("group-by-trans-number")
+  @CacheTransactions(buildReqTransHeaderGroupKey)
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findAllByTransNumber(
     @Request() req,
@@ -53,16 +61,19 @@ export class ReqTransactionHeadersController {
     const transNumber = queryParams.trans_number;
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
     return await this.reqTransactionHeadersService.findAllByTransNumber(
       transNumber,
       userId,
       roleId,
+      accessKeyId,
       dateFrom,
       dateTo,
     );
   }
 
   @Get("find-by-trans-number")
+  @CacheTransactions(buildReqTransHeaderFindByTransKey)
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findOneByTransNumber(@Query() queryParams: WhReqListingDto) {
     const transNumber = queryParams.trans_number;
@@ -72,6 +83,7 @@ export class ReqTransactionHeadersController {
   }
 
   @Get(":id")
+  @CacheTransactions(CACHE_KEYS.REQ_TRANSACTION_HEADERS_BY_ID)
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
   async findOne(@Param("id") id: number) {
     return await this.reqTransactionHeadersService.findOne(id);
@@ -123,7 +135,7 @@ export class ReqTransactionHeadersController {
   }
 
   @Patch(":trans_number/cancel-by-trans-number")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "CANCEL" })
   async toggleStatusCancelByTransNumber(
     @Param("trans_number") transNumber: string,
     @Body() body: { cancellation_reason: string },
@@ -158,7 +170,7 @@ export class ReqTransactionHeadersController {
    * PATCH /req-transaction-headers/toggle-status-cancel
    */
   @Patch("toggle-status-cancel")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "DEACTIVATE" })
+  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "CANCEL" })
   async toggleStatusCancel(
     @Body() updateDto: CreateWarehouseRequirementDueAndReqTransDto,
     @Request() req,

@@ -10,6 +10,7 @@ import * as path from "path";
 
 import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 import { ReqTransactionHeader } from "src/entities/ReqTransactionHeader";
 import { Warehouse } from "src/entities/Warehouse";
@@ -57,6 +58,7 @@ export class ReqTransactionHeadersService {
     private syncLogRepository: Repository<SyncLog>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private cacheInvalidationService: CacheInvalidationService,
     private responseMapperService: ResponseMapperService,
     private reqTransactionDetailsService: ReqTransactionDetailsService,
     private reqTransactionDuesService: ReqTransactionDuesService,
@@ -118,6 +120,7 @@ export class ReqTransactionHeadersService {
     transNumber?: string,
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
     dateFrom?: string,
     dateTo?: string,
   ): Promise<any[]> {
@@ -151,6 +154,11 @@ export class ReqTransactionHeadersService {
       if (transNumber) {
         query = query.andWhere("header.trans_number = :transNumber", {
           transNumber,
+        });
+      }
+      if (accessKeyId) {
+        query = query.andWhere("header.access_key_id = :accessKeyId", {
+          accessKeyId,
         });
       }
       if (dateFrom && dateTo) {
@@ -324,6 +332,9 @@ export class ReqTransactionHeadersService {
 
       const response = await this.findOne(savedRecord.id);
 
+      // Clear req transaction caches (DRY: SSE + cache invalidation)
+      await this.cacheInvalidationService.invalidateReqTransactions();
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -403,6 +414,9 @@ export class ReqTransactionHeadersService {
 
       const savedRecord =
         await this.reqTransactionHeadersRepository.save(record);
+
+      // Clear req transaction caches (DRY: SSE + cache invalidation)
+      await this.cacheInvalidationService.invalidateReqTransactions();
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -521,6 +535,10 @@ export class ReqTransactionHeadersService {
         userId,
       );
 
+      // Clear req transaction caches (DRY: SSE + cache invalidation)
+      await this.cacheInvalidationService.invalidateReqTransactions();
+      await this.cacheInvalidationService.invalidateWarehouseRequirements();
+      await this.cacheInvalidationService.invalidateRequirements();
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdateSignal("req_transactions", savedHdr.id);
@@ -707,6 +725,11 @@ export class ReqTransactionHeadersService {
       }
 
       if (results.cancelled_headers > 0) {
+        // Clear req transaction caches (DRY: SSE + cache invalidation)
+        await this.cacheInvalidationService.invalidateReqTransactions();
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
+        await this.cacheInvalidationService.invalidateRequirements();
+
         // SSE Events
         try {
           this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
@@ -1410,6 +1433,10 @@ export class ReqTransactionHeadersService {
       };
 
       if (successResults.length > 0) {
+        // Clear req transaction caches (DRY: SSE + cache invalidation)
+        await this.cacheInvalidationService.invalidateReqTransactions();
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
+        await this.cacheInvalidationService.invalidateRequirements();
         // SSE Events
         try {
           this.sseEventEmitter.emitCreateSignal("req_transactions", 0);

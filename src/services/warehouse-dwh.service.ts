@@ -6,6 +6,7 @@ import { WarehouseDwhLog } from "../entities/WarehouseDwhLog";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { getCtgiSemsConnection } from "../utils/dwh-datasources";
 import logger from "src/config/logger";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class WarehouseDwhService {
@@ -15,6 +16,7 @@ export class WarehouseDwhService {
     @InjectRepository(WarehouseDwhLog)
     private logRepository: Repository<WarehouseDwhLog>,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async pullAndInsertFromOutlets(
@@ -192,6 +194,8 @@ export class WarehouseDwhService {
       try {
         this.sseEventEmitter.emitCreateSignal("warehouses", 0);
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        await this.cacheInvalidationService.invalidateReqTransactions();
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -201,6 +205,8 @@ export class WarehouseDwhService {
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouses", 0);
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        await this.cacheInvalidationService.invalidateReqTransactions();
+        await this.cacheInvalidationService.invalidateWarehouseRequirements();
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }

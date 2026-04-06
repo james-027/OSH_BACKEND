@@ -20,6 +20,7 @@ import { UpdateRequirementDto } from "src/dto/UpdateRequirementDto";
 import { ResponseMapperService } from "./response-mapper.service";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "../config/logger";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class RequirementsService {
@@ -35,6 +36,7 @@ export class RequirementsService {
     @Inject(forwardRef(() => WarehouseRequirementDuesService))
     private warehouseRequirementDuesService: WarehouseRequirementDuesService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -154,6 +156,8 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("requirements", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        await this.cacheInvalidationService.invalidateRequirements();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -351,6 +355,7 @@ export class RequirementsService {
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        await this.cacheInvalidationService.invalidateRequirements();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -417,6 +422,8 @@ export class RequirementsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("requirements", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        await this.cacheInvalidationService.invalidateRequirements();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

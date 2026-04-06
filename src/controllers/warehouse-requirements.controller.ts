@@ -12,6 +12,13 @@ import {
   Patch,
   Query,
 } from "@nestjs/common";
+import { CacheWarehouseRequirements, CacheCustom } from "../decorators/cache.decorator";
+import {
+  CACHE_KEYS,
+  CACHE_TTL,
+  buildWarehouseRequirementsListingKey,
+  buildWarehouseRequirementsCountsKey,
+} from "../config/cache.config";
 import { JwtAuthGuard } from "../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../guards/permissions.guard";
 import { RequirePermissions } from "../decorators/permissions.decorator";
@@ -76,9 +83,12 @@ export class WarehouseRequirementsController {
    * Get warehouses with base and transacted requirements listing
    * GET /warehouse-requirements/stores/:warehouse_type_id/active-stores
    * Optional: warehouse_id, date_from, date_to
+   * 
+   * CACHED: 5 minute TTL - Heavy query optimized, results shared across users
    */
   @Get("stores/:warehouse_type_id/active-stores-requirements")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @CacheWarehouseRequirements(buildWarehouseRequirementsListingKey)
   async getWarehouseRequirementsListing(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
     @Query("warehouse_id") warehouse_id?: number,
@@ -105,6 +115,7 @@ export class WarehouseRequirementsController {
 
   @Get("stores/:warehouse_type_id/count-active-stores-requirements")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @CacheCustom(buildWarehouseRequirementsCountsKey, CACHE_TTL.COUNTS)
   async getWarehouseRequirementsListingCounts(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
     @Query() queryParams: WhReqListingDto,
