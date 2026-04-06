@@ -73,6 +73,16 @@ export class CacheInvalidationService {
   }
 
   /**
+   * Clear warehouse employees caches
+   * Called when: warehouse employee is created/updated/deleted
+   * SSE Event: warehouse-employees:*
+   */
+  async invalidateWarehouseEmployees(): Promise<void> {
+    const patterns = [CACHE_PATTERNS.WAREHOUSE_EMPLOYEES];
+    await this.invalidatePatterns(patterns);
+  }
+
+  /**
    * Clear warehouse hurdles caches
    * Called when: warehouse hurdle is created/updated/deleted
    * SSE Event: warehouse-hurdles:*

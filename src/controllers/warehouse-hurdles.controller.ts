@@ -33,7 +33,7 @@ import * as XLSX from "xlsx";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
-import { buildWarehouseHurdleKey } from "src/config/cache.config";
+import { buildWarehouseHurdleKey, CACHE_TTL } from "src/config/cache.config";
 import { CacheCustom } from "src/decorators/cache.decorator";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -48,7 +48,7 @@ export class WarehouseHurdlesController {
   ) {}
 
   @Get()
-  @CacheCustom(buildWarehouseHurdleKey)
+  @CacheCustom(buildWarehouseHurdleKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "STORE HURDLES", action: "VIEW" })
   async findAll(@Request() req, @Query() queryParams: DateFilterQueryDto) {
     const accessKeyId = req.user.current_access_key;

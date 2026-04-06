@@ -17,6 +17,8 @@ import { RequirePermissions } from "../decorators/permissions.decorator";
 import { WarehousesService } from "../services/warehouses.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
+import { CacheCustom } from "src/decorators/cache.decorator";
+import { buildWarehouseKey, CACHE_TTL } from "src/config/cache.config";
 
 @Controller("warehouses")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -24,10 +26,11 @@ export class WarehousesController {
   constructor(private readonly warehousesService: WarehousesService) {}
 
   @Get("/stores/:warehouse_type_id")
+  @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
   async findAll(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
-    @Request() req
+    @Request() req,
   ) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
@@ -36,7 +39,7 @@ export class WarehousesController {
       warehouseTypeId,
       accessKeyId,
       userId,
-      roleId
+      roleId,
     );
   }
 
@@ -53,7 +56,7 @@ export class WarehousesController {
     const accessKeyId = req.user.current_access_key;
     return this.warehousesService.create(
       { ...createDto, access_key_id: accessKeyId },
-      userId
+      userId,
     );
   }
 
@@ -62,7 +65,7 @@ export class WarehousesController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehousesService.update(id, updateDto, userId);
@@ -78,7 +81,7 @@ export class WarehousesController {
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehousesService.toggleStatus(id, userId);
@@ -88,7 +91,7 @@ export class WarehousesController {
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehousesService.toggleStatus(id, userId);

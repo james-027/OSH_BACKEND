@@ -110,8 +110,11 @@ export const CACHE_PATTERNS = {
   // Warehouse
   WAREHOUSE: "warehouse:*",
 
-  // Warehouse
+  // Warehouse Hurdles
   WAREHOUSE_HURDLES: "warehouse-hurdles:*",
+
+  // Warehouse Employees
+  WAREHOUSE_EMPLOYEES: "warehouse-employees:*",
 };
 
 export const CACHE_TTL = {
@@ -252,6 +255,35 @@ export function buildWarehouseHurdleKey(
     ? String(query.hurdle_date).toLowerCase()
     : "all";
   return `${base}:${userId}:${roleId}:${accessKeyId}:${hurdleDate}`;
+}
+
+/**
+ * Cache key builder for warehouse listing
+ * Includes: userId, roleId, accessKeyId, warehouse_id
+ */
+export function buildWarehouseKey(query: any, params: any, user: any): string {
+  const base = CACHE_KEYS.FIND_ALL("warehouse");
+  const userId = user?.id || "all";
+  const roleId = user?.role_id || "all";
+  const accessKeyId = user?.current_access_key || "all";
+  const warehouseTypeId = params.warehouse_type_id || "all";
+  return `${base}:${userId}:${roleId}:${accessKeyId}:${warehouseTypeId}`;
+}
+
+/**
+ * Cache key builder for warehouse employees listing
+ * Includes: userId, roleId, accessKeyId, warehouse_id
+ */
+export function buildWarehouseEmployeeKey(
+  query: any,
+  params: any,
+  user: any,
+): string {
+  const base = CACHE_KEYS.FIND_ALL("warehouse-employees");
+  const userId = user?.id || "all";
+  const roleId = user?.role_id || "all";
+  const accessKeyId = user?.current_access_key || "all";
+  return `${base}:${userId}:${roleId}:${accessKeyId}`;
 }
 
 // Type for cache key builder functions

@@ -196,6 +196,7 @@ export class WarehouseDwhService {
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
         await this.cacheInvalidationService.invalidateReqTransactions();
         await this.cacheInvalidationService.invalidateWarehouseRequirements();
+        await this.cacheInvalidationService.invalidateWarehouses();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -207,6 +208,7 @@ export class WarehouseDwhService {
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
         await this.cacheInvalidationService.invalidateReqTransactions();
         await this.cacheInvalidationService.invalidateWarehouseRequirements();
+        await this.cacheInvalidationService.invalidateWarehouses();
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
