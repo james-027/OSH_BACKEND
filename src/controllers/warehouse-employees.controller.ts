@@ -37,6 +37,8 @@ import { StatusService } from "../services/status.service";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../services/user-audit-trail-create.service";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { CacheCustom } from "src/decorators/cache.decorator";
+import { buildWarehouseEmployeeKey, CACHE_TTL } from "src/config/cache.config";
 
 @Controller("warehouse-employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -47,10 +49,11 @@ export class WarehouseEmployeesController {
     private readonly employeesService: EmployeesService,
     private readonly statusService: StatusService,
     private readonly userAuditTrailCreateService: UserAuditTrailCreateService, // Inject audit trail service
-    private commonUtilitiesService: CommonUtilitiesService
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   @Get()
+  @CacheCustom(buildWarehouseEmployeeKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
@@ -72,7 +75,7 @@ export class WarehouseEmployeesController {
     const accessKeyId = req.user.current_access_key;
     return this.warehouseEmployeesService.create(
       { ...createDto, access_key_id: accessKeyId },
-      userId
+      userId,
     );
   }
 
@@ -81,14 +84,14 @@ export class WarehouseEmployeesController {
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseEmployeeDto,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
     return this.warehouseEmployeesService.update(
       id,
       { ...updateDto, access_key_id: accessKeyId },
-      userId
+      userId,
     );
   }
 
@@ -102,7 +105,7 @@ export class WarehouseEmployeesController {
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseEmployeesService.toggleStatus(id, userId);
@@ -112,7 +115,7 @@ export class WarehouseEmployeesController {
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     return this.warehouseEmployeesService.toggleStatus(id, userId);
@@ -122,7 +125,7 @@ export class WarehouseEmployeesController {
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
   async bulkUpload(
     @Body() records: CreateWarehouseEmployeeDto[],
-    @Request() req
+    @Request() req,
   ) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
@@ -132,7 +135,7 @@ export class WarehouseEmployeesController {
       accessKeyId,
       {
         batchSize: 100,
-      }
+      },
     );
   }
 
@@ -145,7 +148,7 @@ export class WarehouseEmployeesController {
       }),
       fileFilter: excelFileFilter,
       limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
-    })
+    }),
   )
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
   async uploadExcel(@UploadedFile() file: FileType, @Request() req) {
@@ -164,7 +167,7 @@ export class WarehouseEmployeesController {
     const allowedLocationIds =
       await this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
-        roleId
+        roleId,
       );
 
     // Preload all warehouses, employees (with their locations), and statuses for fast lookup
@@ -172,7 +175,7 @@ export class WarehouseEmployeesController {
     const employees = await this.employeesService.findAll(
       undefined,
       userId,
-      roleId
+      roleId,
     ); // Pass parameters to include locations
     const statuses = await this.statusService.findAll();
 
@@ -186,13 +189,13 @@ export class WarehouseEmployeesController {
       try {
         // 1. Warehouse lookup
         const warehouse = warehouses.find(
-          (w) => w.warehouse_ifs == row["STORE IFS"] && w.status_id === 1
+          (w) => w.warehouse_ifs == row["STORE IFS"] && w.status_id === 1,
         );
         if (!warehouse) throw new Error("Invalid or inactive STORE IFS");
         // Location permission check
         if (!allowedLocationIds.includes(warehouse.location_id)) {
           throw new Error(
-            `You do not have permission to upload employees for STORE IFS ${row["STORE IFS"]} (${warehouse.warehouse_name}), location_id ${warehouse.location_id}.`
+            `You do not have permission to upload employees for STORE IFS ${row["STORE IFS"]} (${warehouse.warehouse_name}), location_id ${warehouse.location_id}.`,
           );
         }
 
@@ -209,13 +212,13 @@ export class WarehouseEmployeesController {
         const findEmp = (
           empNo: string,
           abbrs: string[],
-          opts?: { requireLocationId?: boolean }
+          opts?: { requireLocationId?: boolean },
         ): Employee | undefined =>
           employees.find((e: any) => {
             const matchesEmpNo = e.employee_number == empNo;
             const matchesStatus = e.status_id === 1;
             const matchesAbbr = abbrs.includes(
-              (e.position_abbr || e.position_name || "").toUpperCase()
+              (e.position_abbr || e.position_name || "").toUpperCase(),
             );
 
             // Check if employee is assigned to the warehouse location through employee_locations
@@ -224,7 +227,7 @@ export class WarehouseEmployeesController {
               (e.locations &&
                 Array.isArray(e.locations) &&
                 e.locations.some(
-                  (loc) => loc.location_id === warehouse.location_id
+                  (loc) => loc.location_id === warehouse.location_id,
                 ));
 
             return (
@@ -238,11 +241,11 @@ export class WarehouseEmployeesController {
           ["SS", "AH", "BCH", "RH"],
           {
             requireLocationId: true,
-          }
+          },
         );
         if (!ss)
           throw new Error(
-            `Invalid ASSIGNED SS EMP. NO. [${row["ASSIGNED SS EMP. NO."]}] (not found or not assigned to this warehouse's location)`
+            `Invalid ASSIGNED SS EMP. NO. [${row["ASSIGNED SS EMP. NO."]}] (not found or not assigned to this warehouse's location)`,
           );
 
         // AH (must be assigned to this warehouse's location via employee_locations)
@@ -251,7 +254,7 @@ export class WarehouseEmployeesController {
         });
         if (!ah)
           throw new Error(
-            `Invalid ASSIGNED AH EMP. NO. [${row["ASSIGNED AH EMP. NO."]}] (not found or not assigned to this warehouse's location)`
+            `Invalid ASSIGNED AH EMP. NO. [${row["ASSIGNED AH EMP. NO."]}] (not found or not assigned to this warehouse's location)`,
           );
 
         // BCH
@@ -265,7 +268,7 @@ export class WarehouseEmployeesController {
           ]);
           if (!foundBch)
             throw new Error(
-              `Invalid ASSIGNED BCH EMP. NO. [${row["ASSIGNED BCH EMP. NO."]}]`
+              `Invalid ASSIGNED BCH EMP. NO. [${row["ASSIGNED BCH EMP. NO."]}]`,
             );
           bch = foundBch ? foundBch.id : null;
         }
@@ -287,7 +290,7 @@ export class WarehouseEmployeesController {
           const foundRh = findEmp(row["ASSIGNED RH EMP. NO."], ["RH", "BCH"]);
           if (!foundRh)
             throw new Error(
-              `Invalid ASSIGNED RH EMP. NO. [${row["ASSIGNED RH EMP. NO."]}]`
+              `Invalid ASSIGNED RH EMP. NO. [${row["ASSIGNED RH EMP. NO."]}]`,
             );
           rh = foundRh ? foundRh.id : null;
         }
@@ -308,7 +311,7 @@ export class WarehouseEmployeesController {
           else {
             // Try to lookup by status name
             const status = statuses.find(
-              (s) => String(s.status_name).trim().toUpperCase() === statusName
+              (s) => String(s.status_name).trim().toUpperCase() === statusName,
             );
             if (status) status_id = status.id;
             else throw new Error("Invalid STATUS value");
@@ -327,7 +330,9 @@ export class WarehouseEmployeesController {
           __rowNum__: excelRowNum,
         } as any);
       } catch (err) {
-        errors.push({ row: excelRowNum, error: err.message });
+        const errorMessage =
+          err instanceof Error ? err.message : "Unknown error";
+        errors.push({ row: excelRowNum, error: errorMessage });
       }
     }
     // const userId = req.user.id;
@@ -338,7 +343,7 @@ export class WarehouseEmployeesController {
       accessKeyId,
       {
         batchSize: 100,
-      }
+      },
     );
     // Merge mapping errors with service errors (including duplicate errors)
     result.errors = [...errors, ...(result.errors || [])];
@@ -369,7 +374,7 @@ export class WarehouseEmployeesController {
           description: `Bulk upload via Excel: ${summary.inserted_count} inserted, ${summary.updated_count} updated, ${summary.errors.length} errors.`,
           status_id: summary.errors.length === 0 ? 1 : 2,
         },
-        userId
+        userId,
       );
     }
     return summary;

@@ -13,6 +13,7 @@ import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { CommonUtilitiesService } from "./common-utilities.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class WarehouseEmployeesService {
@@ -22,20 +23,28 @@ export class WarehouseEmployeesService {
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private sseEventEmitter: SSEEventEmitterHelper,
-    private commonUtilitiesService: CommonUtilitiesService
+    private commonUtilitiesService: CommonUtilitiesService,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return "An unexpected error occurred";
+  }
 
   async findAll(
     accessKeyId?: number,
     userId?: number,
-    roleId?: number
+    roleId?: number,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
       allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
-          roleId
+          roleId,
         );
     }
     const query = this.warehouseEmployeesRepository
@@ -172,7 +181,7 @@ export class WarehouseEmployeesService {
 
   async create(
     createDto: CreateWarehouseEmployeeDto,
-    userId: number
+    userId: number,
   ): Promise<WarehouseEmployee> {
     // Uniqueness check
     const exists = await this.warehouseEmployeesRepository.findOne({
@@ -188,7 +197,7 @@ export class WarehouseEmployeesService {
     });
     if (exists) {
       throw new BadRequestException(
-        "A record with this warehouse and assigned employees already exists."
+        "A record with this warehouse and assigned employees already exists.",
       );
     }
     const rec = this.warehouseEmployeesRepository.create({
@@ -210,24 +219,25 @@ export class WarehouseEmployeesService {
           description: `Created warehouse employee for warehouse ID: ${saved.warehouse_id} - ${saved.warehouse ? saved.warehouse.warehouse_name : ""}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
       // SSE Events
       try {
         this.sseEventEmitter.emitCreateSignal("warehouse_employees", saved.id);
+        await this.cacheInvalidationService.invalidateWarehouseEmployees();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
       return saved;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException(this.getErrorMessage(error));
     }
   }
 
   async update(
     id: number,
     updateDto: UpdateWarehouseEmployeeDto,
-    userId: number
+    userId: number,
   ): Promise<WarehouseEmployee> {
     const rec = await this.findOne(id);
 
@@ -251,7 +261,7 @@ export class WarehouseEmployeesService {
         try {
           return await this.warehouseEmployeesRepository.save(exists);
         } catch (error) {
-          throw new BadRequestException(error.message);
+          throw new BadRequestException(this.getErrorMessage(error));
         }
       }
     }
@@ -276,17 +286,18 @@ export class WarehouseEmployeesService {
           description: `Updated warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouse_employees", id);
+        await this.cacheInvalidationService.invalidateWarehouseEmployees();
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
       return this.findOne(id);
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException(this.getErrorMessage(error));
     }
   }
 
@@ -305,7 +316,7 @@ export class WarehouseEmployeesService {
     });
     if (!rec) {
       throw new NotFoundException(
-        `Warehouse employee record with ID ${id} not found`
+        `Warehouse employee record with ID ${id} not found`,
       );
     }
     const newStatusId = rec.status_id === 1 ? 2 : 1;
@@ -331,12 +342,13 @@ export class WarehouseEmployeesService {
         description: `Toggled status to ${newStatusName} for warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
         status_id: newStatusId,
       },
-      userId
+      userId,
     );
 
     // SSE Events
     try {
       this.sseEventEmitter.emitUpdateSignal("warehouse_employees", id);
+      await this.cacheInvalidationService.invalidateWarehouseEmployees();
     } catch (err) {
       logger.error("SSE event failed for update:", err);
     }
@@ -353,7 +365,7 @@ export class WarehouseEmployeesService {
     records: (CreateWarehouseEmployeeDto & { __rowNum__?: number })[],
     userId: number,
     accessKeyId?: number,
-    options?: { batchSize?: number }
+    options?: { batchSize?: number },
   ): Promise<{
     success: any[];
     errors: { row: number; error: string }[];
@@ -383,7 +395,7 @@ export class WarehouseEmployeesService {
             const updatedRec = await this.update(
               existing.id,
               updatePayload,
-              userId
+              userId,
             );
             fullRec = await this.findOne(existing.id);
             updated.push({ row: rowNum, id: updatedRec.id });
@@ -397,7 +409,7 @@ export class WarehouseEmployeesService {
           // Attach __rowNum__ to the response object
           success.push({ ...fullRec, __rowNum__: rowNum });
         } catch (err) {
-          errors.push({ row: rowNum, error: err.message });
+          errors.push({ row: rowNum, error: this.getErrorMessage(err) });
         }
       });
       await Promise.all(batchPromises); // Run batch in parallel
@@ -406,6 +418,7 @@ export class WarehouseEmployeesService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreateSignal("warehouse_employees", 0);
+        await this.cacheInvalidationService.invalidateWarehouseEmployees();
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
