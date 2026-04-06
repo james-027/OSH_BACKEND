@@ -17,6 +17,7 @@ import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { SSEEmitterService } from "./sse-emitter.service";
 import { UsersService } from "./users.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class ModulesService {
@@ -30,7 +31,8 @@ export class ModulesService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private usersService: UsersService,
-    private sseEmitterService: SSEEmitterService
+    private sseEmitterService: SSEEmitterService,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -127,7 +129,7 @@ export class ModulesService {
 
   async create(
     createModuleDto: CreateModuleDto,
-    authenticatedUserId: number
+    authenticatedUserId: number,
   ): Promise<any> {
     const {
       module_name,
@@ -142,7 +144,7 @@ export class ModulesService {
 
     if (!authenticatedUserId) {
       throw new UnauthorizedException(
-        "Authenticated user ID is required to create a module."
+        "Authenticated user ID is required to create a module.",
       );
     }
 
@@ -202,7 +204,7 @@ export class ModulesService {
           description: `Created module ${savedModule.id} - ${savedModule.module_name} | ${savedModule.module_alias}`,
           status_id: 1,
         },
-        authenticatedUserId
+        authenticatedUserId,
       );
 
       // Fetch the created module with relations
@@ -241,17 +243,18 @@ export class ModulesService {
       };
 
       logger.info(
-        `Successfully created module with ID: ${createdModule.id} by user ${authenticatedUserId}`
+        `Successfully created module with ID: ${createdModule.id} by user ${authenticatedUserId}`,
       );
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByModule(
-          createdModule.id
+          createdModule.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitCreateSignal("modules", createdModule.id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -271,7 +274,7 @@ export class ModulesService {
   async update(
     id: number,
     updateModuleDto: UpdateModuleDto,
-    authenticatedUserId: number
+    authenticatedUserId: number,
   ): Promise<any> {
     if (isNaN(id)) {
       throw new BadRequestException("Invalid module ID provided for update.");
@@ -279,7 +282,7 @@ export class ModulesService {
 
     if (!authenticatedUserId) {
       throw new UnauthorizedException(
-        "Authenticated user ID is required to update a module."
+        "Authenticated user ID is required to update a module.",
       );
     }
 
@@ -303,7 +306,7 @@ export class ModulesService {
         });
         if (existingModuleByName && existingModuleByName.id !== id) {
           throw new BadRequestException(
-            "Module with this name already exists."
+            "Module with this name already exists.",
           );
         }
         moduleToUpdate.module_name = updateModuleDto.module_name;
@@ -319,7 +322,7 @@ export class ModulesService {
         });
         if (existingModuleByAlias && existingModuleByAlias.id !== id) {
           throw new BadRequestException(
-            "Module with this alias already exists."
+            "Module with this alias already exists.",
           );
         }
         moduleToUpdate.module_alias = updateModuleDto.module_alias;
@@ -344,7 +347,7 @@ export class ModulesService {
         });
         if (!statusEntity) {
           throw new BadRequestException(
-            `Status with ID ${updateModuleDto.status_id} not found.`
+            `Status with ID ${updateModuleDto.status_id} not found.`,
           );
         }
         moduleToUpdate.status = statusEntity;
@@ -372,7 +375,7 @@ export class ModulesService {
           description: `Updated module ${id} - ${moduleToUpdate.module_name} | ${moduleToUpdate.module_alias}`,
           status_id: 1,
         },
-        authenticatedUserId
+        authenticatedUserId,
       );
 
       // Fetch the updated module with relations
@@ -411,17 +414,18 @@ export class ModulesService {
       };
 
       logger.info(
-        `Successfully updated module with ID: ${updatedModule.id} by user ${authenticatedUserId}`
+        `Successfully updated module with ID: ${updatedModule.id} by user ${authenticatedUserId}`,
       );
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByModule(
-          updatedModule.id
+          updatedModule.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
@@ -470,7 +474,7 @@ export class ModulesService {
   async toggleStatus(id: number, authenticatedUserId: number): Promise<any> {
     if (isNaN(id)) {
       throw new BadRequestException(
-        "Invalid module ID provided for status toggle."
+        "Invalid module ID provided for status toggle.",
       );
     }
 
@@ -493,7 +497,7 @@ export class ModulesService {
       });
       if (!statusEntity) {
         throw new BadRequestException(
-          `Status with ID ${newStatusId} not found.`
+          `Status with ID ${newStatusId} not found.`,
         );
       }
 
@@ -521,7 +525,7 @@ export class ModulesService {
           description: `Toggled status for module ${id} - ${moduleToToggle.module_name} to ${newStatusName}`,
           status_id: 1,
         },
-        authenticatedUserId
+        authenticatedUserId,
       );
 
       // Fetch updated module with relations
@@ -536,12 +540,13 @@ export class ModulesService {
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByModule(
-          updatedModule.id
+          updatedModule.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }

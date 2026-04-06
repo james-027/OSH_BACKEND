@@ -34,6 +34,7 @@ import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { FrontendUrlUtil } from "src/utils/frontend-url.util";
     ]),
     LocationsModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [ItemsController, ItemCategoriesController, ItemsDwhController],
   providers: [

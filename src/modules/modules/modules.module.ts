@@ -9,6 +9,7 @@ import { UsersModule } from "../users/users.module";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Action } from "src/entities/Action";
 import { SSEModule } from "../sse/sse.module";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SSEModule } from "../sse/sse.module";
     ]),
     UsersModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [ModulesController],
   providers: [ModulesService],

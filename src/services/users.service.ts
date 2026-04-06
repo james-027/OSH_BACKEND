@@ -25,6 +25,7 @@ import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { EmailService } from "./email.service";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { FrontendUrlUtil } from "../utils/frontend-url.util";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class UsersService {
@@ -53,7 +54,12 @@ export class UsersService {
     private emailService: EmailService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private frontendUrlUtil: FrontendUrlUtil,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
+
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
 
   async findAll(): Promise<any[]> {
     try {
@@ -457,7 +463,7 @@ export class UsersService {
         });
       } catch (emailErr) {
         emailStatus = "error";
-        emailError = emailErr?.message || String(emailErr);
+        emailError = this.getErrorMessage(emailErr);
         // Optionally log email sending error, but do not fail the import
         logger.error(`Failed to send welcome email to ${email}:`, emailErr);
       }
@@ -665,7 +671,7 @@ export class UsersService {
           });
         } catch (emailErr) {
           emailStatus = "error";
-          emailError = emailErr?.message || String(emailErr);
+          emailError = this.getErrorMessage(emailErr);
           logger.error(
             `Failed to send welcome email to ${savedUser.email}:`,
             emailErr,
@@ -695,6 +701,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitCreateSignal("users", savedUser.id);
         this.sseEventEmitter.emitCreateSignal("users", 0);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed:", err);
       }
@@ -1163,6 +1170,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
         this.sseEventEmitter.emitUpdateSignal("users", 0);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }
@@ -1203,6 +1211,7 @@ export class UsersService {
       // Emit SSE event for user deletion (broadcast to all users)
       try {
         this.sseEventEmitter.emitDelete("users", id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (sseError) {
         logger.warn("SSE event emission failed for user deletion:", sseError);
       }
@@ -1351,6 +1360,7 @@ export class UsersService {
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }
@@ -2090,7 +2100,7 @@ export class UsersService {
             }
           } catch (locError) {
             logger.warn(
-              `Error processing location names: ${locError.message}. Falling back to role location presets.`,
+              `Error processing location names: ${this.getErrorMessage(locError)}. Falling back to role location presets.`,
             );
           }
         }
@@ -2173,6 +2183,7 @@ export class UsersService {
             // Option 2: WITHOUT data
             this.sseEventEmitter.emitUpdateSignal("users", existingUser.id);
             this.sseEventEmitter.emitUpdateSignal("users", 0);
+            await this.cacheInvalidationService.invalidateFindAll("users");
           } catch (err) {
             console.warn("SSE event failed:", err);
           }
@@ -2255,7 +2266,7 @@ export class UsersService {
               });
             } catch (emailErr) {
               emailStatus = "error";
-              emailError = emailErr?.message || String(emailErr);
+              emailError = this.getErrorMessage(emailErr);
               // Optionally log email sending error, but do not fail the import
               logger.error(
                 `Failed to send welcome email to ${savedUser.email}:`,
@@ -2284,13 +2295,14 @@ export class UsersService {
           success.push({ ...row, __rowNum__: rowNum });
         }
       } catch (err) {
-        errors.push({ row: rowNum, error: err.message });
+        errors.push({ row: rowNum, error: this.getErrorMessage(err) });
       }
     }
     if (inserted_count > 0) {
       try {
         // Option 2: WITHOUT data
         this.sseEventEmitter.emitCreateSignal("users", 0);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed:", err);
       }
@@ -2317,7 +2329,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by role: ${error.message}`,
+        `Failed to get user ids permissions by role: ${this.getErrorMessage(error)}`,
       );
     }
   }
@@ -2333,7 +2345,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by module: ${error.message}`,
+        `Failed to get user ids permissions by module: ${this.getErrorMessage(error)}`,
       );
     }
   }
@@ -2351,7 +2363,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids permissions by access key: ${error.message}`,
+        `Failed to get user ids permissions by access key: ${this.getErrorMessage(error)}`,
       );
     }
   }
@@ -2367,7 +2379,7 @@ export class UsersService {
       return Array.from(new Set(ids));
     } catch (error) {
       throw new Error(
-        `Failed to get user ids locations by location: ${error.message}`,
+        `Failed to get user ids locations by location: ${this.getErrorMessage(error)}`,
       );
     }
   }

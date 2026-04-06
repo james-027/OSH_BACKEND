@@ -15,6 +15,7 @@ import { UsersService } from "./users.service";
 import { UserAuditTrailCreateService } from "./user-audit-trail-create.service";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class RolesService {
@@ -29,7 +30,8 @@ export class RolesService {
     private systemRepository: Repository<System>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -122,7 +124,7 @@ export class RolesService {
         });
         if (!system) {
           throw new BadRequestException(
-            `System with ID ${createRoleDto.system_id} not found.`
+            `System with ID ${createRoleDto.system_id} not found.`,
           );
         }
       }
@@ -135,7 +137,7 @@ export class RolesService {
         });
         if (!statusEntity) {
           throw new BadRequestException(
-            `Status with ID ${createRoleDto.status_id} not found.`
+            `Status with ID ${createRoleDto.status_id} not found.`,
           );
         }
       } else {
@@ -166,19 +168,20 @@ export class RolesService {
           description: `Created role ${savedRole.id} - ${savedRole.role_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       // SSE Events
       try {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         const userIds = await this.usersService.getUserPermissionsByRole(
-          savedRole.id
+          savedRole.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitCreateSignal("roles", savedRole.id);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed:", err);
       }
@@ -209,7 +212,7 @@ export class RolesService {
   async update(
     id: number,
     updateRoleDto: UpdateRoleDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const roleToUpdate = await this.roleRepository.findOne({
@@ -244,7 +247,7 @@ export class RolesService {
         });
         if (!system) {
           throw new BadRequestException(
-            `System with ID ${updateRoleDto.system_id} not found.`
+            `System with ID ${updateRoleDto.system_id} not found.`,
           );
         }
         roleToUpdate.system_id = updateRoleDto.system_id;
@@ -257,7 +260,7 @@ export class RolesService {
         });
         if (!statusEntity) {
           throw new BadRequestException(
-            `Status with ID ${updateRoleDto.status_id} not found.`
+            `Status with ID ${updateRoleDto.status_id} not found.`,
           );
         }
         roleToUpdate.status = statusEntity;
@@ -282,18 +285,18 @@ export class RolesService {
           description: `Updated role ${id} - ${roleToUpdate.role_name}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       // Update role_action_preset status if role status is set to inactive (2)
       if (updateRoleDto.status_id !== undefined) {
         await this.roleRepository.query(
           "UPDATE role_action_preset SET status_id = ? WHERE role_id = ?",
-          [updateRoleDto.status_id, id]
+          [updateRoleDto.status_id, id],
         );
         await this.roleRepository.query(
           "UPDATE user_permissions SET status_id = ? WHERE role_id = ?",
-          [updateRoleDto.status_id, id]
+          [updateRoleDto.status_id, id],
         );
       }
 
@@ -306,6 +309,7 @@ export class RolesService {
         });
         this.sseEventEmitter.emitUpdateSignal("roles", id);
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }
@@ -380,7 +384,7 @@ export class RolesService {
 
       if (!newStatusEntity) {
         throw new BadRequestException(
-          `Target status with ID ${newStatusId} not found.`
+          `Target status with ID ${newStatusId} not found.`,
         );
       }
 
@@ -405,17 +409,17 @@ export class RolesService {
           description: `Toggled status for role ${id} - ${roleToUpdate.role_name} to ${newStatusName} by user ${userId}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       if (newStatusId !== undefined) {
         await this.roleRepository.query(
           "UPDATE role_action_preset SET status_id = ? WHERE role_id = ?",
-          [newStatusId, id]
+          [newStatusId, id],
         );
         await this.roleRepository.query(
           "UPDATE user_permissions SET status_id = ? WHERE role_id = ?",
-          [newStatusId, id]
+          [newStatusId, id],
         );
       }
 
@@ -428,6 +432,7 @@ export class RolesService {
         });
         this.sseEventEmitter.emitUpdateSignal("roles", id);
         this.sseEventEmitter.emitUpdateSignal("role_presets", 0); // Broadcast to all role presets
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }

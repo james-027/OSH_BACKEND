@@ -24,6 +24,7 @@ import {
   RolePresetsController,
 } from "src/controllers/role-action-presets.controller";
 import { SSEModule } from "../sse/sse.module";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { SSEModule } from "../sse/sse.module";
     ]),
     UsersModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [
     RolesController,

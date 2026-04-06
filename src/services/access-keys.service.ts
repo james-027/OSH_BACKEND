@@ -14,6 +14,7 @@ import { UpdateAccessKeyDto } from "../dto/UpdateAccessKeyDto";
 import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import logger from "src/config/logger";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class AccessKeysService {
@@ -22,7 +23,8 @@ export class AccessKeysService {
     private accessKeysRepository: Repository<AccessKey>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -97,7 +99,7 @@ export class AccessKeysService {
 
   async create(
     createAccessKeyDto: CreateAccessKeyDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check for duplicate access key name or abbreviation
@@ -110,7 +112,7 @@ export class AccessKeysService {
 
       if (existingAccessKey) {
         throw new BadRequestException(
-          "Access key with this name or abbreviation already exists"
+          "Access key with this name or abbreviation already exists",
         );
       }
 
@@ -138,7 +140,7 @@ export class AccessKeysService {
           description: `Created access key ${savedAccessKey.id} - ${savedAccessKey.access_key_name} | ${savedAccessKey.access_key_abbr}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       const accessKeyWithRelations = await this.accessKeysRepository.findOne({
@@ -153,15 +155,16 @@ export class AccessKeysService {
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByAccessKey(
-          accessKeyWithRelations.id
+          accessKeyWithRelations.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitCreateSignal(
           "access_keys",
-          accessKeyWithRelations.id
+          accessKeyWithRelations.id,
         );
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -200,7 +203,7 @@ export class AccessKeysService {
   async update(
     id: number,
     updateAccessKeyDto: UpdateAccessKeyDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const accessKey = await this.accessKeysRepository.findOne({
@@ -235,7 +238,7 @@ export class AccessKeysService {
 
         if (existingAccessKey && existingAccessKey.id !== id) {
           throw new BadRequestException(
-            "Access key with this name or abbreviation already exists"
+            "Access key with this name or abbreviation already exists",
           );
         }
       }
@@ -254,7 +257,7 @@ export class AccessKeysService {
       if (updateAccessKeyDto.status_id !== undefined) {
         await this.accessKeysRepository.manager.query(
           "UPDATE user_permissions SET status_id = ? WHERE access_key_id = ?",
-          [updateAccessKeyDto.status_id, id]
+          [updateAccessKeyDto.status_id, id],
         );
       }
 
@@ -276,21 +279,22 @@ export class AccessKeysService {
           description: `Updated access key ${id} - ${updatedAccessKey.access_key_name} | ${updatedAccessKey.access_key_abbr}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByAccessKey(
-          updatedAccessKey.id
+          updatedAccessKey.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitUpdateSignal(
           "access_keys",
-          updatedAccessKey.id
+          updatedAccessKey.id,
         );
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
@@ -375,7 +379,7 @@ export class AccessKeysService {
       if (newStatusId !== undefined) {
         await this.accessKeysRepository.manager.query(
           "UPDATE user_permissions SET status_id = ? WHERE access_key_id = ?",
-          [newStatusId, id]
+          [newStatusId, id],
         );
       }
       const updatedAccessKey = await this.accessKeysRepository.findOne({
@@ -394,21 +398,22 @@ export class AccessKeysService {
           description: `Toggled status for access key ${id} - ${updatedAccessKey.access_key_name} | ${updatedAccessKey.access_key_abbr} to ${newStatusName}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       // SSE Events
       try {
         const userIds = await this.usersService.getUserPermissionsByAccessKey(
-          updatedAccessKey.id
+          updatedAccessKey.id,
         );
         userIds.forEach((uid) => {
           this.sseEventEmitter.emitUpdateSignal("users", uid);
         });
         this.sseEventEmitter.emitUpdateSignal(
           "access_keys",
-          updatedAccessKey.id
+          updatedAccessKey.id,
         );
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }

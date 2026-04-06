@@ -10,6 +10,7 @@ import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
 import { SSEModule } from "../sse/sse.module";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SSEModule } from "../sse/sse.module";
     ]),
     UsersModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [AccessKeysController],
   providers: [AccessKeysService, UserAuditTrailCreateService],

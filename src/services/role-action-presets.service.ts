@@ -27,6 +27,7 @@ import { CreateUserAuditTrailDto } from "../dto/CreateUserAuditTrailDto";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { SSEEmitterService } from "./sse-emitter.service";
 import { UsersService } from "./users.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class RoleActionPresetsService {
@@ -58,6 +59,7 @@ export class RoleActionPresetsService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private usersService: UsersService,
     private sseEmitterService: SSEEmitterService,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
   async findRolesNotInPresets() {
@@ -704,6 +706,7 @@ export class RoleActionPresetsService {
           });
           this.sseEventEmitter.emitUpdateSignal("role_presets", id);
           this.sseEventEmitter.emitUpdateSignal("roles", id);
+          await this.cacheInvalidationService.invalidateFindAll("users");
         } catch (err) {
           console.warn("SSE event failed for update:", err);
         }
@@ -1466,6 +1469,7 @@ export class RoleActionPresetsService {
           });
           this.sseEventEmitter.emitCreateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
+          await this.cacheInvalidationService.invalidateFindAll("users");
         } catch (err) {
           console.warn("SSE event failed for update:", err);
         }
@@ -1696,6 +1700,7 @@ export class RoleActionPresetsService {
           });
           this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
+          await this.cacheInvalidationService.invalidateFindAll("users");
         } catch (err) {
           console.warn("SSE event failed for update:", err);
         }

@@ -15,6 +15,7 @@ import logger from "../config/logger";
 import { Role } from "src/entities/Role";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { SSEEmitterService } from "./sse-emitter.service";
+import { CacheInvalidationService } from "./cache-invalidation.service";
 
 @Injectable()
 export class UserAccessKeyService {
@@ -31,13 +32,14 @@ export class UserAccessKeyService {
     private sessionRepository: Repository<UserLoginSession>,
     private jwtService: JwtService,
     private sseEventEmitter: SSEEventEmitterHelper,
-    private sseEmitterService: SSEEmitterService
+    private sseEmitterService: SSEEmitterService,
+    private cacheInvalidationService: CacheInvalidationService,
   ) {}
   async changeAccessKey(
     userId: number,
     changeAccessKeyDto: ChangeAccessKeyDto,
     authenticatedUserId: number,
-    currentSessionId?: number
+    currentSessionId?: number,
   ): Promise<any> {
     const { access_key_id, role_id } = changeAccessKeyDto;
 
@@ -59,7 +61,7 @@ export class UserAccessKeyService {
 
       if (!accessKey) {
         throw new BadRequestException(
-          `Access key with ID ${access_key_id} not found.`
+          `Access key with ID ${access_key_id} not found.`,
         );
       }
 
@@ -83,7 +85,7 @@ export class UserAccessKeyService {
 
       if (!userPermission) {
         throw new BadRequestException(
-          `User does not have permission to use access key with ID ${access_key_id}.`
+          `User does not have permission to use access key with ID ${access_key_id}.`,
         );
       }
 
@@ -95,7 +97,7 @@ export class UserAccessKeyService {
           role_id: role_id,
           updated_by: authenticatedUserId,
           modified_at: new Date(),
-        }
+        },
       );
 
       // Fetch updated user with relations
@@ -131,12 +133,12 @@ export class UserAccessKeyService {
         });
 
         logger.info(
-          `Generated new JWT token with updated access key ${access_key_id} for user ${userId}, session ${currentSessionId}`
+          `Generated new JWT token with updated access key ${access_key_id} for user ${userId}, session ${currentSessionId}`,
         );
       }
 
       logger.info(
-        `Successfully updated current access key for user ID ${userId} to access key ID ${access_key_id}`
+        `Successfully updated current access key for user ID ${userId} to access key ID ${access_key_id}`,
       );
 
       const response = {
@@ -220,6 +222,7 @@ export class UserAccessKeyService {
         // Update specific resources that depend on role/access key context
         // Frontend only listens for UPDATE events, not INVALIDATE events
         this.sseEmitterService.updateSpecificResources(resourceList);
+        await this.cacheInvalidationService.invalidateFindAll("users");
       } catch (err) {
         console.warn("SSE event failed for update:", err);
       }
@@ -228,7 +231,7 @@ export class UserAccessKeyService {
     } catch (error) {
       logger.error(
         `Error updating current access key for user ID ${userId}:`,
-        error
+        error,
       );
       if (
         error instanceof NotFoundException ||
@@ -237,7 +240,7 @@ export class UserAccessKeyService {
         throw error;
       }
       throw new Error(
-        `Failed to update current access key for user ID ${userId}.`
+        `Failed to update current access key for user ID ${userId}.`,
       );
     }
   }
@@ -255,7 +258,7 @@ export class UserAccessKeyService {
       }
 
       logger.info(
-        `Successfully retrieved current access key for user ID ${userId}`
+        `Successfully retrieved current access key for user ID ${userId}`,
       );
 
       return {
@@ -276,13 +279,13 @@ export class UserAccessKeyService {
     } catch (error) {
       logger.error(
         `Error retrieving current access key for user ID ${userId}:`,
-        error
+        error,
       );
       if (error instanceof NotFoundException) {
         throw error;
       }
       throw new Error(
-        `Failed to retrieve current access key for user ID ${userId}.`
+        `Failed to retrieve current access key for user ID ${userId}.`,
       );
     }
   }
@@ -315,7 +318,7 @@ export class UserAccessKeyService {
         .getRawMany();
 
       logger.info(
-        `Successfully retrieved ${userAccessKeys.length} available access keys for user ID ${userId}`
+        `Successfully retrieved ${userAccessKeys.length} available access keys for user ID ${userId}`,
       );
 
       return {
@@ -333,13 +336,13 @@ export class UserAccessKeyService {
     } catch (error) {
       logger.error(
         `Error retrieving available access keys for user ID ${userId}:`,
-        error
+        error,
       );
       if (error instanceof NotFoundException) {
         throw error;
       }
       throw new Error(
-        `Failed to retrieve available access keys for user ID ${userId}.`
+        `Failed to retrieve available access keys for user ID ${userId}.`,
       );
     }
   }

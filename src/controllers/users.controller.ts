@@ -32,6 +32,8 @@ import {
 } from "../utils/file-upload.utils";
 import * as fs from "fs";
 import * as bcrypt from "bcrypt";
+import { CacheCustom } from "src/decorators/cache.decorator";
+import { CACHE_KEYS, CACHE_TTL } from "src/config/cache.config";
 
 @Controller("users")
 @UseGuards(JwtAuthGuard)
@@ -40,6 +42,7 @@ export class UsersController {
 
   @Get()
   @UseGuards(PermissionsGuard)
+  @CacheCustom(CACHE_KEYS.FIND_ALL("users"), CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "USERS", action: "VIEW" })
   async findAll() {
     return this.usersService.findAll();

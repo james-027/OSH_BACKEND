@@ -24,6 +24,7 @@ import { UserPermissionsService } from "src/services/user-permissions.service";
 import { UserAccessKeyController } from "src/controllers/user-access-key.controller";
 import { SSEModule } from "../sse/sse.module";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { FrontendUrlUtil } from "src/utils/frontend-url.util";
       UserLoginSession,
     ]),
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [UsersController, UserAccessKeyController],
   providers: [
