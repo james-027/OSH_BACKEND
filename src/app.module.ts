@@ -84,6 +84,7 @@ import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { TransactionSequence } from "./entities/TransactionSequence";
 import { CacheInvalidationModule } from "./modules/cache/cache.module";
+import logger from "./config/logger";
 @Module({
   imports: [
     // Configuration
@@ -184,8 +185,13 @@ import { CacheInvalidationModule } from "./modules/cache/cache.module";
 })
 export class AppModule implements NestModule, OnModuleInit {
   async onModuleInit() {
-    // Initialize Redis client for caching
-    await initializeRedisClient();
+    // Initialize Redis client for caching (can be disabled with USE_REDIS=false)
+    const useRedis = process.env.USE_REDIS !== "false"; // Default: enabled
+    if (useRedis) {
+      await initializeRedisClient();
+    } else {
+      logger.warn("⚠️  Redis is disabled. Caching will not be available.");
+    }
   }
 
   configure(consumer: MiddlewareConsumer) {
