@@ -30,7 +30,7 @@ export class ReqTransactionDuesService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     @InjectRepository(SyncLog)
-    private syncLogRepository: Repository<SyncLog>
+    private syncLogRepository: Repository<SyncLog>,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -64,7 +64,7 @@ export class ReqTransactionDuesService {
 
       if (!record) {
         throw new NotFoundException(
-          `Req transaction due with ID ${id} not found`
+          `Req transaction due with ID ${id} not found`,
         );
       }
 
@@ -79,7 +79,7 @@ export class ReqTransactionDuesService {
 
   async create(
     createDto: CreateReqTransactionDueDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       // Check unique constraint: (req_transaction_header_id, warehouse_requirement_due_id, status_id)
@@ -93,7 +93,7 @@ export class ReqTransactionDuesService {
 
       if (existingRecord) {
         throw new BadRequestException(
-          "This req transaction due combination already exists"
+          "This req transaction due combination already exists",
         );
       }
 
@@ -104,7 +104,7 @@ export class ReqTransactionDuesService {
 
       if (!header) {
         throw new BadRequestException(
-          `Req transaction header with ID ${createDto.req_transaction_header_id} not found`
+          `Req transaction header with ID ${createDto.req_transaction_header_id} not found`,
         );
       }
 
@@ -115,7 +115,7 @@ export class ReqTransactionDuesService {
 
       if (!due) {
         throw new BadRequestException(
-          `Warehouse requirement due with ID ${createDto.warehouse_requirement_due_id} not found`
+          `Warehouse requirement due with ID ${createDto.warehouse_requirement_due_id} not found`,
         );
       }
 
@@ -143,7 +143,7 @@ export class ReqTransactionDuesService {
           description: `Created req transaction due ID: ${savedRecord.id}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return this.findOne(savedRecord.id);
@@ -158,7 +158,7 @@ export class ReqTransactionDuesService {
   async update(
     id: number,
     updateDto: UpdateReqTransactionDueDto,
-    userId: number
+    userId: number,
   ): Promise<any> {
     try {
       const record = await this.reqTransactionDuesRepository.findOne({
@@ -167,7 +167,7 @@ export class ReqTransactionDuesService {
 
       if (!record) {
         throw new NotFoundException(
-          `Req transaction due with ID ${id} not found`
+          `Req transaction due with ID ${id} not found`,
         );
       }
 
@@ -191,7 +191,7 @@ export class ReqTransactionDuesService {
 
         if (duplicateCheck && duplicateCheck.id !== id) {
           throw new BadRequestException(
-            "This req transaction due combination already exists"
+            "This req transaction due combination already exists",
           );
         }
       }
@@ -217,7 +217,7 @@ export class ReqTransactionDuesService {
           description: `Updated req transaction due ID: ${id}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return this.findOne(savedRecord.id);
@@ -240,7 +240,7 @@ export class ReqTransactionDuesService {
 
       if (!record) {
         throw new NotFoundException(
-          `Req transaction due with ID ${id} not found`
+          `Req transaction due with ID ${id} not found`,
         );
       }
 
@@ -260,7 +260,7 @@ export class ReqTransactionDuesService {
           description: `Toggled status for req transaction due ID: ${id} to status: ${newStatusId}`,
           status_id: 1,
         },
-        userId
+        userId,
       );
 
       return this.findOne(saved.id);
@@ -269,6 +269,111 @@ export class ReqTransactionDuesService {
         throw error;
       }
       throw new Error("Failed to toggle req transaction due status");
+    }
+  }
+
+  /**
+   * Bulk create transaction dues with consolidated audit trail
+   * Used during batch operations to insert multiple dues with single audit entry
+   * @param createDtos Array of transaction due creation DTOs
+   * @param userId User performing the operation
+   * @returns Saved transaction due records
+   */
+  async bulkCreate(
+    createDtos: CreateReqTransactionDueDto[],
+    userId: number,
+  ): Promise<any[]> {
+    if (!createDtos || createDtos.length === 0) {
+      throw new BadRequestException(
+        "No transaction dues provided for bulk creation",
+      );
+    }
+
+    try {
+      // Verify user exists
+      const createdByUser = await this.usersService.findUserById(userId);
+      if (!createdByUser) {
+        throw new BadRequestException("Authenticated user not found");
+      }
+
+      // Validate all DTOs before bulk insert
+      for (const createDto of createDtos) {
+        // Check unique constraint for each
+        const existingRecord = await this.reqTransactionDuesRepository.findOne({
+          where: {
+            req_transaction_header_id: createDto.req_transaction_header_id,
+            warehouse_requirement_due_id:
+              createDto.warehouse_requirement_due_id,
+            status_id: createDto.status_id || 1,
+          },
+        });
+
+        if (existingRecord) {
+          throw new BadRequestException(
+            `Transaction due combination already exists for header ID: ${createDto.req_transaction_header_id}`,
+          );
+        }
+
+        // Verify header exists
+        const header = await this.reqTransactionHeadersRepository.findOne({
+          where: { id: createDto.req_transaction_header_id },
+        });
+
+        if (!header) {
+          throw new BadRequestException(
+            `Req transaction header with ID ${createDto.req_transaction_header_id} not found`,
+          );
+        }
+
+        // Verify warehouse requirement due exists
+        const due = await this.warehouseRequirementDuesRepository.findOne({
+          where: { id: createDto.warehouse_requirement_due_id },
+        });
+
+        if (!due) {
+          throw new BadRequestException(
+            `Warehouse requirement due with ID ${createDto.warehouse_requirement_due_id} not found`,
+          );
+        }
+      }
+
+      // Bulk create records
+      const newRecords = createDtos.map((dto) =>
+        this.reqTransactionDuesRepository.create({
+          req_transaction_header_id: dto.req_transaction_header_id,
+          warehouse_requirement_due_id: dto.warehouse_requirement_due_id,
+          status_id: dto.status_id || 1,
+          created_by: userId,
+        }),
+      );
+
+      // Bulk insert all at once
+      const savedRecords =
+        await this.reqTransactionDuesRepository.save(newRecords);
+
+      // Single consolidated audit trail for entire batch
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ReqTransactionDuesService",
+          method: "bulkCreate",
+          raw_data: JSON.stringify(createDtos),
+          description: `Bulk created ${savedRecords.length} req transaction dues`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      // Return saved records with ID and header ID for mapping
+      // No need to load full relations since we only need IDs
+      return savedRecords.map((record) => ({
+        id: record.id,
+        req_transaction_header_id: record.req_transaction_header_id,
+      }));
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new Error(`Failed to bulk create req transaction dues: ${error}`);
     }
   }
 }
