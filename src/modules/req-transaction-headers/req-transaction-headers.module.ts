@@ -25,6 +25,8 @@ import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { CacheInvalidationModule } from "../cache/cache.module";
+import { UserAuditTrail } from "src/entities/UserAuditTrail";
+import { UploadProgressLoggerService } from "src/services/upload-progress-logger.service";
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       ReqTransactionDue,
       ReqTransactionDetail,
       TransactionSequence,
+      UserAuditTrail,
     ]),
     UsersModule,
     UserAuditTrailModule,
@@ -57,6 +60,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
     ReqTransactionHeadersService,
     ResponseMapperService,
     CommonUtilitiesService,
+    UploadProgressLoggerService,
   ],
   exports: [ReqTransactionHeadersService],
 })
