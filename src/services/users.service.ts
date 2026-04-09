@@ -26,6 +26,10 @@ import { EmailService } from "./email.service";
 import { SSEEventEmitterHelper } from "./sse-event-emitter.helper";
 import { FrontendUrlUtil } from "../utils/frontend-url.util";
 import { CacheInvalidationService } from "./cache-invalidation.service";
+import {
+  validateAndFormatExcelRow,
+  ExcelValidationConfig,
+} from "../utils/excel-validation";
 
 @Injectable()
 export class UsersService {
@@ -2009,28 +2013,41 @@ export class UsersService {
     const success: any[] = [];
     let inserted_count = 0;
     let updated_count = 0;
+
+    // Define validation and formatting configuration for Excel users
+    // Format is explicit - no automatic trimming. Use "trim"/"lowercase-trim"/"uppercase-trim" if needed
+    const excelValidationConfig: ExcelValidationConfig = {
+      requiredFields: {
+        "Username": { format: "lowercase-trim" },
+        "Employee No.": { format: "trim" },
+        "First Name": { format: "uppercase-trim" },
+        "Last Name": { format: "uppercase-trim" },
+        "Email": { format: "lowercase-trim" },
+        "Password": { format: "trim" },
+        "Access Keys": { format: "trim" },
+        "Role(s)": { format: "trim" },
+      },
+      optionalFields: {
+        "Middle Name": { format: "uppercase-trim", nullable: true },
+        "User Upline ID": { format: "none", nullable: true },
+        "Theme ID": { format: "none", nullable: true },
+        "User Reset": { format: "none", nullable: true },
+        "Send Email Notif": { format: "none", nullable: true },
+        "Location(s)": { format: "none", nullable: true },
+      },
+    };
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = row["__rowNum__"] || i + 2; // Excel row number (header + 1-based)
       try {
-        // Validation: required fields
-        const required = [
-          "Username",
-          "Employee No.",
-          "First Name",
-          "Last Name",
-          "Email",
-          "Password",
-          "Access Keys",
-          "Role(s)",
-        ];
-        for (const field of required) {
-          if (!row[field] || String(row[field]).trim() === "") {
-            throw new Error(`Missing required field: ${field}`);
-          }
-        }
+        // Validate and format row data using the utility function
+        const formattedRow = validateAndFormatExcelRow(
+          row,
+          excelValidationConfig,
+        );
         // 1. Lookup access keys (comma separated abbr)
-        const accessKeyAbbrs = String(row["Access Keys"] || "")
+        const accessKeyAbbrs = String(formattedRow["Access Keys"] || "")
           .split(",")
           .map((s: string) => s.trim())
           .filter(Boolean);
@@ -2045,7 +2062,7 @@ export class UsersService {
           );
         }
         // 2. Lookup multiple roles (comma separated)
-        const roleNames = String(row["Role(s)"] || "")
+        const roleNames = String(formattedRow["Role(s)"] || "")
           .split(",")
           .map((name: string) => name.trim())
           .filter(Boolean);
@@ -2099,10 +2116,13 @@ export class UsersService {
         // Check if Location(s) column has values and build user_location_presets
         let userLocationPresets: any[] = [];
 
-        if (row["Location(s)"] && String(row["Location(s)"]).trim() !== "") {
+        if (
+          formattedRow["Location(s)"] &&
+          String(formattedRow["Location(s)"]).trim() !== ""
+        ) {
           try {
             // Parse comma-separated location names
-            const locationNames = String(row["Location(s)"])
+            const locationNames = String(formattedRow["Location(s)"])
               .split(",")
               .map((name: string) => name.trim())
               .filter(Boolean);
@@ -2170,12 +2190,15 @@ export class UsersService {
 
         // 4. Check if user already exists (by user_name or email)
         let existingUser = await this.usersRepository.findOne({
-          where: [{ user_name: row["Username"] }, { email: row["Email"] }],
+          where: [
+            { user_name: formattedRow["Username"] },
+            { email: formattedRow["Email"] },
+          ],
         });
         // Check for duplicate employee number (emp_number)
-        if (row["Employee No."]) {
+        if (formattedRow["Employee No."]) {
           const existingEmpNumber = await this.usersRepository.findOne({
-            where: { emp_number: row["Employee No."] },
+            where: { emp_number: formattedRow["Employee No."] },
           });
           if (
             existingEmpNumber &&
@@ -2183,28 +2206,29 @@ export class UsersService {
           ) {
             errors.push({
               row: rowNum,
-              error: `Duplicate Employee No.: ${row["Employee No."]} already exists`,
+              error: `Duplicate Employee No.: ${formattedRow["Employee No."]} already exists`,
             });
             continue;
           }
         }
+
         if (existingUser) {
           // Update logic
           const updateUserDto: any = {
-            user_name: row["Username"],
-            emp_number: row["Employee No."],
-            first_name: row["First Name"],
-            last_name: row["Last Name"],
-            middle_name: row["Middle Name"],
-            email: row["Email"],
-            password: row["Password"],
+            user_name: formattedRow["Username"],
+            emp_number: formattedRow["Employee No."],
+            first_name: formattedRow["First Name"],
+            last_name: formattedRow["Last Name"],
+            middle_name: formattedRow["Middle Name"],
+            email: formattedRow["Email"],
+            password: formattedRow["Password"],
             current_access_key: accessKeys[0]?.id,
             role_id: primaryRole.id, // Use primary (first) role as default
             role_ids: allRoleIds, // Multiple roles
             status_id: 1,
             updated_by: created_by,
-            user_reset: row["User Reset"] || false,
-            theme_id: row["Theme ID"] || 1,
+            user_reset: formattedRow["User Reset"] || false,
+            theme_id: formattedRow["Theme ID"] || 1,
             // Permissions/locations with role_ids from presets
             access_key_id: accessKeys.map((k) => k.id),
             user_permission_presets: allRoleActionPresets,
@@ -2216,7 +2240,7 @@ export class UsersService {
             {
               service: "UsersService",
               method: "uploadExcelUsers",
-              raw_data: JSON.stringify({ row, updateUserDto }),
+              raw_data: JSON.stringify({ row: formattedRow, updateUserDto }),
               description: `User updated via Excel upload (row ${rowNum})`,
               status_id: 1,
             },
@@ -2232,10 +2256,10 @@ export class UsersService {
           }
 
           // Send welcome email if requested
-          if (row["Send Email Notif"]) {
+          if (formattedRow["Send Email Notif"]) {
             await this.sendUserWelcomeEmail(
               existingUser,
-              row["Password"],
+              formattedRow["Password"],
               rowNum,
               created_by,
               request,
@@ -2244,23 +2268,24 @@ export class UsersService {
 
           updated_count++;
           updated_row_numbers.push(rowNum);
-          success.push({ ...row, __rowNum__: rowNum });
+          success.push({ ...formattedRow, __rowNum__: rowNum });
         } else {
           // Create logic
+
           const user = this.usersRepository.create({
-            user_name: row["Username"],
-            emp_number: row["Employee No."],
-            first_name: row["First Name"],
-            last_name: row["Last Name"],
-            middle_name: row["Middle Name"],
-            email: row["Email"],
-            password: await bcrypt.hash(row["Password"], 10),
+            user_name: formattedRow["Username"],
+            emp_number: formattedRow["Employee No."],
+            first_name: formattedRow["First Name"],
+            last_name: formattedRow["Last Name"],
+            middle_name: formattedRow["Middle Name"],
+            email: formattedRow["Email"],
+            password: await bcrypt.hash(formattedRow["Password"], 10),
             current_access_key: accessKeys[0]?.id, // for main access key
             role_id: primaryRole.id, // Use primary (first) role as default
             status_id: 1,
             user_reset: true, // default to true on create
-            user_upline_id: row["User Upline ID"] || null,
-            theme_id: row["Theme ID"] || 1,
+            user_upline_id: formattedRow["User Upline ID"] || null,
+            theme_id: formattedRow["Theme ID"] || 1,
             profile_pic_url: "/uploads/profile_pics/default_profile.jpg",
             created_by,
           });
@@ -2270,7 +2295,7 @@ export class UsersService {
             {
               service: "UsersService",
               method: "uploadExcelUsers",
-              raw_data: JSON.stringify({ row, user: savedUser }),
+              raw_data: JSON.stringify({ row: formattedRow, user: savedUser }),
               description: `User created via Excel upload (row ${rowNum})`,
               status_id: 1,
             },
@@ -2299,10 +2324,10 @@ export class UsersService {
           inserted_count++;
 
           // Send welcome email if requested
-          if (row["Send Email Notif"]) {
+          if (formattedRow["Send Email Notif"]) {
             await this.sendUserWelcomeEmail(
               savedUser,
-              row["Password"],
+              formattedRow["Password"],
               rowNum,
               created_by,
               request,
@@ -2310,7 +2335,7 @@ export class UsersService {
           }
 
           inserted_row_numbers.push(rowNum);
-          success.push({ ...row, __rowNum__: rowNum });
+          success.push({ ...formattedRow, __rowNum__: rowNum });
         }
       } catch (err) {
         errors.push({ row: rowNum, error: this.getErrorMessage(err) });
