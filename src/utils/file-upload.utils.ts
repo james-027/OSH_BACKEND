@@ -2,7 +2,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as sharp from "sharp";
+import sharp = require("sharp");
 
 /**
  * Excel file filter - validates that uploaded file is .xlsx or .xls
@@ -76,6 +76,10 @@ export class FileUploadHandler {
   ];
   private static readonly MAX_FILES_PER_BATCH = 150; // Security: max 150 files per batch
   private static readonly MAX_TOTAL_BATCH_SIZE = 750 * 1024 * 1024; // Security: max 750MB total
+
+  private static getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
 
   /**
    * Validate entire batch before processing
@@ -174,7 +178,7 @@ export class FileUploadHandler {
     } catch (error) {
       return {
         valid: false,
-        error: `Validation error: ${error.message}`,
+        error: `Validation error: ${this.getErrorMessage(error)}`,
       };
     }
   }
@@ -236,7 +240,7 @@ export class FileUploadHandler {
       return bufferObj;
     } catch (error) {
       console.warn(
-        `Compression failed for ${filename}, using original: ${error.message}`
+        `Compression failed for ${filename}, using original: ${this.getErrorMessage(error)}`
       );
       // Return original buffer on compression error (graceful degradation)
       return typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
@@ -294,7 +298,125 @@ export class FileUploadHandler {
         size: bufferToSave.length,
       };
     } catch (error) {
-      throw new Error(`File save failed: ${error.message}`);
+      throw new Error(`File save failed: ${this.getErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * NEW STREAMING APPROACH: Compress and save file directly to disk
+   * Memory-efficient: NO intermediate compressed buffer stored in RAM
+   *
+   * OPTIMIZATION BENEFIT:
+   * - Old approach: buffer (5MB) + compressedBuffer (3MB) = 8MB per file × 5 files = 40MB
+   * - New approach: buffer (5MB) only = 5MB per file × 5 files = 25MB
+   * - Result: 37.5% additional memory savings
+   *
+   * HOW IT WORKS:
+   * 1. Images (JPG/PNG/GIF/WebP): sharp.toFile() streams compression directly to disk
+   * 2. PDFs: fs.createWriteStream pipes buffer to disk (no compression needed)
+   * 3. Both: Compressed data written to disk as stream (never held in memory)
+   *
+   * @param buffer - Original file buffer from HTTP request
+   * @param filename - Original filename (used to detect file type)
+   * @param headerId - Header ID for filename generation
+   * @param uploadDir - Upload directory path
+   * @returns SavedFileInfo with relative path and filename (same structure as saveFile)
+   */
+  static async compressAndSaveStreamDirect(
+    buffer: Buffer | string,
+    filename: string,
+    headerId: number,
+    uploadDir: string = "uploads/req-transactions"
+  ): Promise<SavedFileInfo> {
+    try {
+      // Validate file first (quick fail for invalid files)
+      const validation = this.validateFile(filename, buffer);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
+      const bufferObj =
+        typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
+      const ext = path.extname(filename).toLowerCase().slice(1);
+      const mimeType = this.getMimeTypeFromExtension(ext);
+
+      // Ensure upload directory exists (lazy creation)
+      const uploadPath = path.join(process.cwd(), uploadDir);
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, { recursive: true });
+      }
+
+      // Generate unique filename: header-{headerId}-{timestamp}-{originalName}
+      const nameWithoutExt = path.basename(filename, path.extname(filename));
+      const timestamp = Date.now();
+      const uniqueFilename = `header-${headerId}-${timestamp}-${nameWithoutExt}${path.extname(filename)}`;
+      const fullPath = path.join(uploadPath, uniqueFilename);
+
+      let finalSize = 0;
+
+      // PDF: no compression, write stream directly
+      if (mimeType === "application/pdf") {
+        await new Promise<void>((resolve, reject) => {
+          const writeStream = fs.createWriteStream(fullPath);
+          writeStream.on("finish", () => resolve());
+          writeStream.on("error", reject);
+
+          const readStream = fs.createReadStream(fullPath);
+          readStream.on("error", reject);
+
+          // Write buffer directly to stream
+          writeStream.write(bufferObj);
+          writeStream.end();
+        });
+
+        // Get file size for return value
+        finalSize = fs.statSync(fullPath).size;
+      } else if (mimeType.startsWith("image/")) {
+        // Images: use sharp's toFile() for streaming compression to disk
+        let sharpTransform = sharp(bufferObj);
+
+        if (ext === "png") {
+          // PNG: reduce quality and colors, write directly to disk
+          sharpTransform = sharpTransform.png({
+            quality: 75,
+            compressionLevel: 9,
+          });
+        } else if (ext === "jpg" || ext === "jpeg") {
+          // JPEG: reduce quality, write directly to disk
+          sharpTransform = sharpTransform.jpeg({
+            quality: 70,
+            progressive: true,
+          });
+        } else if (ext === "gif" || ext === "webp") {
+          // GIF/WebP: convert to webp, write directly to disk
+          sharpTransform = sharpTransform.toFormat("webp", { quality: 75 });
+        }
+
+        // Stream compression directly to disk (NO intermediate buffer)
+        await sharpTransform.toFile(fullPath);
+
+        // Get file size for return value
+        finalSize = fs.statSync(fullPath).size;
+      } else {
+        // Unknown format: save as-is
+        fs.writeFileSync(fullPath, bufferObj);
+        finalSize = bufferObj.length;
+      }
+
+      // Return relative path from project root (normalized to forward slashes for frontend)
+      const relativePath = path
+        .relative(process.cwd(), fullPath)
+        .replace(/\\/g, "/");
+
+      return {
+        relativePath,
+        filename: uniqueFilename,
+        size: finalSize,
+      };
+    } catch (error) {
+      throw new Error(
+        `Streaming file save failed: ${this.getErrorMessage(error)}`
+      );
     }
   }
 
@@ -308,7 +430,7 @@ export class FileUploadHandler {
         fs.unlinkSync(fullPath);
       }
     } catch (error) {
-      console.error(`Failed to delete file: ${error.message}`);
+      console.error(`Failed to delete file: ${this.getErrorMessage(error)}`);
     }
   }
 
