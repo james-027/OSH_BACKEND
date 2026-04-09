@@ -15,6 +15,7 @@ import { CreateReqTransactionDetailDto } from "src/dto/CreateReqTransactionDetai
 import { UpdateReqTransactionDetailDto } from "src/dto/UpdateReqTransactionDetailDto";
 import { ResponseMapperService } from "./response-mapper.service";
 import { SyncLog } from "src/entities/syncLog";
+import logger from "src/config/logger";
 
 @Injectable()
 export class ReqTransactionDetailsService {
@@ -127,7 +128,8 @@ export class ReqTransactionDetailsService {
           description: `Created req transaction detail ID: ${savedRecord.id}`,
           status_id: 1,
         },
-        userId
+        userId,
+        false // Suppress individual SSE events during batch file processing
       );
 
       return this.findOne(savedRecord.id);
@@ -136,6 +138,89 @@ export class ReqTransactionDetailsService {
         throw error;
       }
       throw new Error("Failed to create req transaction detail");
+    }
+  }
+
+  /**
+   * Bulk create transaction detail records during batch file processing
+   * Consolidates all details into single database operation
+   * @param createDtos Array of transaction detail DTOs
+   * @param userId User performing the operation
+   * @returns Saved transaction detail records (or empty array if none provided)
+   */
+  async bulkCreate(
+    createDtos: CreateReqTransactionDetailDto[],
+    userId: number,
+  ): Promise<ReqTransactionDetail[]> {
+    if (!createDtos || createDtos.length === 0) {
+      logger.warn(
+        "[DETAILS BULK CREATE] No transaction details provided for batch creation",
+      );
+      return [];
+    }
+
+    try {
+      // Verify all headers exist (batch validation upfront)
+      const headerIds = [...new Set(createDtos.map(d => d.req_transaction_header_id))];
+      const existingHeaders = await this.reqTransactionHeadersRepository.findByIds(
+        headerIds,
+      );
+
+      if (existingHeaders.length !== headerIds.length) {
+        throw new BadRequestException(
+          `${headerIds.length - existingHeaders.length} header IDs not found`,
+        );
+      }
+
+      // Prepare batch records with userId
+      const detailsToInsert = createDtos.map((dto) => ({
+        req_transaction_header_id: dto.req_transaction_header_id,
+        requirement_file_path: dto.requirement_file_path,
+        requirement_file_name: dto.requirement_file_name,
+        status_id: dto.status_id || 1,
+        created_by: userId,
+      }));
+
+      // Bulk insert all at once (single database operation)
+      const savedDetails =
+        await this.reqTransactionDetailsRepository.save(detailsToInsert);
+
+      // Create single consolidated audit trail entry for entire batch
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "ReqTransactionDetailsService",
+            method: "bulkCreate",
+            raw_data: JSON.stringify({
+              count: savedDetails.length,
+              header_ids: headerIds,
+            }),
+            description: `Batch created ${savedDetails.length} req transaction details`,
+            status_id: 1,
+          },
+          userId,
+          false // Suppress SSE - will be emitted at end of batch in createWithDetails
+        );
+      } catch (auditErr) {
+        logger.error(
+          `[DETAILS BATCH] Audit trail creation failed: ${(auditErr as Error).message}`,
+        );
+        // Don't throw - audit failure shouldn't block transaction details
+      }
+
+      logger.info(
+        `[DETAILS BATCH] Inserted ${savedDetails.length} transaction detail records`,
+      );
+
+      return savedDetails;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(
+        `[DETAILS BATCH ERROR] Failed to bulk insert transaction details: ${errorMessage}`,
+      );
+      // Don't throw - details failure shouldn't block main batch
+      return [];
     }
   }
 
@@ -209,7 +294,8 @@ export class ReqTransactionDetailsService {
           description: `Updated req transaction detail ID: ${id}`,
           status_id: 1,
         },
-        userId
+        userId,
+        false // Suppress individual SSE events during batch updates
       );
 
       return this.findOne(savedRecord.id);
@@ -252,7 +338,8 @@ export class ReqTransactionDetailsService {
           description: `Toggled status for req transaction detail ID: ${id} to status: ${newStatusId}`,
           status_id: 1,
         },
-        userId
+        userId,
+        false // Suppress individual SSE events during bulk toggle operations
       );
 
       return this.findOne(saved.id);
