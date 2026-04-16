@@ -12,7 +12,16 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {
-      "src/*": ["src/*"]
+      "src/*": ["src/*"],
+      "@modules/*": ["src/modules/*"],
+      "@controllers/*": ["src/modules/locations/controllers/controllers/*"],
+      "@services/*": ["src/services/*"],
+      "@utils/*": ["src/utils/*"],
+      "@config/*": ["src/config/*"],
+      "@entities/*": ["src/entities/*"],
+      "@guards/*": ["src/guards/*"],
+      "@interceptors/*": ["src/interceptors/*"],
+      "@decorators/*": ["src/decorators/*"]
     },
     "incremental": true,
     "skipLibCheck": true,

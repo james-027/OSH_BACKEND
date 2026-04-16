@@ -3,4 +3,5 @@ node_modules/*
 logs/*
 DB/*
 uploads/req-transactions/*
+uploads/qa-req-transactions/*
 *.log
