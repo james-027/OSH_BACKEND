@@ -7,3 +7,4 @@ uploads/qa-req-transactions/*
 *.log
 .env
 .env.cache.example
+EXT/*
