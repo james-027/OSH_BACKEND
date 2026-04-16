@@ -30,15 +30,15 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "src/entities/User";
-import { UpdateUserDto } from "src/dto/UpdateUserDto";
-import { SSEEventEmitterHelper } from "src/services/sse-event-emitter.helper";
+import { UpdateUserDto } from "src/modules/users/dto/UpdateUserDto";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    private sseEventEmitter: SSEEventEmitterHelper // ← ADD THIS
+    private sseEventEmitter: SSEEventEmitterHelper, // ← ADD THIS
   ) {}
 
   async update(id: number, updateDto: UpdateUserDto, userId: number) {
@@ -93,13 +93,13 @@ export class UsersService {
  */
 export class WarehouseRequirementsServiceExample {
   constructor(
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
     // ... other dependencies
   ) {}
 
   async createWarehouseRequirement(
     createDto: CreateWarehouseRequirementDto,
-    userId: number
+    userId: number,
   ) {
     // ... create logic
     const saved = await this.warehouseRequirementsRepository.save(newRecord);
@@ -109,7 +109,7 @@ export class WarehouseRequirementsServiceExample {
       userId,
       "warehouse-requirements",
       saved.id,
-      saved
+      saved,
     );
 
     return saved;
@@ -118,7 +118,7 @@ export class WarehouseRequirementsServiceExample {
   async updateWarehouseRequirementDue(
     dueId: number,
     updateDto: UpdateDto,
-    userId: number
+    userId: number,
   ) {
     // ... update logic
     const updated =
@@ -129,7 +129,7 @@ export class WarehouseRequirementsServiceExample {
       userId,
       "warehouse-requirement-dues",
       dueId,
-      updated
+      updated,
     );
 
     return updated;
@@ -149,21 +149,21 @@ export class WarehouseRequirementsServiceExample {
     // (Use INVALIDATE for full refreshes)
     this.sseEventEmitter.emitQueryInvalidation(
       userId,
-      "warehouse-requirements"
+      "warehouse-requirements",
     );
   }
 
   async notifyMultipleUsersOfWarehouseChange(
     warehouseId: number,
     affectedUserIds: number[],
-    warehouseData: any
+    warehouseData: any,
   ) {
     // Notify multiple users about a shared resource change
     this.sseEventEmitter.emitMultipleUsersUpdate(
       affectedUserIds,
       "warehouses",
       warehouseId,
-      warehouseData
+      warehouseData,
     );
   }
 }
@@ -173,14 +173,14 @@ export class WarehouseRequirementsServiceExample {
  */
 export class ReqTransactionHeadersServiceExample {
   constructor(
-    private sseEventEmitter: SSEEventEmitterHelper
+    private sseEventEmitter: SSEEventEmitterHelper,
     // ... other dependencies
   ) {}
 
   async createWithDetails(
     createDto: CreateReqTransactionWithDetailsDto,
     userId: number,
-    accessKeyId: number
+    accessKeyId: number,
   ) {
     // ... creation logic
 
@@ -190,7 +190,7 @@ export class ReqTransactionHeadersServiceExample {
         userId,
         "req-transaction-headers",
         result.req_transaction_header_id,
-        result
+        result,
       );
 
       // Also notify about warehouse requirement due change
@@ -198,7 +198,7 @@ export class ReqTransactionHeadersServiceExample {
         userId,
         "warehouse-requirement-dues",
         result.warehouse_requirement_due_id,
-        { status_id: 2 } // Deactivated
+        { status_id: 2 }, // Deactivated
       );
     });
 
@@ -212,7 +212,7 @@ export class ReqTransactionHeadersServiceExample {
     transHdrId: number,
     userId: number,
     statusId: number,
-    transDueId: number
+    transDueId: number,
   ) {
     // ... toggle logic
     const saved = await this.reqTransactionDuesRepository.save(recordDue);
@@ -222,7 +222,7 @@ export class ReqTransactionHeadersServiceExample {
       userId,
       "req-transaction-headers",
       transHdrId,
-      { status_id: statusId }
+      { status_id: statusId },
     );
 
     // Also notify about due status change
@@ -230,7 +230,7 @@ export class ReqTransactionHeadersServiceExample {
       userId,
       "warehouse-requirement-dues",
       transDueId,
-      { status_id: statusId === 5 ? 1 : 2 }
+      { status_id: statusId === 5 ? 1 : 2 },
     );
 
     return saved;
