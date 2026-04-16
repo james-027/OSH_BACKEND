@@ -5,3 +5,5 @@ DB/*
 uploads/req-transactions/*
 uploads/qa-req-transactions/*
 *.log
+.env
+.env.cache.example
