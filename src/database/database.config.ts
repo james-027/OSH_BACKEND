@@ -142,13 +142,13 @@ export const entities = [
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
-const baseConfig = {
+export const baseConfig = {
   type: "mysql" as const,
   host: process.env.DB_HOST || "localhost",
   port: parseInt(process.env.DB_PORT, 10) || 3306,
   username: process.env.DB_USERNAME || "root",
-  password: process.env.DB_PASSWORD || "B@v1r3m0t3Localdba@C3sS",
-  database: process.env.DB_DATABASE || "rest_api",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_DATABASE || "xxx",
   // logging: process.env.NODE_ENV === "development",
   logging: false, // Disable SQL query logging
   entities,

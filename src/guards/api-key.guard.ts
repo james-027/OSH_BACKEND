@@ -7,13 +7,13 @@ import {
   Inject,
   forwardRef,
 } from "@nestjs/common";
-import { ApiService } from "../services/api.service";
+import { ApiService } from "../modules/api/services/api.service";
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   constructor(
     @Inject(forwardRef(() => ApiService))
-    private apiService: ApiService
+    private apiService: ApiService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

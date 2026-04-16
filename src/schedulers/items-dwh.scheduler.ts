@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { ItemsDwhService } from "../services/items-dwh.service";
+import { ItemsDwhService } from "src/modules/items/services/items-dwh.service";
 
 @Injectable()
 export class ItemsDwhScheduler {

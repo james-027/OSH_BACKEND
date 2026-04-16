@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { SegmentsController } from "../../controllers/segments.controller";
-import { SegmentsService } from "../../services/segments.service";
+import { SegmentsController } from "./controllers/segments.controller";
+import { SegmentsService } from "./services/segments.service";
 import { Segment } from "../../entities/Segment";
 import { UsersModule } from "../users/users.module";
 import { UserPermissions } from "src/entities/UserPermissions";

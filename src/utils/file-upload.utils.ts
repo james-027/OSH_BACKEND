@@ -10,7 +10,7 @@ import sharp = require("sharp");
 export function excelFileFilter(
   req: any,
   file: any,
-  cb: (error: Error | null, acceptFile: boolean) => void
+  cb: (error: Error | null, acceptFile: boolean) => void,
 ): void {
   if (!file.originalname.match(/\.(xlsx|xls)$/)) {
     return cb(new Error("Only Excel files are allowed!"), false);
@@ -24,7 +24,7 @@ export function excelFileFilter(
 export function imageFileFilter(
   req: any,
   file: any,
-  cb: (error: Error | null, acceptFile: boolean) => void
+  cb: (error: Error | null, acceptFile: boolean) => void,
 ): void {
   if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
     return cb(new Error("Only image files are allowed!"), false);
@@ -38,7 +38,21 @@ export function imageFileFilter(
 export function generateTimestampFilename(
   req: any,
   file: any,
-  cb: (error: Error | null, filename: string) => void
+  cb: (error: Error | null, filename: string) => void,
+): void {
+  const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  // const ext = file.originalname.split(".").pop();
+  const ext = path.extname(file.originalname);
+  cb(null, `${unique}${ext}`);
+}
+
+/**
+ * Generates timestamped filename
+ */
+export function generateTimestampFilename2(
+  req: any,
+  file: any,
+  cb: (error: Error | null, filename: string) => void,
 ): void {
   cb(null, `${Date.now()}-${file.originalname}`);
 }
@@ -74,8 +88,8 @@ export class FileUploadHandler {
     "image/png",
     "application/pdf",
   ];
-  private static readonly MAX_FILES_PER_BATCH = 150; // Security: max 150 files per batch
-  private static readonly MAX_TOTAL_BATCH_SIZE = 750 * 1024 * 1024; // Security: max 750MB total
+  private static readonly MAX_FILES_PER_BATCH = 50; // Security: max 50 files per batch
+  private static readonly MAX_TOTAL_BATCH_SIZE = 270 * 1024 * 1024; // Security: max 270MB total
 
   private static getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -86,7 +100,7 @@ export class FileUploadHandler {
    * Security measure: prevents batch DoS attacks
    */
   static validateBatch(
-    files: Array<{ filename: string; buffer: string | Buffer }>
+    files: Array<{ filename: string; buffer: string | Buffer }>,
   ): FileValidationResult {
     // Check batch size
     if (files.length > this.MAX_FILES_PER_BATCH) {
@@ -136,7 +150,7 @@ export class FileUploadHandler {
    */
   static validateFile(
     filename: string,
-    buffer: Buffer | string
+    buffer: Buffer | string,
   ): FileValidationResult {
     try {
       // Get file extension
@@ -193,7 +207,7 @@ export class FileUploadHandler {
    */
   static async compressFile(
     buffer: Buffer | string,
-    filename: string
+    filename: string,
   ): Promise<Buffer> {
     try {
       const bufferObj =
@@ -213,17 +227,17 @@ export class FileUploadHandler {
         if (ext === "png") {
           // PNG: reduce colors and quality to achieve ~60% of original size
           compressedBuffer = await sharp(bufferObj)
-            .png({ 
-              quality: 75,  // PNG quality
-              compressionLevel: 9  // Maximum compression
+            .png({
+              quality: 75, // PNG quality
+              compressionLevel: 9, // Maximum compression
             })
             .toBuffer();
         } else if (ext === "jpg" || ext === "jpeg") {
           // JPEG: reduce quality to achieve ~60% of original size
           compressedBuffer = await sharp(bufferObj)
-            .jpeg({ 
-              quality: 70,  // JPEG quality (70-75 is good balance)
-              progressive: true  // Progressive JPEG loads faster
+            .jpeg({
+              quality: 70, // JPEG quality (70-75 is good balance)
+              progressive: true, // Progressive JPEG loads faster
             })
             .toBuffer();
         } else if (ext === "gif" || ext === "webp") {
@@ -240,10 +254,12 @@ export class FileUploadHandler {
       return bufferObj;
     } catch (error) {
       console.warn(
-        `Compression failed for ${filename}, using original: ${this.getErrorMessage(error)}`
+        `Compression failed for ${filename}, using original: ${this.getErrorMessage(error)}`,
       );
       // Return original buffer on compression error (graceful degradation)
-      return typeof buffer === "string" ? Buffer.from(buffer, "base64") : buffer;
+      return typeof buffer === "string"
+        ? Buffer.from(buffer, "base64")
+        : buffer;
     }
   }
 
@@ -257,7 +273,7 @@ export class FileUploadHandler {
     buffer: Buffer | string,
     filename: string,
     headerId: number,
-    uploadDir: string = "uploads/req-transactions"
+    uploadDir: string = "uploads/req-transactions",
   ): Promise<SavedFileInfo> {
     try {
       // Validate file first (quick fail for invalid files)
@@ -326,7 +342,7 @@ export class FileUploadHandler {
     buffer: Buffer | string,
     filename: string,
     headerId: number,
-    uploadDir: string = "uploads/req-transactions"
+    uploadDir: string = "uploads/req-transactions",
   ): Promise<SavedFileInfo> {
     try {
       // Validate file first (quick fail for invalid files)
@@ -415,7 +431,7 @@ export class FileUploadHandler {
       };
     } catch (error) {
       throw new Error(
-        `Streaming file save failed: ${this.getErrorMessage(error)}`
+        `Streaming file save failed: ${this.getErrorMessage(error)}`,
       );
     }
   }

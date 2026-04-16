@@ -1,10 +1,10 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { AccessKeysController } from "../../controllers/access-keys.controller";
-import { AccessKeysService } from "../../services/access-keys.service";
+import { AccessKeysController } from "./controllers/access-keys.controller";
+import { AccessKeysService } from "./services/access-keys.service";
 import { AccessKey } from "../../entities/AccessKey";
 import { UsersModule } from "../users/users.module";
-import { UserAuditTrailCreateService } from "src/services/user-audit-trail-create.service";
+import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";

@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { ReportsController } from "../../controllers/reports.controller";
+import { ReportsController } from "./controllers/reports.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";

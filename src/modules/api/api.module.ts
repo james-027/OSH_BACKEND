@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { ApiController } from "../../controllers/api.controller";
-import { ApiService } from "../../services/api.service";
+import { ApiController } from "./controllers/api.controller";
+import { ApiService } from "./services/api.service";
 import { ApiKeyGuard } from "../../guards/api-key.guard";
 import { ApiKey } from "../../entities/ApiKey";
 import { ApiAuthAccess } from "../../entities/ApiAuthAccess";

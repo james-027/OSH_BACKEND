@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { WarehouseRequirementsService } from "../services/warehouse-requirements.service";
+import { WarehouseRequirementsService } from "../modules/warehouse-requirements/services/warehouse-requirements.service";
 import logger from "../config/logger";
 
 @Injectable()
@@ -30,11 +30,11 @@ export class WarehouseRequirementsSyncScheduler {
           `Sync errors: ${JSON.stringify(result.errors.slice(0, 5))}`,
         );
       }
-    } catch (error) {
-      logger.error(
-        `Failed to sync warehouse requirements: ${error.message}`,
-        error.stack,
-      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const stack = error instanceof Error ? error.stack : undefined;
+
+      logger.error(`Failed to sync warehouse requirements: ${message}`, stack);
     }
   }
 }

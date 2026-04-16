@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
-import { CacheInvalidationService } from "../../services/cache-invalidation.service";
-import { CacheDiagnosticService } from "../../services/cache-diagnostic.service";
-import { CacheDebugController } from "../../controllers/cache-debug.controller";
+import { CacheInvalidationService } from "./services/cache-invalidation.service";
+import { CacheDiagnosticService } from "src/modules/cache/services/cache-diagnostic.service";
+import { CacheDebugController } from "src/modules/cache/controllers/cache-debug.controller";
 
 /**
  * Shared Cache Module

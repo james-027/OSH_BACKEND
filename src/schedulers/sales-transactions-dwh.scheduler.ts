@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import { SalesTransactionsDwhService } from "../services/sales-transactions-dwh.service";
+import { SalesTransactionsDwhService } from "../modules/transactions/services/sales-transactions-dwh.service";
 import logger from "../config/logger";
 
 @Injectable()
