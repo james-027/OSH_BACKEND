@@ -39,7 +39,7 @@ export class LocationsController {
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "LOCATIONS", action: "VIEW" })
+  @RequirePermissions({ module: "LOCATIONS", action: "DATA ACCESS" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.locationsService.findOne(id);
   }

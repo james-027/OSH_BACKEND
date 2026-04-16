@@ -24,16 +24,13 @@ export class PositionsController {
   constructor(private readonly positionsService: PositionsService) {}
 
   @Get()
-  @RequirePermissions(
-    { module: "POSITIONS", action: "DATA ACCESS" },
-    // { module: "POSITIONS", action: "VIEW" }
-  )
+  @RequirePermissions({ module: "POSITIONS", action: "DATA ACCESS" })
   async findAll() {
     return this.positionsService.findAll();
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "POSITIONS", action: "VIEW" })
+  @RequirePermissions({ module: "POSITIONS", action: "DATA ACCESS" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.positionsService.findOne(id);
   }
