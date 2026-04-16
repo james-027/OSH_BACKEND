@@ -61,7 +61,8 @@ export class EmployeesService {
       ? employees.filter((employee) =>
           (employee.employee_locations || []).some(
             (el) =>
-              (el.status_id === 1 || el.status_id === 2) &&
+              // (el.status_id === 1 || el.status_id === 2) &&
+              el.status_id === 1 &&
               allowedLocationIds!.includes(el.location_id),
           ),
         )
@@ -164,6 +165,9 @@ export class EmployeesService {
       ...employeeData,
       employee_first_name: employeeData.employee_first_name?.toUpperCase(),
       employee_last_name: employeeData.employee_last_name?.toUpperCase(),
+      employee_email: employeeData.employee_email
+        ? employeeData.employee_email.toLowerCase()
+        : null,
       access_key_id: createEmployeeDto.access_key_id,
       created_by: userId,
       updated_by: userId,
@@ -233,6 +237,9 @@ export class EmployeesService {
     Object.assign(employee, employeeData, {
       employee_first_name: employeeData.employee_first_name?.toUpperCase(),
       employee_last_name: employeeData.employee_last_name?.toUpperCase(),
+      employee_email: employeeData.employee_email
+        ? employeeData.employee_email.toLowerCase()
+        : null,
       updated_by: userId,
     });
     try {
