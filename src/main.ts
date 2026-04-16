@@ -6,10 +6,13 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe, LogLevel } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { json, urlencoded } from "express";
+import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
+import { SanitizationPipe } from "./common/sanitization.pipe";
 import logger from "./config/logger";
 import { join } from "path";
+import * as v8 from "v8";
 
 // Platform selection via environment variable
 const USE_FASTIFY = process.env.USE_FASTIFY === "true";
@@ -54,14 +57,64 @@ async function bootstrap() {
   }
 
   // Common setup for both platforms
+
+  // ====== SECURITY MIDDLEWARE (Defense in Depth) ======
+
+  // 1. Helmet: Set security HTTP headers (can be disabled with USE_HELMET=false)
+  const useHelmet = process.env.USE_HELMET !== "false"; // Default: enabled
+  if (useHelmet) {
+    app.use(
+      helmet({
+        // XSS Protection
+        xssFilter: true,
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            mediaSrc: ["'self'"],
+            frameSrc: ["'none'"],
+          },
+        },
+        // Frame protection (prevent clickjacking)
+        frameguard: { action: "deny" },
+        // MIME type sniffing prevention
+        noSniff: true,
+        // Referrer policy
+        referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+        // HSTS (HTTP Strict Transport Security) - only in production
+        hsts: {
+          maxAge: 31536000, // 1 year in seconds
+          includeSubDomains: true,
+          preload: process.env.NODE_ENV === "production",
+        },
+        // Disable powered-by header
+        hidePoweredBy: true,
+        // crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin
+      }),
+    );
+    logger.info("🛡️ Helmet security headers ENABLED");
+  } else {
+    logger.warn("⚠️ Helmet security headers DISABLED");
+  }
+
+  // 2. Sanitization Pipe & Validation: Clean input data (removes XSS from body)
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
+    new SanitizationPipe(), // Sanitize input data (removes <script>, event handlers, etc)
     new ValidationPipe({
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
     }),
   );
+  logger.info("✅ Input sanitization and validation enabled");
+
+  // ====== END SECURITY MIDDLEWARE ======
 
   const port =
     configService.get<number>("PORT") ||
@@ -172,7 +225,11 @@ async function setupFastify(app: any, configService: ConfigService) {
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
     : ["*"];
-
+  logger.info(
+    "✅ Heap Size Limit: " +
+      v8.getHeapStatistics().heap_size_limit / 1024 / 1024 +
+      "MiB",
+  );
   logger.info("🌍 CORS Origins configured:", corsOrigins);
 
   // Register CORS

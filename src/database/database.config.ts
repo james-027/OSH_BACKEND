@@ -43,6 +43,11 @@ import { ApiKey } from "../entities/ApiKey";
 import { ApiAuthAccess } from "../entities/ApiAuthAccess";
 import { ApiLogs } from "../entities/ApiLogs";
 import { ReminderType } from "../entities/ReminderType";
+import { RequirementType } from "../entities/RequirementType";
+import { Category } from "../entities/Category";
+import { CategoryType } from "../entities/CategoryType";
+import { Vendor } from "../entities/Vendor";
+import { Staff } from "../entities/Staff";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
 import { RequirementReminder } from "../entities/RequirementReminder";
@@ -56,6 +61,13 @@ import { ReqTransactionDue } from "../entities/ReqTransactionDue";
 import { System } from "../entities/System";
 import { SystemAccessKey } from "../entities/SystemAccessKey";
 import { TransactionSequence } from "../entities/TransactionSequence";
+import { LocationHurdleCategory } from "../entities/LocationHurdleCategory";
+import { LocationHurdle } from "../entities/LocationHurdle";
+import { SystemDocumentation } from "../entities/SystemDocumentation";
+import { StaffVendorSalary } from "../entities/StaffVendorSalary";
+import { StaffBrand } from "../entities/StaffBrand";
+import { StaffCategoryType } from "../entities/StaffCategoryType";
+import { StaffWarehouse } from "../entities/StaffWarehouse";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -102,6 +114,11 @@ export const entities = [
   ApiAuthAccess,
   ApiLogs,
   ReminderType,
+  RequirementType,
+  Category,
+  CategoryType,
+  Vendor,
+  Staff,
   RenewalType,
   Requirement,
   RequirementReminder,
@@ -115,16 +132,23 @@ export const entities = [
   System,
   SystemAccessKey,
   TransactionSequence,
+  LocationHurdle,
+  LocationHurdleCategory,
+  SystemDocumentation,
+  StaffVendorSalary,
+  StaffBrand,
+  StaffCategoryType,
+  StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
-const baseConfig = {
+export const baseConfig = {
   type: "mysql" as const,
   host: process.env.DB_HOST || "localhost",
   port: parseInt(process.env.DB_PORT, 10) || 3306,
   username: process.env.DB_USERNAME || "root",
-  password: process.env.DB_PASSWORD || "B@v1r3m0t3Localdba@C3sS",
-  database: process.env.DB_DATABASE || "rest_api",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_DATABASE || "xxx",
   // logging: process.env.NODE_ENV === "development",
   logging: false, // Disable SQL query logging
   entities,

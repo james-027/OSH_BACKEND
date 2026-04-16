@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { WarehouseRequirement } from "../../entities/WarehouseRequirement";
 import { WarehouseRequirementDue } from "../../entities/WarehouseRequirementDue";
@@ -8,9 +8,9 @@ import { ReqTransactionDetail } from "../../entities/ReqTransactionDetail";
 import { SyncLog } from "../../entities/syncLog";
 import { Warehouse } from "../../entities/Warehouse";
 import { Requirement } from "../../entities/Requirement";
-import { WarehouseRequirementsService } from "../../services/warehouse-requirements.service";
-import { WarehouseRequirementDuesService } from "../../services/warehouse-requirement-dues.service";
-import { WarehouseRequirementStartsService } from "../../services/warehouse-requirement-starts.service";
+import { WarehouseRequirementsService } from "./services/warehouse-requirements.service";
+import { WarehouseRequirementDuesService } from "./services/warehouse-requirement-dues.service";
+import { WarehouseRequirementStartsService } from "./services/warehouse-requirement-starts.service";
 import { CommonUtilitiesService } from "../../services/common-utilities.service";
 import { WarehouseRequirementsSyncScheduler } from "../../schedulers/warehouse-requirements-sync.scheduler";
 import { UsersModule } from "../users/users.module";
@@ -22,6 +22,7 @@ import { Action } from "src/entities/Action";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -41,8 +42,9 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     ]),
     UsersModule,
     UserAuditTrailModule,
-    RequirementsModule,
+    forwardRef(() => RequirementsModule),
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [],
   providers: [

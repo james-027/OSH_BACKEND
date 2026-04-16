@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { RegionsController } from "../../controllers/regions.controller";
-import { RegionsService } from "../../services/regions.service";
+import { RegionsController } from "./controllers/regions.controller";
+import { RegionsService } from "./services/regions.service";
 import { Region } from "../../entities/Region";
 import { UsersModule } from "../users/users.module";
 import { UserPermissions } from "src/entities/UserPermissions";

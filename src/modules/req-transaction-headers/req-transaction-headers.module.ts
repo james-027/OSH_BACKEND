@@ -7,8 +7,8 @@ import { WarehouseRequirement } from "../../entities/WarehouseRequirement";
 import { WarehouseRequirementDue } from "../../entities/WarehouseRequirementDue";
 import { RequirementReminder } from "../../entities/RequirementReminder";
 import { SyncLog } from "../../entities/syncLog";
-import { ReqTransactionHeadersService } from "../../services/req-transaction-headers.service";
-import { ReqTransactionHeadersController } from "../../controllers/req-transaction-headers.controller";
+import { ReqTransactionHeadersService } from "./services/req-transaction-headers.service";
+import { ReqTransactionHeadersController } from "src/modules/req-transaction-headers/controllers/req-transaction-headers.controller";
 import { UsersModule } from "../users/users.module";
 import { UserAuditTrailModule } from "../users/user-audit-trail.module";
 import { ResponseMapperService } from "../../services/response-mapper.service";
@@ -24,6 +24,9 @@ import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { CacheInvalidationModule } from "../cache/cache.module";
+import { UserAuditTrail } from "src/entities/UserAuditTrail";
+import { UploadProgressLoggerService } from "src/services/upload-progress-logger.service";
 
 @Module({
   imports: [
@@ -41,6 +44,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
       ReqTransactionDue,
       ReqTransactionDetail,
       TransactionSequence,
+      UserAuditTrail,
     ]),
     UsersModule,
     UserAuditTrailModule,
@@ -49,12 +53,14 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
     WarehouseRequirementsModule,
     RequirementsModule,
     SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [ReqTransactionHeadersController],
   providers: [
     ReqTransactionHeadersService,
     ResponseMapperService,
     CommonUtilitiesService,
+    UploadProgressLoggerService,
   ],
   exports: [ReqTransactionHeadersService],
 })

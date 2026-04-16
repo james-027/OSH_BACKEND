@@ -13,7 +13,7 @@ import { databaseConfig } from "./database.config";
         port: configService.get<number>("DB_PORT") || 3306,
         username: configService.get<string>("DB_USERNAME") || "root",
         password: configService.get<string>("DB_PASSWORD") || "",
-        database: configService.get<string>("DB_DATABASE") || "rest_api",
+        database: configService.get<string>("DB_DATABASE") || "xxx",
         entities: databaseConfig.entities,
         synchronize: false,
         // logging: configService.get<string>("NODE_ENV") === "development",

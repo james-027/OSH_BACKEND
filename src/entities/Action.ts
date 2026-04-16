@@ -29,6 +29,9 @@ export class Action {
   @Column({ default: 1 })
   status_id!: number;
 
+  @Column()
+  action_level!: number;
+
   // Relationship for action_id in RoleActionPreset
   @OneToMany(() => RoleActionPreset, (preset) => preset.action)
   roleActionPresets!: RoleActionPreset[];

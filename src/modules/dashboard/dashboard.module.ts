@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { DashboardController } from "../../controllers/dashboard.controller";
+import { DashboardController } from "./controllers/dashboard.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";

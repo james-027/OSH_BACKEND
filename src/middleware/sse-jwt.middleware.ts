@@ -26,15 +26,15 @@ export class SSEJwtMiddleware implements NestMiddleware {
     }
 
     // Priority 2: Query Parameter (Fallback for testing/mobile)
-    if (req.query.xxx_auth && typeof req.query.xxx_auth === "string") {
+    if (req.query.streamid && typeof req.query.streamid === "string") {
       console.log("[SSE-JWT] Token found in query parameter (fallback)");
-      req.headers.authorization = `Bearer_c+gi ${req.query.xxx_auth}`;
+      req.headers.authorization = `Bearer_c+gi ${req.query.streamid}`;
       return next();
     }
 
     // No token found - JwtAuthGuard will handle authentication error
     console.warn(
-      "[SSE-JWT] No token found in cookies or query params. Request will fail auth guard."
+      "[SSE-JWT] No token found in cookies or query params. Request will fail auth guard.",
     );
     next();
   }

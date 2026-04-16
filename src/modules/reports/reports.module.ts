@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { ReportsController } from "../../controllers/reports.controller";
+import { ReportsController } from "./controllers/reports.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
@@ -7,6 +7,7 @@ import { ActionsModule } from "../actions/actions.module";
 import { Action } from "src/entities/Action";
 import { TransactionsModule } from "../transactions/transactions.module";
 import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse-requirements.module";
+import { LocationsModule } from "../locations/locations.module";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { WarehouseRequirementsModule } from "../warehouse-requirements/warehouse
     ActionsModule,
     TransactionsModule,
     WarehouseRequirementsModule,
+    LocationsModule,
   ],
   controllers: [ReportsController],
 })

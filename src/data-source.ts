@@ -7,18 +7,18 @@ import { resolve } from "path";
 config({ path: resolve(__dirname, "../.env") });
 
 // Import configuration after loading env vars
-import { migrationConfig } from "./database/database.config";
+import { baseConfig, migrationConfig } from "./database/database.config";
 
 // Debug: Log the loaded configuration (remove in production)
 console.log("🔍 Database Config Debug:");
-console.log("Host:", process.env.DB_HOST);
-console.log("Port:", process.env.DB_PORT);
-console.log("Username:", process.env.DB_USERNAME);
+console.log("Host:", baseConfig.host);
+console.log("Port:", baseConfig.port);
+console.log("Username:", baseConfig.username);
 console.log(
   "Password:",
-  process.env.DB_PASSWORD ? "***LOADED***" : "❌ NOT LOADED"
+  baseConfig.password ? "***LOADED***" : "❌ NOT LOADED",
 );
-console.log("Database:", process.env.DB_DATABASE);
+console.log("Database:", baseConfig.database);
 
 // Create and export the DataSource for TypeORM CLI
 export const AppDataSource = new DataSource(migrationConfig);
@@ -28,7 +28,7 @@ if (require.main === module) {
   AppDataSource.initialize()
     .then(() => {
       console.log(
-        "✅ Data Source has been initialized successfully for migrations"
+        "✅ Data Source has been initialized successfully for migrations",
       );
       process.exit(0);
     })

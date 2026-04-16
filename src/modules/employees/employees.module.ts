@@ -1,11 +1,11 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { EmployeesService } from "../../services/employees.service";
+import { EmployeesService } from "./services/employees.service";
 import { Employee } from "../../entities/Employee";
-import { EmployeesController } from "../../controllers/employees.controller";
-import { UserAuditTrailCreateService } from "../../services/user-audit-trail-create.service";
-import { EmployeeLocationsService } from "../../services/employee-locations.service";
-import { PositionsService } from "../../services/positions.service";
+import { EmployeesController } from "./controllers/employees.controller";
+import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
+import { EmployeeLocationsService } from "./services/employee-locations.service";
+import { PositionsService } from "src/modules/positions/services/positions.service";
 import { UsersModule } from "../users/users.module";
 import { LocationsModule } from "../locations/locations.module";
 import { UserAuditTrail } from "../../entities/UserAuditTrail";

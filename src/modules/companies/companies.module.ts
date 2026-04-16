@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { CompaniesController } from "../../controllers/companies.controller";
-import { CompaniesService } from "../../services/companies.service";
+import { CompaniesController } from "./controllers/companies.controller";
+import { CompaniesService } from "./services/companies.service";
 import { Company } from "../../entities/Company";
-import { UserAuditTrailCreateService } from "src/services/user-audit-trail-create.service";
+import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
 import { User } from "src/entities/User";
 import { Status } from "src/entities/Status";
 import { UserPermissions } from "src/entities/UserPermissions";

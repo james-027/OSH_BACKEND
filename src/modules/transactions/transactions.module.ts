@@ -1,15 +1,15 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { TransactionsController } from "../../controllers/transactions.controller";
-import { SalesTransactionsController } from "../../controllers/sales-transactions.controller";
-import { SalesTransactionsDwhController } from "../../controllers/sales-transactions-dwh.controller";
-import { SalesBudgetTransactionsController } from "../../controllers/sales-budget-transactions.controller";
-import { SalesBudgetTransactionsDwhController } from "../../controllers/sales-budget-transactions-dwh.controller";
-import { TransactionsService } from "../../services/transactions.service";
-import { SalesTransactionsService } from "../../services/sales-transactions.service";
-import { SalesTransactionsDwhService } from "../../services/sales-transactions-dwh.service";
-import { SalesBudgetTransactionsService } from "../../services/sales-budget-transactions.service";
-import { SalesBudgetTransactionsDwhService } from "../../services/sales-budget-transactions-dwh.service";
+import { TransactionsController } from "./controllers/transactions.controller";
+import { SalesTransactionsController } from "./controllers/sales-transactions.controller";
+import { SalesTransactionsDwhController } from "./controllers/sales-transactions-dwh.controller";
+import { SalesBudgetTransactionsController } from "./controllers/sales-budget-transactions.controller";
+import { SalesBudgetTransactionsDwhController } from "./controllers/sales-budget-transactions-dwh.controller";
+import { TransactionsService } from "./services/transactions.service";
+import { SalesTransactionsService } from "./services/sales-transactions.service";
+import { SalesTransactionsDwhService } from "./services/sales-transactions-dwh.service";
+import { SalesBudgetTransactionsService } from "./services/sales-budget-transactions.service";
+import { SalesBudgetTransactionsDwhService } from "./services/sales-budget-transactions-dwh.service";
 import { TransactionHeader } from "../../entities/TransactionHeader";
 import { TransactionDetail } from "../../entities/TransactionDetail";
 import { TransactionSequence } from "../../entities/TransactionSequence";
@@ -24,6 +24,7 @@ import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
 import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { Location } from "src/entities/Location";
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
       UserPermissions,
       AppModule,
       Action,
+      Location,
     ]),
     UsersModule,
     LocationsModule,

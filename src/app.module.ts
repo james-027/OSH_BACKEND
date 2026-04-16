@@ -3,6 +3,7 @@ import {
   NestModule,
   MiddlewareConsumer,
   RequestMethod,
+  OnModuleInit,
 } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ThrottlerModule } from "@nestjs/throttler";
@@ -15,6 +16,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 // Configuration
 import configuration from "./config/configuration";
 import { DatabaseModule } from "./database/database.module";
+import { initializeRedisClient } from "./config/cache.config";
 
 // Entities
 import { User } from "./entities/User";
@@ -60,17 +62,29 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { ModulesModule } from "./modules/modules/modules.module";
 import { ApiModule } from "./modules/api/api.module";
 import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.module";
+import { RequirementTypesModule } from "./modules/requirement-types/requirement-types.module";
+import { CategoriesModule } from "./modules/categories/categories.module";
+import { CategoryTypesModule } from "./modules/category-types/category-types.module";
+import { VendorsModule } from "./modules/vendors/vendors.module";
+import { StaffsModule } from "./modules/staffs/staffs.module";
 import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
 import { SystemsModule } from "./modules/systems/systems.module";
+import { SystemDocumentationsModule } from "./modules/system-documentations/system-documentations.module";
 import { RequirementsModule } from "./modules/requirements/requirements.module";
 import { WarehouseRequirementsModule } from "./modules/warehouse-requirements/warehouse-requirements.module";
 import { ReqTransactionHeadersModule } from "./modules/req-transaction-headers/req-transaction-headers.module";
 import { ReqTransactionDetailsModule } from "./modules/req-transaction-details/req-transaction-details.module";
 import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-transaction-dues.module";
 import { SSEModule } from "./modules/sse/sse.module";
+import { StaffVendorSalariesModule } from "./modules/staff-vendor-salaries/staff-vendor-salaries.module";
+import { StaffBrandsModule } from "./modules/staff-brands/staff-brands.module";
+import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
+import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { TransactionSequence } from "./entities/TransactionSequence";
+import { CacheInvalidationModule } from "./modules/cache/cache.module";
+import logger from "./config/logger";
 @Module({
   imports: [
     // Configuration
@@ -131,14 +145,25 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     ModulesModule,
     ApiModule,
     ReminderTypesModule,
+    RequirementTypesModule,
+    CategoriesModule,
+    CategoryTypesModule,
+    VendorsModule,
+    StaffsModule,
     RenewalTypesModule,
     SystemsModule,
+    SystemDocumentationsModule,
     RequirementsModule,
     WarehouseRequirementsModule,
     ReqTransactionHeadersModule,
     ReqTransactionDetailsModule,
     ReqTransactionDuesModule,
     SSEModule,
+    StaffVendorSalariesModule,
+    StaffBrandsModule,
+    StaffCategoryTypesModule,
+    StaffWarehousesModule,
+    CacheInvalidationModule,
   ],
   providers: [
     EmailService,
@@ -158,7 +183,17 @@ import { TransactionSequence } from "./entities/TransactionSequence";
     },
   ],
 })
-export class AppModule implements NestModule {
+export class AppModule implements NestModule, OnModuleInit {
+  async onModuleInit() {
+    // Initialize Redis client for caching (can be disabled with USE_REDIS=false)
+    const useRedis = process.env.USE_REDIS !== "false"; // Default: enabled
+    if (useRedis) {
+      await initializeRedisClient();
+    } else {
+      logger.warn("⚠️  Redis is disabled. Caching will not be available.");
+    }
+  }
+
   configure(consumer: MiddlewareConsumer) {
     // Parse cookies first (before SSE middleware)
     consumer.apply(cookieParser).forRoutes("*");
