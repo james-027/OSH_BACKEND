@@ -593,41 +593,4 @@ export class ModulesService {
       throw new Error(`Failed to toggle status for module with ID ${id}.`);
     }
   }
-
-  /**
-   * Helper method to find all users affected by a module change
-   * This is a TEMPLATE - adapt to your business logic
-   *
-   * Example use case:
-   * - When a module is deactivated, find all users whose roles have access to this module
-   * - When a module's permissions change, find all affected users
-   *
-   * @param moduleId - The module that changed
-   * @returns Array of affected user IDs
-   *
-   * IMPLEMENTATION NOTES:
-   * This depends on your role-module relationship table.
-   * You may need to:
-   * 1. Find all roles that contain this module
-   * 2. Find all users that have those roles
-   * 3. Return the user IDs
-   *
-   * USAGE EXAMPLE (in toggleStatus or update):
-   * const affectedUsers = await this.getUsersAffectedByModule(moduleId);
-   * this.sseEmitterService.invalidateMultipleResourceIds(
-   *   affectedUsers.map(u => u.id)
-   * );
-   *
-   * This will ensure all connected clients receive invalidation
-   * for ['users', userId] so they refetch and detect changes.
-   */
-  // private async getUsersAffectedByModule(moduleId: number): Promise<User[]> {
-  //   // TODO: Implement based on your role-module relationship
-  //   // Example query:
-  //   // SELECT u.* FROM users u
-  //   // INNER JOIN user_roles ur ON u.id = ur.user_id
-  //   // INNER JOIN role_modules rm ON ur.role_id = rm.role_id
-  //   // WHERE rm.module_id = ?
-  //   return [];
-  // }
 }

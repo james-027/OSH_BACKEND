@@ -157,7 +157,7 @@ export const baseConfig = {
 // Configuration for NestJS TypeOrmModule
 export const databaseConfig: TypeOrmModuleOptions = {
   ...baseConfig,
-  synchronize: false, // Keep false to preserve your existing data
+  synchronize: false, // Keep false to preserve existing data
   autoLoadEntities: false, // We explicitly define entities
   migrations: ["dist/migrations/**/*.js"], // Compiled JS files for runtime
   migrationsTableName: "migrations",

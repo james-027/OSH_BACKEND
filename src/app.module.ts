@@ -116,7 +116,7 @@ import logger from "./config/logger";
     PassportModule,
     JwtModule.registerAsync({
       useFactory: () => ({
-        secret: process.env.JWT_SECRET || "your-secret-key",
+        secret: process.env.JWT_SECRET || "secret-key",
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),

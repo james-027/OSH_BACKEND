@@ -14,13 +14,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private userRepository: Repository<User>,
     @InjectRepository(UserLoginSession)
     private sessionRepository: Repository<UserLoginSession>,
-    private configService: ConfigService
+    private configService: ConfigService,
   ) {
     super({
       // jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       jwtFromRequest: ExtractJwt.fromAuthHeaderWithScheme("Bearer_c+gi"),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>("JWT_SECRET") || "your-secret-key",
+      secretOrKey: configService.get<string>("JWT_SECRET") || "secret-key",
     });
   }
   async validate(payload: any) {
