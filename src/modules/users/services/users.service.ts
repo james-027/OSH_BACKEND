@@ -1461,7 +1461,7 @@ export class UsersService {
 
     // Get user locations for this user
     const userLocations = await this.userLocationsRepository.find({
-      where: { user_id: user.id },
+      where: { user_id: user.id, status_id: 1 },
       relations: ["location", "status"],
     });
 

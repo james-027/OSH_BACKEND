@@ -123,6 +123,7 @@ export class RoleActionPresetsService {
     // Get ALL role location presets (both active and inactive) to preserve data
     const roleLocationPresets = await this.roleLocationPresetRepository.find({
       relations: ["role", "location", "status", "createdBy", "updatedBy"],
+      where: { status_id: 1 },
       order: { role_id: "ASC" },
     });
 
@@ -1698,6 +1699,7 @@ export class RoleActionPresetsService {
           userIds.forEach((uid) => {
             this.sseEventEmitter.emitUpdateSignal("users", uid);
           });
+          this.sseEventEmitter.emitUpdateSignal("users", 0);
           this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
           await this.cacheInvalidationService.invalidateFindAll("users");
