@@ -44,10 +44,6 @@ import { ApiAuthAccess } from "../entities/ApiAuthAccess";
 import { ApiLogs } from "../entities/ApiLogs";
 import { ReminderType } from "../entities/ReminderType";
 import { RequirementType } from "../entities/RequirementType";
-import { Category } from "../entities/Category";
-import { CategoryType } from "../entities/CategoryType";
-import { Vendor } from "../entities/Vendor";
-import { Staff } from "../entities/Staff";
 import { RenewalType } from "../entities/RenewalType";
 import { Requirement } from "../entities/Requirement";
 import { RequirementReminder } from "../entities/RequirementReminder";
@@ -64,6 +60,10 @@ import { TransactionSequence } from "../entities/TransactionSequence";
 import { LocationHurdleCategory } from "../entities/LocationHurdleCategory";
 import { LocationHurdle } from "../entities/LocationHurdle";
 import { SystemDocumentation } from "../entities/SystemDocumentation";
+import { Category } from "../entities/Category";
+import { CategoryType } from "../entities/CategoryType";
+import { Vendor } from "../entities/Vendor";
+import { Staff } from "../entities/Staff";
 import { StaffVendorSalary } from "../entities/StaffVendorSalary";
 import { StaffBrand } from "../entities/StaffBrand";
 import { StaffCategoryType } from "../entities/StaffCategoryType";
@@ -115,10 +115,6 @@ export const entities = [
   ApiLogs,
   ReminderType,
   RequirementType,
-  Category,
-  CategoryType,
-  Vendor,
-  Staff,
   RenewalType,
   Requirement,
   RequirementReminder,
@@ -135,10 +131,14 @@ export const entities = [
   LocationHurdle,
   LocationHurdleCategory,
   SystemDocumentation,
-  StaffVendorSalary,
-  StaffBrand,
-  StaffCategoryType,
-  StaffWarehouse,
+  // Category,
+  // CategoryType,
+  // Vendor,
+  // Staff,
+  // StaffVendorSalary,
+  // StaffBrand,
+  // StaffCategoryType,
+  // StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
