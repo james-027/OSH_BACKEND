@@ -128,6 +128,9 @@ async function bootstrap() {
   logger.info(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
   logger.info(`🔌 DB: ${process.env.DB_DATABASE || "no database configured"}`);
   logger.info(`🔌 Platform: ${USE_FASTIFY ? "Fastify" : "Express"}`);
+  logger.info(
+    `🫙 REQ-UPLOAD-PATH: ${process.env.UPLOAD_REQ_DIR || "no path configured"}`,
+  );
 }
 
 // Express-specific setup
