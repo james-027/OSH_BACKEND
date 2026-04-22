@@ -25,7 +25,7 @@ export class PermissionsGuard implements CanActivate {
     @InjectRepository(Module)
     private moduleRepository: Repository<Module>,
     @InjectRepository(Action)
-    private actionRepository: Repository<Action>
+    private actionRepository: Repository<Action>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -47,19 +47,38 @@ export class PermissionsGuard implements CanActivate {
     try {
       // Check each required permission
       for (const permission of requiredPermissions) {
-        const hasPermission = await this.checkUserPermission(
-          user.id,
-          permission.module,
-          permission.action,
-          user.current_access_key // Include access key ID
-        );
+        let hasPermission = false;
+
+        // Normalize action to array for unified handling
+        const actions = Array.isArray(permission.action)
+          ? permission.action
+          : [permission.action];
+
+        // Check if user has ANY of the actions (OR logic)
+        for (const action of actions) {
+          const hasThisAction = await this.checkUserPermission(
+            user.id,
+            permission.module,
+            action,
+            user.current_access_key, // Include access key ID
+            user.role_id,
+          );
+
+          if (hasThisAction) {
+            hasPermission = true;
+            break; // Found one matching action, no need to check others
+          }
+        }
 
         if (!hasPermission) {
+          const actionList = Array.isArray(permission.action)
+            ? permission.action.join(", ")
+            : permission.action;
           logger.warn(
-            `User ${user.id} denied access: Missing ${permission.action} permission for ${permission.module} module with access key ${user.current_access_key}`
+            `User ${user.id} denied access: Missing ${actionList} permission for ${permission.module} module with access key ${user.current_access_key}`,
           );
           throw new ForbiddenException(
-            `Access denied: You don't have ${permission.action} permission for ${permission.module}`
+            `Access denied: You don't have ${actionList} permission for ${permission.module}`,
           );
         }
       }
@@ -77,7 +96,8 @@ export class PermissionsGuard implements CanActivate {
     userId: number,
     moduleName: string,
     actionName: string,
-    accessKeyId?: number
+    accessKeyId?: number,
+    roleId?: number,
   ): Promise<boolean> {
     try {
       // Find the module by name
@@ -111,6 +131,11 @@ export class PermissionsGuard implements CanActivate {
       // Add access key filter if provided
       if (accessKeyId) {
         whereConditions.access_key_id = accessKeyId;
+      }
+
+      // Add role filter if provided
+      if (roleId) {
+        whereConditions.role_id = roleId;
       }
 
       // Check if user has the permission

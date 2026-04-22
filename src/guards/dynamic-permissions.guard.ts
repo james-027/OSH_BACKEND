@@ -28,7 +28,7 @@ export class DynamicPermissionsGuard implements CanActivate {
     @InjectRepository(Action)
     private actionRepository: Repository<Action>,
     @InjectRepository(Location)
-    private locationRepository: Repository<Location>
+    private locationRepository: Repository<Location>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -56,25 +56,43 @@ export class DynamicPermissionsGuard implements CanActivate {
           user.id,
           parseInt(request.params.id),
           "LOCATIONS",
-          user.current_access_key // Include access key ID
+          user.current_access_key, // Include access key ID
         );
       }
 
       // Standard permission checking
       for (const permission of requiredPermissions) {
-        const hasPermission = await this.checkUserPermission(
-          user.id,
-          permission.module,
-          permission.action,
-          user.current_access_key // Include access key ID
-        );
+        let hasPermission = false;
+
+        // Normalize action to array for unified handling
+        const actions = Array.isArray(permission.action)
+          ? permission.action
+          : [permission.action];
+
+        // Check if user has ANY of the actions (OR logic)
+        for (const action of actions) {
+          const hasThisAction = await this.checkUserPermission(
+            user.id,
+            permission.module,
+            action,
+            user.current_access_key, // Include access key ID
+          );
+
+          if (hasThisAction) {
+            hasPermission = true;
+            break; // Found one matching action, no need to check others
+          }
+        }
 
         if (!hasPermission) {
+          const actionList = Array.isArray(permission.action)
+            ? permission.action.join(", ")
+            : permission.action;
           logger.warn(
-            `User ${user.id} denied access: Missing ${permission.action} permission for ${permission.module} module with access key ${user.current_access_key}`
+            `User ${user.id} denied access: Missing ${actionList} permission for ${permission.module} module with access key ${user.current_access_key}`,
           );
           throw new ForbiddenException(
-            `Access denied: You don't have ${permission.action} permission for ${permission.module}`
+            `Access denied: You don't have ${actionList} permission for ${permission.module}`,
           );
         }
       }
@@ -92,7 +110,7 @@ export class DynamicPermissionsGuard implements CanActivate {
     userId: number,
     resourceId: number,
     moduleName: string,
-    accessKeyId?: number
+    accessKeyId?: number,
   ): Promise<boolean> {
     try {
       // Get the current status of the location
@@ -114,15 +132,15 @@ export class DynamicPermissionsGuard implements CanActivate {
         userId,
         moduleName,
         requiredAction,
-        accessKeyId // Include access key ID
+        accessKeyId, // Include access key ID
       );
 
       if (!hasPermission) {
         logger.warn(
-          `User ${userId} denied toggle access: Missing ${requiredAction} permission for ${moduleName} module with access key ${accessKeyId}`
+          `User ${userId} denied toggle access: Missing ${requiredAction} permission for ${moduleName} module with access key ${accessKeyId}`,
         );
         throw new ForbiddenException(
-          `Access denied: You don't have ${requiredAction} permission for ${moduleName}`
+          `Access denied: You don't have ${requiredAction} permission for ${moduleName}`,
         );
       }
 
@@ -139,7 +157,7 @@ export class DynamicPermissionsGuard implements CanActivate {
     userId: number,
     moduleName: string,
     actionName: string,
-    accessKeyId?: number
+    accessKeyId?: number,
   ): Promise<boolean> {
     try {
       // Find the module by name
