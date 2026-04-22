@@ -111,7 +111,7 @@ export class WarehouseHurdlesController {
   }
 
   @Post("/change-bulk-status")
-  @RequirePermissions({ module: "STORE HURDLES", action: "ADD" })
+  @RequirePermissions({ module: "STORE HURDLES", action: ["POST", "APPROVE"] })
   async toggleBulkStatus(
     @Body() body: { ids: number[]; status_id: number; undo_reason?: string },
     @Request() req,
@@ -143,7 +143,7 @@ export class WarehouseHurdlesController {
   }
 
   @Patch(":id/toggle-status-back-to-pending")
-  @RequirePermissions({ module: "STORE HURDLES", action: "ACTIVATE" })
+  @RequirePermissions({ module: "STORE HURDLES", action: "REVERT" })
   async toggleStatusBackToPending(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: any, // Assuming body may contain undo_reason
