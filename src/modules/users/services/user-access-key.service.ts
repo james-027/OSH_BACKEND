@@ -71,7 +71,11 @@ export class UserAccessKeyService {
       });
 
       if (!role) {
-        throw new BadRequestException(`Role with ID ${role_id} not found.`);
+        throw new BadRequestException(
+          role_id > 0
+            ? `Role with ID ${role_id} not found.`
+            : `Role is required.`,
+        );
       }
 
       // Check if user has permission to use this access key
