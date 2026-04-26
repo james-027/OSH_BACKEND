@@ -139,6 +139,7 @@ export class UploadProgressLoggerService {
 
     logger.info(`
     ┌─ PROGRESS: ${progressBar} ${percentComplete}% (${filesProcessed}/${totalFiles})
+    │ Upload ID  : ${this.padRight(uploadId, 56)}
     │ Heap: ${memoryStats?.heapUsed || "N/A"} | RSS: ${memoryStats?.rss || "N/A"} | Success: ${successCount} | Failed: ${failedCount}
     │ Status     : ${queueStatus}
     │ Queue Wait : ${avgWaitTimeMs?.toFixed(0) || "N/A"}ms avg
@@ -183,6 +184,7 @@ export class UploadProgressLoggerService {
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║ ${statusIcon} BATCH COMPLETED                                             ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
+║ Upload ID      : ${this.padRight(uploadId, 60)}
 ║ Transaction    : ${this.padRight(transNumber, 60)}
 ║ Files          : ${this.padRight(`${successCount}/${totalFiles} (${successRate}% success)`, 60)}
 ║ Duration       : ${this.padRight(`${durationSec}s (${avgTimePerFile}ms per file)`, 60)}
