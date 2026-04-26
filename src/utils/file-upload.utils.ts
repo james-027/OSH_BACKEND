@@ -3,6 +3,8 @@
 import * as fs from "fs";
 import * as path from "path";
 import sharp = require("sharp");
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 /**
  * Excel file filter - validates that uploaded file is .xlsx or .xls
@@ -370,20 +372,20 @@ export class FileUploadHandler {
 
       let finalSize = 0;
 
-      // PDF: no compression, write stream directly
+      // PDF: no compression, stream buffer directly to disk
+      // Use Readable.from() to create a readable stream from buffer,
+      // then pipeline to writeStream for proper async streaming
+      // This avoids buffering and works with global queue (concurrency: 2)
       if (mimeType === "application/pdf") {
-        await new Promise<void>((resolve, reject) => {
-          const writeStream = fs.createWriteStream(fullPath);
-          writeStream.on("finish", () => resolve());
-          writeStream.on("error", reject);
-
-          const readStream = fs.createReadStream(fullPath);
-          readStream.on("error", reject);
-
-          // Write buffer directly to stream
-          writeStream.write(bufferObj);
-          writeStream.end();
-        });
+        // Create readable stream from buffer (zero-copy, streams chunks)
+        const readableStream = Readable.from([bufferObj]);
+        
+        // Pipeline: buffer → readable stream → write stream → disk
+        // Properly handles backpressure and errors
+        await pipeline(
+          readableStream,
+          fs.createWriteStream(fullPath)
+        );
 
         // Get file size for return value
         finalSize = fs.statSync(fullPath).size;
