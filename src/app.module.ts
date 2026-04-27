@@ -83,6 +83,9 @@ import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-c
 import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
+import { ThrottleTrackingMiddleware } from "./middleware/throttle-tracking.middleware";
+import { ThrottleTrackerService } from "./services/throttle-tracker.service";
+import { ThrottleTrackingService } from "./guards/throttle-tracking.guard";
 import { TransactionSequence } from "./entities/TransactionSequence";
 import { CacheInvalidationModule } from "./modules/cache/cache.module";
 import logger from "./config/logger";
@@ -174,13 +177,23 @@ import logger from "./config/logger";
     ResponseMapperService,
     CommonUtilitiesService,
     FrontendUrlUtil,
+    ThrottleTrackerService,
+    ThrottleTrackingService,
+    // Exception filters - AllExceptionsFilter handles all exceptions including 429s
     {
       provide: APP_FILTER,
       useClass: AllExceptionsFilter,
     },
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass:
+        process.env.SKIP_THROTTLING === "true"
+          ? class {
+              canActivate() {
+                return true;
+              }
+            }
+          : ThrottlerGuard,
     },
     {
       provide: APP_GUARD,
@@ -200,6 +213,9 @@ export class AppModule implements NestModule, OnModuleInit {
   }
 
   configure(consumer: MiddlewareConsumer) {
+    // Track throttle attempts globally (run on all routes first)
+    consumer.apply(ThrottleTrackingMiddleware).forRoutes("*");
+
     // Parse cookies first (before SSE middleware)
     consumer.apply(cookieParser).forRoutes("*");
 
