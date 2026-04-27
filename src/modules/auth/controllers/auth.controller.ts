@@ -10,6 +10,7 @@ import {
   Param,
   ParseIntPipe,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "../services/auth.service";
 import { LoginUserDto } from "src/modules/auth/dto/LoginUserDto";
 import { RefreshTokenDto } from "src/modules/auth/dto/RefreshTokenDto";
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Post("login")
   async login(@Body() loginDto: LoginUserDto, @Request() req) {
@@ -66,6 +68,7 @@ export class AuthController {
     return this.authService.logout(sessionId);
   }
 
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Post("refresh-token")
   async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {

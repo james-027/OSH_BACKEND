@@ -14,6 +14,7 @@ import {
   UploadedFile,
   BadRequestException,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { UsersService } from "../services/users.service";
 import { CreateUserDto } from "../dto/CreateUserDto";
 import { UpdateUserDto } from "../dto/UpdateUserDto";
@@ -169,6 +170,7 @@ export class UsersController {
     return { profile_pic_url: url };
   }
 
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Put(":user_id/password")
   async updatePassword(
     @Param("user_id", ParseIntPipe) user_id: number,
@@ -198,6 +200,7 @@ export class UsersController {
     return { message: "Password updated." };
   }
 
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Put(":user_id/change-temp-password")
   async updateTempPassword(
     @Param("user_id", ParseIntPipe) user_id: number,

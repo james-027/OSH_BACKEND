@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   Query,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { CacheTransactions } from "src/decorators/cache.decorator";
 import {
   CACHE_KEYS,
@@ -149,6 +150,7 @@ export class ReqTransactionHeadersController {
     );
   }
 
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Post("batch-create")
   @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
   async createWithDetails(
