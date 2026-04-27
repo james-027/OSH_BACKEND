@@ -13,6 +13,10 @@ import { SanitizationPipe } from "./common/sanitization.pipe";
 import logger from "./config/logger";
 import { join } from "path";
 import * as v8 from "v8";
+import {
+  initializeLogRotation,
+  shutdownLogRotation,
+} from "./services/log-rotation.service";
 
 // Platform selection via environment variable
 const USE_FASTIFY = process.env.USE_FASTIFY === "true";
@@ -103,7 +107,7 @@ async function bootstrap() {
   }
 
   // 2. Sanitization Pipe & Validation: Clean input data (removes XSS from body)
-  app.useGlobalFilters(new AllExceptionsFilter());
+  // AllExceptionsFilter is already registered in app.module.ts as APP_FILTER
   app.useGlobalPipes(
     new SanitizationPipe(), // Sanitize input data (removes <script>, event handlers, etc)
     new ValidationPipe({
@@ -131,6 +135,24 @@ async function bootstrap() {
   logger.info(
     `🫙 REQ-UPLOAD-PATH: ${process.env.UPLOAD_REQ_DIR || "no path configured"}`,
   );
+
+  // Initialize log rotation service
+  initializeLogRotation();
+
+  // Graceful shutdown handlers
+  process.on("SIGTERM", async () => {
+    logger.info("⚠️ SIGTERM received, shutting down gracefully...");
+    shutdownLogRotation();
+    await app.close();
+    process.exit(0);
+  });
+
+  process.on("SIGINT", async () => {
+    logger.info("⚠️ SIGINT received, shutting down gracefully...");
+    shutdownLogRotation();
+    await app.close();
+    process.exit(0);
+  });
 }
 
 // Express-specific setup
