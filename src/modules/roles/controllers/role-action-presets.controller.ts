@@ -19,6 +19,7 @@ import { CreateRoleActionPresetDto } from "src/modules/roles/dto/CreateRoleActio
 import { UpdateRoleActionPresetDto } from "src/modules/roles/dto/UpdateRoleActionPresetDto";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
+import { Throttle } from "@nestjs/throttler";
 
 @Controller("role-action-presets")
 @UseGuards(JwtAuthGuard)
@@ -101,6 +102,7 @@ export class RolePresetsController {
     return this.roleActionPresetsService.nested();
   }
 
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
   @Get("nested/:id")
   @RequirePermissions({ module: "ROLE PRESETS", action: "VIEW" })
   async nestedByRole(@Param("id", ParseIntPipe) id: number, @Request() req) {
