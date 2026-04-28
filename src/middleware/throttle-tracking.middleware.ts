@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware, Inject } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import { ThrottleTrackingService } from "../guards/throttle-tracking.guard";
+import logger from "src/config/logger";
 
 /**
  * Middleware to track throttle attempt counts per IP
@@ -29,9 +30,9 @@ export class ThrottleTrackingMiddleware implements NestMiddleware {
     // This runs before the guard, so the count is always available
     this.throttleTrackingService.recordAttemptInfo(ip, attempts, 0);
 
-    console.log(
-      `🔥 [THROTTLE-TRACKING-MIDDLEWARE] IP: ${ip} | Attempt #${attempts}`,
-    );
+    // logger.info(
+    //   `🔥 [THROTTLE-TRACKING-MIDDLEWARE] IP: ${ip} | Attempt #${attempts}`,
+    // );
 
     next();
   }
