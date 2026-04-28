@@ -287,9 +287,8 @@ export class CommonUtilitiesService {
     } catch (error) {
       // Rollback on error
       await queryRunner.rollbackTransaction();
-      throw new Error(
-        `Failed to generate transaction number: ${error.message}`,
-      );
+      const err = error as Error;
+      throw new Error(`Failed to generate transaction number: ${err.message}`);
     } finally {
       // Release connection
       await queryRunner.release();
