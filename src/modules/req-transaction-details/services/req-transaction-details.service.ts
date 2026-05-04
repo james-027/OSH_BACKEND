@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, QueryRunner } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -151,6 +151,7 @@ export class ReqTransactionDetailsService {
   async bulkCreate(
     createDtos: CreateReqTransactionDetailDto[],
     userId: number,
+    queryRunner?: QueryRunner,
   ): Promise<ReqTransactionDetail[]> {
     if (!createDtos || createDtos.length === 0) {
       logger.warn(
@@ -160,12 +161,17 @@ export class ReqTransactionDetailsService {
     }
 
     try {
+      // Use queryRunner.manager if provided (for transaction context), otherwise use repositories
+      const manager = queryRunner ? queryRunner.manager : this.reqTransactionDetailsRepository.manager;
+
       // Verify all headers exist (batch validation upfront)
       const headerIds = [
         ...new Set(createDtos.map((d) => d.req_transaction_header_id)),
       ];
-      const existingHeaders =
-        await this.reqTransactionHeadersRepository.findByIds(headerIds);
+      const existingHeaders = await manager.findByIds(
+        ReqTransactionHeader,
+        headerIds,
+      );
 
       if (existingHeaders.length !== headerIds.length) {
         throw new BadRequestException(
@@ -174,17 +180,21 @@ export class ReqTransactionDetailsService {
       }
 
       // Prepare batch records with userId
-      const detailsToInsert = createDtos.map((dto) => ({
-        req_transaction_header_id: dto.req_transaction_header_id,
-        requirement_file_path: dto.requirement_file_path,
-        requirement_file_name: dto.requirement_file_name,
-        status_id: dto.status_id || 1,
-        created_by: userId,
-      }));
+      const detailsToInsert = createDtos.map((dto) =>
+        manager.create(ReqTransactionDetail, {
+          req_transaction_header_id: dto.req_transaction_header_id,
+          requirement_file_path: dto.requirement_file_path,
+          requirement_file_name: dto.requirement_file_name,
+          status_id: dto.status_id || 1,
+          created_by: userId,
+        }),
+      );
 
       // Bulk insert all at once (single database operation)
-      const savedDetails =
-        await this.reqTransactionDetailsRepository.save(detailsToInsert);
+      const savedDetails = await manager.save(
+        ReqTransactionDetail,
+        detailsToInsert,
+      );
 
       // Create single consolidated audit trail entry for entire batch
       try {

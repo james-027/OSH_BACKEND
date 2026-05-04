@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, QueryRunner } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -282,6 +282,7 @@ export class ReqTransactionDuesService {
   async bulkCreate(
     createDtos: CreateReqTransactionDueDto[],
     userId: number,
+    queryRunner?: QueryRunner,
   ): Promise<any[]> {
     if (!createDtos || createDtos.length === 0) {
       throw new BadRequestException(
@@ -296,10 +297,13 @@ export class ReqTransactionDuesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      // Use queryRunner.manager if provided (for transaction context), otherwise use repositories
+      const manager = queryRunner ? queryRunner.manager : this.reqTransactionDuesRepository.manager;
+
       // Validate all DTOs before bulk insert
       for (const createDto of createDtos) {
         // Check unique constraint for each
-        const existingRecord = await this.reqTransactionDuesRepository.findOne({
+        const existingRecord = await manager.findOne(ReqTransactionDue, {
           where: {
             req_transaction_header_id: createDto.req_transaction_header_id,
             warehouse_requirement_due_id:
@@ -315,7 +319,7 @@ export class ReqTransactionDuesService {
         }
 
         // Verify header exists
-        const header = await this.reqTransactionHeadersRepository.findOne({
+        const header = await manager.findOne(ReqTransactionHeader, {
           where: { id: createDto.req_transaction_header_id },
         });
 
@@ -326,7 +330,7 @@ export class ReqTransactionDuesService {
         }
 
         // Verify warehouse requirement due exists
-        const due = await this.warehouseRequirementDuesRepository.findOne({
+        const due = await manager.findOne(WarehouseRequirementDue, {
           where: { id: createDto.warehouse_requirement_due_id },
         });
 
@@ -339,7 +343,7 @@ export class ReqTransactionDuesService {
 
       // Bulk create records
       const newRecords = createDtos.map((dto) =>
-        this.reqTransactionDuesRepository.create({
+        manager.create(ReqTransactionDue, {
           req_transaction_header_id: dto.req_transaction_header_id,
           warehouse_requirement_due_id: dto.warehouse_requirement_due_id,
           status_id: dto.status_id || 1,
@@ -348,8 +352,7 @@ export class ReqTransactionDuesService {
       );
 
       // Bulk insert all at once
-      const savedRecords =
-        await this.reqTransactionDuesRepository.save(newRecords);
+      const savedRecords = await manager.save(ReqTransactionDue, newRecords);
 
       // Single consolidated audit trail for entire batch
       await this.userAuditTrailCreateService.create(
