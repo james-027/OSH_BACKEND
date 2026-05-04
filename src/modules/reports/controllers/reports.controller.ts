@@ -75,6 +75,7 @@ export class ReportsController {
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
+    @Query("requirement_type_id") requirement_type_id?: number,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -92,6 +93,7 @@ export class ReportsController {
       roleId,
       accessKeyId,
       warehouse_rem_status_id,
+      requirement_type_id,
     );
   }
 
@@ -114,11 +116,18 @@ export class ReportsController {
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
     @Query("flatten") flatten?: boolean,
+    @Query("requirement_type_id") requirement_type_id?: number,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
+    const baseRequirementsFilter =
+      requirement_type_id == 1
+        ? "all"
+        : requirement_type_id == 2
+          ? "withRequirements"
+          : "all";
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingDetailedPerStore(
       warehouse_type_id,
@@ -130,6 +139,8 @@ export class ReportsController {
       roleId,
       accessKeyId,
       flatten,
+      requirement_type_id,
+      baseRequirementsFilter,
     );
   }
 
