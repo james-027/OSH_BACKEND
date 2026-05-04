@@ -41,7 +41,10 @@ export class WarehouseRequirementsController {
   ) {}
 
   @Get("/stores/:warehouse_type_id")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   async findAll(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Request() req,
@@ -58,7 +61,10 @@ export class WarehouseRequirementsController {
   }
 
   @Get("/stores/:warehouse_type_id/:status_id")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   async findAllPerStatus(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Param("status_id", ParseIntPipe) statusId: number,
@@ -77,7 +83,10 @@ export class WarehouseRequirementsController {
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehousesService.findOne(id);
   }
@@ -90,19 +99,36 @@ export class WarehouseRequirementsController {
    * CACHED: 5 minute TTL - Heavy query optimized, results shared across users
    */
   @Get("stores/:warehouse_type_id/active-stores-requirements")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   @CacheWarehouseRequirements(buildWarehouseRequirementsListingKey)
   async getWarehouseRequirementsListing(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
-    @Query("warehouse_id") warehouse_id?: number,
-    @Query("date_from") date_from?: string,
-    @Query("date_to") date_to?: string,
-    @Query("flatten") flatten?: boolean,
+    // @Query("warehouse_id") warehouse_id?: number,
+    // @Query("date_from") date_from?: string,
+    // @Query("date_to") date_to?: string,
+    // @Query("flatten") flatten?: boolean,
+    @Query() queryParams: WhReqListingDto,
     @Request() req?: any,
   ) {
     const userId = req.user?.id;
     const roleId = req.user?.role_id;
     const accessKeyId = req.user?.current_access_key;
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.date_from
+      ? validateDateParam(queryParams.date_from, "date_from")
+      : null;
+    const date_from = validatedDate ? validatedDate : undefined;
+    validatedDate = queryParams.date_to
+      ? validateDateParam(queryParams.date_to, "date_to")
+      : null;
+    const date_to = validatedDate ? validatedDate : undefined;
+    const warehouse_id = Number(queryParams.warehouse_id) || undefined;
+    const flatten = queryParams.flatten || false;
+    const requirementTypeId =
+      Number(queryParams.requirement_type_id) || undefined;
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingOptimized(
       warehouse_type_id,
@@ -112,12 +138,16 @@ export class WarehouseRequirementsController {
       userId,
       roleId,
       accessKeyId,
+      requirementTypeId,
       flatten,
     );
   }
 
   @Get("stores/:warehouse_type_id/count-active-stores-requirements")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   @CacheCustom(buildWarehouseRequirementsCountsKey, CACHE_TTL.COUNTS)
   async getWarehouseRequirementsListingCounts(
     @Param("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
@@ -139,6 +169,14 @@ export class WarehouseRequirementsController {
     const date_to = validatedDate ? validatedDate : undefined;
     const warehouse_id = Number(queryParams.warehouse_id) || undefined;
     const flatten = queryParams.flatten || false;
+    const requirementTypeId =
+      Number(queryParams.requirement_type_id) || undefined;
+    const baseRequirementsFilter =
+      requirementTypeId == 1
+        ? "all"
+        : requirementTypeId == 2
+          ? "withRequirements"
+          : "all";
 
     // console.log("Role ID:", roleId);
     // console.log("Access Key ID:", accessKeyId);
@@ -151,6 +189,8 @@ export class WarehouseRequirementsController {
       userId,
       roleId,
       accessKeyId,
+      requirementTypeId,
+      baseRequirementsFilter,
     );
   }
 
@@ -161,7 +201,10 @@ export class WarehouseRequirementsController {
    * GET /warehouse-requirements
    */
   @Get()
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   async findAllRequirements(@Request() req) {
     return this.warehouseRequirementsService.findAll();
   }
@@ -171,7 +214,10 @@ export class WarehouseRequirementsController {
    * GET /warehouse-requirements/:id
    */
   @Get("view/:id")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "VIEW",
+  })
   async findOneRequirement(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -184,7 +230,10 @@ export class WarehouseRequirementsController {
    * POST /warehouse-requirements
    */
   @Post()
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "ADD",
+  })
   async createRequirement(
     @Body() createWarehouseRequirementDto: CreateWarehouseRequirementDto,
     @Request() req,
@@ -201,7 +250,10 @@ export class WarehouseRequirementsController {
    * PUT /warehouse-requirements/:id
    */
   @Put(":id")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "EDIT" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "EDIT",
+  })
   async updateRequirement(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateWarehouseRequirementDto: UpdateWarehouseRequirementDto,
@@ -220,7 +272,10 @@ export class WarehouseRequirementsController {
    * PATCH /warehouse-requirements/:id/toggle-status-activate
    */
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ACTIVATE" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "ACTIVATE",
+  })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -234,7 +289,10 @@ export class WarehouseRequirementsController {
    * POST /warehouse-requirements/sync
    */
   @Post("sync")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "ADD",
+  })
   async manualSync(@Request() req) {
     return this.warehouseRequirementsService.syncWarehouseRequirements();
   }
@@ -246,7 +304,10 @@ export class WarehouseRequirementsController {
    * Creates dues for all recurring requirements (non-ONE TIME) for specified year
    */
   @Post("periodic-sync")
-  @RequirePermissions({ module: "STORE REQUIREMENTS", action: "ADD" })
+  @RequirePermissions({
+    module: "STORE REGULATORY REQUIREMENTS",
+    action: "ADD",
+  })
   async periodicSync(@Query("year") year?: string, @Request() req?) {
     const userId = req?.user?.id || 1;
     const yearParam = year ? parseInt(year, 10) : new Date().getFullYear();
