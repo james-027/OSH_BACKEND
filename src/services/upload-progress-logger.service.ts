@@ -240,7 +240,7 @@ export class UploadProgressLoggerService {
 ┃ RSS       : ${this.padRight(memoryStats?.rss || "N/A", 57)}
 ┃                                                                       
 ┃ Queue Status: Size=${queueMetrics.queueSize}, Pending=${queueMetrics.queuePending}
-┃ Your upload freed resources. Queue processing other uploads...      
+┃ Upload freed resources. Queue processing other uploads...      
 ┃                                                                       
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     `);
