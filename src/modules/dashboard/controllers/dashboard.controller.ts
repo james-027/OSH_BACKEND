@@ -57,7 +57,7 @@ export class DashboardController {
    */
   @Get("warehouse-req-per-location")
   @RequirePermissions({
-    module: "STORE REQUIREMENTS REPORTS",
+    module: "STORE REQUIREMENTS DASHBOARD",
     action: "VIEW",
   })
   async getWarehouseRequirementsPerLocation(
