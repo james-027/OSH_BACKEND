@@ -10,6 +10,12 @@ import { WarehouseHurdle } from "../../entities/WarehouseHurdle";
 import { WarehouseHurdleCategory } from "../../entities/WarehouseHurdleCategory";
 import { LocationHurdle } from "../../entities/LocationHurdle";
 import { LocationHurdleCategory } from "../../entities/LocationHurdleCategory";
+import { Warehouse } from "src/entities/Warehouse";
+import { WarehouseRequirement } from "src/entities/WarehouseRequirement";
+import { WarehouseRequirementDue } from "src/entities/WarehouseRequirementDue";
+import { ReqTransactionHeader } from "src/entities/ReqTransactionHeader";
+import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
+import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 
 @Module({
   imports: [
@@ -21,6 +27,12 @@ import { LocationHurdleCategory } from "../../entities/LocationHurdleCategory";
       WarehouseHurdleCategory,
       LocationHurdle,
       LocationHurdleCategory,
+      Warehouse,
+      WarehouseRequirement,
+      WarehouseRequirementDue,
+      ReqTransactionHeader,
+      ReqTransactionDue,
+      ReqTransactionDetail,
     ]),
   ],
   controllers: [ApiController],

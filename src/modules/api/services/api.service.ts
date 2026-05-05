@@ -6,6 +6,12 @@ import { ApiAuthAccess } from "../../../entities/ApiAuthAccess";
 import { ApiLogs } from "../../../entities/ApiLogs";
 import { WarehouseHurdle } from "../../../entities/WarehouseHurdle";
 import { WarehouseHurdleCategory } from "../../../entities/WarehouseHurdleCategory";
+import { Warehouse } from "../../../entities/Warehouse";
+import { WarehouseRequirement } from "../../../entities/WarehouseRequirement";
+import { WarehouseRequirementDue } from "../../../entities/WarehouseRequirementDue";
+import { ReqTransactionHeader } from "../../../entities/ReqTransactionHeader";
+import { ReqTransactionDue } from "../../../entities/ReqTransactionDue";
+import { ReqTransactionDetail } from "../../../entities/ReqTransactionDetail";
 import {
   getCtgiSemsConnection,
   getCtgiBosDwhConnection,
@@ -24,6 +30,18 @@ export class ApiService {
     private warehouseHurdleRepository: Repository<WarehouseHurdle>,
     @InjectRepository(WarehouseHurdleCategory)
     private warehouseHurdleCategoryRepository: Repository<WarehouseHurdleCategory>,
+    @InjectRepository(Warehouse)
+    private warehousesRepository: Repository<Warehouse>,
+    @InjectRepository(WarehouseRequirement)
+    private warehouseRequirementsRepository: Repository<WarehouseRequirement>,
+    @InjectRepository(WarehouseRequirementDue)
+    private warehouseRequirementDuesRepository: Repository<WarehouseRequirementDue>,
+    @InjectRepository(ReqTransactionHeader)
+    private reqTransactionHeaderRepository: Repository<ReqTransactionHeader>,
+    @InjectRepository(ReqTransactionDue)
+    private reqTransactionDueRepository: Repository<ReqTransactionDue>,
+    @InjectRepository(ReqTransactionDetail)
+    private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -115,12 +133,13 @@ export class ApiService {
       const err = error as any;
       statusCode = err.status || 500;
       responseData = { error: err.message };
-      // Truncate params for store-crew-assignments
+      // Truncate params for store-crew-assignments, stores, suppliers, store-rentals-attachment
       let logResponse = responseData;
       if (
         (endpoint === "store-crew-assignments" ||
           endpoint === "stores" ||
-          endpoint === "suppliers") &&
+          endpoint === "suppliers" ||
+          endpoint === "store-rentals-attachment") &&
         Array.isArray(responseData)
       ) {
         logResponse = { count: responseData.length };
@@ -449,6 +468,116 @@ export class ApiService {
 
           const [store_rows] = await sourceConn.execute(storeQuery, sqlParams2);
           return store_rows;
+
+        case "store-rentals-attachment":
+          // Get parameters
+          const warehouse_ifs = queryParams.wh_bos_code;
+          const start_date = queryParams.start_date;
+          const grouped =
+            queryParams.grouped === "true" || queryParams.grouped === true; // Default: false (Option B)
+
+          if (!warehouse_ifs || !start_date) {
+            throw new HttpException(
+              "Missing required parameters: warehouse_ifs, start_date",
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          // Step 1: Find warehouse by warehouse_ifs
+          const warehouse = await this.warehousesRepository.findOne({
+            where: { warehouse_ifs },
+          });
+
+          if (!warehouse) {
+            return ["no warehouse"]; // No warehouse found
+          }
+
+          // Step 2: Find warehouse requirement with requirement_id = 6
+          const warehouseRequirement =
+            await this.warehouseRequirementsRepository.findOne({
+              where: {
+                warehouse_id: warehouse.id,
+                requirement_id: 6,
+                status_id: 1,
+              },
+            });
+
+          if (!warehouseRequirement) {
+            return ["no rental requirement"]; // No rental requirement for this warehouse
+          }
+
+          // Step 3: Find warehouse requirement dues with exact start_date match
+          const warehouseRequirementDue =
+            await this.warehouseRequirementDuesRepository.findOne({
+              where: {
+                warehouse_requirement_id: warehouseRequirement.id,
+                warehouse_requirement_due_start: start_date,
+                status_id: 2,
+              },
+            });
+
+          if (!warehouseRequirementDue) {
+            return ["no due found"]; // No due found for this start_date
+          }
+
+          // Step 4: Build optimized QueryBuilder to fetch all transaction data
+          const rentalQuery = this.reqTransactionHeaderRepository
+            .createQueryBuilder("rth")
+            .innerJoin(
+              "rth.reqTransactionDues",
+              "rtd",
+              "rtd.warehouse_requirement_due_id = :dueid",
+              { dueid: warehouseRequirementDue.id },
+            )
+            .leftJoinAndSelect("rth.reqTransactionDetails", "rtd_details")
+            .where("rth.status_id = :header_status", { header_status: 1 })
+            .andWhere("rtd_details.status_id = :detail_status", {
+              detail_status: 1,
+            });
+
+          const [sql, params] = rentalQuery.getQueryAndParameters();
+          console.log("SQL:", sql);
+          console.log("Parameters:", params);
+
+          const transactionHeaders = await rentalQuery.getMany();
+
+          if (transactionHeaders.length === 0) {
+            return []; // No transactions found
+          }
+
+          // Step 5: Transform response based on grouped flag
+          if (grouped) {
+            // Option A: Grouped by header (multiple files per header)
+            return transactionHeaders.map((header) => ({
+              trans_number: header.trans_number,
+              header_id: header.id,
+              due_id: warehouseRequirementDue.id,
+              detail_ids: (header.reqTransactionDetails || []).map((d) => d.id),
+              file_urls: (header.reqTransactionDetails || [])
+                .filter((d) => d.requirement_file_path)
+                .map(
+                  (d) =>
+                    `${process.env.APP_URL || `http://localhost:3000`}/${d.requirement_file_path}`,
+                ),
+            }));
+          } else {
+            // Option B: One entry per detail (one detail = one file)
+            const results: any[] = [];
+            transactionHeaders.forEach((header) => {
+              (header.reqTransactionDetails || []).forEach((detail) => {
+                if (detail.requirement_file_path) {
+                  results.push({
+                    trans_number: header.trans_number,
+                    header_id: header.id,
+                    detail_id: detail.id,
+                    due_id: warehouseRequirementDue.id,
+                    file_url: `${process.env.APP_URL || `http://localhost:3000`}/${detail.requirement_file_path}`,
+                  });
+                }
+              });
+            });
+            return results;
+          }
 
         case "suppliers":
           const supplier_modified_date = queryParams.modified_date ?? "";
