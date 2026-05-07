@@ -621,6 +621,7 @@ export class ReqTransactionHeadersService {
 
       // Status ID 5 = Cancelled
       const cancelledStatusId = 5;
+      const cancelledHeaderIds: number[] = [];
 
       // Process each header
       for (const header of headers) {
@@ -664,17 +665,7 @@ export class ReqTransactionHeadersService {
             }
           }
 
-          // Audit trail for each header
-          await this.userAuditTrailCreateService.create(
-            {
-              service: "ReqTransactionHeadersService",
-              method: "toggleStatusCancelByTransNumber",
-              raw_data: JSON.stringify({ transNumber, cancellationReason }),
-              description: `Cancelled req transaction header ID: ${header.id} (trans_number: ${transNumber}) with reason: ${cancellationReason}`,
-              status_id: 1,
-            },
-            userId,
-          );
+          cancelledHeaderIds.push(header.id);
         } catch (headerError) {
           const headerErr = headerError as Error;
           results.errors.push({
@@ -682,6 +673,24 @@ export class ReqTransactionHeadersService {
             reason: headerErr.message || "Error processing header",
           });
         }
+      }
+
+          // Audit trail for each header
+      if (cancelledHeaderIds.length > 0) {
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "ReqTransactionHeadersService",
+              method: "toggleStatusCancelByTransNumber",
+            raw_data: JSON.stringify({
+              transNumber,
+              cancellationReason,
+              headerIds: cancelledHeaderIds,
+            }),
+            description: `Cancelled ${cancelledHeaderIds.length} req transaction header(s) for trans_number ${transNumber}: [${cancelledHeaderIds.join(", ")}] with reason: ${cancellationReason}`,
+              status_id: 1,
+            },
+            userId,
+          );
       }
 
       // Step: Rename folder to mark as cancelled after successful database updates
