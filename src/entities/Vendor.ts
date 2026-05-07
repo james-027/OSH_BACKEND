@@ -12,7 +12,7 @@ import { Status } from "./Status";
 import { User } from "./User";
 import { Category } from "./Category";
 
-@Entity("service_providers")
+@Entity("vendors")
 @Unique("UQ_vendor_code", ["vendor_code"])
 export class Vendor {
   @PrimaryGeneratedColumn()
