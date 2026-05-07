@@ -3,6 +3,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import sharp = require("sharp");
+import logger from "src/config/logger";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 
@@ -379,13 +380,10 @@ export class FileUploadHandler {
       if (mimeType === "application/pdf") {
         // Create readable stream from buffer (zero-copy, streams chunks)
         const readableStream = Readable.from([bufferObj]);
-        
+
         // Pipeline: buffer → readable stream → write stream → disk
         // Properly handles backpressure and errors
-        await pipeline(
-          readableStream,
-          fs.createWriteStream(fullPath)
-        );
+        await pipeline(readableStream, fs.createWriteStream(fullPath));
 
         // Get file size for return value
         finalSize = fs.statSync(fullPath).size;
@@ -435,6 +433,46 @@ export class FileUploadHandler {
       throw new Error(
         `Streaming file save failed: ${this.getErrorMessage(error)}`,
       );
+    }
+  }
+
+  /**
+   * Helper: Normalize filename for disk storage
+   * Removes spaces around dashes and replaces spaces inside parentheses with underscores
+   * @param filename Original filename (e.g., "50001032 - SRLC - 2026-01-01_2026-11-30 (2nd copy).pdf")
+   * @returns Normalized filename (e.g., "50001032-SRLC-2026-01-01_2026-11-30(2nd_copy).pdf")
+   *
+   * Transformations:
+   * 1. Remove spaces around dashes: " - " → "-"
+   * 2. Remove space before parenthesis: " (" → "("
+   * 3. Replace remaining spaces with underscores: " " → "_"
+   * 4. Remove space after parenthesis: ") " → ")"
+   */
+  static normalizeFilenameForSave(filename: string): string {
+    try {
+      // Extract extension
+      const ext = filename.match(/\.[^/.]+$/)?.[0] || "";
+      const withoutExt = filename.replace(/\.[^/.]+$/, "");
+
+      // Step 1: Remove spaces around dashes: " - " → "-"
+      let normalized = withoutExt.replace(/\s*-\s*/g, "-");
+
+      // Step 2: Remove space before opening parenthesis: " (" → "("
+      normalized = normalized.replace(/\s*\(/g, "(");
+
+      // Step 3: Replace remaining spaces with underscores
+      normalized = normalized.replace(/\s+/g, "_");
+
+      // Step 4: Remove space after closing parenthesis (if any): ") " → ")"
+      normalized = normalized.replace(/\)\s*/g, ")");
+
+      return normalized + ext;
+    } catch (error) {
+      // If normalization fails, return original filename
+      logger.warn(
+        `Failed to normalize filename "${filename}": ${(error as Error).message}`,
+      );
+      return filename;
     }
   }
 

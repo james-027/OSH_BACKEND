@@ -1994,7 +1994,7 @@ export class ReqTransactionHeadersService {
                 const savedFileInfo =
                   await FileUploadHandler.compressAndSaveStreamDirect(
                     file.buffer,
-                    file.filename,
+                    FileUploadHandler.normalizeFilenameForSave(file.filename),
                     correspondingHeader.req_transaction_header_id,
                     "uploads/" +
                       process.env.UPLOAD_REQ_DIR +
