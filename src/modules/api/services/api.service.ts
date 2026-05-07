@@ -536,8 +536,8 @@ export class ApiService {
             });
 
           const [sql, params] = rentalQuery.getQueryAndParameters();
-          console.log("SQL:", sql);
-          console.log("Parameters:", params);
+          // console.log("SQL:", sql);
+          // console.log("Parameters:", params);
 
           const transactionHeaders = await rentalQuery.getMany();
 
