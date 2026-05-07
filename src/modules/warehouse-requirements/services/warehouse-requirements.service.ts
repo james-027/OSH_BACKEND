@@ -1869,35 +1869,13 @@ export class WarehouseRequirementsService {
 
       // const start_date = date_from ? startOfLocalDay(date_from) : null;
       const end_date = date_to ? endOfLocalRange(date_to) : null;
-      // console.log("start_date:", date_from);
-      // console.log("end_date:", date_to);
-      // console.log("start_ts:", start_date);
-      // console.log("end_ts:", end_date);
-      // console.log("get local time:", toLocalDateObject(new Date("2024-05-07")));
-      // console.log("get local time:", getUTCTimestamp(new Date()));
-      // Step 5: Build warehouse query
-      const warehouseWhere: any = {
+      const warehouses = await this.getWarehouses(
         warehouse_type_id,
-        rem_status_id: In(warehouse_rem_status_id || [8, 9]),
-      };
-      if (date_to) {
-        warehouseWhere.created_at = LessThanOrEqual(end_date);
-      }
-      // console.log("warehouseWhere:", warehouseWhere);
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseWhere.access_key_id = accessKeyId;
-      }
-
-      if (finalLocationIds.length > 0) {
-        warehouseWhere.location_id = In(finalLocationIds);
-      }
-
-      // Fetch warehouses with location relation
-      const warehouses = await this.warehousesRepository.find({
-        where: warehouseWhere,
-        relations: ["location"],
-      });
+        warehouse_rem_status_id,
+        date_to,
+        accessKeyId,
+        finalLocationIds,
+      );
 
       if (warehouses.length === 0) {
         return [];
@@ -2044,28 +2022,15 @@ export class WarehouseRequirementsService {
 
       const end_date = date_to ? endOfLocalRange(date_to) : null;
       // Step 5: Build warehouse query
-      const warehouseWhere: any = {
+      const warehouses = await this.getWarehouses(
         warehouse_type_id,
-        rem_status_id: In(warehouse_rem_status_id || [8, 9]),
-      };
-      if (date_to) {
-        warehouseWhere.created_at = LessThanOrEqual(end_date);
-      }
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseWhere.access_key_id = accessKeyId;
-      }
-
-      if (finalLocationIds.length > 0) {
-        warehouseWhere.location_id = In(finalLocationIds);
-      }
-
-      // Fetch warehouses with location and type relations
-      const warehouses = await this.warehousesRepository.find({
-        where: warehouseWhere,
-        relations: ["location", "warehouseType", "remStatus"],
-        order: { warehouse_name: "ASC" },
-      });
+        warehouse_rem_status_id,
+        date_to,
+        accessKeyId,
+        finalLocationIds,
+        { warehouse_name: "ASC" },
+        ["location", "warehouseType", "remStatus"],
+      );
 
       if (warehouses.length === 0) {
         return {
@@ -2301,7 +2266,7 @@ export class WarehouseRequirementsService {
                   100,
               )
             : 0;
-        // console.log("baseRequirementsData:", baseRequirementsData.length);
+        // console.log("baseRequirementsData:", baseRequirementsData.base_requirement_details);
 
         return {
           id: warehouse.id,
@@ -2314,6 +2279,9 @@ export class WarehouseRequirementsService {
           warehouse_type_name:
             warehouse.warehouseType?.warehouse_type_name || null,
           warehouse_rem_status_name: warehouse.remStatus?.status_name || null,
+          warehouse_created_year: warehouse.created_at
+            ? new Date(warehouse.created_at).getFullYear()
+            : null,
           baseRequirements: baseRequirementsData,
           requirements: requirementsObj,
           total_transacted_requirements: {
@@ -2366,5 +2334,42 @@ export class WarehouseRequirementsService {
       order: { id: "ASC" },
     });
     return activeRequirements;
+  }
+
+  private async getWarehouses(
+    warehouse_type_id: number,
+    warehouse_rem_status_id?: number[],
+    date_to?: string,
+    accessKeyId?: number,
+    finalLocationIds: number[] = [],
+    orderBy: any = { id: "ASC" },
+    relations: string[] = ["location"],
+  ) {
+    const warehouseWhere: any = {
+      warehouse_type_id,
+      rem_status_id: In(warehouse_rem_status_id || [8, 9]),
+    };
+
+    const end_date = date_to ? endOfLocalRange(date_to) : null;
+    if (date_to) {
+      warehouseWhere.created_at = LessThanOrEqual(end_date);
+    }
+
+    if (accessKeyId !== undefined && accessKeyId !== null) {
+      warehouseWhere.access_key_id = accessKeyId;
+    }
+
+    if (finalLocationIds.length > 0) {
+      warehouseWhere.location_id = In(finalLocationIds);
+    }
+
+    // Fetch warehouses with location and type relations
+    const warehouses = await this.warehousesRepository.find({
+      where: warehouseWhere,
+      relations: relations,
+      order: orderBy,
+    });
+
+    return warehouses;
   }
 }
