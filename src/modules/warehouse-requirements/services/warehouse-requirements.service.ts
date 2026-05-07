@@ -1190,12 +1190,6 @@ export class WarehouseRequirementsService {
             [])[0];
           const filteredDues = baseReq.warehouseRequirementDues || [];
 
-          // Accumulate additional dues count
-          const duesCount = filteredDues.length;
-          if (duesCount > 1) {
-            totalDuesCount += duesCount - 1;
-          }
-
           for (const due of filteredDues) {
             // Get reminder status for this due
             const reminderStatus =
@@ -1239,13 +1233,30 @@ export class WarehouseRequirementsService {
         }
 
         baseRequirementsDetails = flattenedDetails;
+
+        // Calculate count: unique requirements with at least one due + additional dues
+        const uniqueRequirementIds = new Set(
+          flattenedDetails.map((d) => d.warehouse_requirement_id),
+        );
+        const uniqueRequirementCount = uniqueRequirementIds.size;
+        const totalDuesInFlattened = flattenedDetails.length;
+        totalDuesCount = totalDuesInFlattened - uniqueRequirementCount;
       }
 
       const baseRequirementWithDuesCount =
-        baseRequirements.length + totalDuesCount;
+        (flatten
+          ? new Set(
+              baseRequirementsDetails.map((d) => d.warehouse_requirement_id),
+            ).size + totalDuesCount
+          : baseRequirementsDetails.length + totalDuesCount) || 0;
 
       return {
-        count: baseRequirements.length,
+        count: flatten
+          ? new Set(
+              baseRequirementsDetails.map((d) => d.warehouse_requirement_id),
+            ).size
+          : baseRequirementsDetails.length,
+        due_count: baseRequirementsDetails.length,
         base_requirement_with_dues_count: baseRequirementWithDuesCount,
         base_requirements_details: baseRequirementsDetails,
       };
@@ -1936,7 +1947,7 @@ export class WarehouseRequirementsService {
               "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
               { filterDateFrom, filterDateTo },
             );
-            console.log("date from & to:", filterDateFrom, filterDateTo);
+            // console.log("date from & to:", filterDateFrom, filterDateTo);
           }
 
           const results = await transactionQuery.getRawMany();
