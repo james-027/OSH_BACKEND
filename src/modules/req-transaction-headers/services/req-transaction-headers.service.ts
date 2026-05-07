@@ -895,8 +895,15 @@ export class ReqTransactionHeadersService {
 
   /**
    * Helper: Parse Type 2 (Rental) filename format
-   * Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD.ext
-   * Example: 50000123-SRLC-2026-01-01_2026-12-31.pdf
+   * Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (...)]
+   * Examples:
+   *   - 50000123-SRLC-2026-01-01_2026-12-31.pdf
+   *   - 50000123-SRLC-2026-01-01_2026-12-31 (2).pdf
+   *   - 50000123-SRLC-2026-01-01_2026-12-31 (copy).pdf
+   *   - 50000123-SRLC-2026-01-01_2026-12-31 (anything_inside).pdf
+   *
+   * Optional duplicate counter can have any text inside parentheses: (2), (copy), (etc), (backup_v1), etc.
+   * Text outside parentheses after date range will be rejected.
    *
    * Returns: { valid, warehouse_ifs, start_date, end_date, error }
    */
@@ -911,16 +918,20 @@ export class ReqTransactionHeadersService {
       // Remove extension
       const withoutExt = filename.replace(/\.[^/.]+$/, "");
 
-      // New format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD
-      // Example: 50000123-SRLC-2026-01-01_2026-12-31
-      const regex = /^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/;
+      // Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text_here)]
+      // Regex breakdown:
+      // ^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})  <- base format (required)
+      // (?:\s*\([^)]*\))?  <- optional: spaces + "(" + any chars except ")" + ")"
+      // $  <- end of string (nothing else allowed)
+      const regex =
+        /^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?$/;
       const match = withoutExt.match(regex);
 
       if (!match) {
         return {
           valid: false,
           error:
-            "Invalid format. Expected: store_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD.ext (e.g., 50000123-SRLC-2026-01-01_2026-12-31.pdf)",
+            "Invalid format. Expected: store_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text)].ext | Examples: 50000123-SRLC-2026-01-01_2026-12-31.pdf OR 50000123-SRLC-2026-01-01_2026-12-31 (2).pdf",
         };
       }
 
