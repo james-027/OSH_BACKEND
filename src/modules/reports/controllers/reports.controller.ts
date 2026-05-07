@@ -76,12 +76,15 @@ export class ReportsController {
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
     @Query("requirement_type_id") requirement_type_id?: number,
+    @Query("store_status_ids") store_status_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
-    const warehouse_rem_status_id = [8, 9, 10];
+    const warehouseRemStatusId: number[] = store_status_ids
+      ? store_status_ids.split(",").map((id) => Number(id.trim()))
+      : [8];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingPerLocation(
       warehouse_type_id,
@@ -92,7 +95,7 @@ export class ReportsController {
       userId,
       roleId,
       accessKeyId,
-      warehouse_rem_status_id,
+      warehouseRemStatusId,
       requirement_type_id,
     );
   }
@@ -117,6 +120,7 @@ export class ReportsController {
     @Query("status_id") status_id?: number,
     @Query("flatten") flatten?: boolean,
     @Query("requirement_type_id") requirement_type_id?: number,
+    @Query("store_status_ids") store_status_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -128,6 +132,9 @@ export class ReportsController {
         : requirement_type_id == 2
           ? "withRequirements"
           : "all";
+    const warehouseRemStatusId: number[] = store_status_ids
+      ? store_status_ids.split(",").map((id) => Number(id.trim()))
+      : [8];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingDetailedPerStore(
       warehouse_type_id,
@@ -141,6 +148,7 @@ export class ReportsController {
       flatten,
       requirement_type_id,
       baseRequirementsFilter,
+      warehouseRemStatusId,
     );
   }
 
