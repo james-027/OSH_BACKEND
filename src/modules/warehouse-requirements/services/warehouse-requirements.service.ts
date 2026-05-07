@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In } from "typeorm";
+import { Repository, In, Between, LessThanOrEqual } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -23,10 +23,17 @@ import { ResponseMapperService } from "../../../services/response-mapper.service
 import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.service";
 import { WarehouseRequirementStartsService } from "./warehouse-requirement-starts.service";
 import { SyncLog } from "src/entities/syncLog";
-import { count } from "console";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
-import { formatDateToString } from "src/utils/date.utils";
+import {
+  endOfLocalRange,
+  formatDateToString,
+  getCurrentUTCTimestamp,
+  getLocalISOTimestamp,
+  getUTCTimestamp,
+  startOfLocalDay,
+  toLocalDateObject,
+} from "src/utils/date.utils";
 
 @Injectable()
 export class WarehouseRequirementsService {
@@ -1849,11 +1856,23 @@ export class WarehouseRequirementsService {
       let finalLocationIds =
         filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
 
+      // const start_date = date_from ? startOfLocalDay(date_from) : null;
+      const end_date = date_to ? endOfLocalRange(date_to) : null;
+      // console.log("start_date:", date_from);
+      // console.log("end_date:", date_to);
+      // console.log("start_ts:", start_date);
+      // console.log("end_ts:", end_date);
+      // console.log("get local time:", toLocalDateObject(new Date("2024-05-07")));
+      // console.log("get local time:", getUTCTimestamp(new Date()));
       // Step 5: Build warehouse query
       const warehouseWhere: any = {
         warehouse_type_id,
         rem_status_id: In(warehouse_rem_status_id || [8, 9]),
       };
+      if (date_to) {
+        warehouseWhere.created_at = LessThanOrEqual(end_date);
+      }
+      // console.log("warehouseWhere:", warehouseWhere);
 
       if (accessKeyId !== undefined && accessKeyId !== null) {
         warehouseWhere.access_key_id = accessKeyId;
@@ -1978,6 +1997,7 @@ export class WarehouseRequirementsService {
       | "all"
       | "withRequirements"
       | "withoutRequirements" = "all",
+    warehouse_rem_status_id?: number[],
   ): Promise<any> {
     try {
       // Step 1: Get active requirements only (status_id = 1)
@@ -2011,11 +2031,15 @@ export class WarehouseRequirementsService {
       let finalLocationIds =
         filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
 
+      const end_date = date_to ? endOfLocalRange(date_to) : null;
       // Step 5: Build warehouse query
       const warehouseWhere: any = {
         warehouse_type_id,
-        rem_status_id: In([8, 9]),
+        rem_status_id: In(warehouse_rem_status_id || [8, 9]),
       };
+      if (date_to) {
+        warehouseWhere.created_at = LessThanOrEqual(end_date);
+      }
 
       if (accessKeyId !== undefined && accessKeyId !== null) {
         warehouseWhere.access_key_id = accessKeyId;
