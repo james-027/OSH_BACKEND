@@ -24,6 +24,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post("login")
   async login(@Body() loginDto: LoginUserDto, @Request() req) {
+
     // Extract session info from request
     const sessionInfo: CreateSessionDto = {
       ip_address: req.ip || req.connection?.remoteAddress,

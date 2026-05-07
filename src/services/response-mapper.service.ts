@@ -27,6 +27,12 @@ export class ResponseMapperService {
           "staff",
           "brand",
           "categoryType",
+          "auditForm",
+          "regionalHead",
+          "groupBusinessCenterHead",
+          "groupAreaHead",
+          "areaHead",
+          "auditBy",
           "warehouse",
           "position",
           "renewalType",
@@ -148,6 +154,51 @@ export class ResponseMapperService {
         status_name: catType.status?.status_name || null,
       }));
     }
+
+    //AUDIT FORM NAME RELATION
+    if (entity.auditForm && typeof entity.auditForm === "object") {
+    response.audit_form_name =
+      entity.auditForm.audit_form_name || null;
+  }
+
+  //regionalHead  relation
+    if (entity.regionalHead && typeof entity.regionalHead === "object") {
+    response.regional_head_name =
+      entity.regionalHead.employee_first_name && entity.regionalHead.employee_last_name
+        ? `${entity.regionalHead.employee_first_name} ${entity.regionalHead.employee_last_name}`
+        : null;
+  }
+  // AREA HEAD RELATION
+    if (entity.areaHead && typeof entity.areaHead === "object") {
+    response.area_head_name =
+      entity.areaHead.employee_first_name && entity.areaHead.employee_last_name
+        ? `${entity.areaHead.employee_first_name} ${entity.areaHead.employee_last_name}`
+        : null;
+  }
+
+  // GROUP BUSINESS CENTER HEAD RELATION
+      if (entity.groupBusinessCenterHead && typeof entity.groupBusinessCenterHead === "object") {
+    response.group_business_center_head_name =
+      entity.groupBusinessCenterHead.employee_first_name && entity.groupBusinessCenterHead.employee_last_name
+        ? `${entity.groupBusinessCenterHead.employee_first_name} ${entity.groupBusinessCenterHead.employee_last_name}`
+        : null;
+  }
+  
+  //GROUP AREA HEAD
+      if (entity.groupAreaHead && typeof entity.groupAreaHead === "object") {
+    response.group_area_head_name =
+      entity.groupAreaHead.employee_first_name && entity.groupAreaHead.employee_last_name
+        ? `${entity.groupAreaHead.employee_first_name} ${entity.groupAreaHead.employee_last_name}`
+        : null;
+  }
+  //AUDIT BY RELATION
+      if (entity.auditBy && typeof entity.auditBy === "object") {
+    response.audit_by_name =
+      entity.auditBy.employee_first_name && entity.auditBy.employee_last_name
+        ? `${entity.auditBy.employee_first_name} ${entity.auditBy.employee_last_name}`
+        : null;
+  }
+
 
     // Flatten requirementReminders if present
     if (
