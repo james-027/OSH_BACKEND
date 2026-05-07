@@ -1857,18 +1857,30 @@ export class ReqTransactionHeadersService {
         errors.push(...typeSpecificResult.errors);
         // auditTrailsToCreate.push(...typeSpecificResult.auditTrailsToCreate);
 
+        let transactionType = "";
+        let transFormat = "";
         if (successResults.length > 0) {
           // *** GENERATE trans_number
+          if (requirement.requirement_type_id === 1) {
+            transactionType = "REQUIREMENTS";
+            transFormat = "R{abbr}{key}{year}-{seq:4}";
+          } else {
+            transactionType = `REQUIREMENTS_${requirement.requirement_type_id}_${requirement.id}`;
+            transFormat = `${requirement.id}R{abbr}{key}{year}-{seq:4}`;
+          }
           trans_number =
             await this.commonUtilitiesService.generateTransactionNumber({
-              transaction_type: "REQUIREMENTS",
+              transaction_type: transactionType,
               location_id: location_id,
               access_key_id: accessKeyId,
-              format: "R{abbr}{key}{year}-{seq:4}",
+              format: transFormat,
               reset_per_year: true,
-              currentDate: new Date(calculatedTransDate),
+              currentDate: new Date(),
               abbr: location_abbr,
             });
+
+          // console.log("Current TS:", new Date());
+          // console.log("Calculated TS:", new Date(calculatedTransDate));
 
           logger.debug(
             `[TRANS_NUMBER ALLOCATED] trans_number: ${trans_number} | Stores: ${successResults.length}`,
