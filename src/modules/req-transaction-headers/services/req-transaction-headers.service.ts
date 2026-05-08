@@ -675,22 +675,22 @@ export class ReqTransactionHeadersService {
         }
       }
 
-          // Audit trail for each header
+      // Audit trail for each header
       if (cancelledHeaderIds.length > 0) {
-          await this.userAuditTrailCreateService.create(
-            {
-              service: "ReqTransactionHeadersService",
-              method: "toggleStatusCancelByTransNumber",
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "ReqTransactionHeadersService",
+            method: "toggleStatusCancelByTransNumber",
             raw_data: JSON.stringify({
               transNumber,
               cancellationReason,
               headerIds: cancelledHeaderIds,
             }),
             description: `Cancelled ${cancelledHeaderIds.length} req transaction header(s) for trans_number ${transNumber}: [${cancelledHeaderIds.join(", ")}] with reason: ${cancellationReason}`,
-              status_id: 1,
-            },
-            userId,
-          );
+            status_id: 1,
+          },
+          userId,
+        );
       }
 
       // Step: Rename folder to mark as cancelled after successful database updates
@@ -924,8 +924,10 @@ export class ReqTransactionHeadersService {
     error?: string;
   } {
     try {
-      // Remove extension
-      const withoutExt = filename.replace(/\.[^/.]+$/, "");
+      // Remove extension and normalize filename for consistent parsing
+      const cleanedFilename =
+        FileUploadHandler.normalizeFilenameForSave(filename);
+      const withoutExt = cleanedFilename.replace(/\.[^/.]+$/, "");
 
       // Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text_here)]
       // Regex breakdown:
