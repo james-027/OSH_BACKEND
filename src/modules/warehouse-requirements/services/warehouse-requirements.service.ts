@@ -712,25 +712,27 @@ export class WarehouseRequirementsService {
         }
       }
 
-      // Log summary success
-      try {
-        await this.syncLogRepository.save({
-          module: "WAREHOUSE REQUIREMENT",
-          type: "success",
-          action: "data insertion",
-          message: "Sync completed",
-          row_data: JSON.stringify({
-            inserted: result.inserted,
-            skipped: result.skipped,
-            duesCreated: result.duesCreated,
-            duesSkipped: result.duesSkipped,
-            startsCreated: result.startsCreated,
-            startsSkipped: result.startsSkipped,
-            errors: result.errors.length,
-          }),
-        });
-      } catch (logErr) {
-        // ignore logging failure
+      if (result.inserted > 0 || result.errors.length > 0) {
+        // Log summary
+        try {
+          await this.syncLogRepository.save({
+            module: "WAREHOUSE REQUIREMENT",
+            type: "success",
+            action: "data insertion",
+            message: "Sync completed",
+            row_data: JSON.stringify({
+              inserted: result.inserted,
+              skipped: result.skipped,
+              duesCreated: result.duesCreated,
+              duesSkipped: result.duesSkipped,
+              startsCreated: result.startsCreated,
+              startsSkipped: result.startsSkipped,
+              errors: result.errors.length,
+            }),
+          });
+        } catch (logErr) {
+          // ignore logging failure
+        }
       }
 
       if (result.inserted > 0) {
