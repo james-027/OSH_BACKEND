@@ -252,17 +252,6 @@ export class WarehouseHurdlesController {
         item_category_code: row["ITEM CATEGORY CODE"],
       };
     });
-    // Audit trail
-    await this.auditTrailService.create(
-      {
-        service: "WarehouseHurdlesController",
-        method: "uploadExcel",
-        raw_data: JSON.stringify(records).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
-        description: `Bulk upload warehouse hurdles from Excel. Rows: ${records.length}`,
-        status_id: 1,
-      },
-      userId,
-    );
     return this.warehouseHurdlesService.bulkUploadFromExcel(
       records,
       userId,
