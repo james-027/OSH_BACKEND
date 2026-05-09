@@ -256,7 +256,7 @@ export class WarehouseHurdlesController {
       records,
       userId,
       allowedLocationIds,
-      file.filename,
+      file.originalname,
     );
   }
 }

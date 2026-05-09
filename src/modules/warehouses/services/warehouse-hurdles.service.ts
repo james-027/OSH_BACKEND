@@ -669,6 +669,18 @@ export class WarehouseHurdlesService {
         userId,
       );
     }
+    if (errors.length > 0) {
+      await this.auditTrailService.create(
+        {
+          service: "WarehouseHurdlesService",
+          method: "bulkUploadFromExcel",
+          raw_data: JSON.stringify(errors).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
+          description: `Bulk upload warehouse hurdles from Excel with errors. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
+          status_id: 1,
+        },
+        userId,
+      );
+    }
     return {
       inserted_count,
       updated_count,
