@@ -387,7 +387,7 @@ export class LocationHurdlesService {
       action_id: action_id,
       ref_id: id,
       module_id: 31,
-      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} location hurdle.`,
+      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
     });
@@ -458,7 +458,7 @@ export class LocationHurdlesService {
         action_id: action_id,
         ref_id: hurdle.id,
         module_id: 31,
-        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} location hurdle.`,
+        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({
           id: hurdle.id,
           status_id,

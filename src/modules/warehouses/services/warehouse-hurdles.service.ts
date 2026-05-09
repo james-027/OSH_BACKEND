@@ -401,7 +401,7 @@ export class WarehouseHurdlesService {
       action_id: action_id, // dynamic
       ref_id: id,
       module_id: 16, // STORE HURDLES
-      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} warehouse hurdle.`,
+      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
     });
@@ -463,7 +463,7 @@ export class WarehouseHurdlesService {
         action_id: action_id,
         ref_id: id,
         module_id: 16, // STORE HURDLES
-        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} warehouse hurdle.`,
+        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({ id, status_id }),
         created_by: userId,
       });
