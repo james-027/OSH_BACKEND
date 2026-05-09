@@ -514,6 +514,7 @@ export class WarehouseHurdlesService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    filename?: string,
   ) {
     let inserted_count = 0;
     let updated_count = 0;
@@ -662,7 +663,7 @@ export class WarehouseHurdlesService {
           service: "WarehouseHurdlesService",
           method: "bulkUploadFromExcel",
           raw_data: JSON.stringify(records).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
-          description: `Bulk upload warehouse hurdles from Excel. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
+          description: `Bulk upload warehouse hurdles from Excel. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
           status_id: 1,
         },
         userId,
