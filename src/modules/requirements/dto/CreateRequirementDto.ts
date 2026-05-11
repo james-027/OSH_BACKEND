@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsInt, IsOptional } from "class-validator";
+import {
+  IsString,
+  IsNotEmpty,
+  IsInt,
+  IsOptional,
+  Min,
+  ValidateIf,
+  IsBoolean,
+} from "class-validator";
 
 export class CreateRequirementDto {
   @IsString()
@@ -71,4 +79,13 @@ export class CreateRequirementDto {
   @IsOptional()
   @IsInt()
   requirement_type_id?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  update_date_details?: boolean;
+
+  @ValidateIf((o) => o.update_date_details === true)
+  @IsInt()
+  @Min(1900)
+  year?: number;
 }

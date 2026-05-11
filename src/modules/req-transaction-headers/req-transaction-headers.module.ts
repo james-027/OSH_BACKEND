@@ -27,6 +27,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { CacheInvalidationModule } from "../cache/cache.module";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UploadProgressLoggerService } from "src/services/upload-progress-logger.service";
+import { WarehouseRequirementStart } from "src/entities/WarehouseRequirementStart";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { UploadProgressLoggerService } from "src/services/upload-progress-logger
       ReqTransactionDetail,
       TransactionSequence,
       UserAuditTrail,
+      WarehouseRequirementStart,
     ]),
     UsersModule,
     UserAuditTrailModule,

@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
+import logger from "src/config/logger";
 
 /**
  * SSE JWT Middleware
@@ -20,20 +21,20 @@ export class SSEJwtMiddleware implements NestMiddleware {
     const cookieAccessToken = req.cookies?.access_token;
 
     if (cookieAccessToken) {
-      console.log("[SSE-JWT] Token found in HTTP-only cookie");
+      logger.info("[SSE-JWT] Token found in HTTP-only cookie");
       req.headers.authorization = `Bearer_c+gi ${cookieAccessToken}`;
       return next();
     }
 
     // Priority 2: Query Parameter (Fallback for testing/mobile)
     if (req.query.streamid && typeof req.query.streamid === "string") {
-      console.log("[SSE-JWT] Token found in query parameter (fallback)");
+      logger.info("[SSE-JWT] Token found in query parameter (fallback)");
       req.headers.authorization = `Bearer_c+gi ${req.query.streamid}`;
       return next();
     }
 
     // No token found - JwtAuthGuard will handle authentication error
-    console.warn(
+    logger.warn(
       "[SSE-JWT] No token found in cookies or query params. Request will fail auth guard.",
     );
     next();

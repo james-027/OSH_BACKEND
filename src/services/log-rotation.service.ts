@@ -73,7 +73,7 @@ export class LogRotationService {
 
     try {
       if (!fs.existsSync(filePath)) {
-        logger.debug(`[LOG-ROTATION] File not found: ${filePath}`);
+        logger.debug(`📁 [LOG-ROTATION] File not found: ${filePath}`);
         return;
       }
 
@@ -88,7 +88,7 @@ export class LogRotationService {
       if (needsRotationBySize || needsRotationByDate) {
         this.rotateLog(filePath, shouldCompress);
       } else {
-        logger.debug(`[LOG-ROTATION] ${filePath} does not need rotation`);
+        logger.debug(`📁 [LOG-ROTATION] ${filePath} does not need rotation`);
       }
     } catch (error) {
       logger.error(

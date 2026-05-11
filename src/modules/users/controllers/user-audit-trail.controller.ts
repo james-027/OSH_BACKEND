@@ -3,6 +3,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
@@ -15,10 +16,28 @@ import { UserAuditTrailService } from "../services/user-audit-trail.service";
 export class UserAuditTrailController {
   constructor(private readonly userAuditTrailService: UserAuditTrailService) {}
 
+  // @Get()
+  // @RequirePermissions({ module: "AUDIT TRAIL", action: "VIEW" })
+  // async findAll(
+  //   @Query('page') page: number = 0,
+  //   @Query('pageSize') pageSize: number = 10,
+  //   @Query('sortBy') sortBy: string = 'created_at',
+  //   @Query('sortOrder') sortOrder: 'asc' | 'desc' = 'desc',
+  //   @Query('searchQuery') searchQuery?: string,
+  // ) {
+  //   return this.userAuditTrailService.findAll(
+  //     page,
+  //     pageSize,
+  //     sortBy,
+  //     sortOrder,
+  //     searchQuery,
+  //   );
+  // }
+
   @Get()
   @RequirePermissions({ module: "AUDIT TRAIL", action: "VIEW" })
   async findAll() {
-    return this.userAuditTrailService.findAll();
+    return this.userAuditTrailService.findAllOld();
   }
 
   @Get(":id")

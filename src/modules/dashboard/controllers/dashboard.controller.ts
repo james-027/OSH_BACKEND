@@ -57,7 +57,7 @@ export class DashboardController {
    */
   @Get("warehouse-req-per-location")
   @RequirePermissions({
-    module: "STORE REQUIREMENTS REPORTS",
+    module: "STORE REQUIREMENTS DASHBOARD",
     action: "VIEW",
   })
   async getWarehouseRequirementsPerLocation(
@@ -66,12 +66,15 @@ export class DashboardController {
     @Query("date_from") date_from?: string,
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
+    @Query("store_status_ids") store_status_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
-    const warehouse_rem_status_id = [8, 9];
+    const warehouseRemStatusId: number[] = store_status_ids
+      ? store_status_ids.split(",").map((id) => Number(id.trim()))
+      : [8];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingPerLocation(
       warehouse_type_id,
@@ -82,7 +85,7 @@ export class DashboardController {
       userId,
       roleId,
       accessKeyId,
-      warehouse_rem_status_id,
+      warehouseRemStatusId,
     );
   }
 }

@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, QueryRunner } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -277,12 +277,16 @@ export class ReqTransactionDuesService {
    * Used during batch operations to insert multiple dues with single audit entry
    * @param createDtos Array of transaction due creation DTOs
    * @param userId User performing the operation
-   * @returns Saved transaction due records
+   * @param queryRunner Optional query runner for transaction context
+   * @param skipAuditTrail If true, skip audit trail creation (for consolidated batch audit)
+   * @returns Saved transaction due records or object with records/ids/statuses if skipAuditTrail=true
    */
   async bulkCreate(
     createDtos: CreateReqTransactionDueDto[],
     userId: number,
-  ): Promise<any[]> {
+    queryRunner?: QueryRunner,
+    skipAuditTrail: boolean = false,
+  ): Promise<any> {
     if (!createDtos || createDtos.length === 0) {
       throw new BadRequestException(
         "No transaction dues provided for bulk creation",
@@ -296,10 +300,13 @@ export class ReqTransactionDuesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      // Use queryRunner.manager if provided (for transaction context), otherwise use repositories
+      const manager = queryRunner ? queryRunner.manager : this.reqTransactionDuesRepository.manager;
+
       // Validate all DTOs before bulk insert
       for (const createDto of createDtos) {
         // Check unique constraint for each
-        const existingRecord = await this.reqTransactionDuesRepository.findOne({
+        const existingRecord = await manager.findOne(ReqTransactionDue, {
           where: {
             req_transaction_header_id: createDto.req_transaction_header_id,
             warehouse_requirement_due_id:
@@ -315,7 +322,7 @@ export class ReqTransactionDuesService {
         }
 
         // Verify header exists
-        const header = await this.reqTransactionHeadersRepository.findOne({
+        const header = await manager.findOne(ReqTransactionHeader, {
           where: { id: createDto.req_transaction_header_id },
         });
 
@@ -326,7 +333,7 @@ export class ReqTransactionDuesService {
         }
 
         // Verify warehouse requirement due exists
-        const due = await this.warehouseRequirementDuesRepository.findOne({
+        const due = await manager.findOne(WarehouseRequirementDue, {
           where: { id: createDto.warehouse_requirement_due_id },
         });
 
@@ -339,7 +346,7 @@ export class ReqTransactionDuesService {
 
       // Bulk create records
       const newRecords = createDtos.map((dto) =>
-        this.reqTransactionDuesRepository.create({
+        manager.create(ReqTransactionDue, {
           req_transaction_header_id: dto.req_transaction_header_id,
           warehouse_requirement_due_id: dto.warehouse_requirement_due_id,
           status_id: dto.status_id || 1,
@@ -348,20 +355,33 @@ export class ReqTransactionDuesService {
       );
 
       // Bulk insert all at once
-      const savedRecords =
-        await this.reqTransactionDuesRepository.save(newRecords);
+      const savedRecords = await manager.save(ReqTransactionDue, newRecords);
 
-      // Single consolidated audit trail for entire batch
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "ReqTransactionDuesService",
-          method: "bulkCreate",
-          raw_data: JSON.stringify(createDtos),
-          description: `Bulk created ${savedRecords.length} req transaction dues`,
-          status_id: 1,
-        },
-        userId,
-      );
+      // Create audit trail only if not skipped (skipAuditTrail flag for consolidated batch audit)
+      if (!skipAuditTrail) {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "ReqTransactionDuesService",
+            method: "bulkCreate",
+            raw_data: JSON.stringify(createDtos),
+            description: `Bulk created ${savedRecords.length} req transaction dues`,
+            status_id: 1,
+          },
+          userId,
+        );
+      }
+
+      // If skipAuditTrail=true, return object with ids/status for batch summary audit
+      if (skipAuditTrail) {
+        return {
+          records: savedRecords.map((record) => ({
+            id: record.id,
+            req_transaction_header_id: record.req_transaction_header_id,
+          })),
+          ids: savedRecords.map((record) => record.id),
+          status: savedRecords[0]?.status_id || 1, // Single status value (all records have same status)
+        };
+      }
 
       // Return saved records with ID and header ID for mapping
       // No need to load full relations since we only need IDs
