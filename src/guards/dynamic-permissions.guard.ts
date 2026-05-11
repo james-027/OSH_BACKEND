@@ -64,35 +64,59 @@ export class DynamicPermissionsGuard implements CanActivate {
       for (const permission of requiredPermissions) {
         let hasPermission = false;
 
-        // Normalize action to array for unified handling
+        // Normalize modules to array for unified OR logic handling
+        const modules = Array.isArray(permission.module)
+          ? permission.module
+          : [permission.module];
+
+        // Normalize actions to array for unified handling
         const actions = Array.isArray(permission.action)
           ? permission.action
           : [permission.action];
 
-        // Check if user has ANY of the actions (OR logic)
-        for (const action of actions) {
-          const hasThisAction = await this.checkUserPermission(
-            user.id,
-            permission.module,
-            action,
-            user.current_access_key, // Include access key ID
-          );
-
-          if (hasThisAction) {
-            hasPermission = true;
-            break; // Found one matching action, no need to check others
+        // Check if user has permission for ANY module + ANY action (OR logic)
+        for (const module of modules) {
+          // Apply dynamic suffix if provided (appends query param value to module name)
+          let finalModule = module;
+          if (permission.dynamicModuleSuffix) {
+            const paramValue = request.query[permission.dynamicModuleSuffix];
+            if (paramValue) {
+              finalModule = `${module} ${paramValue}`;
+            }
           }
+
+          for (const action of actions) {
+            const hasThisAction = await this.checkUserPermission(
+              user.id,
+              finalModule,
+              action,
+              user.current_access_key, // Include access key ID
+            );
+
+            if (hasThisAction) {
+              hasPermission = true;
+              break; // Found one matching action, no need to check others
+            }
+          }
+
+          if (hasPermission) break; // Found matching module, skip others
         }
 
         if (!hasPermission) {
+          const moduleList = Array.isArray(permission.module)
+            ? `(${permission.module.join(" OR ")})`
+            : permission.module;
           const actionList = Array.isArray(permission.action)
-            ? permission.action.join(", ")
+            ? `(${permission.action.join(" OR ")})`
             : permission.action;
+          const suffixInfo = permission.dynamicModuleSuffix
+            ? ` with ${permission.dynamicModuleSuffix}=${request.query[permission.dynamicModuleSuffix]}`
+            : "";
           logger.warn(
-            `User ${user.id} denied access: Missing ${actionList} permission for ${permission.module} module with access key ${user.current_access_key}`,
+            `User ${user.id} denied access: Missing ${actionList} permission for ${moduleList} module${suffixInfo} with access key ${user.current_access_key}`,
           );
           throw new ForbiddenException(
-            `Access denied: You don't have ${actionList} permission for ${permission.module}`,
+            `Access denied: You don't have ${actionList} permission for ${moduleList}${suffixInfo}`,
           );
         }
       }
