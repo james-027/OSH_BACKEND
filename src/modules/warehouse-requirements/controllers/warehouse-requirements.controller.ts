@@ -42,7 +42,7 @@ export class WarehouseRequirementsController {
 
   @Get("/stores/:warehouse_type_id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findAll(
@@ -62,7 +62,7 @@ export class WarehouseRequirementsController {
 
   @Get("/stores/:warehouse_type_id/:status_id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findAllPerStatus(
@@ -84,7 +84,7 @@ export class WarehouseRequirementsController {
 
   @Get(":id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findOne(@Param("id", ParseIntPipe) id: number) {
@@ -100,8 +100,9 @@ export class WarehouseRequirementsController {
    */
   @Get("stores/:warehouse_type_id/active-stores-requirements")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: "STORE REQUIREMENTS",
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
   @CacheWarehouseRequirements(buildWarehouseRequirementsListingKey)
   async getWarehouseRequirementsListing(
@@ -145,8 +146,9 @@ export class WarehouseRequirementsController {
 
   @Get("stores/:warehouse_type_id/count-active-stores-requirements")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: "STORE REQUIREMENTS",
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
   @CacheCustom(buildWarehouseRequirementsCountsKey, CACHE_TTL.COUNTS)
   async getWarehouseRequirementsListingCounts(
@@ -202,7 +204,7 @@ export class WarehouseRequirementsController {
    */
   @Get()
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findAllRequirements(@Request() req) {
@@ -215,8 +217,9 @@ export class WarehouseRequirementsController {
    */
   @Get("view/:id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
   async findOneRequirement(
     @Param("id", ParseIntPipe) id: number,
@@ -231,7 +234,7 @@ export class WarehouseRequirementsController {
    */
   @Post()
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async createRequirement(
@@ -251,7 +254,7 @@ export class WarehouseRequirementsController {
    */
   @Put(":id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "EDIT",
   })
   async updateRequirement(
@@ -273,7 +276,7 @@ export class WarehouseRequirementsController {
    */
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ACTIVATE",
   })
   async toggleStatusActivate(
@@ -290,7 +293,7 @@ export class WarehouseRequirementsController {
    */
   @Post("sync")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async manualSync(@Request() req) {
@@ -305,7 +308,7 @@ export class WarehouseRequirementsController {
    */
   @Post("periodic-sync")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async periodicSync(@Query("year") year?: string, @Request() req?) {

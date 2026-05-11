@@ -39,7 +39,7 @@ export class ReqTransactionHeadersController {
   @Get()
   @CacheTransactions(CACHE_KEYS.REQ_TRANSACTION_HEADERS_ALL)
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findAll() {
@@ -49,8 +49,9 @@ export class ReqTransactionHeadersController {
   @Get("group-by-trans-number")
   @CacheTransactions(buildReqTransHeaderGroupKey)
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: "STORE REQUIREMENTS",
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
   async findAllByTransNumber(
     @Request() req,
@@ -84,7 +85,7 @@ export class ReqTransactionHeadersController {
   @Get("find-by-trans-number")
   @CacheTransactions(buildReqTransHeaderFindByTransKey)
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findOneByTransNumber(@Query() queryParams: WhReqListingDto) {
@@ -97,7 +98,7 @@ export class ReqTransactionHeadersController {
   @Get(":id")
   @CacheTransactions(CACHE_KEYS.REQ_TRANSACTION_HEADERS_BY_ID)
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findOne(@Param("id") id: number) {
@@ -106,7 +107,7 @@ export class ReqTransactionHeadersController {
 
   @Post()
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async create(
@@ -119,7 +120,7 @@ export class ReqTransactionHeadersController {
 
   @Put(":id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "EDIT",
   })
   async update(
@@ -137,7 +138,7 @@ export class ReqTransactionHeadersController {
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ACTIVATE",
   })
   async toggleStatusActivate(
@@ -150,7 +151,7 @@ export class ReqTransactionHeadersController {
 
   @Patch(":id/toggle-status-deactivate")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "DEACTIVATE",
   })
   async toggleStatusDeactivate(
@@ -163,7 +164,7 @@ export class ReqTransactionHeadersController {
 
   @Patch(":trans_number/cancel-by-trans-number")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "CANCEL",
   })
   async toggleStatusCancelByTransNumber(
@@ -182,7 +183,7 @@ export class ReqTransactionHeadersController {
   @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Post("batch-create")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async createWithDetails(
@@ -205,7 +206,7 @@ export class ReqTransactionHeadersController {
    */
   @Patch("toggle-status-cancel")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "CANCEL",
   })
   async toggleStatusCancel(

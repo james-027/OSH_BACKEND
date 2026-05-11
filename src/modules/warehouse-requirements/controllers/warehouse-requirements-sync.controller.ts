@@ -27,7 +27,7 @@ export class WarehouseRequirementsSyncController {
 
   @Get()
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findAll(@Request() req) {
@@ -36,7 +36,7 @@ export class WarehouseRequirementsSyncController {
 
   @Get(":id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "VIEW",
   })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
@@ -45,7 +45,7 @@ export class WarehouseRequirementsSyncController {
 
   @Post()
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async create(
@@ -61,7 +61,7 @@ export class WarehouseRequirementsSyncController {
 
   @Put(":id")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "EDIT",
   })
   async update(
@@ -79,7 +79,7 @@ export class WarehouseRequirementsSyncController {
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ACTIVATE",
   })
   async toggleStatusActivate(
@@ -92,7 +92,7 @@ export class WarehouseRequirementsSyncController {
 
   @Patch(":id/toggle-status-deactivate")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "DEACTIVATE",
   })
   async toggleStatusDeactivate(
@@ -105,7 +105,7 @@ export class WarehouseRequirementsSyncController {
 
   @Post("sync")
   @RequirePermissions({
-    module: "STORE REGULATORY REQUIREMENTS",
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
     action: "ADD",
   })
   async manualSync(@Request() req) {

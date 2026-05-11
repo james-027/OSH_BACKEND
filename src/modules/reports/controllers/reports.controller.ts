@@ -64,11 +64,13 @@ export class ReportsController {
    * GET /warehouse-requirements/report/per-location
    * Shows requirement counts and percentages grouped by location
    */
-  @Get("warehouse-req-per-location")
+  @UseGuards(PermissionsGuard)
   @RequirePermissions({
     module: "STORE REQUIREMENTS REPORTS",
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
+  @Get("warehouse-req-per-location")
   async getWarehouseRequirementsPerLocation(
     @Query("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
     @Query("location_ids") location_ids?: string,
@@ -107,11 +109,13 @@ export class ReportsController {
    * location_ids: Optional comma-separated location IDs (defaults to user's allowed locations)
    * Includes baseRequirements and transactedRequirements with transaction due information
    */
-  @Get("warehouse-req-detailed-per-store")
+  @UseGuards(PermissionsGuard)
   @RequirePermissions({
-    module: "STORE REQUIREMENTS REPORTS",
+    module: "STORE REQUIREMENTS DETAILED PER STORE REPORTS",
     action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
   })
+  @Get("warehouse-req-detailed-per-store")
   async getWarehouseRequirementsDetailedPerStore(
     @Query("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
     @Query("location_ids") location_ids?: string,
