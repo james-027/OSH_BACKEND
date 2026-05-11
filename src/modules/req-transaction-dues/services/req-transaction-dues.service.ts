@@ -277,13 +277,16 @@ export class ReqTransactionDuesService {
    * Used during batch operations to insert multiple dues with single audit entry
    * @param createDtos Array of transaction due creation DTOs
    * @param userId User performing the operation
-   * @returns Saved transaction due records
+   * @param queryRunner Optional query runner for transaction context
+   * @param skipAuditTrail If true, skip audit trail creation (for consolidated batch audit)
+   * @returns Saved transaction due records or object with records/ids/statuses if skipAuditTrail=true
    */
   async bulkCreate(
     createDtos: CreateReqTransactionDueDto[],
     userId: number,
     queryRunner?: QueryRunner,
-  ): Promise<any[]> {
+    skipAuditTrail: boolean = false,
+  ): Promise<any> {
     if (!createDtos || createDtos.length === 0) {
       throw new BadRequestException(
         "No transaction dues provided for bulk creation",
@@ -354,17 +357,31 @@ export class ReqTransactionDuesService {
       // Bulk insert all at once
       const savedRecords = await manager.save(ReqTransactionDue, newRecords);
 
-      // Single consolidated audit trail for entire batch
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "ReqTransactionDuesService",
-          method: "bulkCreate",
-          raw_data: JSON.stringify(createDtos),
-          description: `Bulk created ${savedRecords.length} req transaction dues`,
-          status_id: 1,
-        },
-        userId,
-      );
+      // Create audit trail only if not skipped (skipAuditTrail flag for consolidated batch audit)
+      if (!skipAuditTrail) {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "ReqTransactionDuesService",
+            method: "bulkCreate",
+            raw_data: JSON.stringify(createDtos),
+            description: `Bulk created ${savedRecords.length} req transaction dues`,
+            status_id: 1,
+          },
+          userId,
+        );
+      }
+
+      // If skipAuditTrail=true, return object with ids/status for batch summary audit
+      if (skipAuditTrail) {
+        return {
+          records: savedRecords.map((record) => ({
+            id: record.id,
+            req_transaction_header_id: record.req_transaction_header_id,
+          })),
+          ids: savedRecords.map((record) => record.id),
+          status: savedRecords[0]?.status_id || 1, // Single status value (all records have same status)
+        };
+      }
 
       // Return saved records with ID and header ID for mapping
       // No need to load full relations since we only need IDs
