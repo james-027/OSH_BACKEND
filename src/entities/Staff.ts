@@ -78,8 +78,8 @@ export class Staff {
   @Column({ type: "date", nullable: true })
   birthday: Date;
 
-  @Column({ nullable: true })
-  contact_number: number;
+  @Column({ type: "text", nullable: true })
+  contact_number: string;
 
   @Column({ type: "text", nullable: true })
   overall_remarks: string;

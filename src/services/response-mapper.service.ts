@@ -113,7 +113,7 @@ export class ResponseMapperService {
 
     // Map vendor relation
     if (entity.vendor && typeof entity.vendor === "object") {
-      response.vendor_name = entity.vendor.vendor_name || null;
+      response.service_provider_name = entity.vendor.service_provider_name || null;
     }
 
     // Map staff relation

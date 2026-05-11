@@ -141,12 +141,12 @@ export const entities = [
   CategoryType,
   AuditFormDetails,
   AuditFormDetailsHistory,
-  // Vendor,
-  // Staff,
-  // StaffVendorSalary,
-  // StaffBrand,
-  // StaffCategoryType,
-  // StaffWarehouse,
+  Vendor,
+  Staff,
+  StaffVendorSalary,
+  StaffBrand,
+  StaffCategoryType,
+  StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

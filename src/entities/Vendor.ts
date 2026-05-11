@@ -13,18 +13,18 @@ import { User } from "./User";
 import { Category } from "./Category";
 
 @Entity("vendors")
-@Unique("UQ_vendor_code", ["vendor_code"])
+@Unique("UQ_service_provider_code", ["service_provider_code"])
 export class Vendor {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ length: 255 })
-  vendor_name: string;
+  service_provider_name: string;
 
   @Column({ length: 255 })
-  vendor_code: string;
+  service_provider_code: string;
 
-  @Column()
+  @Column()git
   category_id: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
