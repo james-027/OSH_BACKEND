@@ -1405,18 +1405,16 @@ export class ReqTransactionHeadersService {
                 const existingEndDate = new Date(existingReqEnd);
 
                 if (
-                  newStart >= existingStartDate &&
-                  newEnd <= existingEndDate
+                  (newStart >= existingStartDate &&
+                    newEnd <= existingEndDate) ||
+                  (newStart >= existingStartDate &&
+                    newStart <= existingEndDate) ||
+                  (newEnd >= existingStartDate && newEnd <= existingEndDate)
                 ) {
                   errors.push({
                     warehouse_name: `${warehouse.warehouse_ifs} - ${warehouse.warehouse_name}`,
                     file: firstFile.filename,
-                    reason:
-                      "A record of requirement already exists within this period (" +
-                      start_date +
-                      " to " +
-                      end_date +
-                      ") and cannot be replaced.",
+                    reason: `A record of requirement already exists within this period (${start_date} to ${end_date}) and cannot be replaced. Cancel it to process a new record with these dates. Existing record period: ${existingReqStart} to ${existingReqEnd}`,
                     field: "requirement_period",
                   });
                   continue;
