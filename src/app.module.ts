@@ -88,7 +88,13 @@ import { ThrottleTrackerService } from "./services/throttle-tracker.service";
 import { ThrottleTrackingService } from "./guards/throttle-tracking.guard";
 import { TransactionSequence } from "./entities/TransactionSequence";
 import { CacheInvalidationModule } from "./modules/cache/cache.module";
+import { ProfitcenterModule } from "./modules/profitcenters/profitcenter.module";
+import { Profitcenter } from "./entities/Profitcenter";
+import { SupplierModule } from "./modules/suppliers/supplier.module";
+import { Supplier} from "./entities/Supplier";
+import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import logger from "./config/logger";
+import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
 @Module({
   imports: [
     // Configuration
@@ -115,6 +121,9 @@ import logger from "./config/logger";
       Action,
       Location,
       TransactionSequence,
+      Profitcenter,
+      Supplier,
+      DebitAdviceCategory
     ]),
     // Authentication
     PassportModule,
@@ -168,6 +177,10 @@ import logger from "./config/logger";
     StaffCategoryTypesModule,
     StaffWarehousesModule,
     CacheInvalidationModule,
+    ProfitcenterModule,
+    SupplierModule,
+    DebitAdviceCategoryModule,
+    
   ],
   providers: [
     EmailService,

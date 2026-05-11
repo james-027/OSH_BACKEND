@@ -60,6 +60,8 @@ import { TransactionSequence } from "../entities/TransactionSequence";
 import { LocationHurdleCategory } from "../entities/LocationHurdleCategory";
 import { LocationHurdle } from "../entities/LocationHurdle";
 import { SystemDocumentation } from "../entities/SystemDocumentation";
+import { Profitcenter } from "../entities/Profitcenter";
+import { Supplier } from "../entities/Supplier";
 import { Category } from "../entities/Category";
 import { CategoryType } from "../entities/CategoryType";
 import { Vendor } from "../entities/Vendor";
@@ -131,6 +133,8 @@ export const entities = [
   LocationHurdle,
   LocationHurdleCategory,
   SystemDocumentation,
+  Profitcenter,
+  Supplier,
   // Category,
   // CategoryType,
   // Vendor,
