@@ -1006,6 +1006,7 @@ export class ReqTransactionHeadersService {
     successResults: any[];
     errors: any[];
     auditTrailsToCreate: any[];
+    duesResult?: any;
   }> {
     const successResults: any[] = [];
     const errors: any[] = [];
@@ -1560,14 +1561,16 @@ export class ReqTransactionHeadersService {
     }
 
     // Bulk create transaction dues
-    if (transactionDuesToCreate.length > 0) {
-      try {
-        const createdDues = await this.reqTransactionDuesService.bulkCreate(
-          transactionDuesToCreate,
-          userId,
-          queryRunner, // ✅ Pass queryRunner to use same transaction context
-        );
-
+        let duesResult: any = { records: [], ids: [], status: 1 };
+        if (transactionDuesToCreate.length > 0) {
+          try {
+            duesResult = await this.reqTransactionDuesService.bulkCreate(
+              transactionDuesToCreate,
+              userId,
+              queryRunner, // ✅ Pass queryRunner to use same transaction context
+              true, // ✅ Skip individual audit trail, consolidate into batch summary
+            );
+            const createdDues = duesResult.records;
         createdDues.forEach((due) => {
           const result = successResults.find(
             (r) =>
@@ -1587,7 +1590,7 @@ export class ReqTransactionHeadersService {
       }
     }
 
-    return { successResults, errors, auditTrailsToCreate };
+    return { successResults, errors, auditTrailsToCreate, duesResult };
   }
 
   private async calculateTransDate(
@@ -1847,6 +1850,7 @@ export class ReqTransactionHeadersService {
           successResults: any[];
           errors: any[];
           auditTrailsToCreate: any[];
+          duesResult?: any;
         };
 
         typeSpecificResult = await this.processRequirement(
@@ -2128,12 +2132,14 @@ export class ReqTransactionHeadersService {
         }
 
         //* Step 10.5: BULK CREATE all transaction details with consolidated audit trail
+        let detailsResult: any = { records: [], ids: [], status: 1 };
         if (detailsToCreate.length > 0) {
           try {
-            await this.reqTransactionDetailsService.bulkCreate(
+            detailsResult = await this.reqTransactionDetailsService.bulkCreate(
               detailsToCreate,
               userId,
               queryRunner, // ✅ Pass queryRunner to use same transaction context
+              true, // ✅ Skip individual audit trail, consolidate into batch summary
             );
 
             logger.info(
@@ -2179,8 +2185,12 @@ export class ReqTransactionHeadersService {
               (s) => s.req_transaction_header_id,
             ),
             requirement_id: createDto.requirement_id,
+            req_transaction_detail_ids: detailsResult.ids,
+            req_transaction_detail_status: detailsResult.status,
+            req_transaction_due_ids: typeSpecificResult.duesResult?.ids || [],
+            req_transaction_due_status: typeSpecificResult.duesResult?.status || 1,
           }),
-          description: `Batch transaction created - trans_number: ${trans_number} | Files: ${filesProcessed}/${totalFiles} successful | Stores: ${successResults.length} | Headers: ${successResults.length} | Heap peak: ${heapDiffTotal}MB | RSS peak: ${rssDiffTotal}MB`,
+          description: `Batch transaction created - trans_number: ${trans_number} | Files: ${filesProcessed}/${totalFiles} successful | Stores: ${successResults.length} | Headers: ${successResults.length} | Details: ${detailsResult.ids.length} | Dues: ${typeSpecificResult.duesResult?.ids?.length || 0} | Heap peak: ${heapDiffTotal}MB | RSS peak: ${rssDiffTotal}MB`,
           status_id: 1,
         };
 
