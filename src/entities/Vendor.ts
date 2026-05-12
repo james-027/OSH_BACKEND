@@ -37,7 +37,7 @@ export class Vendor {
   asf: number;
 
   @Column({ nullable: true })
-  erp_id: number;git
+  erp_id: number;
 
   @Column({ default: 1 })
   status_id: number;
