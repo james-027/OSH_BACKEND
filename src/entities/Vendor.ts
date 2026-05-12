@@ -24,7 +24,7 @@ export class Vendor {
   @Column({ length: 255 })
   service_provider_code: string;
 
-  @Column()git
+  @Column()
   category_id: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
@@ -37,7 +37,7 @@ export class Vendor {
   asf: number;
 
   @Column({ nullable: true })
-  erp_id: number;
+  erp_id: number;git
 
   @Column({ default: 1 })
   status_id: number;
