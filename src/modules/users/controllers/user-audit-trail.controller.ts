@@ -36,8 +36,11 @@ export class UserAuditTrailController {
 
   @Get()
   @RequirePermissions({ module: "AUDIT TRAIL", action: "VIEW" })
-  async findAll() {
-    return this.userAuditTrailService.findAllOld();
+  async findAll(
+    @Query('date_from') date_from?: string,
+    @Query('date_to') date_to?: string,
+  ) {
+    return this.userAuditTrailService.findAllOld(date_from, date_to);
   }
 
   @Get(":id")

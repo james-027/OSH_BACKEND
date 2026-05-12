@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { UserAuditTrail } from "../../../entities/UserAuditTrail";
@@ -79,11 +79,51 @@ export class UserAuditTrailService {
     };
   }
 
-  async findAllOld(): Promise<any[]> {
-    const audits = await this.userAuditTrailRepository.find({
-      relations: ["status", "createdBy"],
-      order: { id: "DESC" },
-    });
+  async findAllOld(date_from?: string, date_to?: string): Promise<any[]> {
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (date_from && !dateRegex.test(date_from)) {
+      throw new BadRequestException(
+        `Invalid date_from format. Expected YYYY-MM-DD, got ${date_from}`,
+      );
+    }
+
+    if (date_to && !dateRegex.test(date_to)) {
+      throw new BadRequestException(
+        `Invalid date_to format. Expected YYYY-MM-DD, got ${date_to}`,
+      );
+    }
+
+    // Validate date_from <= date_to if both provided
+    if (date_from && date_to && date_from > date_to) {
+      throw new BadRequestException(
+        `date_from (${date_from}) cannot be greater than date_to (${date_to})`,
+      );
+    }
+
+    // Build query with date filtering
+    let query = this.userAuditTrailRepository
+      .createQueryBuilder('audit')
+      .leftJoinAndSelect('audit.status', 'status')
+      .leftJoinAndSelect('audit.createdBy', 'createdBy');
+
+    // Apply date range filters (filter by DATE part only, ignore time)
+    if (date_from) {
+      query = query.andWhere('DATE(audit.created_at) >= :dateFrom', {
+        dateFrom: date_from,
+      });
+    }
+
+    if (date_to) {
+      query = query.andWhere('DATE(audit.created_at) <= :dateTo', {
+        dateTo: date_to,
+      });
+    }
+
+    // Order by created_at descending
+    const audits = await query.orderBy('audit.created_at', 'DESC').getMany();
+
     return audits.map((audit) => ({
       id: audit.id,
       service: audit.service,
