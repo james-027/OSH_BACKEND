@@ -46,6 +46,8 @@ import { ItemsModule } from "./modules/items/items.module";
 import { ActionsModule } from "./modules/actions/actions.module";
 import { AccessKeysModule } from "./modules/access-keys/access-keys.module";
 import { RegionsModule } from "./modules/regions/regions.module";
+import { AuditFormsModule } from "./modules/audit-forms/audit-forms.module";
+import { AuditFormDetailsModule } from "./modules/audit-form-details/audit-form-details.module";
 import { SegmentsModule } from "./modules/segments/segments.module";
 import { PositionsModule } from "./modules/positions/positions.module";
 import { TransactionsModule } from "./modules/transactions/transactions.module";
@@ -66,6 +68,7 @@ import { ReminderTypesModule } from "./modules/reminder-types/reminder-types.mod
 import { RequirementTypesModule } from "./modules/requirement-types/requirement-types.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
 import { CategoryTypesModule } from "./modules/category-types/category-types.module";
+import { AuditCategoryTypesModule } from "./modules/audit-category-types/audit-category-types.module";
 import { VendorsModule } from "./modules/vendors/vendors.module";
 import { StaffsModule } from "./modules/staffs/staffs.module";
 import { RenewalTypesModule } from "./modules/renewal-types/renewal-types.module";
@@ -131,12 +134,15 @@ import logger from "./config/logger";
     StatusModule,
     ThemesModule,
     LocationsModule,
+    AuditCategoryTypesModule,
     CompaniesModule,
     WarehousesModule,
     ItemsModule,
     ActionsModule,
     AccessKeysModule,
     RegionsModule,
+    AuditFormsModule,
+    AuditFormDetailsModule,
     SegmentsModule,
     PositionsModule,
     TransactionsModule,

@@ -64,7 +64,7 @@ export class VendorsService {
     try {
       // Check if vendor with this code already exists
       const existingVendor = await this.vendorsRepository.findOne({
-        where: { vendor_code: createVendorDto.vendor_code },
+        where: { service_provider_code: createVendorDto.service_provider_code },
       });
 
       if (existingVendor) {
@@ -77,8 +77,8 @@ export class VendorsService {
       }
 
       const newVendor = this.vendorsRepository.create({
-        vendor_name: createVendorDto.vendor_name.toUpperCase(),
-        vendor_code: createVendorDto.vendor_code.toUpperCase(),
+        service_provider_name: createVendorDto.service_provider_name.toUpperCase(),
+        service_provider_code: createVendorDto.service_provider_code.toUpperCase(),
         category_id: createVendorDto.category_id,
         tax: createVendorDto.tax || null,
         vat: createVendorDto.vat || null,
@@ -97,7 +97,7 @@ export class VendorsService {
           service: "VendorsService",
           method: "create",
           raw_data: JSON.stringify(savedVendor),
-          description: `Created vendor ${savedVendor.id} - ${savedVendor.vendor_name}`,
+          description: `Created vendor ${savedVendor.id} - ${savedVendor.service_provider_name}`,
           status_id: 1,
         },
         userId,
@@ -147,9 +147,9 @@ export class VendorsService {
       }
 
       // Check for unique constraints if updating code
-      if (updateVendorDto.vendor_code) {
+      if (updateVendorDto.service_provider_code) {
         const existingVendor = await this.vendorsRepository.findOne({
-          where: { vendor_code: updateVendorDto.vendor_code },
+          where: { service_provider_code: updateVendorDto.service_provider_code },
         });
 
         if (existingVendor && existingVendor.id !== id) {
@@ -162,12 +162,12 @@ export class VendorsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      if (updateVendorDto.vendor_name) {
-        updateVendorDto.vendor_name = updateVendorDto.vendor_name.toUpperCase();
+      if (updateVendorDto.service_provider_name) {
+        updateVendorDto.service_provider_name = updateVendorDto.service_provider_name.toUpperCase();
       }
 
-      if (updateVendorDto.vendor_code) {
-        updateVendorDto.vendor_code = updateVendorDto.vendor_code.toUpperCase();
+      if (updateVendorDto.service_provider_code) {
+        updateVendorDto.service_provider_code = updateVendorDto.service_provider_code.toUpperCase();
       }
 
       Object.assign(vendor, updateVendorDto, {
@@ -182,7 +182,7 @@ export class VendorsService {
           service: "VendorsService",
           method: "update",
           raw_data: JSON.stringify(vendor),
-          description: `Updated vendor ${vendor.id} - ${vendor.vendor_name}`,
+          description: `Updated vendor ${vendor.id} - ${vendor.service_provider_name}`,
           status_id: 1,
         },
         userId,
@@ -252,7 +252,7 @@ export class VendorsService {
           service: "VendorsService",
           method: "toggleStatus",
           raw_data: JSON.stringify(updatedVendor),
-          description: `Toggled status for vendor ${id} - ${vendor.vendor_name} to ${newStatusName}`,
+          description: `Toggled status for vendor ${id} - ${vendor.service_provider_name} to ${newStatusName}`,
           status_id: 1,
         },
         userId,

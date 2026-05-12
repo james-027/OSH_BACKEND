@@ -88,8 +88,8 @@ export class CreateStaffDto {
   birthday?: string;
 
   @IsOptional()
-  @IsNumber()
-  contact_number?: number;
+  @IsString()
+  contact_number?: string;
 
   @IsOptional()
   @IsString()
