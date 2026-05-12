@@ -83,6 +83,20 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      
+      const existingRecord = await this.staffsRepository.findOne({
+        where: {
+          staff_code: createStaffDto.staff_code,
+        },
+      });
+
+      if (existingRecord) {
+        throw new BadRequestException(
+          `Staff code '${createStaffDto.staff_code}' already exists`,
+        );
+      }
+
+
       const newStaff = this.staffsRepository.create({
         staff_code: createStaffDto.staff_code
           ? createStaffDto.staff_code.toUpperCase()
@@ -196,6 +210,18 @@ export class StaffsService {
       if (!staff) {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
+
+      const existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: updateStaffDto.staff_code,
+          },
+        });
+
+        if (existingRecord && existingRecord.id !== id) {
+          throw new BadRequestException(
+            `Staff code '${updateStaffDto.staff_code}' already exists`,
+          );
+        }
 
       const updatedByUser = await this.usersService.findUserById(userId);
       if (!updatedByUser) {
