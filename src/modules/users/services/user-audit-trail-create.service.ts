@@ -12,7 +12,7 @@ export class UserAuditTrailCreateService {
     @InjectRepository(UserAuditTrail)
     private userAuditTrailRepository: Repository<UserAuditTrail>,
     private sseEventEmitter: SSEEventEmitterHelper,
-  ) {}
+  ) { }
 
   async create(
     createDto: CreateUserAuditTrailDto,

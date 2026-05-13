@@ -66,4 +66,4 @@ import { CacheInvalidationModule } from "../cache/cache.module";
     UserAuditTrailCreateService,
   ],
 })
-export class UsersModule {}
+export class UsersModule { }
