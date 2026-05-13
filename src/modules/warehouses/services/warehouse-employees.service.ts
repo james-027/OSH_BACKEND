@@ -184,6 +184,7 @@ export class WarehouseEmployeesService {
   async create(
     createDto: CreateWarehouseEmployeeDto,
     userId: number,
+    skipAuditTrail: boolean = false,
   ): Promise<WarehouseEmployee> {
     // Uniqueness check
     const exists = await this.warehouseEmployeesRepository.findOne({
@@ -212,17 +213,20 @@ export class WarehouseEmployeesService {
     });
     try {
       const saved = await this.warehouseEmployeesRepository.save(rec);
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "WarehouseEmployeesService",
-          method: "create",
-          raw_data: JSON.stringify({ ...createDto }),
-          description: `Created warehouse employee for warehouse ID: ${saved.warehouse_id} - ${saved.warehouse ? saved.warehouse.warehouse_name : ""}`,
-          status_id: 1,
-        },
-        userId,
-      );
+
+      if (!skipAuditTrail) {
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "WarehouseEmployeesService",
+            method: "create",
+            raw_data: JSON.stringify({ ...createDto }),
+            description: `Created warehouse employee for warehouse ID: ${saved.warehouse_id} - ${saved.warehouse ? saved.warehouse.warehouse_name : ""}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      }
       // SSE Events
       try {
         this.sseEventEmitter.emitCreateSignal("warehouse_employees", saved.id);
@@ -240,6 +244,7 @@ export class WarehouseEmployeesService {
     id: number,
     updateDto: UpdateWarehouseEmployeeDto,
     userId: number,
+    skipAuditTrail: boolean = false,
   ): Promise<WarehouseEmployee> {
     const rec = await this.findOne(id);
 
@@ -279,17 +284,20 @@ export class WarehouseEmployeesService {
         ...updateDto,
         updated_by: userId,
       });
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "WarehouseEmployeesService",
-          method: "update",
-          raw_data: JSON.stringify({ ...updateDto }),
-          description: `Updated warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
-          status_id: 1,
-        },
-        userId,
-      );
+
+      if (!skipAuditTrail) {
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "WarehouseEmployeesService",
+            method: "update",
+            raw_data: JSON.stringify({ ...updateDto }),
+            description: `Updated warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      }
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouse_employees", id);
@@ -398,13 +406,14 @@ export class WarehouseEmployeesService {
               existing.id,
               updatePayload,
               userId,
+              true, // skipAuditTrail for bulk upload updates
             );
             fullRec = await this.findOne(existing.id);
             updated.push({ row: rowNum, id: updatedRec.id });
           } else {
             // Create new
             record.access_key_id = accessKeyId ?? record.access_key_id ?? null;
-            const createdRec = await this.create(record, userId);
+            const createdRec = await this.create(record, userId, true); // skipAuditTrail for bulk upload creates
             fullRec = await this.findOne(createdRec.id);
             inserted.push({ row: rowNum, id: createdRec.id });
           }
