@@ -102,7 +102,7 @@ export class RolePresetsController {
     return this.roleActionPresetsService.nested();
   }
 
-  @Throttle({ default: { limit: 300, ttl: 60000 } })
+  @Throttle({ default: { limit: 2000, ttl: 60000 } })
   @Get("nested/:id")
   @RequirePermissions({ module: "ROLE PRESETS", action: "VIEW" })
   async nestedByRole(@Param("id", ParseIntPipe) id: number, @Request() req) {

@@ -180,7 +180,7 @@ export class ReqTransactionHeadersController {
     );
   }
 
-  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @Throttle({ default: { limit: 2000, ttl: 60000 } })
   @Post("batch-create")
   @RequirePermissions({
     module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
