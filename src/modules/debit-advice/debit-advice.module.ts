@@ -31,7 +31,6 @@ import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
     controllers: [DebitAdviceController],
     providers: [
         DebitAdviceService,
-        // UserAuditTrailCreateService,
         CommonUtilitiesService,
         ResponseMapperService,
     ],

@@ -33,7 +33,7 @@ export class DebitAdviceService {
         private debitAdviceLineRepository: Repository<DebitAdviceLine>,
         @InjectRepository(DebitAdviceGLItems)
         private debitAdviceGLItemsRepository: Repository<DebitAdviceGLItems>,
-        // private userAuditTrailCreateService: UserAuditTrailCreateService,
+        private userAuditTrailCreateService: UserAuditTrailCreateService,
         private responseMapperService: ResponseMapperService,
         private commonUtilitiesService: CommonUtilitiesService,
         private sseEventEmitter: SSEEventEmitterHelper,
@@ -181,14 +181,20 @@ export class DebitAdviceService {
                 where: { id: savedDebitAdvice.id },
                 relations: ["status", "createdBy", "lines", "lines.glItems"],
             });
-            // Log audit trail
-            // await this.userAuditTrailCreateService.createAuditTrail({
-            //     user_id: userId,
-            //     module_name: "DEBIT_ADVICES",
-            //     action_name: "ADD",
-            //     description: `Created debit advice: ${createDebitAdviceDto.id}`,
-            //     method: "create",
-            // });
+
+            // Audit trail
+            await this.userAuditTrailCreateService.create(
+                {
+                    service: "DEBIT_ADVICES",
+                    method: "create",
+                    raw_data: JSON.stringify(reloadedDebitAdvice),
+                    description: `Created debit advice: ${createDebitAdviceDto.id}`,
+                    status_id: reloadedDebitAdvice.status_id,
+                },
+                userId,
+            );
+
+
             // return this.responseMapperService.mapEntityToResponse(savedDebitAdvice);
             return {
                 id: reloadedDebitAdvice.id,
@@ -310,14 +316,19 @@ export class DebitAdviceService {
                 where: { id: updatedDebitAdvice.id },
                 relations: ["status", "createdBy", "lines"],
             });
-            // Log audit trail
-            // await this.userAuditTrailCreateService.createAuditTrail({
-            //     user_id: userId,
-            //     module_name: "DEBIT_ADVICES",
-            //     action_name: "EDIT",
-            //     description: `Updated debit advice: ${updatedDebitAdvice.id}`,
-            //     method: "update",
-            // });
+
+
+            // Audit trail
+            await this.userAuditTrailCreateService.create(
+                {
+                    service: "DEBIT_ADVICES",
+                    method: "EDIT",
+                    raw_data: JSON.stringify(reloadedDebitAdvice),
+                    description: `Updated debit advice: ${reloadedDebitAdvice.document_number}`,
+                    status_id: reloadedDebitAdvice.status_id,
+                },
+                userId,
+            );
 
 
             return {
@@ -354,14 +365,19 @@ export class DebitAdviceService {
             await this.debitAdviceLineRepository.delete({ ref_docno: docno });
             await this.debitAdviceRepository.delete({ document_number: docno });
 
-            // // Log audit trail
-            // await this.userAuditTrailCreateService.createAuditTrail({
-            //     user_id: userId,
-            //     module_name: "DEBIT_ADVICES",
-            //     action_name: "DELETE",
-            //     description: `Deleted debit advice: ${debitAdvice.id}`,
-            //     method: "delete",
-            // });
+
+
+            // Audit trail
+            await this.userAuditTrailCreateService.create(
+                {
+                    service: "DEBIT_ADVICES",
+                    method: "DELETE",
+                    raw_data: JSON.stringify(debitAdvice),
+                    description: `Deleted debit advice: ${debitAdvice.document_number}`,
+                    status_id: 14,
+                },
+                userId,
+            );
             return { success: true, message: "Debit advice deleted successfully" };
         } catch (error) {
             logger.error("Error deleting debit advice:", error);
