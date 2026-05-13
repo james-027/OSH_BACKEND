@@ -15,6 +15,7 @@ import { ResponseMapperService } from "../../../services/response-mapper.service
 import logger from "../../../config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { formatDateToString } from "src/utils/date.utils";
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import { stat } from "fs";
 
 
@@ -35,6 +36,7 @@ export class DebitAdviceService {
         // private userAuditTrailCreateService: UserAuditTrailCreateService,
         private responseMapperService: ResponseMapperService,
         private commonUtilitiesService: CommonUtilitiesService,
+        private sseEventEmitter: SSEEventEmitterHelper,
     ) { }
     // Get all debit advices
     async findAll(): Promise<any[]> {
@@ -133,7 +135,7 @@ export class DebitAdviceService {
                 throw new BadRequestException("Debit advice already exists");
             }
 
-            //* Generate using bulletproof service with database-level locking
+            //* for document No
             trans_number =
                 await this.commonUtilitiesService.generateTransactionNumber({
                     transaction_type: "DEBIT ADVICE",
@@ -144,6 +146,7 @@ export class DebitAdviceService {
                     currentDate: new Date(calculatedTransDate),
                     abbr: location_abbr,
                 });
+
             // Create debit advice
             const newDebitAdvice = this.debitAdviceRepository.create({
                 createdBy: { id: userId } as any,
@@ -162,6 +165,17 @@ export class DebitAdviceService {
                 })),
             });
             savedDebitAdvice = await this.debitAdviceRepository.save(newDebitAdvice);
+
+
+            // SSE Events
+            try {
+                console.log("working")
+                this.sseEventEmitter.emitCreate("debit-advices", savedDebitAdvice.id);
+            } catch (err) {
+                console.log("not working create")
+                logger.error("SSE event failed:", err);
+            }
+
             // Reload relations after save
             const reloadedDebitAdvice = await this.debitAdviceRepository.findOne({
                 where: { id: savedDebitAdvice.id },
@@ -213,7 +227,7 @@ export class DebitAdviceService {
             if (!debitAdvice) {
                 throw new NotFoundException(`Debit advice with document number ${docno} not found`);
             }
-            // Update fields
+            // Update header
             Object.assign(debitAdvice, updateDebitAdviceDto);
             updatedDebitAdvice = await this.debitAdviceRepository.save(debitAdvice);
 
@@ -283,6 +297,15 @@ export class DebitAdviceService {
                 }
             }
 
+            // SSE Events
+            try {
+                console.log("working")
+                this.sseEventEmitter.emitUpdate("debit-advices", updatedDebitAdvice.id);
+            } catch (err) {
+                console.log("not working")
+                logger.error("SSE event failed:", err);
+            }
+
             const reloadedDebitAdvice = await this.debitAdviceRepository.findOne({
                 where: { id: updatedDebitAdvice.id },
                 relations: ["status", "createdBy", "lines"],
@@ -295,6 +318,8 @@ export class DebitAdviceService {
             //     description: `Updated debit advice: ${updatedDebitAdvice.id}`,
             //     method: "update",
             // });
+
+
             return {
                 id: reloadedDebitAdvice.id,
                 status_id: reloadedDebitAdvice.status_id,

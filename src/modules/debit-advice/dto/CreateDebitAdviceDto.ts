@@ -15,8 +15,6 @@ export class CreateDebitAdviceDto {
     @IsNumber()
     id?: number;
 
-    @IsNumber()
-    created_by?: number;
 
     @IsString()
     document_number: string;
@@ -33,6 +31,6 @@ export class CreateDebitAdviceDto {
     @Type(() => DebitAdviceLineItemDto)
     line!: DebitAdviceLineItemDto[];
     access_key_id?: number;
-    createdBy?: number;
+
 }
 
