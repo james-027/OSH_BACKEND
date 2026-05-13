@@ -19,7 +19,7 @@ import { CreateProfitcenterDto } from "../dto/CreateProfitcenterDto";
 import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 
 @Controller("profitcenters")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class ProfitcenterController {
   constructor(
     private readonly profitcenterService: ProfitcenterService,
@@ -57,7 +57,7 @@ export class ProfitcenterController {
     @Body() updateProfitcenterDto: UpdateProfitcenterDto,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
     return this.profitcenterService.update(
       id,
@@ -71,7 +71,7 @@ export class ProfitcenterController {
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
     return this.profitcenterService.delete(id, userId);
   }

@@ -95,9 +95,12 @@ import { ProfitcenterModule } from "./modules/profitcenters/profitcenter.module"
 import { Profitcenter } from "./entities/Profitcenter";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
 import { Supplier} from "./entities/Supplier";
-import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import logger from "./config/logger";
 import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
+import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
+import { DebitAdviceGlAccount } from "./entities/DebitAdviceGlAccount";
+import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
+
 @Module({
   imports: [
     // Configuration
@@ -126,7 +129,8 @@ import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit
       TransactionSequence,
       Profitcenter,
       Supplier,
-      DebitAdviceCategory
+      DebitAdviceCategory,
+      DebitAdviceGlAccount
     ]),
     // Authentication
     PassportModule,
@@ -186,6 +190,7 @@ import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit
     ProfitcenterModule,
     SupplierModule,
     DebitAdviceCategoryModule,
+    DebitAdviceGlAccountModule
     
   ],
   providers: [
