@@ -16,9 +16,6 @@ export class UpdateDebitAdviceDto {
     @IsNumber()
     status_id?: number;
 
-    @IsNumber()
-    updated_by?: number;
-
     @IsString()
     document_number: string;
 
