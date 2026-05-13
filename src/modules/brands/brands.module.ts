@@ -9,19 +9,27 @@ import { Status } from "src/entities/Status";
 import { Role } from "src/entities/Role";
 import { Theme } from "src/entities/Theme";
 import { UserPermissions } from "src/entities/UserPermissions";
+import { SSEModule } from "../sse/sse.module";
+import { UsersModule } from "../users/users.module";
+import { Module as AppModule } from "src/entities/Module";
+import { Action } from "src/entities/Action";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Brand,
+     Brand,
       User,
       Status,
       Role,
       Theme,
       UserPermissions,
+      AppModule,
+      Action,
     ]),
+    UsersModule,
+    SSEModule,
   ],
-  providers: [BrandsService, UsersService],
+  providers: [BrandsService],
   controllers: [BrandsController],
   exports: [BrandsService],
 })
