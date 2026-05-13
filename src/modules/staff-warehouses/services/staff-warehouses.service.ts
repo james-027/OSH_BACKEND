@@ -81,6 +81,19 @@ export class StaffWarehousesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      const existingRecord = await this.staffWarehousesRepository.findOne({
+        where: {
+          staff_code: createStaffWarehouseDto.staff_code,
+        },
+      });
+
+      if (existingRecord) {
+        throw new BadRequestException(
+          `Staff code '${createStaffWarehouseDto.staff_code}' already exists`,
+        );
+      }
+
+
       const newRecord = this.staffWarehousesRepository.create({
         staff_id: createStaffWarehouseDto.staff_id,
         staff_code: createStaffWarehouseDto.staff_code,
@@ -145,91 +158,125 @@ export class StaffWarehousesService {
     }
   }
 
-  async update(
-    id: number,
-    updateStaffWarehouseDto: UpdateStaffWarehouseDto,
-    userId: number,
-  ): Promise<any> {
-    try {
-      const record = await this.staffWarehousesRepository.findOne({
-        where: { id },
-        relations: this.relationFields,
-      });
+async update(
+  id: number,
+  updateStaffWarehouseDto: UpdateStaffWarehouseDto,
+  userId: number,
+): Promise<any> {
+  try {
+    const record = await this.staffWarehousesRepository.findOne({
+      where: { id },
+      relations: this.relationFields,
+    });
 
-      if (!record) {
-        throw new NotFoundException(
-          `${this.entityName} with ID ${id} not found`,
-        );
-      }
-
-      const user = await this.usersService.findUserById(userId);
-      if (!user) {
-        throw new BadRequestException("Authenticated user not found");
-      }
-
-      // Handle date conversions
-      const updateData = { ...updateStaffWarehouseDto };
-      if (updateData.effectivity_date) {
-        updateData.effectivity_date = new Date(
-          updateData.effectivity_date,
-        ) as any;
-      }
-      if (updateData.end_date) {
-        updateData.end_date = new Date(updateData.end_date) as any;
-      }
-
-      Object.assign(record, updateData, {
-        updated_by: userId,
-      });
-
-      await this.staffWarehousesRepository.save(record);
-
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "StaffWarehousesService",
-          method: "update",
-          raw_data: JSON.stringify(record),
-          description: `Updated staff warehouse assignment ${id}`,
-          status_id: 1,
-        },
-        userId,
+    if (!record) {
+      throw new NotFoundException(
+        `${this.entityName} with ID ${id} not found`,
       );
+    }
 
-      const recordWithRelations = await this.staffWarehousesRepository.findOne({
-        where: { id: record.id },
-        relations: this.relationFields,
+    const user = await this.usersService.findUserById(userId);
+    if (!user) {
+      throw new BadRequestException("Authenticated user not found");
+    }
+
+    if (updateStaffWarehouseDto.staff_code) {
+      const existingRecord = await this.staffWarehousesRepository.findOne({
+        where: {
+          staff_code: updateStaffWarehouseDto.staff_code,
+        },
       });
 
-      if (!recordWithRelations) {
-        throw new Error(`Failed to retrieve updated ${this.entityName}`);
-      }
-
-      const response =
-        this.responseMapperService.mapEntityToResponse(recordWithRelations);
-
-      // SSE Events
-      try {
-        this.sseEventEmitter.emitUpdate(
-          "staff_warehouses",
-          response.id,
-          response,
+      if (existingRecord && existingRecord.id !== id) {
+        throw new BadRequestException(
+          `Staff code '${updateStaffWarehouseDto.staff_code}' already exists`,
         );
-      } catch (err) {
-        logger.error("SSE event failed:", err);
       }
-
-      return response;
-    } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      throw new Error(`Failed to update ${this.entityName}`);
     }
+
+    const effectivity_date = updateStaffWarehouseDto.effectivity_date
+      ? new Date(updateStaffWarehouseDto.effectivity_date)
+      : null;
+
+    const end_date = updateStaffWarehouseDto.end_date
+      ? new Date(updateStaffWarehouseDto.end_date)
+      : null;
+
+    Object.assign(record, {
+      staff: { id: updateStaffWarehouseDto.staff_id } as any,
+      warehouse: { id: updateStaffWarehouseDto.warehouse_id } as any,
+      location: { id: updateStaffWarehouseDto.location_id } as any,
+      vendor: { id: updateStaffWarehouseDto.vendor_id } as any,
+      staff_code: updateStaffWarehouseDto.staff_code,
+      effectivity_date,
+      end_date,
+      remarks: updateStaffWarehouseDto.remarks,
+      status_id: updateStaffWarehouseDto.status_id,
+      updated_by: userId,
+    });
+
+    await this.staffWarehousesRepository.save(record);
+ 
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "StaffWarehousesService",
+        method: "update",
+        raw_data: JSON.stringify({
+          id: record.id,
+          staff_code: record.staff_code,
+          staff_id: updateStaffWarehouseDto.staff_id,
+          warehouse_id: updateStaffWarehouseDto.warehouse_id,
+          location_id: updateStaffWarehouseDto.location_id,
+          vendor_id: updateStaffWarehouseDto.vendor_id,
+          effectivity_date,
+          end_date,
+          status_id: updateStaffWarehouseDto.status_id,
+        }),
+        description: `Updated staff warehouse assignment ${id}`,
+        status_id: 1,
+      },
+      userId,
+    );
+
+
+    const recordWithRelations = await this.staffWarehousesRepository.findOne({
+      where: { id },
+      relations: this.relationFields,
+    });
+
+    if (!recordWithRelations) {
+      throw new Error(`Failed to retrieve updated ${this.entityName}`);
+    }
+
+    const response =
+      this.responseMapperService.mapEntityToResponse(recordWithRelations);
+
+
+    try {
+      this.sseEventEmitter.emitUpdate(
+        "staff_warehouses",
+        response.id,
+        response,
+      );
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
+
+    return response;
+  } catch (error) {
+    logger.error(error);
+
+    if (
+      error instanceof NotFoundException ||
+      error instanceof BadRequestException
+    ) {
+      throw error;
+    }
+
+    throw new Error(`Failed to update ${this.entityName}`);
   }
+}
+
 
   async toggleStatus(id: number, userId: number): Promise<any> {
     try {

@@ -177,6 +177,7 @@ export class WarehouseHurdlesService {
   async create(
     createDto: CreateWarehouseHurdleDto,
     userId: number,
+    createAuditTrail: boolean = true,
   ): Promise<WarehouseHurdle[]> {
     const { warehouse_ids, item_category_ids, ...mainDto } = createDto;
     const hurdles: WarehouseHurdle[] = [];
@@ -218,17 +219,20 @@ export class WarehouseHurdlesService {
       hurdles.push(saved);
       result.push(saved);
     }
-    // Audit trail
-    await this.auditTrailService.create(
-      {
-        service: "WarehouseHurdlesService",
-        method: "create",
-        raw_data: JSON.stringify(createDto),
-        description: `Created warehouse hurdles for warehouse_ids: [${warehouse_ids}] and item_category_ids: [${item_category_ids}]`,
-        status_id: 1,
-      },
-      userId,
-    );
+
+    if (createAuditTrail) {
+      // Audit trail
+      await this.auditTrailService.create(
+        {
+          service: "WarehouseHurdlesService",
+          method: "create",
+          raw_data: JSON.stringify(createDto),
+          description: `Created warehouse hurdles for warehouse_ids: [${warehouse_ids}] and item_category_ids: [${item_category_ids}]`,
+          status_id: 1,
+        },
+        userId,
+      );
+    }
 
     // SSE Events
     try {
@@ -245,6 +249,7 @@ export class WarehouseHurdlesService {
     id: number,
     updateDto: UpdateWarehouseHurdleDto,
     userId: number,
+    createAuuditTrail: boolean = true,
   ): Promise<WarehouseHurdle> {
     const {
       warehouse_ids,
@@ -292,17 +297,19 @@ export class WarehouseHurdlesService {
           userId,
         );
       }
-      // Audit trail
-      await this.auditTrailService.create(
-        {
-          service: "WarehouseHurdlesService",
-          method: "update",
-          raw_data: JSON.stringify(updateDto),
-          description: `Updated warehouse hurdle id: ${id}`,
-          status_id: 1,
-        },
-        userId,
-      );
+      if (createAuuditTrail) {
+        // Audit trail
+        await this.auditTrailService.create(
+          {
+            service: "WarehouseHurdlesService",
+            method: "update",
+            raw_data: JSON.stringify(updateDto),
+            description: `Updated warehouse hurdle id: ${id}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      }
 
       const status_change =
         old_status_id !== status_id && status_id !== undefined;
@@ -394,7 +401,7 @@ export class WarehouseHurdlesService {
       action_id: action_id, // dynamic
       ref_id: id,
       module_id: 16, // STORE HURDLES
-      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} warehouse hurdle.`,
+      description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
     });
@@ -456,7 +463,7 @@ export class WarehouseHurdlesService {
         action_id: action_id,
         ref_id: id,
         module_id: 16, // STORE HURDLES
-        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""} warehouse hurdle.`,
+        description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({ id, status_id }),
         created_by: userId,
       });
@@ -507,6 +514,7 @@ export class WarehouseHurdlesService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    filename?: string,
   ) {
     let inserted_count = 0;
     let updated_count = 0;
@@ -571,6 +579,7 @@ export class WarehouseHurdlesService {
               status_id: 3, // pending status
             },
             userId,
+            false, // skip audit trail for bulk upload
           );
           inserted_count++;
           inserted_row_numbers.push(i + 2);
@@ -607,6 +616,7 @@ export class WarehouseHurdlesService {
                     status_id: 3, // pending status
                   },
                   userId,
+                  false, // skip audit trail for bulk upload
                 );
                 updated_count++;
                 updated_row_numbers.push(i + 2);
@@ -646,6 +656,30 @@ export class WarehouseHurdlesService {
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
+
+      //* OPTIMIZED: DB Roundtrip - Audit trail for bulk upload, instead of inline during calling create & update
+      await this.auditTrailService.create(
+        {
+          service: "WarehouseHurdlesService",
+          method: "bulkUploadFromExcel",
+          raw_data: JSON.stringify(records).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
+          description: `Bulk upload warehouse hurdles from Excel. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
+          status_id: 1,
+        },
+        userId,
+      );
+    }
+    if (errors.length > 0) {
+      await this.auditTrailService.create(
+        {
+          service: "WarehouseHurdlesService",
+          method: "bulkUploadFromExcel",
+          raw_data: JSON.stringify(errors).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
+          description: `Bulk upload warehouse hurdles from Excel with errors. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
+          status_id: 1,
+        },
+        userId,
+      );
     }
     return {
       inserted_count,

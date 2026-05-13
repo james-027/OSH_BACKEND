@@ -16,6 +16,8 @@ import { UserPermissions } from "../entities/UserPermissions";
 import { UserLocations } from "../entities/UserLocations";
 import { UserLoginSession } from "../entities/UserLoginSession";
 import { Region } from "../entities/Region";
+import { AuditForm } from "../entities/AuditForm";
+import { AuditFormCategoryTypes } from "../entities/AuditFormCategoryTypes";
 import { Brand } from "../entities/Brand";
 import { BrandGroup } from "../entities/BrandGroup";
 import { WarehouseType } from "../entities/WarehouseType";
@@ -62,6 +64,8 @@ import { LocationHurdle } from "../entities/LocationHurdle";
 import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Category } from "../entities/Category";
 import { CategoryType } from "../entities/CategoryType";
+import { AuditFormDetails } from "../entities/AuditFormDetails";
+import { AuditFormDetailsHistory } from "../entities/AuditFormDetailsHistory";
 import { Vendor } from "../entities/Vendor";
 import { Staff } from "../entities/Staff";
 import { StaffVendorSalary } from "../entities/StaffVendorSalary";
@@ -87,6 +91,8 @@ export const entities = [
   UserLocations,
   UserLoginSession,
   Region,
+  AuditForm,
+  AuditFormCategoryTypes,
   Brand,
   BrandGroup,
   WarehouseType,
@@ -131,14 +137,16 @@ export const entities = [
   LocationHurdle,
   LocationHurdleCategory,
   SystemDocumentation,
-  // Category,
-  // CategoryType,
-  // Vendor,
-  // Staff,
-  // StaffVendorSalary,
-  // StaffBrand,
-  // StaffCategoryType,
-  // StaffWarehouse,
+  Category,
+  CategoryType,
+  AuditFormDetails,
+  AuditFormDetailsHistory,
+  Vendor,
+  Staff,
+  StaffVendorSalary,
+  StaffBrand,
+  StaffCategoryType,
+  StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

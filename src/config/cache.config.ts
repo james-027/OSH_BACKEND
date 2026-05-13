@@ -167,7 +167,10 @@ export function buildReqTransHeaderGroupKey(
   const transNumber = query.trans_number
     ? String(query.trans_number).toLowerCase()
     : "all";
-  return `${base}:${userId}:${roleId}:${accessKeyId}:${dateFrom}:${dateTo}:${transNumber}`;
+  const requirementTypeId = query.requirement_type_id
+    ? String(query.requirement_type_id).toLowerCase()
+    : "all";
+  return `${base}:${userId}:${roleId}:${accessKeyId}:${dateFrom}:${dateTo}:${transNumber}:${requirementTypeId}`;
 }
 
 /**
@@ -211,7 +214,10 @@ export function buildWarehouseRequirementsListingKey(
     : "all";
   const dateTo = query.date_to ? String(query.date_to).toLowerCase() : "all";
   const flatten = query.flatten ? String(query.flatten).toLowerCase() : "false";
-  return `${base}:${userId}:${roleId}:${accessKeyId}:${warehouseTypeId}:${warehouseId}:${dateFrom}:${dateTo}:${flatten}`;
+  const requirementTypeId = query.requirement_type_id
+    ? String(query.requirement_type_id).toLowerCase()
+    : "false";
+  return `${base}:${userId}:${roleId}:${accessKeyId}:${warehouseTypeId}:${warehouseId}:${dateFrom}:${dateTo}:${flatten}:${requirementTypeId}`;
 }
 
 /**
@@ -235,7 +241,10 @@ export function buildWarehouseRequirementsCountsKey(
     ? String(query.date_from).toLowerCase()
     : "all";
   const dateTo = query.date_to ? String(query.date_to).toLowerCase() : "all";
-  return `${base}:${userId}:${roleId}:${accessKeyId}:${warehouseTypeId}:${warehouseId}:${dateFrom}:${dateTo}`;
+  const requirementTypeId = query.requirement_type_id
+    ? String(query.requirement_type_id).toLowerCase()
+    : "false";
+  return `${base}:${userId}:${roleId}:${accessKeyId}:${warehouseTypeId}:${warehouseId}:${dateFrom}:${dateTo}:${requirementTypeId}`;
 }
 
 /**

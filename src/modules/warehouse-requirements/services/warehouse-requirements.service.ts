@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In } from "typeorm";
+import { Repository, In, Between, LessThanOrEqual } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -23,9 +23,17 @@ import { ResponseMapperService } from "../../../services/response-mapper.service
 import { WarehouseRequirementDuesService } from "./warehouse-requirement-dues.service";
 import { WarehouseRequirementStartsService } from "./warehouse-requirement-starts.service";
 import { SyncLog } from "src/entities/syncLog";
-import { count } from "console";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
+import {
+  endOfLocalRange,
+  formatDateToString,
+  getCurrentUTCTimestamp,
+  getLocalISOTimestamp,
+  getUTCTimestamp,
+  startOfLocalDay,
+  toLocalDateObject,
+} from "src/utils/date.utils";
 
 @Injectable()
 export class WarehouseRequirementsService {
@@ -156,13 +164,14 @@ export class WarehouseRequirementsService {
     warehouseIds: number[],
     dateFrom?: string,
     dateTo?: string,
+    requirementTypeId?: number,
   ): Promise<{
     requirements: any[];
     duesMap: Map<number, any[]>;
     warehouseRequirementIds: number[];
   }> {
     // Query warehouse requirements
-    const requirementsQuery = this.warehouseRequirementsRepository
+    let requirementsQuery = this.warehouseRequirementsRepository
       .createQueryBuilder("warehouseRequirement")
       .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
       .leftJoinAndSelect("requirement.renewalType", "renewalType")
@@ -177,6 +186,15 @@ export class WarehouseRequirementsService {
       .andWhere("warehouseRequirement.status_id = :status_id", {
         status_id: 1,
       });
+
+    if (requirementTypeId) {
+      requirementsQuery = requirementsQuery.andWhere(
+        "requirement.requirement_type_id = :requirementTypeId",
+        {
+          requirementTypeId,
+        },
+      );
+    }
 
     const requirements = await requirementsQuery.getMany();
     const warehouseRequirementIds: number[] = requirements.map((r) => r.id);
@@ -559,12 +577,7 @@ export class WarehouseRequirementsService {
       }
 
       // Fetch all active requirements (status_id = 1)
-      const activeRequirements = await this.requirementsRepository.find({
-        where: {
-          status_id: 1,
-          requirement_type_id: In([1]), // Only regulatory requirement types
-        },
-      });
+      const activeRequirements = await this.activeRequirements(1);
 
       if (activeRequirements.length === 0) {
         // Log summary success (nothing to do)
@@ -699,25 +712,27 @@ export class WarehouseRequirementsService {
         }
       }
 
-      // Log summary success
-      try {
-        await this.syncLogRepository.save({
-          module: "WAREHOUSE REQUIREMENT",
-          type: "success",
-          action: "data insertion",
-          message: "Sync completed",
-          row_data: JSON.stringify({
-            inserted: result.inserted,
-            skipped: result.skipped,
-            duesCreated: result.duesCreated,
-            duesSkipped: result.duesSkipped,
-            startsCreated: result.startsCreated,
-            startsSkipped: result.startsSkipped,
-            errors: result.errors.length,
-          }),
-        });
-      } catch (logErr) {
-        // ignore logging failure
+      if (result.inserted > 0 || result.errors.length > 0) {
+        // Log summary
+        try {
+          await this.syncLogRepository.save({
+            module: "WAREHOUSE REQUIREMENT",
+            type: "success",
+            action: "data insertion",
+            message: "Sync completed",
+            row_data: JSON.stringify({
+              inserted: result.inserted,
+              skipped: result.skipped,
+              duesCreated: result.duesCreated,
+              duesSkipped: result.duesSkipped,
+              startsCreated: result.startsCreated,
+              startsSkipped: result.startsSkipped,
+              errors: result.errors.length,
+            }),
+          });
+        } catch (logErr) {
+          // ignore logging failure
+        }
       }
 
       if (result.inserted > 0) {
@@ -1177,12 +1192,6 @@ export class WarehouseRequirementsService {
             [])[0];
           const filteredDues = baseReq.warehouseRequirementDues || [];
 
-          // Accumulate additional dues count
-          const duesCount = filteredDues.length;
-          if (duesCount > 1) {
-            totalDuesCount += duesCount - 1;
-          }
-
           for (const due of filteredDues) {
             // Get reminder status for this due
             const reminderStatus =
@@ -1226,13 +1235,30 @@ export class WarehouseRequirementsService {
         }
 
         baseRequirementsDetails = flattenedDetails;
+
+        // Calculate count: unique requirements with at least one due + additional dues
+        const uniqueRequirementIds = new Set(
+          flattenedDetails.map((d) => d.warehouse_requirement_id),
+        );
+        const uniqueRequirementCount = uniqueRequirementIds.size;
+        const totalDuesInFlattened = flattenedDetails.length;
+        totalDuesCount = totalDuesInFlattened - uniqueRequirementCount;
       }
 
       const baseRequirementWithDuesCount =
-        baseRequirements.length + totalDuesCount;
+        (flatten
+          ? new Set(
+              baseRequirementsDetails.map((d) => d.warehouse_requirement_id),
+            ).size + totalDuesCount
+          : baseRequirementsDetails.length + totalDuesCount) || 0;
 
       return {
-        count: baseRequirements.length,
+        count: flatten
+          ? new Set(
+              baseRequirementsDetails.map((d) => d.warehouse_requirement_id),
+            ).size
+          : baseRequirementsDetails.length,
+        due_count: baseRequirementsDetails.length,
         base_requirement_with_dues_count: baseRequirementWithDuesCount,
         base_requirements_details: baseRequirementsDetails,
       };
@@ -1258,6 +1284,7 @@ export class WarehouseRequirementsService {
     dateTo?: string,
     countOnly: boolean = false,
     flatten: boolean = false,
+    requirementTypeId?: number,
   ): Promise<any> {
     try {
       // Build where condition for transaction headers
@@ -1273,6 +1300,10 @@ export class WarehouseRequirementsService {
           dateTo,
         );
         headerWhere.trans_date = In(dateRange);
+      }
+
+      if (requirementTypeId) {
+        headerWhere.requirement = { requirement_type_id: requirementTypeId };
       }
 
       // Get transaction headers with eager loaded details in a single query
@@ -1455,6 +1486,7 @@ export class WarehouseRequirementsService {
     userId?: number,
     roleId?: number,
     accessKeyId?: number,
+    requirementTypeId?: number,
     flatten: boolean = false,
   ): Promise<any> {
     try {
@@ -1492,6 +1524,7 @@ export class WarehouseRequirementsService {
           warehouseIds,
           date_from,
           date_to,
+          requirementTypeId,
         );
 
       // Step 4: Attach requirements to warehouses (in-memory)
@@ -1536,6 +1569,7 @@ export class WarehouseRequirementsService {
               date_to,
               false,
               flatten,
+              requirementTypeId,
             );
 
           return {
@@ -1574,6 +1608,11 @@ export class WarehouseRequirementsService {
    * Get warehouse requirements listing with COUNTS ONLY (ultra-fast)
    * Returns minimal data: warehouse info + requirement/transaction counts
    * Optimized for quick dashboard/list views
+   *
+   * @param baseRequirementsFilter Filter warehouses by base requirements count:
+   *   - 'all': Show all warehouses (default)
+   *   - 'withRequirements': Only warehouses with baseRequirements.count > 0
+   *   - 'withoutRequirements': Only warehouses with baseRequirements.count = 0
    */
   async getWarehouseRequirementsListingCounts(
     warehouse_type_id: number,
@@ -1583,6 +1622,11 @@ export class WarehouseRequirementsService {
     userId?: number,
     roleId?: number,
     accessKeyId?: number,
+    requirementTypeId?: number,
+    baseRequirementsFilter:
+      | "all"
+      | "withRequirements"
+      | "withoutRequirements" = "all",
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
@@ -1624,9 +1668,16 @@ export class WarehouseRequirementsService {
           "warehouseRequirement.warehouseRequirementDues",
           "warehouseRequirementDue",
         )
+        .leftJoin("warehouseRequirement.requirement", "requirement")
         .where("warehouseRequirement.warehouse_id IN (:...warehouseIds)", {
           warehouseIds,
-        });
+        })
+        .andWhere(
+          "warehouseRequirement.status_id IN (:...requirementStatusIds)",
+          {
+            requirementStatusIds: [1, 2],
+          },
+        );
 
       // Apply date filtering if provided
       if (date_from && date_to) {
@@ -1650,6 +1701,13 @@ export class WarehouseRequirementsService {
         requirementCountsQuery = requirementCountsQuery.andWhere(
           "warehouseRequirement.status_id IN (:...requirementStatusIds)",
           { requirementStatusIds: [1, 2] },
+        );
+      }
+
+      if (requirementTypeId) {
+        requirementCountsQuery = requirementCountsQuery.andWhere(
+          "requirement.requirement_type_id = :requirementTypeId",
+          { requirementTypeId },
         );
       }
 
@@ -1679,6 +1737,7 @@ export class WarehouseRequirementsService {
           "reqTransactionDetail",
           "reqTransactionDetail.status_id = :detail_status_id",
         )
+        .leftJoin("reqTransactionHeader.requirement", "requirement")
         .where("reqTransactionHeader.warehouse_id IN (:...warehouseIds)", {
           warehouseIds,
         })
@@ -1699,6 +1758,13 @@ export class WarehouseRequirementsService {
         );
       }
 
+      if (requirementTypeId) {
+        transactionHeaderCountsQuery.andWhere(
+          "requirement.requirement_type_id = :requirementTypeId",
+          { requirementTypeId },
+        );
+      }
+
       const transactionHeaderCounts = await transactionHeaderCountsQuery
         .groupBy("reqTransactionHeader.warehouse_id")
         .getRawMany();
@@ -1713,7 +1779,7 @@ export class WarehouseRequirementsService {
       });
 
       // Step 5: Build response with counts only
-      const result = warehouses.map((warehouse) => ({
+      let result = warehouses.map((warehouse) => ({
         id: warehouse.id,
         location_name: warehouse.location?.location_name || null,
         warehouse_name: warehouse.warehouse_name,
@@ -1733,13 +1799,21 @@ export class WarehouseRequirementsService {
         },
       }));
 
-      return result;
+      // Step 6: Apply baseRequirements filter
+      if (baseRequirementsFilter === "withRequirements") {
+        // Only include warehouses with baseRequirements.count > 0
+        result = result.filter(
+          (warehouse) => warehouse.baseRequirements.count > 0,
+        );
+      } else if (baseRequirementsFilter === "withoutRequirements") {
+        // Only include warehouses with baseRequirements.count = 0
+        result = result.filter(
+          (warehouse) => warehouse.baseRequirements.count === 0,
+        );
+      }
+      // If 'all', return all warehouses (no filtering)
 
-      // return {
-      //   success: true,
-      //   data: result,
-      //   total: result.length,
-      // };
+      return result;
     } catch (error) {
       console.error(
         "Error fetching warehouse requirements counts listing:",
@@ -1766,13 +1840,11 @@ export class WarehouseRequirementsService {
     roleId?: number,
     accessKeyId?: number,
     warehouse_rem_status_id?: number[],
+    requirementTypeId?: number,
   ): Promise<any[]> {
     try {
-      // Step 1: Get active requirements only (status_id = 1)
-      const activeRequirements = await this.requirementsRepository.find({
-        where: { status_id: 1 },
-        order: { id: "ASC" },
-      });
+      const activeRequirements =
+        await this.activeRequirements(requirementTypeId);
 
       if (activeRequirements.length === 0) {
         return [];
@@ -1797,25 +1869,15 @@ export class WarehouseRequirementsService {
       let finalLocationIds =
         filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
 
-      // Step 5: Build warehouse query
-      const warehouseWhere: any = {
+      // const start_date = date_from ? startOfLocalDay(date_from) : null;
+      const end_date = date_to ? endOfLocalRange(date_to) : null;
+      const warehouses = await this.getWarehouses(
         warehouse_type_id,
-        rem_status_id: In(warehouse_rem_status_id || [8, 9]),
-      };
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseWhere.access_key_id = accessKeyId;
-      }
-
-      if (finalLocationIds.length > 0) {
-        warehouseWhere.location_id = In(finalLocationIds);
-      }
-
-      // Fetch warehouses with location relation
-      const warehouses = await this.warehousesRepository.find({
-        where: warehouseWhere,
-        relations: ["location"],
-      });
+        warehouse_rem_status_id,
+        date_to,
+        accessKeyId,
+        finalLocationIds,
+      );
 
       if (warehouses.length === 0) {
         return [];
@@ -1857,14 +1919,15 @@ export class WarehouseRequirementsService {
 
           // Apply date filtering on transaction date if provided
           if (date_from && date_to) {
-            const filterDateFrom = new Date(date_from);
-            const filterDateTo = new Date(date_to);
-            filterDateTo.setHours(23, 59, 59, 999);
+            const filterDateFrom = formatDateToString(new Date(date_from));
+            const filterDateTo = formatDateToString(new Date(date_to));
+            // filterDateTo.setHours(23, 59, 59, 999);
 
             transactionQuery = transactionQuery.andWhere(
               "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
               { filterDateFrom, filterDateTo },
             );
+            // console.log("date from & to:", filterDateFrom, filterDateTo);
           }
 
           const results = await transactionQuery.getRawMany();
@@ -1873,6 +1936,10 @@ export class WarehouseRequirementsService {
             totalStores > 0
               ? Math.round((requirementCount / totalStores) * 100)
               : 0;
+
+          // const [sql, params] = transactionQuery.getQueryAndParameters();
+          // console.log("SQL:", sql);
+          // console.log("Params:", params);
 
           row.requirements[requirement.requirement_name] = {
             actual_no: requirementCount,
@@ -1900,6 +1967,11 @@ export class WarehouseRequirementsService {
    * Shows detailed per-warehouse requirements with transacted requirement counts and drill-down data
    * Groups requirements by requirement name with transaction details including warehouse_requirement_dues data
    * location_ids: Optional comma-separated location IDs (defaults to user's allowed locations)
+   *
+   * @param baseRequirementsFilter Filter warehouses by base requirements count:
+   *   - 'all': Show all warehouses (default)
+   *   - 'withRequirements': Only warehouses with baseRequirements count > 0
+   *   - 'withoutRequirements': Only warehouses with baseRequirements count = 0
    */
   async getWarehouseRequirementsListingDetailedPerStore(
     warehouse_type_id: number,
@@ -1911,13 +1983,17 @@ export class WarehouseRequirementsService {
     roleId?: number,
     accessKeyId?: number,
     flatten: boolean = false,
+    requirementTypeId?: number,
+    baseRequirementsFilter:
+      | "all"
+      | "withRequirements"
+      | "withoutRequirements" = "all",
+    warehouse_rem_status_id?: number[],
   ): Promise<any> {
     try {
       // Step 1: Get active requirements only (status_id = 1)
-      const activeRequirements = await this.requirementsRepository.find({
-        where: { status_id: 1 },
-        order: { id: "ASC" },
-      });
+      const activeRequirements =
+        await this.activeRequirements(requirementTypeId);
 
       if (activeRequirements.length === 0) {
         return {
@@ -1946,26 +2022,17 @@ export class WarehouseRequirementsService {
       let finalLocationIds =
         filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
 
+      const end_date = date_to ? endOfLocalRange(date_to) : null;
       // Step 5: Build warehouse query
-      const warehouseWhere: any = {
+      const warehouses = await this.getWarehouses(
         warehouse_type_id,
-        rem_status_id: In([8, 9]),
-      };
-
-      if (accessKeyId !== undefined && accessKeyId !== null) {
-        warehouseWhere.access_key_id = accessKeyId;
-      }
-
-      if (finalLocationIds.length > 0) {
-        warehouseWhere.location_id = In(finalLocationIds);
-      }
-
-      // Fetch warehouses with location and type relations
-      const warehouses = await this.warehousesRepository.find({
-        where: warehouseWhere,
-        relations: ["location", "warehouseType", "remStatus"],
-        order: { warehouse_name: "ASC" },
-      });
+        warehouse_rem_status_id,
+        date_to,
+        accessKeyId,
+        finalLocationIds,
+        { warehouse_name: "ASC" },
+        ["location", "warehouseType", "remStatus"],
+      );
 
       if (warehouses.length === 0) {
         return {
@@ -1982,6 +2049,7 @@ export class WarehouseRequirementsService {
           warehouseIds,
           date_from,
           date_to,
+          requirementTypeId,
         );
 
       // Attach requirements to warehouses (in-memory)
@@ -2200,7 +2268,7 @@ export class WarehouseRequirementsService {
                   100,
               )
             : 0;
-        // console.log("baseRequirementsData:", baseRequirementsData.length);
+        // console.log("baseRequirementsData:", baseRequirementsData.base_requirement_details);
 
         return {
           id: warehouse.id,
@@ -2213,6 +2281,9 @@ export class WarehouseRequirementsService {
           warehouse_type_name:
             warehouse.warehouseType?.warehouse_type_name || null,
           warehouse_rem_status_name: warehouse.remStatus?.status_name || null,
+          warehouse_created_year: warehouse.created_at
+            ? new Date(warehouse.created_at).getFullYear()
+            : null,
           baseRequirements: baseRequirementsData,
           requirements: requirementsObj,
           total_transacted_requirements: {
@@ -2221,6 +2292,22 @@ export class WarehouseRequirementsService {
           },
         };
       });
+
+      // Step 11: Apply baseRequirements filter
+      if (baseRequirementsFilter === "withRequirements") {
+        // Only include warehouses with baseRequirements.base_requirement_with_dues_count > 0
+        return result.filter(
+          (warehouse) =>
+            warehouse.baseRequirements.base_requirement_with_dues_count > 0,
+        );
+      } else if (baseRequirementsFilter === "withoutRequirements") {
+        // Only include warehouses with baseRequirements.base_requirement_with_dues_count = 0
+        return result.filter(
+          (warehouse) =>
+            warehouse.baseRequirements.base_requirement_with_dues_count === 0,
+        );
+      }
+      // If 'all', return all warehouses (no filtering)
 
       // return {
       //   success: true,
@@ -2237,5 +2324,54 @@ export class WarehouseRequirementsService {
         `Failed to fetch warehouse requirements detailed listing: ${(error as Error).message}`,
       );
     }
+  }
+
+  private async activeRequirements(requirementTypeId?: number) {
+    let activeRequirementWhere: any = { status_id: 1 };
+    if (requirementTypeId) {
+      activeRequirementWhere.requirement_type_id = requirementTypeId;
+    }
+    const activeRequirements = await this.requirementsRepository.find({
+      where: activeRequirementWhere,
+      order: { id: "ASC" },
+    });
+    return activeRequirements;
+  }
+
+  private async getWarehouses(
+    warehouse_type_id: number,
+    warehouse_rem_status_id?: number[],
+    date_to?: string,
+    accessKeyId?: number,
+    finalLocationIds: number[] = [],
+    orderBy: any = { id: "ASC" },
+    relations: string[] = ["location"],
+  ) {
+    const warehouseWhere: any = {
+      warehouse_type_id,
+      rem_status_id: In(warehouse_rem_status_id || [8, 9]),
+    };
+
+    const end_date = date_to ? endOfLocalRange(date_to) : null;
+    if (date_to) {
+      warehouseWhere.created_at = LessThanOrEqual(end_date);
+    }
+
+    if (accessKeyId !== undefined && accessKeyId !== null) {
+      warehouseWhere.access_key_id = accessKeyId;
+    }
+
+    if (finalLocationIds.length > 0) {
+      warehouseWhere.location_id = In(finalLocationIds);
+    }
+
+    // Fetch warehouses with location and type relations
+    const warehouses = await this.warehousesRepository.find({
+      where: warehouseWhere,
+      relations: relations,
+      order: orderBy,
+    });
+
+    return warehouses;
   }
 }

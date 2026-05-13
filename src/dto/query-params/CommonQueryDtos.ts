@@ -7,6 +7,7 @@ import {
   Max,
   IsBoolean,
 } from "class-validator";
+import { Transform } from "class-transformer";
 
 /**
  * Reusable query params DTO for pagination
@@ -80,8 +81,12 @@ export class ListQueryDto extends PaginationQueryDto {
  */
 export class WhReqListingDto extends PaginationQueryDto {
   @IsOptional()
-  @IsNumber()
-  warehouse_id?: number;
+  @IsString()
+  warehouse_id?: string;
+
+  @IsOptional()
+  @IsString()
+  requirement_type_id?: string;
 
   @IsOptional()
   @IsString()
@@ -97,5 +102,11 @@ export class WhReqListingDto extends PaginationQueryDto {
 
   @IsOptional()
   @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === "boolean") return value;
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+  })
   flatten?: boolean;
 }

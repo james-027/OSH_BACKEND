@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
   Unique,
   OneToMany,
+  Index,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
@@ -18,7 +19,13 @@ import { WarehouseRequirementStart } from "./WarehouseRequirementStart";
 import { AccessKey } from "./AccessKey";
 
 @Entity("warehouse_requirements")
-@Unique("UQ_wh_id_requirement_id", ["warehouse_id", "requirement_id"])
+@Index("IDX_wr_warehouse_id", ["warehouse_id"])
+@Unique("UQ_id_wh_id_requirement_id_status_id", [
+  "id",
+  "warehouse_id",
+  "requirement_id",
+  "status_id",
+])
 export class WarehouseRequirement {
   @PrimaryGeneratedColumn()
   id: number;
@@ -102,21 +109,21 @@ export class WarehouseRequirement {
       eager: false,
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
-    }
+    },
   )
   @JoinColumn({ name: "requirement_id" })
   requirement!: Requirement;
 
   @OneToMany(
     () => WarehouseRequirementDue,
-    (warehouseRequirementDue) => warehouseRequirementDue.warehouseRequirement
+    (warehouseRequirementDue) => warehouseRequirementDue.warehouseRequirement,
   )
   warehouseRequirementDues!: WarehouseRequirementDue[];
 
   @OneToMany(
     () => WarehouseRequirementStart,
     (warehouseRequirementStart) =>
-      warehouseRequirementStart.warehouseRequirement
+      warehouseRequirementStart.warehouseRequirement,
   )
   warehouseRequirementStarts!: WarehouseRequirementStart[];
 }

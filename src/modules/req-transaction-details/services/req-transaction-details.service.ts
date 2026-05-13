@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, QueryRunner } from "typeorm";
 
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -146,12 +146,16 @@ export class ReqTransactionDetailsService {
    * Consolidates all details into single database operation
    * @param createDtos Array of transaction detail DTOs
    * @param userId User performing the operation
-   * @returns Saved transaction detail records (or empty array if none provided)
+   * @param queryRunner Optional query runner for transaction context
+   * @param skipAuditTrail If true, skip audit trail creation (for consolidated batch audit)
+   * @returns Saved transaction detail records or object with records/ids/statuses if skipAuditTrail=true
    */
   async bulkCreate(
     createDtos: CreateReqTransactionDetailDto[],
     userId: number,
-  ): Promise<ReqTransactionDetail[]> {
+    queryRunner?: QueryRunner,
+    skipAuditTrail: boolean = false,
+  ): Promise<any> {
     if (!createDtos || createDtos.length === 0) {
       logger.warn(
         "[DETAILS BULK CREATE] No transaction details provided for batch creation",
@@ -160,12 +164,17 @@ export class ReqTransactionDetailsService {
     }
 
     try {
+      // Use queryRunner.manager if provided (for transaction context), otherwise use repositories
+      const manager = queryRunner ? queryRunner.manager : this.reqTransactionDetailsRepository.manager;
+
       // Verify all headers exist (batch validation upfront)
       const headerIds = [
         ...new Set(createDtos.map((d) => d.req_transaction_header_id)),
       ];
-      const existingHeaders =
-        await this.reqTransactionHeadersRepository.findByIds(headerIds);
+      const existingHeaders = await manager.findByIds(
+        ReqTransactionHeader,
+        headerIds,
+      );
 
       if (existingHeaders.length !== headerIds.length) {
         throw new BadRequestException(
@@ -174,44 +183,59 @@ export class ReqTransactionDetailsService {
       }
 
       // Prepare batch records with userId
-      const detailsToInsert = createDtos.map((dto) => ({
-        req_transaction_header_id: dto.req_transaction_header_id,
-        requirement_file_path: dto.requirement_file_path,
-        requirement_file_name: dto.requirement_file_name,
-        status_id: dto.status_id || 1,
-        created_by: userId,
-      }));
+      const detailsToInsert = createDtos.map((dto) =>
+        manager.create(ReqTransactionDetail, {
+          req_transaction_header_id: dto.req_transaction_header_id,
+          requirement_file_path: dto.requirement_file_path,
+          requirement_file_name: dto.requirement_file_name,
+          status_id: dto.status_id || 1,
+          created_by: userId,
+        }),
+      );
 
       // Bulk insert all at once (single database operation)
-      const savedDetails =
-        await this.reqTransactionDetailsRepository.save(detailsToInsert);
+      const savedDetails = await manager.save(
+        ReqTransactionDetail,
+        detailsToInsert,
+      );
 
-      // Create single consolidated audit trail entry for entire batch
-      try {
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "ReqTransactionDetailsService",
-            method: "bulkCreate",
-            raw_data: JSON.stringify({
-              count: savedDetails.length,
-              header_ids: headerIds,
-            }),
-            description: `Batch created ${savedDetails.length} req transaction details`,
-            status_id: 1,
-          },
-          userId,
-          false, // Suppress SSE - will be emitted at end of batch in createWithDetails
-        );
-      } catch (auditErr) {
-        logger.error(
-          `[DETAILS BATCH] Audit trail creation failed: ${(auditErr as Error).message}`,
-        );
-        // Don't throw - audit failure shouldn't block transaction details
+      // Create audit trail only if not skipped (skipAuditTrail flag for consolidated batch audit)
+      if (!skipAuditTrail) {
+        try {
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "ReqTransactionDetailsService",
+              method: "bulkCreate",
+              raw_data: JSON.stringify({
+                count: savedDetails.length,
+                header_ids: headerIds,
+              }),
+              description: `Batch created ${savedDetails.length} req transaction details`,
+              status_id: 1,
+            },
+            userId,
+            false, // Suppress SSE - will be emitted at end of batch in createWithDetails
+          );
+        } catch (auditErr) {
+          logger.error(
+            `[DETAILS BATCH] Audit trail creation failed: ${(auditErr as Error).message}`,
+          );
+          // Don't throw - audit failure shouldn't block transaction details
+        }
       }
 
       logger.info(
         `[DETAILS BATCH] Inserted ${savedDetails.length} transaction detail records`,
       );
+
+      // If skipAuditTrail=true, return object with ids/status for batch summary audit
+      if (skipAuditTrail) {
+        return {
+          records: savedDetails,
+          ids: savedDetails.map((d) => d.id),
+          status: savedDetails[0]?.status_id || 1, // Single status value (all records have same status)
+        };
+      }
 
       return savedDetails;
     } catch (error) {

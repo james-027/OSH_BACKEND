@@ -9,11 +9,11 @@ import {
 export class CreateVendorDto {
   @IsString()
   @IsNotEmpty()
-  vendor_name!: string;
+  service_provider_name!: string;
 
   @IsString()
   @IsNotEmpty()
-  vendor_code!: string;
+  service_provider_code!: string;
 
   @IsInt()
   @IsNotEmpty()
