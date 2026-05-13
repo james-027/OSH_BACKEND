@@ -104,7 +104,7 @@ import logger from "./config/logger";
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
-        limit: 100,
+        limit: 1500,
       },
     ]),
 
