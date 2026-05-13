@@ -371,7 +371,9 @@ export class WarehouseEmployeesController {
             // records: records.slice(0, 65535),
             records: records,
           }).slice(0, 65535),
-          description: `Bulk upload via Excel: ${summary.inserted_count} inserted, ${summary.updated_count} updated, ${summary.errors.length} errors.`,
+          description: `Bulk upload via Excel: ${summary.inserted_count} inserted, ${summary.updated_count} updated, ${summary.errors.length} errors. Inserted rows: ${summary.inserted_row_numbers.join(", ")}. Updated rows: ${summary.updated_row_numbers.join(", ")}. Errors: ${summary.errors
+            .map((e) => `Row ${e.row}: ${e.error}`)
+            .join("; ")}`,
           status_id: summary.errors.length === 0 ? 1 : 2,
         },
         userId,

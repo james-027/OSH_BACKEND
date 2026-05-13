@@ -20,11 +20,10 @@ import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Post("login")
   async login(@Body() loginDto: LoginUserDto, @Request() req) {
-
     // Extract session info from request
     const sessionInfo: CreateSessionDto = {
       ip_address: req.ip || req.connection?.remoteAddress,
@@ -69,7 +68,7 @@ export class AuthController {
     return this.authService.logout(sessionId);
   }
 
-  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @Throttle({ default: { limit: 2000, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @Post("refresh-token")
   async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
