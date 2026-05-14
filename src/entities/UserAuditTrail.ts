@@ -20,10 +20,10 @@ export class UserAuditTrail {
   @Column({ type: "varchar", length: 255 })
   method: string;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: "longtext", nullable: true })
   raw_data: string;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: "mediumtext", nullable: true })
   description: string;
 
   @Column({ type: "int", default: 1 })
