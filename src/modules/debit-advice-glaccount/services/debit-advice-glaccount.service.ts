@@ -11,7 +11,7 @@ import { CreateDebitAdviceGlAccountDto } from "../dto/CreateDebitAdviceGlDto";
 import { UpdateDebitAdviceGlAccountDto } from "../dto/UpdateDebitAdviceGlDto";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
-
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 
 @Injectable()
@@ -22,7 +22,8 @@ export class DebitAdviceGlAccountService {
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-  ) {}
+    private sseEventEmitter: SSEEventEmitterHelper,
+  ) { }
 
   // Get all debit advice GL accounts
   async findAll(): Promise<any[]> {
@@ -86,7 +87,7 @@ export class DebitAdviceGlAccountService {
         await this.debitAdviceGlAccountRepository.findOne({
           where: {
             gl_code:
-              createDebitAdviceGlAccountDto.gl_code.toUpperCase(),
+              createDebitAdviceGlAccountDto.gl_code,
           },
         });
 
@@ -100,22 +101,22 @@ export class DebitAdviceGlAccountService {
       const newDebitAdviceGlAccount =
         this.debitAdviceGlAccountRepository.create({
           gl_code:
-            createDebitAdviceGlAccountDto.gl_code.toUpperCase(),
+            createDebitAdviceGlAccountDto.gl_code,
 
           category_code:
-            createDebitAdviceGlAccountDto.category_code?.toUpperCase() ||
+            createDebitAdviceGlAccountDto.category_code ||
             null,
 
           category_name:
-            createDebitAdviceGlAccountDto.category_name?.toUpperCase() ||
+            createDebitAdviceGlAccountDto.category_name ||
             null,
 
           gl_name:
-            createDebitAdviceGlAccountDto.gl_name?.toUpperCase() ||
+            createDebitAdviceGlAccountDto.gl_name ||
             null,
 
           old_code:
-            createDebitAdviceGlAccountDto.old_code?.toUpperCase() ||
+            createDebitAdviceGlAccountDto.old_code ||
             null,
 
           created_by_id: userId,
@@ -126,14 +127,31 @@ export class DebitAdviceGlAccountService {
           newDebitAdviceGlAccount,
         );
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "DEBIT_ADVICE_GL_ACCOUNT",
-      //   action_name: "ADD",
-      //   description: `Created debit advice GL account: ${createDebitAdviceGlAccountDto.gl_name}`,
-      //   method: "create",
-      // });
+      // Audit trail
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "DEBIT_ADVICE_GL_ACCOUNT",
+            method: "CREATE",
+            raw_data: JSON.stringify(savedDebitAdviceGlAccount),
+            description: `Created debit advice GL account: ${savedDebitAdviceGlAccount.gl_code}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (auditError) {
+        logger.error("AUDIT ERROR", auditError);
+      }
+
+      // SSE CREATE
+      try {
+        this.sseEventEmitter.emitCreate(
+          "debit-advice-gl-account",
+          savedDebitAdviceGlAccount.id,
+        );
+      } catch (err) {
+        logger.error("SSE create event failed:", err);
+      }
 
       return savedDebitAdviceGlAccount;
     } catch (error) {
@@ -167,14 +185,14 @@ export class DebitAdviceGlAccountService {
       // Check duplicate gl_code
       if (
         updateDebitAdviceGlAccountDto.gl_code &&
-        updateDebitAdviceGlAccountDto.gl_code.toUpperCase() !==
-          debitAdviceGlAccount.gl_code
+        updateDebitAdviceGlAccountDto.gl_code !==
+        debitAdviceGlAccount.gl_code
       ) {
         const existingDebitAdviceGlAccount =
           await this.debitAdviceGlAccountRepository.findOne({
             where: {
               gl_code:
-                updateDebitAdviceGlAccountDto.gl_code.toUpperCase(),
+                updateDebitAdviceGlAccountDto.gl_code,
             },
           });
 
@@ -187,23 +205,23 @@ export class DebitAdviceGlAccountService {
 
       // Update fields
       debitAdviceGlAccount.gl_code =
-        updateDebitAdviceGlAccountDto.gl_code?.toUpperCase() ||
+        updateDebitAdviceGlAccountDto.gl_code ||
         debitAdviceGlAccount.gl_code;
 
       debitAdviceGlAccount.category_code =
-        updateDebitAdviceGlAccountDto.category_code?.toUpperCase() ||
+        updateDebitAdviceGlAccountDto.category_code ||
         debitAdviceGlAccount.category_code;
 
       debitAdviceGlAccount.category_name =
-        updateDebitAdviceGlAccountDto.category_name?.toUpperCase() ||
+        updateDebitAdviceGlAccountDto.category_name ||
         debitAdviceGlAccount.category_name;
 
       debitAdviceGlAccount.gl_name =
-        updateDebitAdviceGlAccountDto.gl_name?.toUpperCase() ||
+        updateDebitAdviceGlAccountDto.gl_name ||
         debitAdviceGlAccount.gl_name;
 
       debitAdviceGlAccount.old_code =
-        updateDebitAdviceGlAccountDto.old_code?.toUpperCase() ||
+        updateDebitAdviceGlAccountDto.old_code ||
         debitAdviceGlAccount.old_code;
 
       const updatedDebitAdviceGlAccount =
@@ -211,14 +229,27 @@ export class DebitAdviceGlAccountService {
           debitAdviceGlAccount,
         );
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "DEBIT_ADVICE_GL_ACCOUNT",
-      //   action_name: "EDIT",
-      //   description: `Updated debit advice GL account: ${debitAdviceGlAccount.gl_name}`,
-      //   method: "update",
-      // });
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_GL_ACCOUNT",
+          method: "EDIT",
+          raw_data: JSON.stringify(updatedDebitAdviceGlAccount),
+          description: `Updated debit advice GL account: ${updatedDebitAdviceGlAccount.gl_code}`,
+          status_id: updatedDebitAdviceGlAccount.status_id || 1,
+        },
+        userId,
+      );
+
+      // SSE UPDATE
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "debit-advice-gl-account",
+          updatedDebitAdviceGlAccount.id,
+        );
+      } catch (err) {
+        logger.error("SSE update event failed:", err);
+      }
 
       return updatedDebitAdviceGlAccount;
     } catch (error) {
@@ -249,6 +280,29 @@ export class DebitAdviceGlAccountService {
       }
 
       await this.debitAdviceGlAccountRepository.delete(id);
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_GL_ACCOUNT",
+          method: "DELETE",
+          raw_data: JSON.stringify(debitAdviceGlAccount),
+          description: `Deleted debit advice GL account: ${debitAdviceGlAccount.gl_code}`,
+          status_id: 14,
+        },
+        userId,
+      );
+
+      // SSE DELETE
+      try {
+        this.sseEventEmitter.emitDelete(
+          "debit-advice-gl-account",
+          id,
+        );
+      } catch (err) {
+        logger.error("SSE delete event failed:", err);
+      }
+
     } catch (error) {
       logger.error(
         "Error deleting debit advice GL account:",

@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
+import { PermissionsGuard } from "src/guards/permissions.guard";
 
 import { ProfitcenterService } from "../services/profitcenter.service";
 
@@ -19,11 +20,11 @@ import { CreateProfitcenterDto } from "../dto/CreateProfitcenterDto";
 import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 
 @Controller("profitcenters")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ProfitcenterController {
   constructor(
     private readonly profitcenterService: ProfitcenterService,
-  ) {}
+  ) { }
 
   @Get()
   async findAll(@Request() req) {

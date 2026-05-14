@@ -11,7 +11,7 @@ import { CreateDebitAdviceCategoryDto } from "../dto/CreateDebitAdviceCatdto";
 import { UpdateDebitAdviceCategoryDto } from "../dto/UpdateDebitAdviceCatDto";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
-
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 
 @Injectable()
@@ -22,7 +22,8 @@ export class DebitAdviceCategoryService {
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-  ) {}
+    private sseEventEmitter: SSEEventEmitterHelper,
+  ) { }
 
   // Get all debit advice categories
   async findAll(): Promise<any[]> {
@@ -77,7 +78,7 @@ export class DebitAdviceCategoryService {
         await this.debitAdviceCategoryRepository.findOne({
           where: {
             category_code:
-              createDebitAdviceCategoryDto.category_code.toUpperCase(),
+              createDebitAdviceCategoryDto.category_code,
           },
         });
 
@@ -91,16 +92,16 @@ export class DebitAdviceCategoryService {
       const newDebitAdviceCategory =
         this.debitAdviceCategoryRepository.create({
           category_code:
-            createDebitAdviceCategoryDto.category_code.toUpperCase(),
+            createDebitAdviceCategoryDto.category_code,
 
           category_name:
-            createDebitAdviceCategoryDto.category_name?.toUpperCase() || null,
+            createDebitAdviceCategoryDto.category_name || null,
 
           old_code:
-            createDebitAdviceCategoryDto.old_code?.toUpperCase() || null,
+            createDebitAdviceCategoryDto.old_code || null,
 
           company:
-            createDebitAdviceCategoryDto.company?.toUpperCase() || null,
+            createDebitAdviceCategoryDto.company || null,
 
           created_by_id: userId,
         });
@@ -110,14 +111,31 @@ export class DebitAdviceCategoryService {
           newDebitAdviceCategory,
         );
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "DEBIT_ADVICE_CATEGORY",
-      //   action_name: "ADD",
-      //   description: `Created debit advice category: ${createDebitAdviceCategoryDto.category_name}`,
-      //   method: "create",
-      // });
+      // Audit trail
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "DEBIT_ADVICE_CATEGORY",
+            method: "CREATE",
+            raw_data: JSON.stringify(savedDebitAdviceCategory),
+            description: `Created debit advice category: ${savedDebitAdviceCategory.category_code}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (auditError) {
+        logger.error("AUDIT ERROR", auditError);
+      }
+
+      // SSE CREATE
+      try {
+        this.sseEventEmitter.emitCreate(
+          "debit-advice-category",
+          savedDebitAdviceCategory.id,
+        );
+      } catch (err) {
+        logger.error("SSE create event failed:", err);
+      }
 
       return savedDebitAdviceCategory;
     } catch (error) {
@@ -147,14 +165,14 @@ export class DebitAdviceCategoryService {
       // Check duplicate category_code
       if (
         updateDebitAdviceCategoryDto.category_code &&
-        updateDebitAdviceCategoryDto.category_code.toUpperCase() !==
-          debitAdviceCategory.category_code
+        updateDebitAdviceCategoryDto.category_code !==
+        debitAdviceCategory.category_code
       ) {
         const existingDebitAdviceCategory =
           await this.debitAdviceCategoryRepository.findOne({
             where: {
               category_code:
-                updateDebitAdviceCategoryDto.category_code.toUpperCase(),
+                updateDebitAdviceCategoryDto.category_code,
             },
           });
 
@@ -167,19 +185,19 @@ export class DebitAdviceCategoryService {
 
       // Update fields
       debitAdviceCategory.category_code =
-        updateDebitAdviceCategoryDto.category_code?.toUpperCase() ||
+        updateDebitAdviceCategoryDto.category_code ||
         debitAdviceCategory.category_code;
 
       debitAdviceCategory.category_name =
-        updateDebitAdviceCategoryDto.category_name?.toUpperCase() ||
+        updateDebitAdviceCategoryDto.category_name ||
         debitAdviceCategory.category_name;
 
       debitAdviceCategory.old_code =
-        updateDebitAdviceCategoryDto.old_code?.toUpperCase() ||
+        updateDebitAdviceCategoryDto.old_code ||
         debitAdviceCategory.old_code;
 
       debitAdviceCategory.company =
-        updateDebitAdviceCategoryDto.company?.toUpperCase() ||
+        updateDebitAdviceCategoryDto.company ||
         debitAdviceCategory.company;
 
       const updatedDebitAdviceCategory =
@@ -187,14 +205,27 @@ export class DebitAdviceCategoryService {
           debitAdviceCategory,
         );
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "DEBIT_ADVICE_CATEGORY",
-      //   action_name: "EDIT",
-      //   description: `Updated debit advice category: ${debitAdviceCategory.category_name}`,
-      //   method: "update",
-      // });
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_CATEGORY",
+          method: "EDIT",
+          raw_data: JSON.stringify(updatedDebitAdviceCategory),
+          description: `Updated debit advice category: ${updatedDebitAdviceCategory.category_code}`,
+          status_id: updatedDebitAdviceCategory.status_id || 1,
+        },
+        userId,
+      );
+
+      // SSE UPDATE
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "debit-advice-category",
+          updatedDebitAdviceCategory.id,
+        );
+      } catch (err) {
+        logger.error("SSE update event failed:", err);
+      }
 
       return updatedDebitAdviceCategory;
     } catch (error) {
@@ -221,6 +252,29 @@ export class DebitAdviceCategoryService {
       }
 
       await this.debitAdviceCategoryRepository.delete(id);
+
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_CATEGORY",
+          method: "DELETE",
+          raw_data: JSON.stringify(debitAdviceCategory),
+          description: `Deleted debit advice category: ${debitAdviceCategory.category_code}`,
+          status_id: 14,
+        },
+        userId,
+      );
+
+      // SSE DELETE
+      try {
+        this.sseEventEmitter.emitDelete(
+          "debit-advice-category",
+          id,
+        );
+      } catch (err) {
+        logger.error("SSE delete event failed:", err);
+      }
+
     } catch (error) {
       logger.error(
         "Error deleting debit advice category:",

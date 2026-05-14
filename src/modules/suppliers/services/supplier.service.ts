@@ -23,9 +23,6 @@ export class SupplierService {
     private supplierRepository: Repository<Supplier>,
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
-    private responseMapperService: ResponseMapperService,
-
-    // ✅ ADD THIS
     private sseEventEmitter: SSEEventEmitterHelper,
   ) { }
 
@@ -79,7 +76,7 @@ export class SupplierService {
         await this.supplierRepository.findOne({
           where: {
             suppliercode:
-              createSupplierDto.suppliercode.toUpperCase(),
+              createSupplierDto.suppliercode,
           },
         });
 
@@ -91,13 +88,13 @@ export class SupplierService {
 
       const newSupplier = this.supplierRepository.create({
         suppliercode:
-          createSupplierDto.suppliercode.toUpperCase(),
+          createSupplierDto.suppliercode,
 
         suppliername:
-          createSupplierDto.suppliername?.toUpperCase() || null,
+          createSupplierDto.suppliername || null,
 
         oldcode:
-          createSupplierDto.oldcode?.toUpperCase() || null,
+          createSupplierDto.oldcode || null,
 
         created_by_id: userId,
       });
@@ -105,7 +102,26 @@ export class SupplierService {
       const savedSupplier =
         await this.supplierRepository.save(newSupplier);
 
-      // ✅ SSE CREATE
+      // Audit trail
+      // Audit trail
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "SUPPLIERS",
+            method: "CREATE",
+            raw_data: JSON.stringify(savedSupplier),
+            description: `Created supplier: ${savedSupplier.suppliercode}`,
+            status_id: 1,
+          },
+          userId,
+        );
+
+        console.log("AUDIT SUCCESS");
+
+      } catch (auditError) {
+        console.log("AUDIT ERROR", auditError);
+      }
+      //  SSE CREATE
       try {
         this.sseEventEmitter.emitCreate(
           "suppliers",
@@ -143,14 +159,14 @@ export class SupplierService {
 
       if (
         updateSupplierDto.suppliercode &&
-        updateSupplierDto.suppliercode.toUpperCase() !==
+        updateSupplierDto.suppliercode !==
         supplier.suppliercode
       ) {
         const existingSupplier =
           await this.supplierRepository.findOne({
             where: {
               suppliercode:
-                updateSupplierDto.suppliercode.toUpperCase(),
+                updateSupplierDto.suppliercode,
             },
           });
 
@@ -162,21 +178,33 @@ export class SupplierService {
       }
 
       supplier.suppliercode =
-        updateSupplierDto.suppliercode?.toUpperCase() ||
+        updateSupplierDto.suppliercode ||
         supplier.suppliercode;
 
       supplier.suppliername =
-        updateSupplierDto.suppliername?.toUpperCase() ||
+        updateSupplierDto.suppliername ||
         supplier.suppliername;
 
       supplier.oldcode =
-        updateSupplierDto.oldcode?.toUpperCase() ||
+        updateSupplierDto.oldcode ||
         supplier.oldcode;
 
       const updatedSupplier =
         await this.supplierRepository.save(supplier);
 
-      // ✅ SSE UPDATE
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "SUPPLIERS",
+          method: "EDIT",
+          raw_data: JSON.stringify(updatedSupplier),
+          description: `Updated supplier: ${updatedSupplier.suppliercode}`,
+          status_id: updatedSupplier.status_id || 1,
+        },
+        userId,
+      );
+
+      //  SSE UPDATE
       try {
         this.sseEventEmitter.emitUpdate(
           "suppliers",
@@ -213,7 +241,19 @@ export class SupplierService {
 
       await this.supplierRepository.delete(id);
 
-      // ✅ SSE DELETE
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "SUPPLIERS",
+          method: "DELETE",
+          raw_data: JSON.stringify(supplier),
+          description: `Deleted supplier: ${supplier.suppliercode}`,
+          status_id: 14,
+        },
+        userId,
+      );
+
+      //  SSE DELETE
       try {
         this.sseEventEmitter.emitDelete(
           "suppliers",

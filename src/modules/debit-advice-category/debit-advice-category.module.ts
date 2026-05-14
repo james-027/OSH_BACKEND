@@ -12,16 +12,17 @@ import { DebitAdviceCategoryService } from "./services/debit-advice-category.ser
 import { UsersModule } from "../users/users.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
-
+import { SSEModule } from "../sse/sse.module"; //
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       DebitAdviceCategory,
       UserPermissions,
       PermissionModule,
-      Action,
+      Action
     ]),
     UsersModule,
+    SSEModule
   ],
 
   controllers: [DebitAdviceCategoryController],
@@ -33,4 +34,4 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   exports: [DebitAdviceCategoryService],
 })
-export class DebitAdviceCategoryModule {}
+export class DebitAdviceCategoryModule { }

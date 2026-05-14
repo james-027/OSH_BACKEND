@@ -12,7 +12,7 @@ import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
-
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 
 @Injectable()
@@ -23,19 +23,20 @@ export class ProfitcenterService {
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-  ) {}
+    private sseEventEmitter: SSEEventEmitterHelper,
+  ) { }
 
   // Get all profit centers
   async findAll(): Promise<any[]> {
     try {
-     const profitcenters =
-          await this.profitcenterRepository.find({
-            where: {
-              status_id: 1,
-            },
-          });
+      const profitcenters =
+        await this.profitcenterRepository.find({
+          where: {
+            status_id: 1,
+          },
+        });
 
-     return profitcenters;
+      return profitcenters;
     } catch (error) {
       logger.error("Error fetching profit centers:", error);
       throw new Error("Failed to fetch profit centers");
@@ -45,16 +46,16 @@ export class ProfitcenterService {
   // Get single profit center by ID
   async findOne(id: number): Promise<any> {
     try {
-    const profitcenter = await this.profitcenterRepository.findOne({
-  where: { id },
-});
+      const profitcenter = await this.profitcenterRepository.findOne({
+        where: { id },
+      });
       if (!profitcenter) {
         throw new NotFoundException(
           `Profitcenter with ID ${id} not found`,
         );
       }
 
-     return profitcenter;
+      return profitcenter;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -73,29 +74,29 @@ export class ProfitcenterService {
     try {
       // Check if profit center already exists
       const existingProfitcenter =
-      await this.profitcenterRepository.findOne({
-        where: {
-          profitcenter_code:
-            createProfitcenterDto.profitcenter_code.toUpperCase(),
-        },
-      });
+        await this.profitcenterRepository.findOne({
+          where: {
+            profitcenter_code:
+              createProfitcenterDto.profitcenter_code,
+          },
+        });
 
       if (existingProfitcenter) {
         throw new BadRequestException(
-         "Profit center code already exists"
+          "Profit center code already exists"
         );
       }
 
       // Create profit center
-        const newProfitcenter = this.profitcenterRepository.create({
+      const newProfitcenter = this.profitcenterRepository.create({
         profitcenter_code:
-          createProfitcenterDto.profitcenter_code.toUpperCase(),
+          createProfitcenterDto.profitcenter_code,
 
         profitcenter_name:
-          createProfitcenterDto.profitcenter_name?.toUpperCase() || null,
+          createProfitcenterDto.profitcenter_name || null,
 
-          old_code:
-          createProfitcenterDto.old_code?.toUpperCase() || null,
+        old_code:
+          createProfitcenterDto.old_code || null,
 
         created_by_id: userId,
       });
@@ -103,16 +104,33 @@ export class ProfitcenterService {
       const savedProfitcenter =
         await this.profitcenterRepository.save(newProfitcenter);
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "PROFITCENTER",
-      //   action_name: "ADD",
-      //   description: `Created profit center: ${createProfitcenterDto.profitcenter_name}`,
-      //   method: "create",
-      // });
+      // Audit trail
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "PROFITCENTER",
+            method: "CREATE",
+            raw_data: JSON.stringify(savedProfitcenter),
+            description: `Created profit center: ${savedProfitcenter.profitcenter_code}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (auditError) {
+        logger.error("AUDIT ERROR", auditError);
+      }
 
-  return savedProfitcenter;
+      // SSE CREATE
+      try {
+        this.sseEventEmitter.emitCreate(
+          "profitcenters",
+          savedProfitcenter.id,
+        );
+      } catch (err) {
+        logger.error("SSE create event failed:", err);
+      }
+
+      return savedProfitcenter;
     } catch (error) {
       logger.error("Error creating profit center:", error);
       throw error;
@@ -120,33 +138,33 @@ export class ProfitcenterService {
   }
 
   // Update profit center
-async update(
-  id: number,
-  updateProfitcenterDto: UpdateProfitcenterDto,
-  userId: number,
-): Promise<any> {
-  try {
-    const profitcenter = await this.profitcenterRepository.findOne({
-      where: { id },
-    });
+  async update(
+    id: number,
+    updateProfitcenterDto: UpdateProfitcenterDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const profitcenter = await this.profitcenterRepository.findOne({
+        where: { id },
+      });
 
-    if (!profitcenter) {
-      throw new NotFoundException(
-        `Profitcenter with ID ${id} not found`,
-      );
-    }
+      if (!profitcenter) {
+        throw new NotFoundException(
+          `Profitcenter with ID ${id} not found`,
+        );
+      }
 
-    // Check duplicate profitcenter_code
+      // Check duplicate profitcenter_code
       if (
         updateProfitcenterDto.profitcenter_code &&
-        updateProfitcenterDto.profitcenter_code.toUpperCase() !==
-          profitcenter.profitcenter_code
+        updateProfitcenterDto.profitcenter_code !==
+        profitcenter.profitcenter_code
       ) {
         const existingProfitcenter =
           await this.profitcenterRepository.findOne({
             where: {
               profitcenter_code:
-                updateProfitcenterDto.profitcenter_code.toUpperCase(),
+                updateProfitcenterDto.profitcenter_code,
             },
           });
 
@@ -157,64 +175,97 @@ async update(
         }
       }
 
-    // Update fields
-    profitcenter.profitcenter_code =
-      updateProfitcenterDto.profitcenter_code?.toUpperCase() ||
-      profitcenter.profitcenter_code;
+      // Update fields
+      profitcenter.profitcenter_code =
+        updateProfitcenterDto.profitcenter_code ||
+        profitcenter.profitcenter_code;
 
-    profitcenter.profitcenter_name =
-      updateProfitcenterDto.profitcenter_name?.toUpperCase() ||
-      profitcenter.profitcenter_name;
+      profitcenter.profitcenter_name =
+        updateProfitcenterDto.profitcenter_name ||
+        profitcenter.profitcenter_name;
 
-    profitcenter.old_code =
-      updateProfitcenterDto.old_code?.toUpperCase() ||
-      profitcenter.old_code;
+      profitcenter.old_code =
+        updateProfitcenterDto.old_code ||
+        profitcenter.old_code;
 
-    const updatedProfitcenter =
-      await this.profitcenterRepository.save(profitcenter);
+      const updatedProfitcenter =
+        await this.profitcenterRepository.save(profitcenter);
 
-    // Log audit trail
-    // await this.userAuditTrailCreateService.createAuditTrail({
-    //   user_id: userId,
-    //   module_name: "PROFITCENTER",
-    //   action_name: "EDIT",
-    //   description: `Updated profit center: ${profitcenter.profitcenter_name}`,
-    //   method: "update",
-    // });
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "PROFITCENTER",
+          method: "EDIT",
+          raw_data: JSON.stringify(updatedProfitcenter),
+          description: `Updated profit center: ${updatedProfitcenter.profitcenter_code}`,
+          status_id: updatedProfitcenter.status_id || 1,
+        },
+        userId,
+      );
 
-  return updatedProfitcenter;
-  } catch (error) {
-    logger.error("Error updating profit center:", error);
-    throw error;
+      // SSE UPDATE
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "profitcenters",
+          updatedProfitcenter.id,
+        );
+      } catch (err) {
+        logger.error("SSE update event failed:", err);
+      }
+
+      return updatedProfitcenter;
+    } catch (error) {
+      logger.error("Error updating profit center:", error);
+      throw error;
+    }
   }
-}
 
   // Delete profit center (soft delete via status)
-async delete(
-  id: number,
-  userId: number,
-): Promise<void> {
-  try {
-    const profitcenter =
-      await this.profitcenterRepository.findOne({
-        where: { id },
-      });
+  async delete(
+    id: number,
+    userId: number,
+  ): Promise<void> {
+    try {
+      const profitcenter =
+        await this.profitcenterRepository.findOne({
+          where: { id },
+        });
 
-    if (!profitcenter) {
-      throw new NotFoundException(
-        `Profitcenter with ID ${id} not found`,
+      if (!profitcenter) {
+        throw new NotFoundException(
+          `Profitcenter with ID ${id} not found`,
+        );
+      }
+
+      await this.profitcenterRepository.delete(id);
+      // Audit trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "PROFITCENTER",
+          method: "DELETE",
+          raw_data: JSON.stringify(profitcenter),
+          description: `Deleted profit center: ${profitcenter.profitcenter_code}`,
+          status_id: 14,
+        },
+        userId,
       );
+
+      // SSE DELETE
+      try {
+        this.sseEventEmitter.emitDelete(
+          "profitcenters",
+          id,
+        );
+      } catch (err) {
+        logger.error("SSE delete event failed:", err);
+      }
+    } catch (error) {
+      logger.error(
+        "Error deleting profit center:",
+        error,
+      );
+
+      throw error;
     }
-
-    await this.profitcenterRepository.delete(id);
-
-  } catch (error) {
-    logger.error(
-      "Error deleting profit center:",
-      error,
-    );
-
-    throw error;
   }
-}
 }

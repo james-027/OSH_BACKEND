@@ -8,18 +8,21 @@ import {
   Param,
   Request,
   ParseIntPipe,
+  UseGuards
 } from "@nestjs/common";
 
 import { DebitAdviceGlAccountService } from "../services/debit-advice-glaccount.service";
 import { CreateDebitAdviceGlAccountDto } from "../dto/CreateDebitAdviceGlDto";
 import { UpdateDebitAdviceGlAccountDto } from "../dto/UpdateDebitAdviceGlDto";
+import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
+import { PermissionsGuard } from "src/guards/permissions.guard";
 
-@Controller("debit-advice-gl-accounts")
-// @UseGuards(JwtAuthGuard)
+@Controller("debit-advice-gl-account")
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceGlAccountController {
   constructor(
     private readonly debitAdviceGlAccountService: DebitAdviceGlAccountService,
-  ) {}
+  ) { }
 
   @Get()
   async findAll(@Request() req) {

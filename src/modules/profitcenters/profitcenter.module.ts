@@ -10,7 +10,7 @@ import { ProfitcenterController } from "./controllers/profitcenter.controller";
 import { ProfitcenterService } from "./services/profitcenter.service";
 
 import { UsersModule } from "../users/users.module";
-
+import { SSEModule } from "../sse/sse.module"; //
 import { ResponseMapperService } from "../../services/response-mapper.service";
 
 @Module({
@@ -22,6 +22,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       Action,
     ]),
     UsersModule,
+    SSEModule
   ],
 
   controllers: [ProfitcenterController],
@@ -33,4 +34,4 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   exports: [ProfitcenterService],
 })
-export class ProfitcenterModule {}
+export class ProfitcenterModule { }

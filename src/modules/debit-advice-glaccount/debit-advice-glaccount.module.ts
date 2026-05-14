@@ -12,7 +12,7 @@ import { DebitAdviceGlAccountService } from "./services/debit-advice-glaccount.s
 import { UsersModule } from "../users/users.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
-
+import { SSEModule } from "../sse/sse.module"; //
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -22,6 +22,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       Action,
     ]),
     UsersModule,
+    SSEModule
   ],
 
   controllers: [DebitAdviceGlAccountController],
@@ -33,4 +34,4 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   exports: [DebitAdviceGlAccountService],
 })
-export class DebitAdviceGlAccountModule {}
+export class DebitAdviceGlAccountModule { }
