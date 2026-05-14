@@ -12,6 +12,7 @@ import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 
 import logger from "../../../config/logger";
 
@@ -23,7 +24,10 @@ export class SupplierService {
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-  ) {}
+
+    // ✅ ADD THIS
+    private sseEventEmitter: SSEEventEmitterHelper,
+  ) { }
 
   // Get all suppliers
   async findAll(): Promise<any[]> {
@@ -71,7 +75,6 @@ export class SupplierService {
     userId: number,
   ): Promise<any> {
     try {
-      // Check if supplier already exists
       const existingSupplier =
         await this.supplierRepository.findOne({
           where: {
@@ -86,7 +89,6 @@ export class SupplierService {
         );
       }
 
-      // Create supplier
       const newSupplier = this.supplierRepository.create({
         suppliercode:
           createSupplierDto.suppliercode.toUpperCase(),
@@ -103,16 +105,18 @@ export class SupplierService {
       const savedSupplier =
         await this.supplierRepository.save(newSupplier);
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "SUPPLIER",
-      //   action_name: "ADD",
-      //   description: `Created supplier: ${createSupplierDto.suppliername}`,
-      //   method: "create",
-      // });
+      // ✅ SSE CREATE
+      try {
+        this.sseEventEmitter.emitCreate(
+          "suppliers",
+          savedSupplier.id,
+        );
+      } catch (err) {
+        logger.error("SSE create event failed:", err);
+      }
 
       return savedSupplier;
+
     } catch (error) {
       logger.error("Error creating supplier:", error);
       throw error;
@@ -137,11 +141,10 @@ export class SupplierService {
         );
       }
 
-      // Check duplicate suppliercode
       if (
         updateSupplierDto.suppliercode &&
         updateSupplierDto.suppliercode.toUpperCase() !==
-          supplier.suppliercode
+        supplier.suppliercode
       ) {
         const existingSupplier =
           await this.supplierRepository.findOne({
@@ -158,7 +161,6 @@ export class SupplierService {
         }
       }
 
-      // Update fields
       supplier.suppliercode =
         updateSupplierDto.suppliercode?.toUpperCase() ||
         supplier.suppliercode;
@@ -174,16 +176,18 @@ export class SupplierService {
       const updatedSupplier =
         await this.supplierRepository.save(supplier);
 
-      // Log audit trail
-      // await this.userAuditTrailCreateService.createAuditTrail({
-      //   user_id: userId,
-      //   module_name: "SUPPLIER",
-      //   action_name: "EDIT",
-      //   description: `Updated supplier: ${supplier.suppliername}`,
-      //   method: "update",
-      // });
+      // ✅ SSE UPDATE
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "suppliers",
+          updatedSupplier.id,
+        );
+      } catch (err) {
+        logger.error("SSE update event failed:", err);
+      }
 
       return updatedSupplier;
+
     } catch (error) {
       logger.error("Error updating supplier:", error);
       throw error;
@@ -208,6 +212,16 @@ export class SupplierService {
       }
 
       await this.supplierRepository.delete(id);
+
+      // ✅ SSE DELETE
+      try {
+        this.sseEventEmitter.emitDelete(
+          "suppliers",
+          id,
+        );
+      } catch (err) {
+        logger.error("SSE delete event failed:", err);
+      }
 
     } catch (error) {
       logger.error(

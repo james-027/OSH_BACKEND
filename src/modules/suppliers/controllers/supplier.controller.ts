@@ -12,18 +12,18 @@ import {
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
-
+import { PermissionsGuard } from "src/guards/permissions.guard";
 import { SupplierService } from "../services/supplier.service";
 
 import { CreateSupplierDto } from "../dto/CreateSupplierDto";
 import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 
 @Controller("suppliers")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SupplierController {
   constructor(
     private readonly supplierService: SupplierService,
-  ) {}
+  ) { }
 
   @Get()
   async findAll(@Request() req) {
