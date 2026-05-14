@@ -152,7 +152,7 @@ export class DebitAdviceService {
                 createdBy: { id: userId } as any,
                 document_number: trans_number,
                 transaction_date: createDebitAdviceDto.transaction_date,
-                status_id: 1, // Assuming 1 is the default status for new debit advice
+                status_id: 13, // Assuming 1 is the default status for new debit advice
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
                     createdBy: { id: userId } as any,
