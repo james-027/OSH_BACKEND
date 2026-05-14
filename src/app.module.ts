@@ -82,6 +82,7 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
 import { SSEModule } from "./modules/sse/sse.module";
 import { StaffVendorSalariesModule } from "./modules/staff-vendor-salaries/staff-vendor-salaries.module";
 import { StaffBrandsModule } from "./modules/staff-brands/staff-brands.module";
+import { BrandsModule } from "./modules/brands/brands.module";
 import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
 import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
 import cookieParser from "cookie-parser";
@@ -172,6 +173,7 @@ import logger from "./config/logger";
     StaffVendorSalariesModule,
     StaffBrandsModule,
     StaffCategoryTypesModule,
+    BrandsModule,
     StaffWarehousesModule,
     CacheInvalidationModule,
   ],
