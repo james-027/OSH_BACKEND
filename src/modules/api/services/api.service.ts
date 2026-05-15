@@ -16,6 +16,7 @@ import {
   getCtgiSemsConnection,
   getCtgiBosDwhConnection,
 } from "../../../utils/dwh-datasources";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Injectable()
 export class ApiService {
@@ -42,6 +43,7 @@ export class ApiService {
     private reqTransactionDueRepository: Repository<ReqTransactionDue>,
     @InjectRepository(ReqTransactionDetail)
     private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -573,6 +575,13 @@ export class ApiService {
                   (d) =>
                     `${process.env.APP_URL || `http://localhost:3000`}/${d.requirement_file_path}`,
                 ),
+              file_names: (header.reqTransactionDetails || [])
+                .filter((d) => d.requirement_file_name)
+                .map((d) =>
+                  this.commonUtilitiesService.formatTransFileName(
+                    d.requirement_file_name,
+                  ),
+                ),
             }));
           } else {
             // Option B: One entry per detail (one detail = one file)
@@ -587,6 +596,9 @@ export class ApiService {
                     detail_id: detail.id,
                     due_id: warehouseRequirementDue.id,
                     file_url: `${process.env.APP_URL || `http://localhost:3000`}/${detail.requirement_file_path}`,
+                    file_name: this.commonUtilitiesService.formatTransFileName(
+                      detail.requirement_file_name,
+                    ),
                   });
                 }
               });
