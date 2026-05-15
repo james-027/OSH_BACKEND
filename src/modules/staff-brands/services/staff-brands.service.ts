@@ -79,6 +79,17 @@ export class StaffBrandsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      const existingRecord = await this.staffBrandsRepository.findOne({
+        where: {
+          staff_id: createStaffBrandDto.staff_id,
+          brand_id: createStaffBrandDto.brand_id,
+        },
+      });
+
+      if (existingRecord) {
+        throw new BadRequestException("Staff brand mapping with this staff  and brand already exists");
+      }
+
       const newRecord = this.staffBrandsRepository.create({
         staff_id: createStaffBrandDto.staff_id,
         brand_id: createStaffBrandDto.brand_id,
@@ -137,7 +148,6 @@ export class StaffBrandsService {
     try {
       const record = await this.staffBrandsRepository.findOne({
         where: { id },
-        relations: this.relationFields,
       });
 
       if (!record) {
@@ -145,6 +155,22 @@ export class StaffBrandsService {
           `${this.entityName} with ID ${id} not found`,
         );
       }
+
+          const staffId = updateStaffBrandDto.staff_id ?? record.staff_id;
+          const brandId = updateStaffBrandDto.brand_id ?? record.brand_id;
+
+          const existingRecord = await this.staffBrandsRepository.findOne({
+            where: {
+              staff_id: staffId,
+              brand_id: brandId,
+            },
+          });
+
+          if (existingRecord && existingRecord.id !== id) {
+            throw new BadRequestException(
+              `Staff brand mapping already exists`,
+            );
+          }
 
       const user = await this.usersService.findUserById(userId);
       if (!user) {

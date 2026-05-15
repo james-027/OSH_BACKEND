@@ -2,6 +2,7 @@ dist/*
 node_modules/*
 logs/*
 DB/*
+src/migrations/*
 uploads/req-transactions/*
 uploads/qa-req-transactions/*
 *.log
