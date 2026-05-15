@@ -16,6 +16,9 @@ import { WarehouseRequirementDue } from "src/entities/WarehouseRequirementDue";
 import { ReqTransactionHeader } from "src/entities/ReqTransactionHeader";
 import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
 import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
+import { UsersModule } from "../users/users.module";
 
 @Module({
   imports: [
@@ -33,10 +36,12 @@ import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
       ReqTransactionHeader,
       ReqTransactionDue,
       ReqTransactionDetail,
+      TransactionSequence,
     ]),
+    UsersModule,
   ],
   controllers: [ApiController],
-  providers: [ApiService, ApiKeyGuard],
+  providers: [ApiService, ApiKeyGuard, CommonUtilitiesService],
   exports: [ApiService, ApiKeyGuard],
 })
 export class ApiModule {}
