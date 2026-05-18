@@ -55,6 +55,9 @@ export class DebitAdviceLine {
     @Column({ nullable: true })
     created_by: number;
 
+    @Column({ nullable: true })
+    updated_by: number;
+
     @CreateDateColumn({
         type: "timestamp",
         precision: 6,
@@ -75,6 +78,11 @@ export class DebitAdviceLine {
         default: () => "CURRENT_TIMESTAMP(6)",
     })
     updated_at: Date;
+
+    @ManyToOne(() => User)
+    @JoinColumn({ name: "updated_by" })
+    updatedBy: User;
+
 
 
     // Relationship to Line Items

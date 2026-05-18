@@ -32,12 +32,19 @@ export class DebitAdviceController {
         return 'working';
     }
     @Get(":id")
-    @RequirePermissions({ module: "DEBIT ADVICE", action: "VIEW" })
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "VIEW"
+    })
     async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
         return this.debitAdviceService.findOne(id);
     }
     @Post()
-    @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    // @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
     async create(@Body() createDebitAdviceDto: CreateDebitAdviceDto, @Request() req) {
         const userId = req.user.id;
         const accessKeyId = req.user?.current_access_key;
@@ -47,7 +54,11 @@ export class DebitAdviceController {
 
 
     @Put(":docno")
-    @RequirePermissions({ module: "DEBIT ADVICE", action: "EDIT" })
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "EDIT"
+    })
+    // @RequirePermissions({ module: "DEBIT ADVICE", action: "EDIT" })
     async update(
         @Param("docno") docno: string,
         @Body() updateDebitAdviceDto: UpdateDebitAdviceDto,

@@ -16,6 +16,8 @@ import logger from "../../../config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { formatDateToString } from "src/utils/date.utils";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { Inject } from "@nestjs/common";
 import { stat } from "fs";
 
 
@@ -37,6 +39,8 @@ export class DebitAdviceService {
         private responseMapperService: ResponseMapperService,
         private commonUtilitiesService: CommonUtilitiesService,
         private sseEventEmitter: SSEEventEmitterHelper,
+        @Inject(ActionLogsService)
+        private ActionLogsService: ActionLogsService,
     ) { }
     // Get all debit advices
     async findAll(): Promise<any[]> {
@@ -182,6 +186,16 @@ export class DebitAdviceService {
                 relations: ["status", "createdBy", "lines", "lines.glItems"],
             });
 
+            // Action log
+            await this.ActionLogsService.logAction({
+                action_id: 13, // add
+                ref_id: reloadedDebitAdvice.id,
+                module_id: 34, // STORE HURDLES
+                description: `Created debit advice with document number ${reloadedDebitAdvice.document_number}`,
+                raw_data: JSON.stringify(reloadedDebitAdvice),
+                created_by: userId,
+            });
+
             // Audit trail
             await this.userAuditTrailCreateService.create(
                 {
@@ -234,7 +248,10 @@ export class DebitAdviceService {
                 throw new NotFoundException(`Debit advice with document number ${docno} not found`);
             }
             // Update header
-            Object.assign(debitAdvice, updateDebitAdviceDto);
+            Object.assign(debitAdvice,
+                updateDebitAdviceDto,
+                { updated_by: userId }
+            );
             updatedDebitAdvice = await this.debitAdviceRepository.save(debitAdvice);
 
             // Update line items
@@ -253,7 +270,10 @@ export class DebitAdviceService {
                                 await this.debitAdviceLineRepository.delete(lineItem.id);
                                 continue;
                             } else {
-                                Object.assign(lineItem, lineItemDto);
+                                Object.assign(lineItem,
+                                    lineItemDto,
+                                    { updated_by: userId }
+                                );
                                 await this.debitAdviceLineRepository.save(lineItem);
                             }
 
@@ -269,7 +289,9 @@ export class DebitAdviceService {
                                                 // Soft delete: mark as deleted
                                                 await this.debitAdviceGLItemsRepository.delete({ id: glItemDto.id });
                                             } else {
-                                                Object.assign(glItem, glItemDto);
+                                                Object.assign(glItem,
+                                                    glItemDto,
+                                                    { updated_by: userId });
                                                 await this.debitAdviceGLItemsRepository.save(glItem);
                                             }
                                         }
@@ -318,11 +340,23 @@ export class DebitAdviceService {
             });
 
 
+
+
+            // Action log
+            await this.ActionLogsService.logAction({
+                action_id: updatedDebitAdvice.status_id, // add
+                ref_id: reloadedDebitAdvice.id,
+                module_id: 34, // DEBIT ADVICES
+                description: `Update Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`,
+                raw_data: JSON.stringify(reloadedDebitAdvice),
+                created_by: userId,
+            });
+
             // Audit trail
             await this.userAuditTrailCreateService.create(
                 {
                     service: "DEBIT_ADVICES",
-                    method: "EDIT",
+                    method: reloadedDebitAdvice.status?.status_name || 'Unknown',
                     raw_data: JSON.stringify(reloadedDebitAdvice),
                     description: `Updated debit advice: ${reloadedDebitAdvice.document_number}`,
                     status_id: reloadedDebitAdvice.status_id,

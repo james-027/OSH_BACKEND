@@ -14,6 +14,8 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 import { CommonUtilitiesService } from "../../services/common-utilities.service";
 import { TransactionSequence } from "../../entities/TransactionSequence";
 import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
+import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { ActionLog } from "src/entities/ActionLog";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
     imports: [TypeOrmModule.forFeature([
@@ -24,6 +26,7 @@ import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
         AppModule,
         Action,
         TransactionSequence,
+        ActionLog,
     ]),
         UsersModule,
         SSEModule],
@@ -33,6 +36,7 @@ import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
         DebitAdviceService,
         CommonUtilitiesService,
         ResponseMapperService,
+        ActionLogsService,
     ],
     exports: [DebitAdviceService],
 })
