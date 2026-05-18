@@ -1,13 +1,13 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { DebitAdviceCategory } from "../../entities/DebitAdviceCategory";
+import { DebitAdviceGlAccount } from "src/entities/DebitAdviceGLAccount";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 
-import { DebitAdviceCategoryController } from "./controllers/debit-advice-category.controller";
-import { DebitAdviceCategoryService } from "./services/debit-advice-category.service";
+import { DebitAdviceGlAccountController } from "./controllers/debit-advice-glaccount.controller";
+import { DebitAdviceGlAccountService } from "./services/debit-advice-glaccount.service";
 
 import { UsersModule } from "../users/users.module";
 
@@ -16,22 +16,22 @@ import { SSEModule } from "../sse/sse.module"; //
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      DebitAdviceCategory,
+      DebitAdviceGlAccount,
       UserPermissions,
       PermissionModule,
-      Action
+      Action,
     ]),
     UsersModule,
     SSEModule
   ],
 
-  controllers: [DebitAdviceCategoryController],
+  controllers: [DebitAdviceGlAccountController],
 
   providers: [
-    DebitAdviceCategoryService,
+    DebitAdviceGlAccountService,
     ResponseMapperService,
   ],
 
-  exports: [DebitAdviceCategoryService],
+  exports: [DebitAdviceGlAccountService],
 })
-export class DebitAdviceCategoryModule { }
+export class DebitAdviceGlAccountModule { }

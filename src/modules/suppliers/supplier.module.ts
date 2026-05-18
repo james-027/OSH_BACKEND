@@ -1,37 +1,37 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { DebitAdviceCategory } from "../../entities/DebitAdviceCategory";
+import { Supplier } from "../../entities/Supplier";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
-
-import { DebitAdviceCategoryController } from "./controllers/debit-advice-category.controller";
-import { DebitAdviceCategoryService } from "./services/debit-advice-category.service";
+import { SSEModule } from "../sse/sse.module"; //
+import { SupplierController } from "./controllers/supplier.controller";
+import { SupplierService } from "./services/supplier.service";
 
 import { UsersModule } from "../users/users.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
-import { SSEModule } from "../sse/sse.module"; //
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      DebitAdviceCategory,
+      Supplier,
       UserPermissions,
       PermissionModule,
-      Action
+      Action,
     ]),
     UsersModule,
-    SSEModule
+    SSEModule,
   ],
 
-  controllers: [DebitAdviceCategoryController],
+  controllers: [SupplierController],
 
   providers: [
-    DebitAdviceCategoryService,
+    SupplierService,
     ResponseMapperService,
   ],
 
-  exports: [DebitAdviceCategoryService],
+  exports: [SupplierService],
 })
-export class DebitAdviceCategoryModule { }
+export class SupplierModule { }

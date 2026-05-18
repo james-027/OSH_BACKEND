@@ -1,37 +1,37 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { DebitAdviceCategory } from "../../entities/DebitAdviceCategory";
+import { Profitcenter } from "../../entities/Profitcenter";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 
-import { DebitAdviceCategoryController } from "./controllers/debit-advice-category.controller";
-import { DebitAdviceCategoryService } from "./services/debit-advice-category.service";
+import { ProfitcenterController } from "./controllers/profitcenter.controller";
+import { ProfitcenterService } from "./services/profitcenter.service";
 
 import { UsersModule } from "../users/users.module";
-
-import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module"; //
+import { ResponseMapperService } from "../../services/response-mapper.service";
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      DebitAdviceCategory,
+      Profitcenter,
       UserPermissions,
       PermissionModule,
-      Action
+      Action,
     ]),
     UsersModule,
     SSEModule
   ],
 
-  controllers: [DebitAdviceCategoryController],
+  controllers: [ProfitcenterController],
 
   providers: [
-    DebitAdviceCategoryService,
+    ProfitcenterService,
     ResponseMapperService,
   ],
 
-  exports: [DebitAdviceCategoryService],
+  exports: [ProfitcenterService],
 })
-export class DebitAdviceCategoryModule { }
+export class ProfitcenterModule { }

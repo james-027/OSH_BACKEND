@@ -16,6 +16,7 @@ import {
   getCtgiSemsConnection,
   getCtgiBosDwhConnection,
 } from "../../../utils/dwh-datasources";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Injectable()
 export class ApiService {
@@ -42,6 +43,7 @@ export class ApiService {
     private reqTransactionDueRepository: Repository<ReqTransactionDue>,
     @InjectRepository(ReqTransactionDetail)
     private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -473,12 +475,13 @@ export class ApiService {
           // Get parameters
           const warehouse_ifs = queryParams.wh_bos_code;
           const start_date = queryParams.start_date;
+          const end_date = queryParams.end_date;
           const grouped =
             queryParams.grouped === "true" || queryParams.grouped === true; // Default: false (Option B)
 
-          if (!warehouse_ifs || !start_date) {
+          if (!warehouse_ifs || !start_date || !end_date) {
             throw new HttpException(
-              "Missing required parameters: warehouse_ifs, start_date",
+              "Missing required parameters: wh_bos_code, start_date, end_date",
               HttpStatus.BAD_REQUEST,
             );
           }
@@ -489,7 +492,7 @@ export class ApiService {
           });
 
           if (!warehouse) {
-            return ["no warehouse"]; // No warehouse found
+            return [{ error: true, message: "No record for this store" }]; // No warehouse found
           }
 
           // Step 2: Find warehouse requirement with requirement_id = 6
@@ -503,7 +506,12 @@ export class ApiService {
             });
 
           if (!warehouseRequirement) {
-            return ["no rental requirement"]; // No rental requirement for this warehouse
+            return [
+              {
+                error: true,
+                message: "No record for this store rental requirement",
+              },
+            ]; // No rental requirement for this warehouse
           }
 
           // Step 3: Find warehouse requirement dues with exact start_date match
@@ -512,12 +520,19 @@ export class ApiService {
               where: {
                 warehouse_requirement_id: warehouseRequirement.id,
                 warehouse_requirement_due_start: start_date,
+                warehouse_requirement_due_end: end_date,
                 status_id: 2,
               },
             });
 
           if (!warehouseRequirementDue) {
-            return ["no due found"]; // No due found for this start_date
+            return [
+              {
+                error: true,
+                message:
+                  "No record found for this start_date, end_date, and store rental requirement",
+              },
+            ]; // No due found for this start_date, end_date, and warehouse requirement
           }
 
           // Step 4: Build optimized QueryBuilder to fetch all transaction data
@@ -535,20 +550,21 @@ export class ApiService {
               detail_status: 1,
             });
 
-          const [sql, params] = rentalQuery.getQueryAndParameters();
+          // const [sql, params] = rentalQuery.getQueryAndParameters();
           // console.log("SQL:", sql);
           // console.log("Parameters:", params);
 
           const transactionHeaders = await rentalQuery.getMany();
 
           if (transactionHeaders.length === 0) {
-            return []; // No transactions found
+            return [{ error: true, message: "No transactions found" }]; // No transactions found
           }
 
           // Step 5: Transform response based on grouped flag
           if (grouped) {
             // Option A: Grouped by header (multiple files per header)
             return transactionHeaders.map((header) => ({
+              success: true,
               trans_number: header.trans_number,
               header_id: header.id,
               due_id: warehouseRequirementDue.id,
@@ -559,6 +575,13 @@ export class ApiService {
                   (d) =>
                     `${process.env.APP_URL || `http://localhost:3000`}/${d.requirement_file_path}`,
                 ),
+              file_names: (header.reqTransactionDetails || [])
+                .filter((d) => d.requirement_file_name)
+                .map((d) =>
+                  this.commonUtilitiesService.formatTransFileName(
+                    d.requirement_file_name,
+                  ),
+                ),
             }));
           } else {
             // Option B: One entry per detail (one detail = one file)
@@ -567,11 +590,15 @@ export class ApiService {
               (header.reqTransactionDetails || []).forEach((detail) => {
                 if (detail.requirement_file_path) {
                   results.push({
+                    success: true,
                     trans_number: header.trans_number,
                     header_id: header.id,
                     detail_id: detail.id,
                     due_id: warehouseRequirementDue.id,
                     file_url: `${process.env.APP_URL || `http://localhost:3000`}/${detail.requirement_file_path}`,
+                    file_name: this.commonUtilitiesService.formatTransFileName(
+                      detail.requirement_file_name,
+                    ),
                   });
                 }
               });

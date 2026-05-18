@@ -8,17 +8,20 @@ import {
   Param,
   Request,
   ParseIntPipe,
+  UseGuards,
 } from "@nestjs/common";
 import { DebitAdviceCategoryService } from "../services/debit-advice-category.service";
 import { CreateDebitAdviceCategoryDto } from "../dto/CreateDebitAdviceCatdto";
 import { UpdateDebitAdviceCategoryDto } from "../dto/UpdateDebitAdviceCatDto";
+import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
+import { PermissionsGuard } from "src/guards/permissions.guard";
 
-@Controller("debit-advice-categories")
-// @UseGuards(JwtAuthGuard)
+@Controller("debit-advice-category")
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceCategoryController {
   constructor(
     private readonly debitAdviceCategoryService: DebitAdviceCategoryService,
-  ) {}
+  ) { }
 
   @Get()
   async findAll(@Request() req) {

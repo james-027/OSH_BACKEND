@@ -61,20 +61,42 @@ export class AuthService {
         });
       }
 
+      let logDescription = "";
+      let exceptionMessage = "";
       if (!user) {
-        logger.warn(`Login attempt with non-existent username: ${user_name}`);
-        throw new UnauthorizedException("Invalid credentials");
+        logDescription = `Login attempt with non-existent username or email: ${email ? email : user_name}`;
+        exceptionMessage = "Invalid credentials";
+        await this.handleLoginFailure(
+          logDescription,
+          exceptionMessage,
+          email,
+          user_name,
+        );
       }
 
       if (user.status_id !== 1) {
-        logger.warn(`Login attempt by inactive user: ${user_name}`);
-        throw new UnauthorizedException("Account is inactive");
+        logDescription = `Login attempt by inactive user: ${email ? email : user_name}`;
+        exceptionMessage = "Account is inactive";
+        await this.handleLoginFailure(
+          logDescription,
+          exceptionMessage,
+          email,
+          user_name,
+          user,
+        );
       }
 
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (!isPasswordValid) {
-        logger.warn(`Invalid password attempt for user: ${user_name}`);
-        throw new UnauthorizedException("Invalid credentials");
+        logDescription = `Invalid password attempt for user: ${email ? email : user_name}`;
+        exceptionMessage = "Invalid credentials";
+        await this.handleLoginFailure(
+          logDescription,
+          exceptionMessage,
+          email,
+          user_name,
+          user,
+        );
       }
 
       // Remove password from user object
@@ -88,6 +110,33 @@ export class AuthService {
       throw new UnauthorizedException("Authentication failed");
     }
   }
+
+  private async handleLoginFailure(
+    logDescription?: string,
+    exceptionMessage?: string,
+    email?: string,
+    user_name?: string,
+    user?: User,
+  ): Promise<void> {
+    if (logDescription) {
+      logger.warn(logDescription);
+    }
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "AuthService",
+        method: "login",
+        raw_data: JSON.stringify({
+          email: email,
+          user_name: user_name,
+        }),
+        description: logDescription,
+        status_id: 1,
+      },
+      user?.id || 1,
+    );
+    throw new UnauthorizedException(exceptionMessage);
+  }
+
   async login(
     loginDto: LoginUserDto,
     sessionInfo?: CreateSessionDto,
