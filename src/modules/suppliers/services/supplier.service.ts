@@ -96,7 +96,7 @@ export class SupplierService {
         oldcode:
           createSupplierDto.oldcode || null,
 
-        created_by_id: userId,
+        created_by: userId,
       });
 
       const savedSupplier =

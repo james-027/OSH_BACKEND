@@ -103,7 +103,7 @@ export class DebitAdviceCategoryService {
           company:
             createDebitAdviceCategoryDto.company || null,
 
-          created_by_id: userId,
+          created_by: userId,
         });
 
       const savedDebitAdviceCategory =

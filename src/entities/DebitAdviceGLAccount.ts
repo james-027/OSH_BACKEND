@@ -12,53 +12,58 @@ export class DebitAdviceGlAccount {
   id: number;
 
   @Column({
-    name: "GLCODE",
+    name: "glcode",
     length: 100,
     unique: true,
   })
   gl_code: string;
 
   @Column({
-    name: "CATEGORYCODE",
+    name: "categorycode",
     length: 100,
   })
   category_code: string;
 
   @Column({
-    name: "CATEGORYNAME",
+    name: "categoryname",
     length: 255,
   })
   category_name: string;
 
   @Column({
-  name: "GLNAME",
-  length: 255,
+    name: "glname",
+    length: 255,
   })
   gl_name: string;
 
   @Column({
-  name: "OLDCODE",
-  length: 100,
-  nullable: true,
+    name: "oldcode",
+    length: 100,
+    nullable: true,
   })
   old_code: string;
 
   @Column({ default: 1 })
   status_id: number;
 
-  @Column({ default: 1 })
-  created_by_id: number;
-  
+  @Column({ nullable: true })
+  created_by: number;
+
+  @Column({ nullable: true })
+  updated_by: number;
 
   @CreateDateColumn({
+    name: "created_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
   })
   created_at: Date;
 
   @UpdateDateColumn({
+    name: "updated_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
+    onUpdate: "CURRENT_TIMESTAMP(6)",
   })
   updated_at: Date;
 }

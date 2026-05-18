@@ -119,7 +119,7 @@ export class DebitAdviceGlAccountService {
             createDebitAdviceGlAccountDto.old_code ||
             null,
 
-          created_by_id: userId,
+          created_by: userId,
         });
 
       const savedDebitAdviceGlAccount =

@@ -3,7 +3,7 @@ import { IsString, IsNotEmpty, IsOptional } from "class-validator";
 export class CreateSupplierDto {
   @IsString()
   @IsNotEmpty()
-  suppliercode?: string;
+  suppliercode: string;
 
   @IsOptional()
   @IsString()

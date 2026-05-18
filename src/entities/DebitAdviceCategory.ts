@@ -12,27 +12,27 @@ export class DebitAdviceCategory {
   id: number;
 
   @Column({
-    name: "CATEGORYCODE",
+    name: "categorycode",
     length: 100,
     unique: true,
   })
   category_code: string;
 
   @Column({
-    name: "CATEGORYNAME",
+    name: "categoryname",
     length: 255,
   })
   category_name: string;
 
   @Column({
-    name: "OLDCODE",
+    name: "oldcode",
     length: 100,
     nullable: true,
   })
   old_code: string;
 
   @Column({
-    name: "COMPANY",
+    name: "company",
     length: 255,
     nullable: true,
   })
@@ -41,18 +41,24 @@ export class DebitAdviceCategory {
   @Column({ default: 1 })
   status_id: number;
 
-  @Column({ default: 1 })
-  created_by_id: number;
+  @Column({ nullable: true })
+  created_by: number;
+
+  @Column({ nullable: true })
+  updated_by: number;
 
   @CreateDateColumn({
+    name: "created_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
   })
   created_at: Date;
 
   @UpdateDateColumn({
+    name: "updated_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
+    onUpdate: "CURRENT_TIMESTAMP(6)",
   })
   updated_at: Date;
 }

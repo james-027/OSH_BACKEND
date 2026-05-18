@@ -12,20 +12,20 @@ export class Profitcenter {
   id: number;
 
   @Column({
-    name: "PROFITCENTER",
+    name: "profitcenter",
     length: 100,
     unique: true,
   })
   profitcenter_code: string;
 
   @Column({
-    name: "PROFITCENTERNAME",
+    name: "profitcentername",
     length: 255,
   })
   profitcenter_name: string;
 
   @Column({
-    name: "OLDCODE",
+    name: "oldcode",
     length: 100,
     nullable: true,
   })
@@ -34,18 +34,24 @@ export class Profitcenter {
   @Column({ default: 1 })
   status_id: number;
 
-  @Column({ default: 1 })
-  created_by_id: number;
+  @Column({ nullable: true })
+  created_by: number;
+
+  @Column({ nullable: true })
+  updated_by: number;
 
   @CreateDateColumn({
+    name: "created_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
   })
   created_at: Date;
 
   @UpdateDateColumn({
+    name: "updated_at",
     type: "timestamp",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "CURRENT_TIMESTAMP(6)",
+    onUpdate: "CURRENT_TIMESTAMP(6)",
   })
   updated_at: Date;
 }
