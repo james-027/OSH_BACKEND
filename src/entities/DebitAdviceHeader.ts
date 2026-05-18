@@ -36,6 +36,9 @@ export class DebitAdvice_header {
     @Column({ nullable: true })
     created_by: number;
 
+    @Column({ nullable: true })
+    updated_by: number;
+
 
     @CreateDateColumn({
         type: "timestamp",
@@ -59,6 +62,10 @@ export class DebitAdvice_header {
     @ManyToOne(() => User)
     @JoinColumn({ name: "created_by" })
     createdBy: User;
+
+    @ManyToOne(() => User)
+    @JoinColumn({ name: "updated_by" })
+    updatedBy: User;
 
     // Relationship to Line Items
     @OneToMany(() => DebitAdviceLine, (line) => line.header, { cascade: true })

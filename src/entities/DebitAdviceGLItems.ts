@@ -58,7 +58,9 @@ export class DebitAdviceGLItems {
     @JoinColumn({ name: "created_by" })
     createdBy: User;
 
-
+    @ManyToOne(() => User)
+    @JoinColumn({ name: "updated_by" })
+    updatedBy: User;
 
     @UpdateDateColumn({
         type: "timestamp",
@@ -66,4 +68,6 @@ export class DebitAdviceGLItems {
         default: () => "CURRENT_TIMESTAMP(6)",
     })
     updated_at: Date;
+
+
 }
