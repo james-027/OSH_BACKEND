@@ -188,7 +188,7 @@ export class DebitAdviceService {
 
             // Action log
             await this.ActionLogsService.logAction({
-                action_id: 13, // add
+                action_id: 1, // add
                 ref_id: reloadedDebitAdvice.id,
                 module_id: 34, // STORE HURDLES
                 description: `Created debit advice with document number ${reloadedDebitAdvice.document_number}`,
@@ -340,11 +340,26 @@ export class DebitAdviceService {
             });
 
 
+            let action_id = 1;
+            if (reloadedDebitAdvice.status_id === debitAdvice.status_id) {
+                action_id = 2; // EDIT
+            } else if (reloadedDebitAdvice.status_id === 3 || reloadedDebitAdvice.status_id === 13) {
+                action_id = 1; // ADD
+            } else if (reloadedDebitAdvice.status_id === 4) {
+                action_id = 4; // Posting
+            }
+            else if (reloadedDebitAdvice.status_id === 7) {
+                action_id = 7; // Approve
+            }
+            else if (reloadedDebitAdvice.status_id === 14) {
+                action_id = 6; // Deactivate
+            }
+
 
 
             // Action log
             await this.ActionLogsService.logAction({
-                action_id: updatedDebitAdvice.status_id, // add
+                action_id: action_id, // add
                 ref_id: reloadedDebitAdvice.id,
                 module_id: 34, // DEBIT ADVICES
                 description: `Update Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`,
