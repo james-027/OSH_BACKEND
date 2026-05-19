@@ -39,6 +39,17 @@ export class DebitAdviceController {
     async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
         return this.debitAdviceService.findOne(id);
     }
+
+
+    @Get("history/:ref_id")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "VIEW"
+    })
+    async findOneHistory(@Param("ref_id", ParseIntPipe) ref_id: number, @Request() req) {
+        return this.debitAdviceService.findOneHistory(ref_id);
+    }
+
     @Post()
     @RequirePermissions({
         module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
