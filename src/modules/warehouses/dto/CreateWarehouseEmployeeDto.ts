@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsInt, IsOptional } from "class-validator";
+import { IsNotEmpty, IsInt, IsOptional, IsDateString } from "class-validator";
 
 export class CreateWarehouseEmployeeDto {
   @IsNotEmpty()
@@ -36,4 +36,8 @@ export class CreateWarehouseEmployeeDto {
   @IsOptional()
   @IsInt()
   access_key_id?: number;
+
+  @IsNotEmpty()
+  @IsDateString()
+  assignment_date?: string;
 }

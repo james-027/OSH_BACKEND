@@ -14,6 +14,7 @@ import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
+import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 
 @Injectable()
 export class WarehouseEmployeesService {
@@ -38,6 +39,7 @@ export class WarehouseEmployeesService {
     accessKeyId?: number,
     userId?: number,
     roleId?: number,
+    assignmentDate?: string,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
@@ -70,6 +72,11 @@ export class WarehouseEmployeesService {
     } else {
       query.andWhere("1=0"); // No access to any records if no allowed locations
     }
+    if (assignmentDate) {
+      query.andWhere("we.assignment_date = :assignmentDate", {
+        assignmentDate,
+      });
+    }
     const records = await query.getMany();
     return records.map((rec) => ({
       id: rec.id,
@@ -81,6 +88,7 @@ export class WarehouseEmployeesService {
         rec.warehouse && rec.warehouse.location
           ? rec.warehouse.location.location_name
           : null,
+      assignment_date: rec.assignment_date,
       assigned_ss: rec.assigned_ss,
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
@@ -142,6 +150,7 @@ export class WarehouseEmployeesService {
       id: rec.id,
       warehouse_id: rec.warehouse_id,
       warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
+      assignment_date: rec.assignment_date,
       assigned_ss: rec.assigned_ss,
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
@@ -186,26 +195,22 @@ export class WarehouseEmployeesService {
     userId: number,
     skipAuditTrail: boolean = false,
   ): Promise<WarehouseEmployee> {
-    // Uniqueness check
+    // Uniqueness check - warehouse_id + assignment_date must be unique
     const exists = await this.warehouseEmployeesRepository.findOne({
       where: {
         warehouse_id: createDto.warehouse_id,
-        // assigned_ss: createDto.assigned_ss,
-        // assigned_ah: createDto.assigned_ah,
-        // assigned_bch: createDto.assigned_bch,
-        // assigned_gbch: createDto.assigned_gbch ?? null,
-        // assigned_rh: createDto.assigned_rh,
-        // assigned_grh: createDto.assigned_grh ?? null,
+        assignment_date: createDto.assignment_date,
       },
     });
     if (exists) {
       throw new BadRequestException(
-        "A record with this warehouse and assigned employees already exists.",
+        `A record with this warehouse (ID: ${createDto.warehouse_id}) and assignment date (${createDto.assignment_date}) already exists.`,
       );
     }
     const rec = this.warehouseEmployeesRepository.create({
       ...createDto,
       access_key_id: createDto.access_key_id,
+      assignment_date: createDto.assignment_date,
       assigned_gbch: createDto.assigned_gbch ?? null,
       assigned_grh: createDto.assigned_grh ?? null,
       created_by: userId,
@@ -248,13 +253,26 @@ export class WarehouseEmployeesService {
   ): Promise<WarehouseEmployee> {
     const rec = await this.findOne(id);
 
-    // Only check for warehouse_id uniqueness
+    // assignment_date is immutable - prevent updates
+    if (
+      updateDto.assignment_date !== undefined &&
+      updateDto.assignment_date !== rec.assignment_date
+    ) {
+      throw new BadRequestException(
+        "assignment_date is immutable and cannot be changed after creation.",
+      );
+    }
+
+    // Only check for warehouse_id + assignment_date uniqueness
     if (
       updateDto.warehouse_id !== undefined &&
       updateDto.warehouse_id !== rec.warehouse_id
     ) {
       const exists = await this.warehouseEmployeesRepository.findOne({
-        where: { warehouse_id: updateDto.warehouse_id },
+        where: {
+          warehouse_id: updateDto.warehouse_id,
+          assignment_date: rec.assignment_date,
+        },
       });
       if (exists && exists.id !== id) {
         // Update the existing record with updateDto values
@@ -274,6 +292,7 @@ export class WarehouseEmployeesService {
     }
 
     Object.assign(rec, updateDto, {
+      assignment_date: rec.assignment_date, // Ensure assignment_date is not updated
       assigned_gbch: updateDto.assigned_gbch ?? rec.assigned_gbch ?? null,
       assigned_grh: updateDto.assigned_grh ?? rec.assigned_grh ?? null,
       access_key_id: updateDto.access_key_id ?? rec.access_key_id,
@@ -369,6 +388,7 @@ export class WarehouseEmployeesService {
   /**
    * Bulk upload warehouse employees.
    * Accepts an array of CreateWarehouseEmployeeDto objects.
+   * assignment_date is immutable - identified by warehouse_id + assignment_date
    * Returns a summary with successes and errors.
    */
   async bulkUpload(
@@ -392,9 +412,12 @@ export class WarehouseEmployeesService {
       const batchPromises = batch.map(async (record, idx) => {
         const rowNum = record.__rowNum__ ?? i + idx + 2; // +2 for Excel row
         try {
-          // Check if a record exists for this warehouse_id
+          // Check if a record exists for this warehouse_id + assignment_date (immutable identifier)
           const existing = await this.warehouseEmployeesRepository.findOne({
-            where: { warehouse_id: record.warehouse_id },
+            where: {
+              warehouse_id: record.warehouse_id,
+              assignment_date: record.assignment_date,
+            },
           });
           let fullRec: any;
           if (existing) {
