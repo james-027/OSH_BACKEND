@@ -34,7 +34,7 @@ export class LocationType {
 
   // Foreign key to User entity for created_by
   @ManyToOne(() => User, (user) => user.createdLocationTypes, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "created_by" })
@@ -45,7 +45,7 @@ export class LocationType {
 
   // Foreign key to User entity for updated_by
   @ManyToOne(() => User, (user) => user.updatedLocationTypes, {
-    eager: true,
+    eager: false,
     nullable: true,
   })
   @JoinColumn({ name: "updated_by" })
