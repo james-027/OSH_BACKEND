@@ -39,10 +39,7 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { CreateUserAuditTrailDto } from "../../users/dto/CreateUserAuditTrailDto";
 import { buildWarehouseHurdleKey, CACHE_TTL } from "src/config/cache.config";
 import { CacheCustom } from "src/decorators/cache.decorator";
-import { generate } from "rxjs";
-const dayjs = require("dayjs");
-const utc = require("dayjs/plugin/utc");
-dayjs.extend(utc);
+import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 
 @Controller("warehouse-hurdles")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -221,27 +218,7 @@ export class WarehouseHurdlesController {
       await this.warehouseHurdlesService.getAllowedLocationIds(userId, roleId);
     // Map Excel columns to DTOs
     const records = json.map((row) => {
-      let hurdle_date = null;
-      const excelDate = row["HURDLE MONTH"];
-      let year, month;
-      if (typeof excelDate === "number") {
-        // Excel serial date
-        const parsed = XLSX.SSF.parse_date_code(excelDate);
-        if (parsed) {
-          year = parsed.y;
-          month = String(parsed.m).padStart(2, "0");
-        }
-      } else if (typeof excelDate === "string" && excelDate) {
-        // Use dayjs UTC for robust parsing
-        const d = dayjs.utc(excelDate);
-        if (d.isValid()) {
-          year = d.year();
-          month = String(d.month() + 1).padStart(2, "0");
-        }
-      }
-      if (year && month) {
-        hurdle_date = `${year}-${month}-01`;
-      }
+      const hurdle_date = parseToFirstDayOfMonth(row["HURDLE MONTH"]);
       return {
         ss_hurdle_qty:
           row["HURDLE QTY"] !== null && row["HURDLE QTY"] !== undefined

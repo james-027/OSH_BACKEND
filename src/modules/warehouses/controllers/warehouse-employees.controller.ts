@@ -39,6 +39,7 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { CacheCustom } from "src/decorators/cache.decorator";
 import { buildWarehouseEmployeeKey, CACHE_TTL } from "src/config/cache.config";
+import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 
 @Controller("warehouse-employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -318,6 +319,17 @@ export class WarehouseEmployeesController {
           }
         }
 
+        // 4. Assignment date mapping - extract month/year and convert to first day of month
+        let assignment_date: string | null = null;
+        if (row["ASSIGNMENT MONTH"]) {
+          assignment_date = parseToFirstDayOfMonth(row["ASSIGNMENT MONTH"]);
+          if (!assignment_date) {
+            throw new Error(
+              `Invalid ASSIGNMENT MONTH: ${row["ASSIGNMENT MONTH"]} (unable to parse date)`,
+            );
+          }
+        }
+
         records.push({
           warehouse_id: warehouse.id,
           assigned_ss: ss.id,
@@ -327,6 +339,7 @@ export class WarehouseEmployeesController {
           assigned_rh: rh,
           assigned_grh: grh,
           status_id,
+          assignment_date,
           __rowNum__: excelRowNum,
         } as any);
       } catch (err) {
