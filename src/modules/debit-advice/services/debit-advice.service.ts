@@ -46,7 +46,7 @@ export class DebitAdviceService {
     async findAll(): Promise<any[]> {
         try {
             const debitAdvices = await this.debitAdviceRepository.find({
-                relations: ["createdBy", "status", "lines"],
+                relations: ["status", "createdBy", "lines", "lines.glItems"],
                 order: {
                     id: "ASC",
                     lines: {
@@ -66,9 +66,9 @@ export class DebitAdviceService {
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
+                // ✅ include GL items inside each line
                 lines_items: (item.lines || []).map(line => ({
                     ...line,
-                    gl_items: line.glItems || []
                 })),
             }));
             // return this.responseMapperService.mapEntitiesToResponse(debitAdvices);
@@ -78,6 +78,10 @@ export class DebitAdviceService {
         }
     }
 
+    async findOneHistory(ref_id: number) {
+        const module_id = 34;   // DEBIT ADVICES
+        return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
+    }
 
     // Get single debit advice by ID
     async findOne(id: number): Promise<any> {
@@ -247,6 +251,7 @@ export class DebitAdviceService {
             if (!debitAdvice) {
                 throw new NotFoundException(`Debit advice with document number ${docno} not found`);
             }
+            const current_status_id = debitAdvice.status_id;
             // Update header
             Object.assign(debitAdvice,
                 updateDebitAdviceDto,
@@ -341,7 +346,9 @@ export class DebitAdviceService {
 
 
             let action_id = 1;
-            if (reloadedDebitAdvice.status_id === debitAdvice.status_id) {
+            console.log("Current status ID:", current_status_id);
+            console.log("New status ID:", reloadedDebitAdvice.status_id);
+            if (reloadedDebitAdvice.status_id === current_status_id) {
                 action_id = 2; // EDIT
             } else if (reloadedDebitAdvice.status_id === 3 || reloadedDebitAdvice.status_id === 13) {
                 action_id = 1; // ADD
