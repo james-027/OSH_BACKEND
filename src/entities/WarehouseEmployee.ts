@@ -76,6 +76,9 @@ export class WarehouseEmployee {
   @Column({ nullable: true })
   updated_by: number;
 
+  @Column({ type: "date" })
+  assignment_date: string;
+
   @ManyToOne(() => Warehouse)
   @JoinColumn({ name: "warehouse_id" })
   warehouse: Warehouse;
