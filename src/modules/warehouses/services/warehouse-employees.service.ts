@@ -14,6 +14,7 @@ import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
+import { Warehouse } from "src/entities/Warehouse";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -23,6 +24,8 @@ export class WarehouseEmployeesService {
   constructor(
     @InjectRepository(WarehouseEmployee)
     private warehouseEmployeesRepository: Repository<WarehouseEmployee>,
+    @InjectRepository(Warehouse)
+    private warehousesRepository: Repository<Warehouse>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private sseEventEmitter: SSEEventEmitterHelper,
@@ -130,6 +133,42 @@ export class WarehouseEmployeesService {
         ? `${rec.updatedBy.first_name} ${rec.updatedBy.last_name}`
         : null,
     }));
+  }
+
+  /**
+   * Get all warehouses in specified locations that do NOT have a warehouse_employees
+   * record for the given assignment_date.
+   * @param locationIds Array of location IDs to filter warehouses
+   * @param assignmentDate Assignment date in YYYY-MM-01 format
+   * @returns Array of warehouses with minimal fields: id, warehouse_name, warehouse_ifs, warehouse_code
+   */
+  async getWarehousesWithNoRecord(
+    locationIds: number[],
+    assignmentDate: string,
+  ): Promise<any[]> {
+    // Use NOT IN subquery for optimal performance - avoids expensive LEFT JOIN
+    const warehouses = await this.warehousesRepository
+      .createQueryBuilder("w")
+      .select([
+        "w.id AS id",
+        "w.warehouse_name AS warehouse_name",
+        "w.warehouse_ifs AS warehouse_ifs",
+        "w.warehouse_code AS warehouse_code",
+      ])
+      .distinct(true)
+      .where("w.location_id IN (:...locationIds)", { locationIds })
+      .andWhere("w.status_id = :statusId", { statusId: 1 })
+      .andWhere(
+        `w.id NOT IN (
+          SELECT warehouse_id FROM warehouse_employees 
+          WHERE assignment_date = :assignmentDate
+        )`,
+        { assignmentDate },
+      )
+      .orderBy("w.warehouse_name", "ASC")
+      .getRawMany();
+
+    return warehouses;
   }
 
   async findOne(id: number): Promise<any> {
