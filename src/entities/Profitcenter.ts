@@ -4,7 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from "typeorm";
+
+import { Status } from "./Status";
 
 @Entity("profitcenters")
 export class Profitcenter {
@@ -31,8 +35,13 @@ export class Profitcenter {
   })
   old_code: string;
 
+  // Foreign key to Status entity
+  @ManyToOne(() => Status)
+  @JoinColumn({ name: "status_id" })
+  status!: Status;
+
   @Column({ default: 1 })
-  status_id: number;
+  status_id!: number;
 
   @Column({ nullable: true })
   created_by: number;

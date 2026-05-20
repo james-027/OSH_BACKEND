@@ -13,13 +13,17 @@ import { UsersModule } from "../users/users.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module"; //
+import { Status } from "src/entities/Status";
+import { User } from "src/entities/User";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       DebitAdviceCategory,
       UserPermissions,
       PermissionModule,
-      Action
+      Action,
+      Status,
+      User,
     ]),
     UsersModule,
     SSEModule

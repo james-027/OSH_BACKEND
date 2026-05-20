@@ -6,51 +6,78 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 
-import { DebitAdviceGlAccount } from "src/entities/DebitAdviceGlAccount";
+import { DebitAdviceGLAccounts } from "src/entities/DebitAdviceGLAccounts";
 import { CreateDebitAdviceGlAccountDto } from "../dto/CreateDebitAdviceGlDto";
 import { UpdateDebitAdviceGlAccountDto } from "../dto/UpdateDebitAdviceGlDto";
+
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+
 import logger from "../../../config/logger";
+
+import { User } from "src/entities/User";
+import { Status } from "src/entities/Status";
 
 @Injectable()
 export class DebitAdviceGlAccountService {
   constructor(
-    @InjectRepository(DebitAdviceGlAccount)
-    private debitAdviceGlAccountRepository: Repository<DebitAdviceGlAccount>,
+    @InjectRepository(DebitAdviceGLAccounts)
+    private debitAdviceGlAccountRepository: Repository<DebitAdviceGLAccounts>,
 
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
-  ) { }
 
-  // Get all debit advice GL accounts
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+
+    @InjectRepository(Status)
+    private statusRepository: Repository<Status>,
+  ) {}
+
+  // Get all GL accounts
   async findAll(): Promise<any[]> {
     try {
       const debitAdviceGlAccounts =
         await this.debitAdviceGlAccountRepository.find({
-          where: {
-            status_id: 1,
-          },
+          relations: ["status"],
         });
 
-      return debitAdviceGlAccounts;
+      return debitAdviceGlAccounts.map((gl) => ({
+        id: gl.id,
+        gl_code: gl.gl_code,
+        category_code: gl.category_code,
+        category_name: gl.category_name,
+        gl_name: gl.gl_name,
+        old_code: gl.old_code,
+        status_id: gl.status_id,
+        status_name: gl.status
+          ? gl.status.status_name
+          : null,
+        created_at: gl.created_at,
+        updated_at: gl.updated_at,
+        created_by: gl.created_by,
+      }));
     } catch (error) {
-      console.log("FULL ERROR:", error);
-      console.log("ERROR MESSAGE:", error.message);
-      console.log("ERROR STACK:", error.stack);
+      logger.error(
+        "Error fetching debit advice GL accounts:",
+        error,
+      );
 
-      throw error;
+      throw new Error(
+        "Failed to fetch debit advice GL accounts",
+      );
     }
   }
 
-  // Get single debit advice GL account by ID
+  // Get single GL account
   async findOne(id: number): Promise<any> {
     try {
       const debitAdviceGlAccount =
         await this.debitAdviceGlAccountRepository.findOne({
           where: { id },
+          relations: ["status"],
         });
 
       if (!debitAdviceGlAccount) {
@@ -59,30 +86,39 @@ export class DebitAdviceGlAccountService {
         );
       }
 
-      return debitAdviceGlAccount;
+      return {
+        id: debitAdviceGlAccount.id,
+        gl_code: debitAdviceGlAccount.gl_code,
+        category_code: debitAdviceGlAccount.category_code,
+        category_name: debitAdviceGlAccount.category_name,
+        gl_name: debitAdviceGlAccount.gl_name,
+        old_code: debitAdviceGlAccount.old_code,
+        status_id: debitAdviceGlAccount.status_id,
+        status_name: debitAdviceGlAccount.status
+          ? debitAdviceGlAccount.status.status_name
+          : null,
+        created_at: debitAdviceGlAccount.created_at,
+        updated_at: debitAdviceGlAccount.updated_at,
+        created_by: debitAdviceGlAccount.created_by,
+      };
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-
       logger.error(
         "Error fetching debit advice GL account:",
         error,
       );
 
-      throw new Error(
-        "Failed to fetch debit advice GL account",
-      );
+      throw error;
     }
   }
 
-  // Create new debit advice GL account
+  // Create GL account
   async create(
     createDebitAdviceGlAccountDto: CreateDebitAdviceGlAccountDto,
     userId: number,
   ): Promise<any> {
+    const { status_id } = createDebitAdviceGlAccountDto;
+
     try {
-      // Check if GL code already exists
       const existingDebitAdviceGlAccount =
         await this.debitAdviceGlAccountRepository.findOne({
           where: {
@@ -97,7 +133,19 @@ export class DebitAdviceGlAccountService {
         );
       }
 
-      // Create debit advice GL account
+      const resolvedStatusId = status_id || 1;
+
+      const statusEntity =
+        await this.statusRepository.findOneBy({
+          id: resolvedStatusId,
+        });
+
+      if (!statusEntity) {
+        throw new BadRequestException(
+          `Status with ID ${resolvedStatusId} not found.`,
+        );
+      }
+
       const newDebitAdviceGlAccount =
         this.debitAdviceGlAccountRepository.create({
           gl_code:
@@ -119,6 +167,9 @@ export class DebitAdviceGlAccountService {
             createDebitAdviceGlAccountDto.old_code ||
             null,
 
+          status_id: resolvedStatusId,
+          status: statusEntity,
+
           created_by: userId,
         });
 
@@ -127,33 +178,39 @@ export class DebitAdviceGlAccountService {
           newDebitAdviceGlAccount,
         );
 
-      // Audit trail
-      try {
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "DEBIT_ADVICE_GL_ACCOUNT",
-            method: "CREATE",
-            raw_data: JSON.stringify(savedDebitAdviceGlAccount),
-            description: `Created debit advice GL account: ${savedDebitAdviceGlAccount.gl_code}`,
-            status_id: 1,
-          },
-          userId,
-        );
-      } catch (auditError) {
-        logger.error("AUDIT ERROR", auditError);
-      }
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_GL_ACCOUNT",
+          method: "CREATE",
+          raw_data: JSON.stringify(savedDebitAdviceGlAccount),
+          description: `Created debit advice GL account: ${savedDebitAdviceGlAccount.gl_code}`,
+          status_id: 1,
+        },
+        userId,
+      );
 
-      // SSE CREATE
-      try {
-        this.sseEventEmitter.emitCreate(
-          "debit-advice-gl-account",
-          savedDebitAdviceGlAccount.id,
-        );
-      } catch (err) {
-        logger.error("SSE create event failed:", err);
-      }
+      this.sseEventEmitter.emitCreateSignal(
+        "debit-advice-gl-account",
+        savedDebitAdviceGlAccount.id,
+      );
 
-      return savedDebitAdviceGlAccount;
+      return {
+        id: savedDebitAdviceGlAccount.id,
+        gl_code: savedDebitAdviceGlAccount.gl_code,
+        category_code:
+          savedDebitAdviceGlAccount.category_code,
+        category_name:
+          savedDebitAdviceGlAccount.category_name,
+        gl_name: savedDebitAdviceGlAccount.gl_name,
+        old_code: savedDebitAdviceGlAccount.old_code,
+        status_id: savedDebitAdviceGlAccount.status_id,
+        status_name: savedDebitAdviceGlAccount.status
+          ? savedDebitAdviceGlAccount.status.status_name
+          : null,
+        created_at: savedDebitAdviceGlAccount.created_at,
+        updated_at: savedDebitAdviceGlAccount.updated_at,
+        created_by: savedDebitAdviceGlAccount.created_by,
+      };
     } catch (error) {
       logger.error(
         "Error creating debit advice GL account:",
@@ -164,7 +221,7 @@ export class DebitAdviceGlAccountService {
     }
   }
 
-  // Update debit advice GL account
+  // Update GL account
   async update(
     id: number,
     updateDebitAdviceGlAccountDto: UpdateDebitAdviceGlAccountDto,
@@ -182,13 +239,12 @@ export class DebitAdviceGlAccountService {
         );
       }
 
-      // Check duplicate gl_code
       if (
         updateDebitAdviceGlAccountDto.gl_code &&
         updateDebitAdviceGlAccountDto.gl_code !==
-        debitAdviceGlAccount.gl_code
+          debitAdviceGlAccount.gl_code
       ) {
-        const existingDebitAdviceGlAccount =
+        const existing =
           await this.debitAdviceGlAccountRepository.findOne({
             where: {
               gl_code:
@@ -196,62 +252,72 @@ export class DebitAdviceGlAccountService {
             },
           });
 
-        if (existingDebitAdviceGlAccount) {
+        if (existing) {
           throw new BadRequestException(
             "Debit advice GL code already exists",
           );
         }
       }
 
-      // Update fields
-      debitAdviceGlAccount.gl_code =
-        updateDebitAdviceGlAccountDto.gl_code ||
-        debitAdviceGlAccount.gl_code;
+      Object.assign(debitAdviceGlAccount, {
+        gl_code:
+          updateDebitAdviceGlAccountDto.gl_code ||
+          debitAdviceGlAccount.gl_code,
 
-      debitAdviceGlAccount.category_code =
-        updateDebitAdviceGlAccountDto.category_code ||
-        debitAdviceGlAccount.category_code;
+        category_code:
+          updateDebitAdviceGlAccountDto.category_code ||
+          debitAdviceGlAccount.category_code,
 
-      debitAdviceGlAccount.category_name =
-        updateDebitAdviceGlAccountDto.category_name ||
-        debitAdviceGlAccount.category_name;
+        category_name:
+          updateDebitAdviceGlAccountDto.category_name ||
+          debitAdviceGlAccount.category_name,
 
-      debitAdviceGlAccount.gl_name =
-        updateDebitAdviceGlAccountDto.gl_name ||
-        debitAdviceGlAccount.gl_name;
+        gl_name:
+          updateDebitAdviceGlAccountDto.gl_name ||
+          debitAdviceGlAccount.gl_name,
 
-      debitAdviceGlAccount.old_code =
-        updateDebitAdviceGlAccountDto.old_code ||
-        debitAdviceGlAccount.old_code;
+        old_code:
+          updateDebitAdviceGlAccountDto.old_code ||
+          debitAdviceGlAccount.old_code,
+      });
+
+      await this.debitAdviceGlAccountRepository.save(
+        debitAdviceGlAccount,
+      );
 
       const updatedDebitAdviceGlAccount =
-        await this.debitAdviceGlAccountRepository.save(
-          debitAdviceGlAccount,
-        );
+        await this.debitAdviceGlAccountRepository.findOne({
+          where: { id },
+          relations: ["status"],
+        });
 
-      // Audit trail
       await this.userAuditTrailCreateService.create(
         {
           service: "DEBIT_ADVICE_GL_ACCOUNT",
           method: "EDIT",
-          raw_data: JSON.stringify(updatedDebitAdviceGlAccount),
+          raw_data: JSON.stringify(
+            updatedDebitAdviceGlAccount,
+          ),
           description: `Updated debit advice GL account: ${updatedDebitAdviceGlAccount.gl_code}`,
-          status_id: updatedDebitAdviceGlAccount.status_id || 1,
+          status_id:
+            updatedDebitAdviceGlAccount.status_id || 1,
         },
         userId,
       );
 
-      // SSE UPDATE
-      try {
-        this.sseEventEmitter.emitUpdate(
-          "debit-advice-gl-account",
-          updatedDebitAdviceGlAccount.id,
-        );
-      } catch (err) {
-        logger.error("SSE update event failed:", err);
-      }
+      this.sseEventEmitter.emitUpdateSignal(
+        "debit-advice-gl-account",
+        updatedDebitAdviceGlAccount.id,
+      );
 
-      return updatedDebitAdviceGlAccount;
+      return {
+        ...updatedDebitAdviceGlAccount,
+        status_name:
+          updatedDebitAdviceGlAccount.status
+            ? updatedDebitAdviceGlAccount.status
+                .status_name
+            : null,
+      };
     } catch (error) {
       logger.error(
         "Error updating debit advice GL account:",
@@ -262,7 +328,7 @@ export class DebitAdviceGlAccountService {
     }
   }
 
-  // Delete debit advice GL account
+  // Soft delete
   async delete(
     id: number,
     userId: number,
@@ -279,30 +345,29 @@ export class DebitAdviceGlAccountService {
         );
       }
 
-      await this.debitAdviceGlAccountRepository.delete(id);
+      debitAdviceGlAccount.status_id = 14;
 
-      // Audit trail
+      await this.debitAdviceGlAccountRepository.save(
+        debitAdviceGlAccount,
+      );
+
       await this.userAuditTrailCreateService.create(
         {
           service: "DEBIT_ADVICE_GL_ACCOUNT",
           method: "DELETE",
-          raw_data: JSON.stringify(debitAdviceGlAccount),
+          raw_data: JSON.stringify(
+            debitAdviceGlAccount,
+          ),
           description: `Deleted debit advice GL account: ${debitAdviceGlAccount.gl_code}`,
           status_id: 14,
         },
         userId,
       );
 
-      // SSE DELETE
-      try {
-        this.sseEventEmitter.emitDelete(
-          "debit-advice-gl-account",
-          id,
-        );
-      } catch (err) {
-        logger.error("SSE delete event failed:", err);
-      }
-
+      this.sseEventEmitter.emitDeleteSignal(
+        "debit-advice-gl-account",
+        id,
+      );
     } catch (error) {
       logger.error(
         "Error deleting debit advice GL account:",
@@ -311,5 +376,84 @@ export class DebitAdviceGlAccountService {
 
       throw error;
     }
+  }
+
+  // Toggle status
+  async toggleStatus(
+    id: number,
+    userId: number,
+  ) {
+    const debitAdviceGlAccount =
+      await this.debitAdviceGlAccountRepository.findOne({
+        where: { id },
+      });
+
+    if (!debitAdviceGlAccount) {
+      throw new NotFoundException(
+        "Debit advice GL account not found.",
+      );
+    }
+
+    const newStatusId =
+      debitAdviceGlAccount.status_id === 1
+        ? 14
+        : 1;
+
+    const newStatusEntity =
+      await this.statusRepository.findOneBy({
+        id: newStatusId,
+      });
+
+    if (!newStatusEntity) {
+      throw new Error(
+        "Target status not found.",
+      );
+    }
+
+    debitAdviceGlAccount.status =
+      newStatusEntity;
+
+    debitAdviceGlAccount.status_id =
+      newStatusEntity.id;
+
+    const updatedDebitAdviceGlAccount =
+      await this.debitAdviceGlAccountRepository.save(
+        debitAdviceGlAccount,
+      );
+
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "DEBIT_ADVICE_GL_ACCOUNT",
+        method: "TOGGLE_STATUS",
+        raw_data: JSON.stringify(
+          updatedDebitAdviceGlAccount,
+        ),
+        description: `Toggled debit advice GL account: ${updatedDebitAdviceGlAccount.gl_code}`,
+        status_id:
+          updatedDebitAdviceGlAccount.status_id,
+      },
+      userId,
+    );
+
+    this.sseEventEmitter.emitUpdateSignal(
+      "debit-advice-gl-account",
+      updatedDebitAdviceGlAccount.id,
+    );
+
+    return {
+      message: `Debit advice GL account ${updatedDebitAdviceGlAccount.gl_code} successfully toggled ${
+        newStatusId === 1
+          ? "to active"
+          : "to deleted"
+      }.`,
+      debit_advice_gl_account: {
+        ...updatedDebitAdviceGlAccount,
+        status_name:
+          updatedDebitAdviceGlAccount.status
+            ? updatedDebitAdviceGlAccount.status
+                .status_name
+            : null,
+      },
+    };
   }
 }

@@ -4,7 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from "typeorm";
+
+import { Status } from "./Status";
 
 @Entity("suppliers")
 export class Supplier {
@@ -16,24 +20,29 @@ export class Supplier {
     length: 100,
     unique: true,
   })
-  suppliercode: string;
+  supplier_code: string;
 
   @Column({
     name: "suppliername",
     length: 255,
     nullable: true,
   })
-  suppliername: string;
+  supplier_name: string;
 
   @Column({
     name: "oldcode",
     length: 100,
     nullable: true,
   })
-  oldcode: string;
+  old_code: string;
+
+  // Foreign key to Status entity
+  @ManyToOne(() => Status)
+  @JoinColumn({ name: "status_id" })
+  status!: Status;
 
   @Column({ default: 1 })
-  status_id: number;
+  status_id!: number;
 
   @Column({ nullable: true })
   created_by: number;

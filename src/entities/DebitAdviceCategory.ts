@@ -4,8 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn
 } from "typeorm";
-
+import { Status } from "./Status";
 @Entity("debit_advice_categories")
 export class DebitAdviceCategory {
   @PrimaryGeneratedColumn()
@@ -38,8 +40,13 @@ export class DebitAdviceCategory {
   })
   company: string;
 
+  // Foreign key to Status entity
+  @ManyToOne(() => Status)
+  @JoinColumn({ name: "status_id" })
+  status!: Status;
+
   @Column({ default: 1 })
-  status_id: number;
+  status_id!: number;
 
   @Column({ nullable: true })
   created_by: number;

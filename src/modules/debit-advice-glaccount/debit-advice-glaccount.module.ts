@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 
-import { DebitAdviceGlAccount } from "src/entities/DebitAdviceGLAccount";
+import { DebitAdviceGLAccounts } from "src/entities/DebitAdviceGLAccounts";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
@@ -12,17 +12,23 @@ import { DebitAdviceGlAccountService } from "./services/debit-advice-glaccount.s
 import { UsersModule } from "../users/users.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
-import { SSEModule } from "../sse/sse.module"; //
+import { SSEModule } from "../sse/sse.module";
+
+import { Status } from "src/entities/Status";
+import { User } from "src/entities/User";
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      DebitAdviceGlAccount,
+      DebitAdviceGLAccounts,
       UserPermissions,
       PermissionModule,
       Action,
+      Status,
+      User,
     ]),
     UsersModule,
-    SSEModule
+    SSEModule,
   ],
 
   controllers: [DebitAdviceGlAccountController],
@@ -34,4 +40,4 @@ import { SSEModule } from "../sse/sse.module"; //
 
   exports: [DebitAdviceGlAccountService],
 })
-export class DebitAdviceGlAccountModule { }
+export class DebitAdviceGlAccountModule {}

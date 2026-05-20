@@ -5,11 +5,14 @@ import { Supplier } from "../../entities/Supplier";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
-import { SSEModule } from "../sse/sse.module"; //
+import { Status } from "../../entities/Status";
+import { User } from "../../entities/User";
+
 import { SupplierController } from "./controllers/supplier.controller";
 import { SupplierService } from "./services/supplier.service";
 
 import { UsersModule } from "../users/users.module";
+import { SSEModule } from "../sse/sse.module";
 
 import { ResponseMapperService } from "../../services/response-mapper.service";
 
@@ -20,6 +23,8 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       UserPermissions,
       PermissionModule,
       Action,
+      Status,
+      User,
     ]),
     UsersModule,
     SSEModule,
@@ -34,4 +39,4 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   exports: [SupplierService],
 })
-export class SupplierModule { }
+export class SupplierModule {}

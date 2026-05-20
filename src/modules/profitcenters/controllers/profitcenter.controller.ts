@@ -3,7 +3,7 @@ import {
   Get,
   Post,
   Put,
-  Delete,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -13,6 +13,7 @@ import {
 
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
+import { RequirePermissions } from "../../../decorators/permissions.decorator";
 
 import { ProfitcenterService } from "../services/profitcenter.service";
 
@@ -24,14 +25,22 @@ import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 export class ProfitcenterController {
   constructor(
     private readonly profitcenterService: ProfitcenterService,
-  ) { }
+  ) {}
 
   @Get()
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "VIEW",
+  })
   async findAll(@Request() req) {
     return this.profitcenterService.findAll();
   }
 
   @Get(":id")
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "VIEW",
+  })
   async findOne(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -40,11 +49,15 @@ export class ProfitcenterController {
   }
 
   @Post()
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "ADD",
+  })
   async create(
     @Body() createProfitcenterDto: CreateProfitcenterDto,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
     return this.profitcenterService.create(
       createProfitcenterDto,
@@ -53,6 +66,10 @@ export class ProfitcenterController {
   }
 
   @Put(":id")
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateProfitcenterDto: UpdateProfitcenterDto,
@@ -67,13 +84,37 @@ export class ProfitcenterController {
     );
   }
 
-  @Delete(":id")
-  async delete(
+  @Patch(":id/toggle-status-activate")
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "ACTIVATE",
+  })
+  async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
     const userId = req.user.id;
 
-    return this.profitcenterService.delete(id, userId);
+    return this.profitcenterService.toggleStatus(
+      id,
+      userId,
+    );
+  }
+
+  @Patch(":id/toggle-status-deactivate")
+  @RequirePermissions({
+    module: "PROFIT CENTERS",
+    action: "DEACTIVATE",
+  })
+  async toggleStatusDeactivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+
+    return this.profitcenterService.toggleStatus(
+      id,
+      userId,
+    );
   }
 }
