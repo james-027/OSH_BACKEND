@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Query,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
@@ -40,6 +41,8 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { CacheCustom } from "src/decorators/cache.decorator";
 import { buildWarehouseEmployeeKey, CACHE_TTL } from "src/config/cache.config";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+import { DateFilterQueryDto } from "src/dto/query-params";
+import { validateDateParam } from "src/utils/query-validators";
 
 @Controller("warehouse-employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -56,11 +59,23 @@ export class WarehouseEmployeesController {
   @Get()
   @CacheCustom(buildWarehouseEmployeeKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
-  async findAll(@Request() req) {
+  async findAll(@Request() req, @Query() queryParams: DateFilterQueryDto) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
     const roleId = req.user.role_id;
-    return this.warehouseEmployeesService.findAll(accessKeyId, userId, roleId);
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.assignment_date
+      ? validateDateParam(queryParams.assignment_date, "assignment_date")
+      : null;
+    const assignment_date = validatedDate ? validatedDate : undefined;
+
+    return this.warehouseEmployeesService.findAll(
+      accessKeyId,
+      userId,
+      roleId,
+      assignment_date,
+    );
+  }
   }
 
   @Get(":id")
