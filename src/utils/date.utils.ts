@@ -313,11 +313,12 @@ export function parseToFirstDayOfMonth(dateInput: any): string | null {
   }
 
   // Handle string date
+  const timezoneName = getTimeZoneName();
   if (typeof dateInput === "string") {
-    parsedDate = dayjs.tz(dateInput, "Asia/Manila");
+    parsedDate = dayjs.tz(dateInput, timezoneName);
   } else if (dateInput instanceof Date) {
     // Handle Date object
-    parsedDate = dayjs.tz(dateInput, "Asia/Manila");
+    parsedDate = dayjs.tz(dateInput, timezoneName);
   } else {
     return null;
   }
