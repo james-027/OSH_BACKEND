@@ -15,6 +15,8 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
 
 @Injectable()
 export class WarehouseEmployeesService {
@@ -88,7 +90,9 @@ export class WarehouseEmployeesService {
         rec.warehouse && rec.warehouse.location
           ? rec.warehouse.location.location_name
           : null,
-      assignment_date: rec.assignment_date,
+      assignment_date: rec.assignment_date
+        ? dayjs(rec.assignment_date).format("MMMM YYYY")
+        : null,
       assigned_ss: rec.assigned_ss,
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
