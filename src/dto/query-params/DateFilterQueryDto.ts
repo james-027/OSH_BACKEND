@@ -17,6 +17,10 @@ export class DateFilterQueryDto {
 
   @IsOptional()
   @IsDateString()
+  assignment_date?: string;
+
+  @IsOptional()
+  @IsDateString()
   sales_date?: string;
 
   @IsOptional()
