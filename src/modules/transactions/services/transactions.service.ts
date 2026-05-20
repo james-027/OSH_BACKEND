@@ -648,7 +648,7 @@ export class TransactionsService {
       await this.dataSource.query(
         `
         UPDATE transaction_details a
-        INNER JOIN warehouse_employees b ON a.warehouse_id = b.warehouse_id
+        INNER JOIN warehouse_employees b ON a.warehouse_id = b.warehouse_id AND b.assignment_date <= ? AND b.status_id = 1
         SET
           a.assigned_ss = b.assigned_ss,
           a.assigned_ah = b.assigned_ah,
@@ -658,7 +658,7 @@ export class TransactionsService {
           a.assigned_grh = b.assigned_grh
         WHERE b.status_id = 1 AND a.transaction_header_id = ?
       `,
-        [header.id],
+        [trans_date, header.id],
       );
 
       // Audit trail for transaction creation
