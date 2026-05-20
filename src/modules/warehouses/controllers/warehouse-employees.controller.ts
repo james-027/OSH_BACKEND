@@ -76,6 +76,40 @@ export class WarehouseEmployeesController {
       assignment_date,
     );
   }
+
+  @Get("get-warehouses-with-no-record")
+  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "DATA ACCESS" })
+  async getWarehousesWithNoRecord(
+    @Query("location_ids") locationIdsParam: string,
+    @Query("assignment_date") assignmentDateParam: string,
+  ) {
+    if (!locationIdsParam || !assignmentDateParam) {
+      throw new BadRequestException(
+        "location_ids and assignment_date query parameters are required",
+      );
+    }
+
+    // Parse comma-separated location_ids and convert to numbers
+    const locationIds = locationIdsParam.split(",").map((id) => {
+      const parsed = parseInt(id.trim(), 10);
+      if (isNaN(parsed)) {
+        throw new BadRequestException(
+          `Invalid location_id: ${id}. Must be a valid number.`,
+        );
+      }
+      return parsed;
+    });
+
+    // Validate assignment_date format
+    const validatedDate = validateDateParam(
+      assignmentDateParam,
+      "assignment_date",
+    );
+
+    return this.warehouseEmployeesService.getWarehousesWithNoRecord(
+      locationIds,
+      validatedDate,
+    );
   }
 
   @Get(":id")
