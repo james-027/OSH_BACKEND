@@ -143,7 +143,6 @@ export class StaffCategoryTypesService {
     try {
       const record = await this.staffCategoryTypesRepository.findOne({
         where: { id },
-        relations: this.relationFields,
       });
 
       if (!record) {
