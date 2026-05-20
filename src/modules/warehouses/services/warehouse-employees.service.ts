@@ -244,10 +244,11 @@ export class WarehouseEmployeesService {
         warehouse_id: createDto.warehouse_id,
         assignment_date: createDto.assignment_date,
       },
+      relations: ["warehouse"],
     });
     if (exists) {
       throw new BadRequestException(
-        `A record with this warehouse (ID: ${createDto.warehouse_id}) and assignment date (${createDto.assignment_date}) already exists.`,
+        `A record with this store (${exists.warehouse ? exists.warehouse.warehouse_name : exists.warehouse_id}) and assignment date (${createDto.assignment_date}) already exists.`,
       );
     }
     const rec = this.warehouseEmployeesRepository.create({
