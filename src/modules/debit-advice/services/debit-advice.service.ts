@@ -66,10 +66,10 @@ export class DebitAdviceService {
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
-                // ✅ include GL items inside each line
-                lines_items: (item.lines || []).map(line => ({
-                    ...line,
-                })),
+                // // ✅ include GL items inside each line
+                // lines_items: (item.lines || []).map(line => ({
+                //     ...line,
+                // })),
             }));
             // return this.responseMapperService.mapEntitiesToResponse(debitAdvices);
         } catch (error) {
@@ -160,7 +160,7 @@ export class DebitAdviceService {
                 createdBy: { id: userId } as any,
                 document_number: trans_number,
                 transaction_date: createDebitAdviceDto.transaction_date,
-                status_id: 13, // Assuming 1 is the default status for new debit advice
+                status_id: createDebitAdviceDto.status_id ?? 13,
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
                     createdBy: { id: userId } as any,
@@ -236,8 +236,6 @@ export class DebitAdviceService {
             throw error;
         }
     }
-
-
     // Update debit advice
     async update(
         docno: string,
@@ -346,8 +344,8 @@ export class DebitAdviceService {
 
 
             let action_id = 1;
-            console.log("Current status ID:", current_status_id);
-            console.log("New status ID:", reloadedDebitAdvice.status_id);
+            // console.log("Current status ID:", current_status_id);
+            // console.log("New status ID:", reloadedDebitAdvice.status_id);
             if (reloadedDebitAdvice.status_id === current_status_id) {
                 action_id = 2; // EDIT
             } else if (reloadedDebitAdvice.status_id === 3 || reloadedDebitAdvice.status_id === 13) {
@@ -457,4 +455,159 @@ export class DebitAdviceService {
             logger.error("Rollback failed:", rollbackError);
         }
     }
+
+
+    async uploadExcelDebitAdvices(
+        filePath: string,
+        userId: number,
+        roleId?: number,
+        accessKeyId?: number,
+    ) {
+        const XLSX = require("xlsx");
+        const fs = require("fs");
+        const workbook = XLSX.read(fs.readFileSync(filePath), {
+            type: "buffer",
+        });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+        const inserted_row_numbers: number[] = [];
+        const updated_row_numbers: number[] = [];
+        const errors: { row: number; error: string }[] = [];
+        const success: any[] = [];
+        let inserted_count = 0;
+        let updated_count = 0;
+
+        const groupedDocuments: Record<string, any> = {};
+
+        for (let index = 0; index < rows.length; index++) {
+            const row = rows[index];
+
+            try {
+                const sequence = row["SEQUENCE"];
+
+                if (!sequence) {
+                    errors.push({
+                        row: index + 2,
+                        error: "SEQUENCE is required",
+                    });
+                    continue;
+                }
+
+                const amount = Number(row["AMOUNT"]);
+
+                if (isNaN(amount)) {
+                    errors.push({
+                        row: index + 2,
+                        error: "Invalid AMOUNT",
+                    });
+                    continue;
+                }
+
+                if (!groupedDocuments[sequence]) {
+                    groupedDocuments[sequence] = {
+                        id: 0,
+                        document_number: "0",
+                        transaction_date: formatExcelDate(row["TRANSACTION DATE"]),
+                        status_id: 3,
+                        quarter: 1,
+                        line: [],
+                    };
+                }
+
+                groupedDocuments[sequence].line.push({
+                    vendor_code: row["SUPPLIER CODE"],
+                    vendor_name: row["SUPPLIER NAME"],
+                    category: row["CATEGORY CODE"],
+                    amount,
+                    particulars: row["REASON"],
+                    glItems: [
+                        {
+                            gl_code: row["GL CODE"] ?? "-",
+                            gl_description: row["GL DESCRIPTION"] ?? "-",
+                            profitcenter_code: row["PROFIT CENTER CODE"] ?? "-",
+                            amount,
+                            Remarks: row["REASON"] ?? "-",
+                        },
+                    ],
+                });
+
+            } catch (err) {
+                errors.push({
+                    row: index + 2,
+                    error: err.message,
+                });
+            }
+        }
+
+        // SAVE DOCUMENTS
+        for (const sequence of Object.keys(groupedDocuments)) {
+            const document = groupedDocuments[sequence];
+            try {
+                const createdDebitAdvice = await this.create(document, userId, accessKeyId, document.document_number);
+                inserted_count++;
+                inserted_row_numbers.push(document.rowNum);
+                success.push({
+                    __rowNum__: inserted_count,
+                    SEQUENCE: sequence,
+                    DESTRIPTION: `Successfully inserted document with SEQUENCE ${sequence}`,
+                    "TRANSACTION DATE": createdDebitAdvice.Transaction_date,
+                    AMOUNT: document.line?.[0]?.amount ?? 0,
+                    REASON: document.line?.[0]?.reason ?? "",
+                    ID: createdDebitAdvice.id,
+                    DOCUMENT_NUMBER: createdDebitAdvice.document_number,
+                    STATUS_NAME: createdDebitAdvice.status_name,
+                    STATUS: "Inserted",
+                    id: createdDebitAdvice.id,
+                });
+
+            } catch (err) {
+                errors.push({
+                    row: document.rowNum,
+                    error: `Failed saving sequence ${sequence}: ${err.message}`,
+                });
+            }
+        }
+
+        // Delete the file after processing
+        // fs.unlinkSync(filePath);
+
+
+        if (inserted_count > 0 || updated_count > 0) {
+            // SSE Events
+            try {
+                this.sseEventEmitter.emitCreateSignal("debit-advices", 0);
+            } catch (err) {
+                logger.error("SSE event failed:", err);
+            }
+        }
+
+        return {
+            inserted_count,
+            updated_count,
+            inserted_row_numbers,
+            updated_row_numbers,
+            errors,
+            success,
+        };
+
+    }
+
+
 }
+
+const formatExcelDate = (excelDate: any) => {
+    if (!excelDate) return null;
+
+    // If already string/date
+    if (typeof excelDate === "string") {
+        return excelDate;
+    }
+
+    // Excel serial number
+    const jsDate = new Date(
+        (excelDate - 25569) * 86400 * 1000,
+    );
+
+    return jsDate.toISOString().split("T")[0];
+};

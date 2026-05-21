@@ -9,7 +9,20 @@ import {
     UseGuards,
     Request,
     ParseIntPipe,
+    UploadedFile,
+    UseInterceptors,
+    BadRequestException,
 } from "@nestjs/common";
+import {
+    FileInterceptor,
+    diskStorage,
+    UploadedFile as FileType,
+} from "../../../adapters";
+import {
+    excelFileFilter,
+    FILE_SIZE_LIMITS,
+    generateTimestampFilename,
+} from "src/utils/file-upload.utils";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -85,5 +98,33 @@ export class DebitAdviceController {
     async delete(@Param("docno") docno: string, @Request() req) {
         const userId = req.user.id;
         return this.debitAdviceService.delete(docno, userId);
+    }
+
+    @Post("upload-excel")
+    @UseInterceptors(
+        FileInterceptor("file", {
+            storage: diskStorage({
+                destination: "./uploads/debit-advice-upload",
+                filename: generateTimestampFilename,
+            }),
+            fileFilter: excelFileFilter,
+            limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
+        }),
+    )
+    @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+    async uploadExcelDebitAdvices(@UploadedFile() file: FileType, @Request() req) {
+        if (!file)
+            throw new BadRequestException("No file uploaded or invalid file type.");
+
+        const userId = req.user.id;
+        const roleId = req.user.role_id;
+        const accessKeyId = req.user.current_access_key;
+        const result = await this.debitAdviceService.uploadExcelDebitAdvices(
+            file.path,
+            userId,
+            roleId,
+            accessKeyId,
+        );
+        return result;
     }
 }
