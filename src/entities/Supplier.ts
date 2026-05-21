@@ -16,21 +16,21 @@ export class Supplier {
   id: number;
 
   @Column({
-    name: "suppliercode",
+    name: "supplier_code",
     length: 100,
     unique: true,
   })
   supplier_code: string;
 
   @Column({
-    name: "suppliername",
+    name: "supplier_name",
     length: 255,
     nullable: true,
   })
   supplier_name: string;
 
   @Column({
-    name: "oldcode",
+    name: "old_code",
     length: 100,
     nullable: true,
   })

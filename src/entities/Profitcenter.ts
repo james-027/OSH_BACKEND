@@ -16,20 +16,20 @@ export class Profitcenter {
   id: number;
 
   @Column({
-    name: "profitcenter",
+    name: "profitcenter_code",
     length: 100,
     unique: true,
   })
   profitcenter_code: string;
 
   @Column({
-    name: "profitcentername",
+    name: "profitcenter_name",
     length: 255,
   })
   profitcenter_name: string;
 
   @Column({
-    name: "oldcode",
+    name: "old_code",
     length: 100,
     nullable: true,
   })
