@@ -64,8 +64,11 @@ import { LocationHurdle } from "../entities/LocationHurdle";
 import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Profitcenter } from "../entities/Profitcenter";
 import { Supplier } from "../entities/Supplier";
-import { DebitAdviceCategory } from "../entities/DebitAdviceCategory";
 import { DebitAdviceGLAccounts } from "../entities/DebitAdviceGLAccounts";
+import { DebitAdviceCategory } from "src/entities/DebitAdviceCategory";
+import { DebitAdvice_header } from "../entities/DebitAdviceHeader";
+import { DebitAdviceLine } from "../entities/DebitAdviceItems";
+import { DebitAdviceGLItems } from "../entities/DebitAdviceGLItems";
 import { Category } from "../entities/Category";
 import { CategoryType } from "../entities/CategoryType";
 import { AuditFormDetails } from "../entities/AuditFormDetails";
@@ -154,7 +157,18 @@ export const entities = [
   Profitcenter,
   Supplier,
   DebitAdviceCategory,
-  DebitAdviceGLAccounts
+  DebitAdviceGLAccounts,
+  DebitAdvice_header,
+  DebitAdviceLine,
+  DebitAdviceGLItems,
+  // Category,
+  // CategoryType,
+  // Vendor,
+  // Staff,
+  // StaffVendorSalary,
+  // StaffBrand,
+  // StaffCategoryType,
+  // StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

@@ -12,16 +12,36 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {
-      "src/*": ["src/*"],
-      "@modules/*": ["src/modules/*"],
-      "@controllers/*": ["src/modules/locations/controllers/controllers/*"],
-      "@services/*": ["src/services/*"],
-      "@utils/*": ["src/utils/*"],
-      "@config/*": ["src/config/*"],
-      "@entities/*": ["src/entities/*"],
-      "@guards/*": ["src/guards/*"],
-      "@interceptors/*": ["src/interceptors/*"],
-      "@decorators/*": ["src/decorators/*"]
+      "src/*": [
+        "src/*"
+      ],
+      "@modules/*": [
+        "src/modules/*"
+      ],
+      "@controllers/*": [
+        "src/modules/locations/controllers/controllers/*"
+      ],
+      "@services/*": [
+        "src/services/*"
+      ],
+      "@utils/*": [
+        "src/utils/*"
+      ],
+      "@config/*": [
+        "src/config/*"
+      ],
+      "@entities/*": [
+        "src/entities/*"
+      ],
+      "@guards/*": [
+        "src/guards/*"
+      ],
+      "@interceptors/*": [
+        "src/interceptors/*"
+      ],
+      "@decorators/*": [
+        "src/decorators/*"
+      ]
     },
     "incremental": true,
     "skipLibCheck": true,
@@ -30,5 +50,11 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*.spec.ts"
+  ]
 }

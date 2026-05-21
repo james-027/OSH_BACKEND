@@ -1,0 +1,363 @@
+import {
+    Injectable,
+    NotFoundException,
+    BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Transaction } from "typeorm";
+import { DebitAdvice_header } from "../../../entities/DebitAdviceHeader";
+import { DebitAdviceLine } from "src/entities/DebitAdviceItems";
+import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
+import { CreateDebitAdviceDto } from "../dto/CreateDebitAdviceDto";
+import { UpdateDebitAdviceDto } from "../dto/UpdateDebitAdviceDto";
+import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
+import { ResponseMapperService } from "../../../services/response-mapper.service";
+import logger from "../../../config/logger";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { formatDateToString } from "src/utils/date.utils";
+import { stat } from "fs";
+
+
+// This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as 
+// create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary 
+// transformations or validations before returning the response to the controller. Additionally, it will log audit trails for create 
+// and update operations to keep track of changes made to the debit advice records.
+
+@Injectable()
+export class DebitAdviceService {
+    constructor(
+        @InjectRepository(DebitAdvice_header)
+        private debitAdviceRepository: Repository<DebitAdvice_header>,
+        @InjectRepository(DebitAdviceLine)
+        private debitAdviceLineRepository: Repository<DebitAdviceLine>,
+        @InjectRepository(DebitAdviceGLItems)
+        private debitAdviceGLItemsRepository: Repository<DebitAdviceGLItems>,
+        // private userAuditTrailCreateService: UserAuditTrailCreateService,
+        private responseMapperService: ResponseMapperService,
+        private commonUtilitiesService: CommonUtilitiesService,
+    ) { }
+    // Get all debit advices
+    async findAll(): Promise<any[]> {
+        try {
+            const debitAdvices = await this.debitAdviceRepository.find({
+                relations: ["createdBy", "status", "lines"],
+                order: {
+                    id: "ASC",
+                    lines: {
+                        id: "ASC",
+                    },
+                },
+            });
+
+            return debitAdvices.map((item) => ({
+                id: item.id,
+                document_number: item.document_number,
+                transaction_date: item.transaction_date,
+                status_id: item.status_id,
+                status_name: item.status ? item.status.status_name : null,
+                created_at: item.created_at,
+                updated_at: item.updated_at,
+                created_user: item.createdBy
+                    ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
+                    : null,
+                lines_items: (item.lines || []).map(line => ({
+                    ...line,
+                    gl_items: line.glItems || []
+                })),
+            }));
+            // return this.responseMapperService.mapEntitiesToResponse(debitAdvices);
+        } catch (error) {
+            logger.error("Error fetching debit advices:", error);
+            throw new Error("Failed to fetch debit advices");
+        }
+    }
+
+
+    // Get single debit advice by ID
+    async findOne(id: number): Promise<any> {
+        try {
+            const debitAdvice = await this.debitAdviceRepository.findOne({
+                where: { id },
+                relations: ["status", "createdBy", "lines", "lines.glItems"],
+            });
+            if (!debitAdvice) {
+                throw new NotFoundException(`Debit advice with ID ${id} not found`);
+            }
+            return {
+                document_number: debitAdvice.document_number,
+                transaction_date: debitAdvice.transaction_date,
+                id: debitAdvice.id,
+                status_id: debitAdvice.status_id,
+                status_name: debitAdvice.status ? debitAdvice.status.status_name : null,
+                created_at: debitAdvice.created_at,
+                updated_at: debitAdvice.updated_at,
+                created_user: debitAdvice.createdBy
+                    ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
+                    : null,
+                // ✅ include GL items inside each line
+                lines_items: (debitAdvice.lines || []).map(line => ({
+                    ...line,
+                })),
+            };
+            // return this.responseMapperService.mapEntityToResponse(debitAdvice);
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            logger.error("Error fetching debit advice:", error);
+            throw new Error("Failed to fetch debit advice");
+        }
+    }
+    // Create new debit advice
+    async create(createDebitAdviceDto: CreateDebitAdviceDto, userId: number, accessKeyId: number, docno: string): Promise<any> {
+        let savedDebitAdvice: any;
+        try {
+            let trans_number = "";
+            let location_id: number | null = 1;
+            let location_abbr: string | null = null;
+            const year = parseInt(createDebitAdviceDto.transaction_date.toString(), 10);
+            const quarterMonth =
+                (createDebitAdviceDto.quarter - 1) * 3 + 1;
+            const transDate = new Date(
+                year,
+                quarterMonth - 1,
+                1,
+            );
+            const calculatedTransDate = formatDateToString(transDate);
+
+            // Check if debit advice already exists checking of docno 
+            const existingDebitAdvice = await this.debitAdviceRepository.findOne({
+                where: { document_number: createDebitAdviceDto.document_number },
+            });
+            if (existingDebitAdvice) {
+                throw new BadRequestException("Debit advice already exists");
+            }
+
+            //* Generate using bulletproof service with database-level locking
+            trans_number =
+                await this.commonUtilitiesService.generateTransactionNumber({
+                    transaction_type: "DEBIT ADVICE",
+                    location_id: location_id,
+                    access_key_id: accessKeyId,
+                    format: "D{abbr}{key}{year}-{seq:5}",
+                    reset_per_year: true,
+                    currentDate: new Date(calculatedTransDate),
+                    abbr: location_abbr,
+                });
+            // Create debit advice
+            const newDebitAdvice = this.debitAdviceRepository.create({
+                createdBy: { id: userId } as any,
+                document_number: trans_number,
+                transaction_date: createDebitAdviceDto.transaction_date,
+                status_id: 1, // Assuming 1 is the default status for new debit advice
+                lines: createDebitAdviceDto.line.map((item) => ({
+                    ...item,
+                    createdBy: { id: userId } as any,
+                    ref_docno: trans_number,
+                    glItems: (item.glItems || []).map((data) => ({
+                        ...data,
+                        createdBy: { id: userId } as any,
+                        ref_docno: trans_number,
+                    })),
+                })),
+            });
+            savedDebitAdvice = await this.debitAdviceRepository.save(newDebitAdvice);
+            // Reload relations after save
+            const reloadedDebitAdvice = await this.debitAdviceRepository.findOne({
+                where: { id: savedDebitAdvice.id },
+                relations: ["status", "createdBy", "lines", "lines.glItems"],
+            });
+            // Log audit trail
+            // await this.userAuditTrailCreateService.createAuditTrail({
+            //     user_id: userId,
+            //     module_name: "DEBIT_ADVICES",
+            //     action_name: "ADD",
+            //     description: `Created debit advice: ${createDebitAdviceDto.id}`,
+            //     method: "create",
+            // });
+            // return this.responseMapperService.mapEntityToResponse(savedDebitAdvice);
+            return {
+                id: reloadedDebitAdvice.id,
+                status_id: reloadedDebitAdvice.status_id,
+                status_name: reloadedDebitAdvice.status?.status_name || null,
+                created_at: reloadedDebitAdvice.created_at,
+                document_number: reloadedDebitAdvice.document_number,
+                Transaction_date: reloadedDebitAdvice.transaction_date,
+                created_user: reloadedDebitAdvice.createdBy
+                    ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
+                    : null,
+                // ✅ include GL items inside each line
+                lines_items: (reloadedDebitAdvice.lines || []).map(line => ({
+                    ...line,
+                })),
+
+            };
+        } catch (error) {
+            await this.rollbackWarehouseTransaction(savedDebitAdvice);
+            logger.error("Error creating debit advice:", error);
+            throw error;
+        }
+    }
+
+
+    // Update debit advice
+    async update(
+        docno: string,
+        updateDebitAdviceDto: UpdateDebitAdviceDto,
+        userId: number,
+        accessKeyId: number,
+    ): Promise<any> {
+        let updatedDebitAdvice: any;
+        try {
+            const debitAdvice = await this.debitAdviceRepository.findOne({ where: { document_number: docno } });
+            if (!debitAdvice) {
+                throw new NotFoundException(`Debit advice with document number ${docno} not found`);
+            }
+            // Update fields
+            Object.assign(debitAdvice, updateDebitAdviceDto);
+            updatedDebitAdvice = await this.debitAdviceRepository.save(debitAdvice);
+
+            // Update line items
+            if (updateDebitAdviceDto.line && updateDebitAdviceDto.line.length > 0) {
+                for (const lineItemDto of updateDebitAdviceDto.line) {
+                    let lineItem: DebitAdviceLine;
+                    if (lineItemDto.id) {
+                        // Update existing line item
+                        lineItem = await this.debitAdviceLineRepository.findOne({ where: { id: lineItemDto.id } });
+                        if (lineItem) {
+                            if (lineItemDto.isdeleted == 1 && lineItem) {
+                                // 1. delete child records FIRST
+                                await this.debitAdviceGLItemsRepository.delete({
+                                    debitAdviceLine: { id: lineItem.id },
+                                });
+                                await this.debitAdviceLineRepository.delete(lineItem.id);
+                                continue;
+                            } else {
+                                Object.assign(lineItem, lineItemDto);
+                                await this.debitAdviceLineRepository.save(lineItem);
+                            }
+
+                            //  Update or create GL items for this line item
+                            if (lineItemDto.glItems && lineItemDto.glItems.length > 0) {
+                                for (const glItemDto of lineItemDto.glItems) {
+                                    let glItem: DebitAdviceGLItems;
+                                    if (glItemDto.id) {
+                                        // Update existing GL item
+                                        glItem = await this.debitAdviceGLItemsRepository.findOne({ where: { id: glItemDto.id } });
+                                        if (glItem) {
+                                            if (glItemDto.isdeleted == 1) {
+                                                // Soft delete: mark as deleted
+                                                await this.debitAdviceGLItemsRepository.delete({ id: glItemDto.id });
+                                            } else {
+                                                Object.assign(glItem, glItemDto);
+                                                await this.debitAdviceGLItemsRepository.save(glItem);
+                                            }
+                                        }
+                                    } else {
+                                        // Create new GL item
+                                        glItem = this.debitAdviceGLItemsRepository.create({
+                                            ...glItemDto,
+                                            debitAdviceLine: lineItem,
+                                            createdBy: { id: userId } as any,
+                                            ref_docno: debitAdvice.document_number,
+                                        });
+                                        await this.debitAdviceGLItemsRepository.save(glItem);
+                                    }
+
+                                }
+                            }
+                        }
+
+                    } else {
+
+                        // Create new line item
+                        lineItem = this.debitAdviceLineRepository.create({
+                            ...lineItemDto,
+                            header: debitAdvice,
+
+                            createdBy: { id: userId } as any,
+                            ref_docno: debitAdvice.document_number,
+                        });
+                        await this.debitAdviceLineRepository.save(lineItem);
+                    }
+                }
+            }
+
+            const reloadedDebitAdvice = await this.debitAdviceRepository.findOne({
+                where: { id: updatedDebitAdvice.id },
+                relations: ["status", "createdBy", "lines"],
+            });
+            // Log audit trail
+            // await this.userAuditTrailCreateService.createAuditTrail({
+            //     user_id: userId,
+            //     module_name: "DEBIT_ADVICES",
+            //     action_name: "EDIT",
+            //     description: `Updated debit advice: ${updatedDebitAdvice.id}`,
+            //     method: "update",
+            // });
+            return {
+                id: reloadedDebitAdvice.id,
+                status_id: reloadedDebitAdvice.status_id,
+                status_name: reloadedDebitAdvice.status?.status_name || null,
+                created_at: reloadedDebitAdvice.created_at,
+                updated_at: reloadedDebitAdvice.updated_at,
+                document_number: reloadedDebitAdvice.document_number,
+                transaction_date: reloadedDebitAdvice.transaction_date,
+                created_user: reloadedDebitAdvice.createdBy
+                    ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
+                    : null,
+                lines_items: (reloadedDebitAdvice.lines || []).map(line => ({
+                    ...line,
+                })),
+
+            };
+        } catch (error) {
+            await this.rollbackWarehouseTransaction(updatedDebitAdvice);
+            logger.error("Error updating debit advice:", error);
+            throw error;
+        }
+    }
+    // Delete debit advice (soft delete via status)
+    async delete(docno: string, userId: number): Promise<any> {
+        try {
+            const debitAdvice = await this.debitAdviceRepository.findOne({ where: { document_number: docno } });
+            if (!debitAdvice) {
+                throw new NotFoundException(`Debit advice with document number ${docno} not found`);
+            }
+
+            await this.debitAdviceGLItemsRepository.delete({ ref_docno: docno });
+            await this.debitAdviceLineRepository.delete({ ref_docno: docno });
+            await this.debitAdviceRepository.delete({ document_number: docno });
+
+            // // Log audit trail
+            // await this.userAuditTrailCreateService.createAuditTrail({
+            //     user_id: userId,
+            //     module_name: "DEBIT_ADVICES",
+            //     action_name: "DELETE",
+            //     description: `Deleted debit advice: ${debitAdvice.id}`,
+            //     method: "delete",
+            // });
+            return { success: true, message: "Debit advice deleted successfully" };
+        } catch (error) {
+            logger.error("Error deleting debit advice:", error);
+            throw error;
+        }
+    }
+
+    private async rollbackWarehouseTransaction(header: any) {
+        try {
+            // Delete header
+            await this.debitAdviceRepository.delete(header.id);
+            // Delete line items
+            await this.debitAdviceLineRepository.delete({ header_id: header.id });
+
+            // Delete GL items
+            await this.debitAdviceGLItemsRepository.delete({ ref_docno: header.document_number });
+
+            return { success: true, message: "Rollback successful" };
+
+        } catch (rollbackError) {
+            logger.error("Rollback failed:", rollbackError);
+        }
+    }
+}
