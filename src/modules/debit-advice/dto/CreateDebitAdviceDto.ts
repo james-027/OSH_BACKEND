@@ -31,6 +31,6 @@ export class CreateDebitAdviceDto {
     @Type(() => DebitAdviceLineItemDto)
     line!: DebitAdviceLineItemDto[];
     access_key_id?: number;
-
+    status_id?: number;
 }
 
