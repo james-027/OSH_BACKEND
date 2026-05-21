@@ -1,4 +1,5 @@
 import {
+
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -13,6 +14,8 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
+import { User } from "src/entities/User";
+import { Status } from "src/entities/Status";
 
 @Injectable()
 export class DebitAdviceCategoryService {
@@ -23,19 +26,38 @@ export class DebitAdviceCategoryService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+
+    @InjectRepository(Status)
+    private statusRepository: Repository<Status>,
   ) { }
+
+  
 
   // Get all debit advice categories
   async findAll(): Promise<any[]> {
     try {
       const debitAdviceCategories =
         await this.debitAdviceCategoryRepository.find({
-          where: {
-            status_id: 1,
-          },
-        });
+          relations: ["status"],
+        })
 
-      return debitAdviceCategories;
+      return debitAdviceCategories.map((debitAdviceCategory) => ({
+        id: debitAdviceCategory.id,
+        category_code: debitAdviceCategory.category_code,
+        category_name: debitAdviceCategory.category_name,
+        old_code: debitAdviceCategory.old_code,
+        company: debitAdviceCategory.company,
+        status_id: debitAdviceCategory.status_id,
+        status_name:
+        debitAdviceCategory.status
+          ? debitAdviceCategory.status.status_name
+          : null,
+        created_at: debitAdviceCategory.created_at,
+        updated_at: debitAdviceCategory.updated_at,
+        created_by: debitAdviceCategory.created_by,
+      }));
     } catch (error) {
       logger.error("Error fetching debit advice categories:", error);
       throw new Error("Failed to fetch debit advice categories");
@@ -47,8 +69,9 @@ export class DebitAdviceCategoryService {
     try {
       const debitAdviceCategory =
         await this.debitAdviceCategoryRepository.findOne({
-          where: { id },
-        });
+        where: { id },
+        relations: ["status"],
+      })
 
       if (!debitAdviceCategory) {
         throw new NotFoundException(
@@ -56,7 +79,21 @@ export class DebitAdviceCategoryService {
         );
       }
 
-      return debitAdviceCategory;
+      return {
+        id: debitAdviceCategory.id,
+        category_code: debitAdviceCategory.category_code,
+        category_name: debitAdviceCategory.category_name,
+        old_code: debitAdviceCategory.old_code,
+        company: debitAdviceCategory.company,
+        status_id: debitAdviceCategory.status_id,
+       status_name:
+        debitAdviceCategory.status
+          ? debitAdviceCategory.status.status_name
+          : null,
+        created_at: debitAdviceCategory.created_at,
+        updated_at: debitAdviceCategory.updated_at,
+        created_by: debitAdviceCategory.created_by,
+      };
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -72,6 +109,7 @@ export class DebitAdviceCategoryService {
     createDebitAdviceCategoryDto: CreateDebitAdviceCategoryDto,
     userId: number,
   ): Promise<any> {
+    const {  status_id } = createDebitAdviceCategoryDto;
     try {
       // Check if debit advice category already exists
       const existingDebitAdviceCategory =
@@ -79,6 +117,7 @@ export class DebitAdviceCategoryService {
           where: {
             category_code:
               createDebitAdviceCategoryDto.category_code,
+              
           },
         });
 
@@ -103,7 +142,7 @@ export class DebitAdviceCategoryService {
           company:
             createDebitAdviceCategoryDto.company || null,
 
-          created_by_id: userId,
+          created_by: userId,
         });
 
       const savedDebitAdviceCategory =
@@ -129,15 +168,38 @@ export class DebitAdviceCategoryService {
 
       // SSE CREATE
       try {
-        this.sseEventEmitter.emitCreate(
+        this.sseEventEmitter.emitCreateSignal(
           "debit-advice-category",
           savedDebitAdviceCategory.id,
         );
       } catch (err) {
         logger.error("SSE create event failed:", err);
       }
+    const resolvedStatusId = status_id || 1;
+    const statusEntity = await this.statusRepository.findOneBy({
+      id: resolvedStatusId,
+    });
+    if (!statusEntity) {
+      throw new BadRequestException(
+        `Status with ID ${resolvedStatusId} not found.`,
+      );
+    }
+      return {
+        id: savedDebitAdviceCategory.id,
+        category_code: savedDebitAdviceCategory.category_code,
+        category_name: savedDebitAdviceCategory.category_name,
+        old_code: savedDebitAdviceCategory.old_code,
+        company: savedDebitAdviceCategory.company,
+        status_id: savedDebitAdviceCategory.status_id,
+        status_name:
+        savedDebitAdviceCategory.status
+          ? savedDebitAdviceCategory.status.status_name
+          : null,
+        created_at: savedDebitAdviceCategory.created_at,
+        updated_at: savedDebitAdviceCategory.updated_at,
+        created_by: savedDebitAdviceCategory.created_by,
+      };
 
-      return savedDebitAdviceCategory;
     } catch (error) {
       logger.error("Error creating debit advice category:", error);
       throw error;
@@ -200,10 +262,21 @@ export class DebitAdviceCategoryService {
         updateDebitAdviceCategoryDto.company ||
         debitAdviceCategory.company;
 
+      await this.debitAdviceCategoryRepository.save(
+        debitAdviceCategory,
+      );
+
       const updatedDebitAdviceCategory =
-        await this.debitAdviceCategoryRepository.save(
-          debitAdviceCategory,
+        await this.debitAdviceCategoryRepository.findOne({
+          where: { id },
+          relations: ["status"],
+        });
+
+      if (!updatedDebitAdviceCategory) {
+        throw new Error(
+          "Failed to retrieve updated debit advice category",
         );
+      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -219,7 +292,7 @@ export class DebitAdviceCategoryService {
 
       // SSE UPDATE
       try {
-        this.sseEventEmitter.emitUpdate(
+        this.sseEventEmitter.emitUpdateSignal(
           "debit-advice-category",
           updatedDebitAdviceCategory.id,
         );
@@ -227,7 +300,21 @@ export class DebitAdviceCategoryService {
         logger.error("SSE update event failed:", err);
       }
 
-      return updatedDebitAdviceCategory;
+      return {
+        id: updatedDebitAdviceCategory.id,
+        category_code: updatedDebitAdviceCategory.category_code,
+        category_name: updatedDebitAdviceCategory.category_name,
+        old_code: updatedDebitAdviceCategory.old_code,
+        company: updatedDebitAdviceCategory.company,
+        status_id: updatedDebitAdviceCategory.status_id,
+       status_name:
+       updatedDebitAdviceCategory.status
+        ? updatedDebitAdviceCategory.status.status_name
+        : null,
+        created_at: updatedDebitAdviceCategory.created_at,
+        updated_at: updatedDebitAdviceCategory.updated_at,
+        created_by: updatedDebitAdviceCategory.created_by,
+      };
     } catch (error) {
       logger.error("Error updating debit advice category:", error);
       throw error;
@@ -251,7 +338,11 @@ export class DebitAdviceCategoryService {
         );
       }
 
-      await this.debitAdviceCategoryRepository.delete(id);
+      debitAdviceCategory.status_id = 14;
+
+      await this.debitAdviceCategoryRepository.save(
+        debitAdviceCategory,
+      );
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -267,7 +358,7 @@ export class DebitAdviceCategoryService {
 
       // SSE DELETE
       try {
-        this.sseEventEmitter.emitDelete(
+        this.sseEventEmitter.emitDeleteSignal(
           "debit-advice-category",
           id,
         );
@@ -283,5 +374,86 @@ export class DebitAdviceCategoryService {
 
       throw error;
     }
+
+
+  }
+
+  async toggleStatus(id: number, userId: number) {
+    const debitAdviceCategoryToUpdate =
+      await this.debitAdviceCategoryRepository.findOne({
+        where: { id },
+      });
+
+    if (!debitAdviceCategoryToUpdate) {
+      throw new NotFoundException(
+        "Debit advice category not found for status toggle.",
+      );
+    }
+
+    // Determine new status_id
+    let newStatusId: number;
+
+    if (debitAdviceCategoryToUpdate.status_id === 1) {
+      newStatusId = 14; // Set to deleted
+    } else {
+      newStatusId = 1; // Set to active
+    }
+
+   const newStatusEntity = await this.statusRepository.findOneBy({
+      id: newStatusId,
+    });
+    if (!newStatusEntity) {
+      throw new Error(
+        "Target status (active/delete) not found in the database.",
+      );
+    }
+    debitAdviceCategoryToUpdate.status =
+    newStatusEntity;
+
+    debitAdviceCategoryToUpdate.status_id =
+      newStatusEntity.id;
+
+    const updatedDebitAdviceCategory =
+      await this.debitAdviceCategoryRepository.save(
+        debitAdviceCategoryToUpdate,
+      );
+
+    // Audit trail
+    try {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "DEBIT_ADVICE_CATEGORY",
+          method: "TOGGLE_STATUS",
+          raw_data: JSON.stringify(updatedDebitAdviceCategory),
+          description: `Toggled debit advice category: ${updatedDebitAdviceCategory.category_code}`,
+          status_id: updatedDebitAdviceCategory.status_id,
+        },
+        userId,
+      );
+    } catch (auditError) {
+      logger.error("AUDIT ERROR", auditError);
+    }
+
+    // SSE UPDATE
+    try {
+     this.sseEventEmitter.emitUpdateSignal(
+      "debit-advice-category",
+      updatedDebitAdviceCategory.id,
+    );
+    } catch (err) {
+      logger.error("SSE toggle event failed:", err);
+    }
+
+    return {
+      message: `Debit advice category ${updatedDebitAdviceCategory.category_code} successfully toggled ${newStatusId === 1 ? "to active" : "to deleted"
+        }.`,
+      debit_advice_category: {
+        ...updatedDebitAdviceCategory,
+       status_name:
+        updatedDebitAdviceCategory.status
+          ? updatedDebitAdviceCategory.status.status_name
+          : null,
+      },
+    };
   }
 }

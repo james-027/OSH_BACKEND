@@ -3,10 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
+
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 
 import { Supplier } from "src/entities/Supplier";
+import { Status } from "src/entities/Status";
+
 import { CreateSupplierDto } from "../dto/CreateSupplierDto";
 import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 
@@ -22,32 +25,55 @@ export class SupplierService {
     @InjectRepository(Supplier)
     private supplierRepository: Repository<Supplier>,
 
+    @InjectRepository(Status)
+    private statusRepository: Repository<Status>,
+
     private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
-  ) { }
+  ) {}
 
   // Get all suppliers
   async findAll(): Promise<any[]> {
     try {
-      const suppliers = await this.supplierRepository.find({
-        where: {
-          status_id: 1,
-        },
-      });
+      const suppliers =
+        await this.supplierRepository.find({
+          relations: ["status"],
+        });
 
-      return suppliers;
+      return suppliers.map((supplier) => ({
+        id: supplier.id,
+        supplier_code: supplier.supplier_code,
+        supplier_name: supplier.supplier_name,
+        old_code: supplier.old_code,
+        status_id: supplier.status_id,
+        status_name: supplier.status
+          ? supplier.status.status_name
+          : null,
+        created_at: supplier.created_at,
+        updated_at: supplier.updated_at,
+        created_by: supplier.created_by,
+      }));
     } catch (error) {
-      logger.error("Error fetching suppliers:", error);
-      throw new Error("Failed to fetch suppliers");
+      logger.error(
+        "Error fetching suppliers:",
+        error,
+      );
+
+      throw new Error(
+        "Failed to fetch suppliers",
+      );
     }
   }
 
-  // Get single supplier by ID
+  // Get single supplier
   async findOne(id: number): Promise<any> {
     try {
-      const supplier = await this.supplierRepository.findOne({
-        where: { id },
-      });
+      const supplier =
+        await this.supplierRepository.findOne({
+          where: { id },
+          relations: ["status"],
+        });
 
       if (!supplier) {
         throw new NotFoundException(
@@ -55,28 +81,42 @@ export class SupplierService {
         );
       }
 
-      return supplier;
+      return {
+        id: supplier.id,
+        supplier_code: supplier.supplier_code,
+        supplier_name: supplier.supplier_name,
+        old_code: supplier.old_code,
+        status_id: supplier.status_id,
+        status_name: supplier.status
+          ? supplier.status.status_name
+          : null,
+        created_at: supplier.created_at,
+        updated_at: supplier.updated_at,
+        created_by: supplier.created_by,
+      };
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
+      logger.error(
+        "Error fetching supplier:",
+        error,
+      );
 
-      logger.error("Error fetching supplier:", error);
-      throw new Error("Failed to fetch supplier");
+      throw error;
     }
   }
 
-  // Create new supplier
+  // Create supplier
   async create(
     createSupplierDto: CreateSupplierDto,
     userId: number,
   ): Promise<any> {
+    const { status_id } = createSupplierDto;
+
     try {
       const existingSupplier =
         await this.supplierRepository.findOne({
           where: {
-            suppliercode:
-              createSupplierDto.suppliercode,
+            supplier_code:
+              createSupplierDto.supplier_code,
           },
         });
 
@@ -86,55 +126,81 @@ export class SupplierService {
         );
       }
 
-      const newSupplier = this.supplierRepository.create({
-        suppliercode:
-          createSupplierDto.suppliercode,
+      const resolvedStatusId =
+        status_id || 1;
 
-        suppliername:
-          createSupplierDto.suppliername || null,
+      const statusEntity =
+        await this.statusRepository.findOneBy({
+          id: resolvedStatusId,
+        });
 
-        oldcode:
-          createSupplierDto.oldcode || null,
+      if (!statusEntity) {
+        throw new BadRequestException(
+          `Status with ID ${resolvedStatusId} not found.`,
+        );
+      }
 
-        created_by_id: userId,
-      });
+      const newSupplier =
+        this.supplierRepository.create({
+          supplier_code:
+            createSupplierDto.supplier_code,
+
+          supplier_name:
+            createSupplierDto.supplier_name ||
+            null,
+
+          old_code:
+            createSupplierDto.old_code ||
+            null,
+
+          status_id: resolvedStatusId,
+          status: statusEntity,
+
+          created_by: userId,
+        });
 
       const savedSupplier =
-        await this.supplierRepository.save(newSupplier);
-
-      // Audit trail
-      // Audit trail
-      try {
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "SUPPLIERS",
-            method: "CREATE",
-            raw_data: JSON.stringify(savedSupplier),
-            description: `Created supplier: ${savedSupplier.suppliercode}`,
-            status_id: 1,
-          },
-          userId,
+        await this.supplierRepository.save(
+          newSupplier,
         );
 
-        console.log("AUDIT SUCCESS");
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "SUPPLIERS",
+          method: "CREATE",
+          raw_data: JSON.stringify(savedSupplier),
+          description: `Created supplier: ${savedSupplier.supplier_code}`,
+          status_id: 1,
+        },
+        userId,
+      );
 
-      } catch (auditError) {
-        console.log("AUDIT ERROR", auditError);
-      }
-      //  SSE CREATE
-      try {
-        this.sseEventEmitter.emitCreate(
-          "suppliers",
-          savedSupplier.id,
-        );
-      } catch (err) {
-        logger.error("SSE create event failed:", err);
-      }
+      this.sseEventEmitter.emitCreateSignal(
+        "suppliers",
+        savedSupplier.id,
+      );
 
-      return savedSupplier;
-
+      return {
+        id: savedSupplier.id,
+        supplier_code:
+          savedSupplier.supplier_code,
+        supplier_name:
+          savedSupplier.supplier_name,
+        old_code: savedSupplier.old_code,
+        status_id: savedSupplier.status_id,
+        status_name: savedSupplier.status
+          ? savedSupplier.status.status_name
+          : null,
+        created_at: savedSupplier.created_at,
+        updated_at: savedSupplier.updated_at,
+        created_by: savedSupplier.created_by,
+      };
     } catch (error) {
-      logger.error("Error creating supplier:", error);
+      logger.error(
+        "Error creating supplier:",
+        error,
+      );
+
       throw error;
     }
   }
@@ -158,118 +224,161 @@ export class SupplierService {
       }
 
       if (
-        updateSupplierDto.suppliercode &&
-        updateSupplierDto.suppliercode !==
-        supplier.suppliercode
+        updateSupplierDto.supplier_code &&
+        updateSupplierDto.supplier_code !==
+          supplier.supplier_code
       ) {
-        const existingSupplier =
+        const existing =
           await this.supplierRepository.findOne({
             where: {
-              suppliercode:
-                updateSupplierDto.suppliercode,
+              supplier_code:
+                updateSupplierDto.supplier_code,
             },
           });
 
-        if (existingSupplier) {
+        if (existing) {
           throw new BadRequestException(
             "Supplier code already exists",
           );
         }
       }
 
-      supplier.suppliercode =
-        updateSupplierDto.suppliercode ||
-        supplier.suppliercode;
+      Object.assign(supplier, {
+        supplier_code:
+          updateSupplierDto.supplier_code ||
+          supplier.supplier_code,
 
-      supplier.suppliername =
-        updateSupplierDto.suppliername ||
-        supplier.suppliername;
+        supplier_name:
+          updateSupplierDto.supplier_name ||
+          supplier.supplier_name,
 
-      supplier.oldcode =
-        updateSupplierDto.oldcode ||
-        supplier.oldcode;
+        old_code:
+          updateSupplierDto.old_code ||
+          supplier.old_code,
+      });
+
+      await this.supplierRepository.save(
+        supplier,
+      );
 
       const updatedSupplier =
-        await this.supplierRepository.save(supplier);
+        await this.supplierRepository.findOne({
+          where: { id },
+          relations: ["status"],
+        });
 
-      // Audit trail
       await this.userAuditTrailCreateService.create(
         {
           service: "SUPPLIERS",
           method: "EDIT",
-          raw_data: JSON.stringify(updatedSupplier),
-          description: `Updated supplier: ${updatedSupplier.suppliercode}`,
-          status_id: updatedSupplier.status_id || 1,
+          raw_data: JSON.stringify(
+            updatedSupplier,
+          ),
+          description: `Updated supplier: ${updatedSupplier.supplier_code}`,
+          status_id:
+            updatedSupplier.status_id || 1,
         },
         userId,
       );
 
-      //  SSE UPDATE
-      try {
-        this.sseEventEmitter.emitUpdate(
-          "suppliers",
-          updatedSupplier.id,
-        );
-      } catch (err) {
-        logger.error("SSE update event failed:", err);
-      }
-
-      return updatedSupplier;
-
-    } catch (error) {
-      logger.error("Error updating supplier:", error);
-      throw error;
-    }
-  }
-
-  // Delete supplier
-  async delete(
-    id: number,
-    userId: number,
-  ): Promise<void> {
-    try {
-      const supplier =
-        await this.supplierRepository.findOne({
-          where: { id },
-        });
-
-      if (!supplier) {
-        throw new NotFoundException(
-          `Supplier with ID ${id} not found`,
-        );
-      }
-
-      await this.supplierRepository.delete(id);
-
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "SUPPLIERS",
-          method: "DELETE",
-          raw_data: JSON.stringify(supplier),
-          description: `Deleted supplier: ${supplier.suppliercode}`,
-          status_id: 14,
-        },
-        userId,
+      this.sseEventEmitter.emitUpdateSignal(
+        "suppliers",
+        updatedSupplier.id,
       );
 
-      //  SSE DELETE
-      try {
-        this.sseEventEmitter.emitDelete(
-          "suppliers",
-          id,
-        );
-      } catch (err) {
-        logger.error("SSE delete event failed:", err);
-      }
-
+      return {
+        ...updatedSupplier,
+        status_name:
+          updatedSupplier.status
+            ? updatedSupplier.status
+                .status_name
+            : null,
+      };
     } catch (error) {
       logger.error(
-        "Error deleting supplier:",
+        "Error updating supplier:",
         error,
       );
 
       throw error;
     }
+  }
+
+  // Toggle status
+  async toggleStatus(
+    id: number,
+    userId: number,
+  ) {
+    const supplier =
+      await this.supplierRepository.findOne({
+        where: { id },
+      });
+
+    if (!supplier) {
+      throw new NotFoundException(
+        "Supplier not found.",
+      );
+    }
+
+    const newStatusId =
+      supplier.status_id === 1
+        ? 14
+        : 1;
+
+    const newStatusEntity =
+      await this.statusRepository.findOneBy({
+        id: newStatusId,
+      });
+
+    if (!newStatusEntity) {
+      throw new Error(
+        "Target status not found.",
+      );
+    }
+
+    supplier.status = newStatusEntity;
+
+    supplier.status_id =
+      newStatusEntity.id;
+
+    const updatedSupplier =
+      await this.supplierRepository.save(
+        supplier,
+      );
+
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "SUPPLIERS",
+        method: "TOGGLE_STATUS",
+        raw_data: JSON.stringify(
+          updatedSupplier,
+        ),
+        description: `Toggled supplier: ${updatedSupplier.supplier_code}`,
+        status_id:
+          updatedSupplier.status_id,
+      },
+      userId,
+    );
+
+    this.sseEventEmitter.emitUpdateSignal(
+      "suppliers",
+      updatedSupplier.id,
+    );
+
+    return {
+      message: `Supplier ${updatedSupplier.supplier_code} successfully toggled ${
+        newStatusId === 1
+          ? "to active"
+          : "to deleted"
+      }.`,
+      supplier: {
+        ...updatedSupplier,
+        status_name:
+          updatedSupplier.status
+            ? updatedSupplier.status
+                .status_name
+            : null,
+      },
+    };
   }
 }

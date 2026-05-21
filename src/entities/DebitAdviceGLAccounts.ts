@@ -10,23 +10,35 @@ import {
 
 import { Status } from "./Status";
 
-@Entity("profitcenters")
-export class Profitcenter {
+@Entity("debit_advice_gl_accounts")
+export class DebitAdviceGLAccounts {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({
-    name: "profitcenter",
+    name: "glcode",
     length: 100,
     unique: true,
   })
-  profitcenter_code: string;
+  gl_code: string;
 
   @Column({
-    name: "profitcentername",
+    name: "categorycode",
+    length: 100,
+  })
+  category_code: string;
+
+  @Column({
+    name: "categoryname",
     length: 255,
   })
-  profitcenter_name: string;
+  category_name: string;
+
+  @Column({
+    name: "glname",
+    length: 255,
+  })
+  gl_name: string;
 
   @Column({
     name: "oldcode",

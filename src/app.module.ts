@@ -99,7 +99,7 @@ import { Supplier} from "./entities/Supplier";
 import logger from "./config/logger";
 import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
 import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
-import { DebitAdviceGlAccount } from "./entities/DebitAdviceGlAccount";
+import { DebitAdviceGLAccounts } from "./entities/DebitAdviceGLAccounts";
 import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 
 @Module({
@@ -131,7 +131,7 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
       Profitcenter,
       Supplier,
       DebitAdviceCategory,
-      DebitAdviceGlAccount
+      DebitAdviceGLAccounts
     ]),
     // Authentication
     PassportModule,

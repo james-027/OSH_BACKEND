@@ -3,16 +3,18 @@ import {
   Get,
   Post,
   Put,
-  Delete,
+  Patch,
   Body,
   Param,
-  UseGuards,
   Request,
   ParseIntPipe,
+  UseGuards,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
+import { RequirePermissions } from "../../../decorators/permissions.decorator";
+
 import { SupplierService } from "../services/supplier.service";
 
 import { CreateSupplierDto } from "../dto/CreateSupplierDto";
@@ -23,14 +25,16 @@ import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 export class SupplierController {
   constructor(
     private readonly supplierService: SupplierService,
-  ) { }
+  ) {}
 
   @Get()
+  @RequirePermissions({ module: "SUPPLIERS", action: "VIEW" })
   async findAll(@Request() req) {
     return this.supplierService.findAll();
   }
 
   @Get(":id")
+  @RequirePermissions({ module: "SUPPLIERS", action: "VIEW" })
   async findOne(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -39,11 +43,12 @@ export class SupplierController {
   }
 
   @Post()
+  @RequirePermissions({ module: "SUPPLIERS", action: "ADD" })
   async create(
     @Body() createSupplierDto: CreateSupplierDto,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
     return this.supplierService.create(
       createSupplierDto,
@@ -52,12 +57,13 @@ export class SupplierController {
   }
 
   @Put(":id")
+  @RequirePermissions({ module: "SUPPLIERS", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateSupplierDto: UpdateSupplierDto,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
     return this.supplierService.update(
       id,
@@ -66,13 +72,31 @@ export class SupplierController {
     );
   }
 
-  @Delete(":id")
-  async delete(
+  @Patch(":id/toggle-status-activate")
+  @RequirePermissions({
+    module: "SUPPLIERS",
+    action: "ACTIVATE",
+  })
+  async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
-    const userId = 3;
+    const userId = req.user.id;
 
-    return this.supplierService.delete(id, userId);
+    return this.supplierService.toggleStatus(id, userId);
+  }
+
+  @Patch(":id/toggle-status-deactivate")
+  @RequirePermissions({
+    module: "SUPPLIERS",
+    action: "DEACTIVATE",
+  })
+  async toggleStatusDeactivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+
+    return this.supplierService.toggleStatus(id, userId);
   }
 }

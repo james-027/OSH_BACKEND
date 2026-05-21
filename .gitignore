@@ -10,3 +10,5 @@ uploads/qa-req-transactions/*
 .env.cache.example
 EXT/*
 src/migrations/*
+tsconfig.tsbuildinfo
+package-lock.json

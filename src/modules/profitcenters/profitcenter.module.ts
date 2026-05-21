@@ -5,12 +5,15 @@ import { Profitcenter } from "../../entities/Profitcenter";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { Module as PermissionModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
+import { Status } from "../../entities/Status";
+import { User } from "../../entities/User";
 
 import { ProfitcenterController } from "./controllers/profitcenter.controller";
 import { ProfitcenterService } from "./services/profitcenter.service";
 
 import { UsersModule } from "../users/users.module";
-import { SSEModule } from "../sse/sse.module"; //
+import { SSEModule } from "../sse/sse.module";
+
 import { ResponseMapperService } from "../../services/response-mapper.service";
 
 @Module({
@@ -20,9 +23,11 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       UserPermissions,
       PermissionModule,
       Action,
+      Status,
+      User,
     ]),
     UsersModule,
-    SSEModule
+    SSEModule,
   ],
 
   controllers: [ProfitcenterController],
@@ -34,4 +39,4 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   exports: [ProfitcenterService],
 })
-export class ProfitcenterModule { }
+export class ProfitcenterModule {}
