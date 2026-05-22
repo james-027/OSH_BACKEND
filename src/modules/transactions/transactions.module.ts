@@ -25,6 +25,8 @@ import { Action } from "src/entities/Action";
 import { SSEModule } from "../sse/sse.module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { Location } from "src/entities/Location";
+import { EmailService } from "src/services/email.service";
+import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { Location } from "src/entities/Location";
     SalesBudgetTransactionsService,
     SalesBudgetTransactionsDwhService,
     CommonUtilitiesService,
+    EmailService,
+    FrontendUrlUtil,
   ],
   exports: [
     TransactionsService,
