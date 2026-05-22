@@ -12,9 +12,14 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { CreateUserAuditTrailDto } from "../../users/dto/CreateUserAuditTrailDto";
 import { UserLocationsService } from "../../users/services/user-locations.service";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { EmailService } from "../../../services/email.service";
+import { formatDateToMonthYear } from "../../../utils/date.utils";
 import { filter } from "rxjs";
 import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+
+// Role IDs to notify when personnel assignment is missing (dynamic config)
+const PERSONNEL_NOTIFICATION_ROLE_IDS = [3, 4]; // Adjust based on roles that should be notified
 
 @Injectable()
 export class TransactionsService {
@@ -29,6 +34,7 @@ export class TransactionsService {
     private userLocationsService: UserLocationsService,
     private commonUtilitiesService: CommonUtilitiesService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private emailService: EmailService,
   ) {}
 
   // HEADER CRUD
@@ -964,5 +970,125 @@ export class TransactionsService {
       };
     });
     return report;
+  }
+
+  /**
+   * Send notification emails to location's users (OSA/OSS/BCH) about warehouses with no personnel assignment.
+   * Fires asynchronously (non-blocking) and logs audit trail for tracking.
+   * @param locationId - Location where no assignment was found
+   * @param locationName - Display name of location
+   * @param warehousesWithNoAssignment - Array of warehouses with issues
+   * @param createdBy - User ID initiating the transaction
+   */
+  private async sendNoAssignmentNotificationEmails(
+    locationId: number,
+    locationName: string,
+    warehousesWithNoAssignment: Array<{
+      warehouse_ifs: string;
+      warehouse_name: string;
+    }>,
+    createdBy: number,
+    periodDate: string, // YYYY-MM-DD format (e.g., "2026-05-01")
+  ): Promise<void> {
+    try {
+      // Query active users in this location with specified role_ids
+      const recipients = await this.dataSource.query(
+        `
+        SELECT DISTINCT u.id, u.first_name, u.email
+        FROM users u
+        INNER JOIN user_locations ul ON u.id = ul.user_id
+        WHERE ul.location_id = ?
+          AND ul.role_id IN (?)
+          AND u.status_id = 1
+          AND ul.status_id = 1
+        ORDER BY u.first_name ASC
+      `,
+        [locationId, PERSONNEL_NOTIFICATION_ROLE_IDS],
+      );
+
+      if (!recipients || recipients.length === 0) {
+        // Log that no recipients found
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "transactions",
+            method: "sendNoAssignmentNotificationEmails",
+            raw_data: JSON.stringify({
+              location_id: locationId,
+              location_name: locationName,
+              warehouse_count: warehousesWithNoAssignment.length,
+            }),
+            description: `Store personnel assignment notification skipped for location ${locationName}: no active recipients found with specified role IDs`,
+            status_id: 1,
+          },
+          createdBy,
+        );
+        return;
+      }
+
+      // Build subject with month/year
+      const monthYear = formatDateToMonthYear(periodDate);
+
+      // Generate email HTML
+      const emailHtml = this.emailService.generateNoPersonnelAssignmentEmail({
+        locationName,
+        monthYear,
+        warehousesWithNoAssignment,
+      });
+
+      // Build recipient email list (comma-separated for CC)
+      const recipientEmails = recipients.map((r) => r.email).join(",");
+
+      const subject = `Action Required: Missing Store Personnel Assignment - ${locationName} (${monthYear})`;
+
+      // Send single email to all recipients
+      await this.emailService.sendMail({
+        to: recipientEmails,
+        subject,
+        html: emailHtml,
+      });
+
+      // Log successful email sending
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "transactions",
+          method: "sendNoAssignmentNotificationEmails",
+          raw_data: JSON.stringify({
+            location_id: locationId,
+            location_name: locationName,
+            recipient_count: recipients.length,
+            warehouse_count: warehousesWithNoAssignment.length,
+            recipients: recipients
+              .map((r) => `${r.first_name} (${r.email})`)
+              .join("; "),
+          }),
+          description: `Sent store personnel assignment notification for location ${locationName} to ${recipients.length} recipient(s)`,
+          status_id: 1,
+        },
+        createdBy,
+      );
+    } catch (error) {
+      // Log email sending failure with reason
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "transactions",
+          method: "sendNoAssignmentNotificationEmails",
+          raw_data: JSON.stringify({
+            location_id: locationId,
+            location_name: locationName,
+            warehouse_count: warehousesWithNoAssignment.length,
+            error: errorMessage,
+          }),
+          description: `Failed to send store personnel assignment notification for location ${locationName}: ${errorMessage}`,
+          status_id: 1,
+        },
+        createdBy,
+      );
+      logger.error(
+        `Failed to send store personnel notification email for location ${locationName}:`,
+        error,
+      );
+    }
   }
 }
