@@ -187,4 +187,92 @@ export class EmailService {
       </div>
     `;
   }
+
+  /**
+   * Generates an HTML email template for personnel assignment notification.
+   * Notifies location admins/managers about warehouses missing personnel assignments.
+   * @param options - Template variables
+   */
+  generateNoPersonnelAssignmentEmail(options: {
+    locationName: string;
+    monthYear: string; // YYYY-MM-DD format (e.g., "2026-05-01")
+    warehousesWithNoAssignment: Array<{
+      warehouse_ifs: string;
+      warehouse_name: string;
+    }>;
+    supportEmail?: string;
+    companyName?: string;
+    projectName?: string;
+    projectAbbr?: string;
+  }): string {
+    const {
+      locationName,
+      monthYear,
+      warehousesWithNoAssignment,
+      supportEmail = process.env.SUPPORT_EMAIL || "support@bavi.com",
+      companyName = process.env.COMPANY_NAME || "Your Company",
+      projectName = process.env.PROJECT_NAME || "Your Project",
+      projectAbbr = process.env.PROJECT_ABBR || "Your Project",
+    } = options;
+
+    const header = this.generateEmailTemplateHeader(projectName, projectAbbr);
+    const footer = this.generateEmailTemplateFooter(supportEmail, companyName);
+
+    // Build warehouse table rows with role assignment columns
+    const warehouseTableRows = warehousesWithNoAssignment
+      .map(
+        (w) => `
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 6px 8px; font-family: Arial, sans-serif; color: #333; font-size: 13px;">${w.warehouse_ifs}</td>
+        <td style="padding: 6px 8px; font-family: Arial, sans-serif; color: #333; font-size: 13px;">${w.warehouse_name}</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+        <td style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; color: #333; font-size: 13px;">-</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    return `
+      <div style="font-family: Arial, sans-serif; background: #f7f7f7; padding: 32px;">
+        <div style="max-width: 100%; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 0 0 32px 0;">
+          ${header}
+          <div style="padding: 32px;">
+            <p>Dear All,</p>
+            <p>The following stores in <b>${locationName}</b> do not have assigned personnel for <b>${monthYear}</b>. Please assign personnel to these stores so that Nationwide admin can proceed with the transaction creation:</p>
+            
+            <!-- Store Assigned Personnel Table -->
+            <div style="overflow-x: auto; margin: 24px 0;">
+              <table style="width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #2d6cdf;">
+                <thead>
+                  <tr style="background: #2d6cdf; color: #fff; font-weight: bold; text-align: center;">
+                    <th rowspan="2" style="padding: 6px 8px; text-align: left; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 15%;">Code</th>
+                    <th rowspan="2" style="padding: 6px 8px; text-align: left; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 30%;">Store Name</th>
+                    <th colspan="6" style="padding: 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold;">Store Assigned Personnel</th>
+                  </tr>
+                  <tr style="background: #2d6cdf; color: #fff; font-weight: bold; text-align: center;">
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 7%;">SS</th>
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 7%;">AH</th>
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 10%;">BCH</th>
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 10%;">GBCH</th>
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 7%;">RH</th>
+                    <th style="padding: 6px 8px; text-align: center; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; width: 8%;">GRH</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${warehouseTableRows}
+                </tbody>
+              </table>
+            </div>
+
+            <p style="color: #d9534f; font-weight: bold;">Please assign the necessary personnel.</p>
+            ${footer}
+          </div>
+        </div>
+      </div>
+    `;
+  }
 }
