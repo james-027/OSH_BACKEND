@@ -154,7 +154,7 @@ export const entities = [
   Profitcenter,
   Supplier,
   DebitAdviceCategory,
-  DebitAdviceGLAccounts
+  DebitAdviceGLAccounts,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

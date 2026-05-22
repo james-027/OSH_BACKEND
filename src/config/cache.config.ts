@@ -292,7 +292,10 @@ export function buildWarehouseEmployeeKey(
   const userId = user?.id || "all";
   const roleId = user?.role_id || "all";
   const accessKeyId = user?.current_access_key || "all";
-  return `${base}:${userId}:${roleId}:${accessKeyId}`;
+  const assignmentDate = query.assignment_date
+    ? String(query.assignment_date).toLowerCase()
+    : "all";
+  return `${base}:${userId}:${roleId}:${accessKeyId}:${assignmentDate}`;
 }
 
 // Type for cache key builder functions

@@ -12,9 +12,14 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { CreateUserAuditTrailDto } from "../../users/dto/CreateUserAuditTrailDto";
 import { UserLocationsService } from "../../users/services/user-locations.service";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { EmailService } from "../../../services/email.service";
+import { formatDateToMonthYear } from "../../../utils/date.utils";
 import { filter } from "rxjs";
 import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+
+// Role IDs to notify when personnel assignment is missing (dynamic config)
+const PERSONNEL_NOTIFICATION_ROLE_IDS = [3, 4]; // Adjust based on roles that should be notified
 
 @Injectable()
 export class TransactionsService {
@@ -29,6 +34,7 @@ export class TransactionsService {
     private userLocationsService: UserLocationsService,
     private commonUtilitiesService: CommonUtilitiesService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private emailService: EmailService,
   ) {}
 
   // HEADER CRUD
@@ -563,6 +569,7 @@ export class TransactionsService {
           a.whs_code,
           c.id as warehouse_id,
           c.warehouse_name as whs_name,
+          c.warehouse_ifs as warehouse_ifs,
           SUM(a.quantity) AS quantity,
           SUM(a.converted_quantity) AS converted_quantity,
           a.doc_date,
@@ -603,6 +610,8 @@ export class TransactionsService {
         const budgetMonthly = budgetMonthlyMap.get(s.whs_code);
         merged.push({
           warehouse_id: s.warehouse_id,
+          warehouse_ifs: s.warehouse_ifs,
+          warehouse_name: s.whs_name,
           sales_det_qty_2: budget ? Number(budget.sales_det_qty_2) : 0,
           budget_volume_monthly: budgetMonthly
             ? Number(budgetMonthly.sales_det_qty_2)
@@ -621,6 +630,56 @@ export class TransactionsService {
         });
         continue;
       }
+
+      // Validate that all warehouses have assigned personnel for this period
+      const warehousesWithNoAssignment: Array<{
+        warehouse_ifs: string;
+        warehouse_name: string;
+      }> = [];
+      for (const row of merged) {
+        const empRecord = await this.dataSource.query(
+          `SELECT assigned_ss FROM warehouse_employees WHERE warehouse_id = ? AND assignment_date = ? AND status_id = 1`,
+          [row.warehouse_id, trans_date],
+        );
+        const hasAssignment =
+          empRecord && empRecord.length > 0 && empRecord[0].assigned_ss;
+        if (!hasAssignment) {
+          warehousesWithNoAssignment.push({
+            warehouse_ifs: row.warehouse_ifs,
+            warehouse_name: row.warehouse_name,
+          });
+        }
+      }
+
+      if (warehousesWithNoAssignment.length > 0) {
+        const warehouseList = warehousesWithNoAssignment
+          .map((w) => `${w.warehouse_ifs} - ${w.warehouse_name}`)
+          .join(", ");
+
+        results.push({
+          location_id,
+          location_name,
+          status: "skipped",
+          reason: `The following warehouses have no assigned personnel for this period: ${warehouseList}. Please contact your location admin to assign personnel before creating this transaction.`,
+        });
+
+        // Send notification email asynchronously (fire and forget)
+        this.sendNoAssignmentNotificationEmails(
+          location_id,
+          location_name,
+          warehousesWithNoAssignment,
+          created_by,
+          trans_date,
+        ).catch((err) => {
+          logger.error(
+            `Background email sending failed for location ${location_name}:`,
+            err,
+          );
+        });
+
+        continue;
+      }
+
       // 5. Insert transaction_header
       const header = await this.headerRepo.save({
         trans_date,
@@ -648,7 +707,7 @@ export class TransactionsService {
       await this.dataSource.query(
         `
         UPDATE transaction_details a
-        INNER JOIN warehouse_employees b ON a.warehouse_id = b.warehouse_id
+        INNER JOIN warehouse_employees b ON a.warehouse_id = b.warehouse_id AND b.assignment_date <= ? AND b.status_id = 1
         SET
           a.assigned_ss = b.assigned_ss,
           a.assigned_ah = b.assigned_ah,
@@ -658,7 +717,7 @@ export class TransactionsService {
           a.assigned_grh = b.assigned_grh
         WHERE b.status_id = 1 AND a.transaction_header_id = ?
       `,
-        [header.id],
+        [trans_date, header.id],
       );
 
       // Audit trail for transaction creation
@@ -911,5 +970,125 @@ export class TransactionsService {
       };
     });
     return report;
+  }
+
+  /**
+   * Send notification emails to location's users (OSA/OSS/BCH) about warehouses with no personnel assignment.
+   * Fires asynchronously (non-blocking) and logs audit trail for tracking.
+   * @param locationId - Location where no assignment was found
+   * @param locationName - Display name of location
+   * @param warehousesWithNoAssignment - Array of warehouses with issues
+   * @param createdBy - User ID initiating the transaction
+   */
+  private async sendNoAssignmentNotificationEmails(
+    locationId: number,
+    locationName: string,
+    warehousesWithNoAssignment: Array<{
+      warehouse_ifs: string;
+      warehouse_name: string;
+    }>,
+    createdBy: number,
+    periodDate: string, // YYYY-MM-DD format (e.g., "2026-05-01")
+  ): Promise<void> {
+    try {
+      // Query active users in this location with specified role_ids
+      const recipients = await this.dataSource.query(
+        `
+        SELECT DISTINCT u.id, u.first_name, u.email
+        FROM users u
+        INNER JOIN user_locations ul ON u.id = ul.user_id
+        WHERE ul.location_id = ?
+          AND ul.role_id IN (?)
+          AND u.status_id = 1
+          AND ul.status_id = 1
+        ORDER BY u.first_name ASC
+      `,
+        [locationId, PERSONNEL_NOTIFICATION_ROLE_IDS],
+      );
+
+      if (!recipients || recipients.length === 0) {
+        // Log that no recipients found
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "transactions",
+            method: "sendNoAssignmentNotificationEmails",
+            raw_data: JSON.stringify({
+              location_id: locationId,
+              location_name: locationName,
+              warehouse_count: warehousesWithNoAssignment.length,
+            }),
+            description: `Store personnel assignment notification skipped for location ${locationName}: no active recipients found with specified role IDs`,
+            status_id: 1,
+          },
+          createdBy,
+        );
+        return;
+      }
+
+      // Build subject with month/year
+      const monthYear = formatDateToMonthYear(periodDate);
+
+      // Generate email HTML
+      const emailHtml = this.emailService.generateNoPersonnelAssignmentEmail({
+        locationName,
+        monthYear,
+        warehousesWithNoAssignment,
+      });
+
+      // Build recipient email list (comma-separated for CC)
+      const recipientEmails = recipients.map((r) => r.email).join(",");
+
+      const subject = `Action Required: Missing Store Personnel Assignment - ${locationName} (${monthYear})`;
+
+      // Send single email to all recipients
+      await this.emailService.sendMail({
+        to: recipientEmails,
+        subject,
+        html: emailHtml,
+      });
+
+      // Log successful email sending
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "transactions",
+          method: "sendNoAssignmentNotificationEmails",
+          raw_data: JSON.stringify({
+            location_id: locationId,
+            location_name: locationName,
+            recipient_count: recipients.length,
+            warehouse_count: warehousesWithNoAssignment.length,
+            recipients: recipients
+              .map((r) => `${r.first_name} (${r.email})`)
+              .join("; "),
+          }),
+          description: `Sent store personnel assignment notification for location ${locationName} to ${recipients.length} recipient(s)`,
+          status_id: 1,
+        },
+        createdBy,
+      );
+    } catch (error) {
+      // Log email sending failure with reason
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "transactions",
+          method: "sendNoAssignmentNotificationEmails",
+          raw_data: JSON.stringify({
+            location_id: locationId,
+            location_name: locationName,
+            warehouse_count: warehousesWithNoAssignment.length,
+            error: errorMessage,
+          }),
+          description: `Failed to send store personnel assignment notification for location ${locationName}: ${errorMessage}`,
+          status_id: 1,
+        },
+        createdBy,
+      );
+      logger.error(
+        `Failed to send store personnel notification email for location ${locationName}:`,
+        error,
+      );
+    }
   }
 }

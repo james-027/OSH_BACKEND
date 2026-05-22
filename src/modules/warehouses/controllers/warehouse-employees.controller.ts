@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Query,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
@@ -39,6 +40,9 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { CacheCustom } from "src/decorators/cache.decorator";
 import { buildWarehouseEmployeeKey, CACHE_TTL } from "src/config/cache.config";
+import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+import { DateFilterQueryDto } from "src/dto/query-params";
+import { validateDateParam } from "src/utils/query-validators";
 
 @Controller("warehouse-employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -55,11 +59,57 @@ export class WarehouseEmployeesController {
   @Get()
   @CacheCustom(buildWarehouseEmployeeKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
-  async findAll(@Request() req) {
+  async findAll(@Request() req, @Query() queryParams: DateFilterQueryDto) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
     const roleId = req.user.role_id;
-    return this.warehouseEmployeesService.findAll(accessKeyId, userId, roleId);
+    let validatedDate: string | null = null;
+    validatedDate = queryParams.assignment_date
+      ? validateDateParam(queryParams.assignment_date, "assignment_date")
+      : null;
+    const assignment_date = validatedDate ? validatedDate : undefined;
+
+    return this.warehouseEmployeesService.findAll(
+      accessKeyId,
+      userId,
+      roleId,
+      assignment_date,
+    );
+  }
+
+  @Get("get-warehouses-with-no-record")
+  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "DATA ACCESS" })
+  async getWarehousesWithNoRecord(
+    @Query("location_ids") locationIdsParam: string,
+    @Query("assignment_date") assignmentDateParam: string,
+  ) {
+    if (!locationIdsParam || !assignmentDateParam) {
+      throw new BadRequestException(
+        "location_ids and assignment_date query parameters are required",
+      );
+    }
+
+    // Parse comma-separated location_ids and convert to numbers
+    const locationIds = locationIdsParam.split(",").map((id) => {
+      const parsed = parseInt(id.trim(), 10);
+      if (isNaN(parsed)) {
+        throw new BadRequestException(
+          `Invalid location_id: ${id}. Must be a valid number.`,
+        );
+      }
+      return parsed;
+    });
+
+    // Validate assignment_date format
+    const validatedDate = validateDateParam(
+      assignmentDateParam,
+      "assignment_date",
+    );
+
+    return this.warehouseEmployeesService.getWarehousesWithNoRecord(
+      locationIds,
+      validatedDate,
+    );
   }
 
   @Get(":id")
@@ -318,6 +368,17 @@ export class WarehouseEmployeesController {
           }
         }
 
+        // 4. Assignment date mapping - extract month/year and convert to first day of month
+        let assignment_date: string | null = null;
+        if (row["ASSIGNMENT MONTH"]) {
+          assignment_date = parseToFirstDayOfMonth(row["ASSIGNMENT MONTH"]);
+          if (!assignment_date) {
+            throw new Error(
+              `Invalid ASSIGNMENT MONTH: ${row["ASSIGNMENT MONTH"]} (unable to parse date)`,
+            );
+          }
+        }
+
         records.push({
           warehouse_id: warehouse.id,
           assigned_ss: ss.id,
@@ -327,6 +388,7 @@ export class WarehouseEmployeesController {
           assigned_rh: rh,
           assigned_grh: grh,
           status_id,
+          assignment_date,
           __rowNum__: excelRowNum,
         } as any);
       } catch (err) {

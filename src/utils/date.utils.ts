@@ -274,3 +274,93 @@ export function formatClockInForDisplay(utcTimestamp: string): string {
     return "Invalid date";
   }
 }
+
+/**
+ * Parse various date formats to the first day of the month (YYYY-MM-01)
+ * Handles Excel serial dates, string dates, and Date objects
+ * Respects Manila timezone for accurate month calculation
+ * @param dateInput Excel serial number, date string, or Date object
+ * @returns Date string in YYYY-MM-01 format, or null if invalid
+ * @example
+ * parseToFirstDayOfMonth(45078)  // Excel serial → "2026-05-01"
+ * parseToFirstDayOfMonth("2026-05-15") // String → "2026-05-01"
+ * parseToFirstDayOfMonth(new Date("2026-05-15")) // Date → "2026-05-01"
+ */
+export function parseToFirstDayOfMonth(dateInput: any): string | null {
+  const dayjs = require("dayjs");
+  const utc = require("dayjs/plugin/utc");
+  const timezone = require("dayjs/plugin/timezone");
+
+  dayjs.extend(utc);
+  dayjs.extend(timezone);
+
+  let parsedDate;
+
+  // Handle Excel serial date (number)
+  if (typeof dateInput === "number") {
+    try {
+      const XLSX = require("xlsx");
+      const parsed = XLSX.SSF.parse_date_code(dateInput);
+      if (parsed) {
+        const year = parsed.y;
+        const month = String(parsed.m).padStart(2, "0");
+        return `${year}-${month}-01`;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Handle string date
+  const timezoneName = getTimeZoneName();
+  if (typeof dateInput === "string") {
+    parsedDate = dayjs.tz(dateInput, timezoneName);
+  } else if (dateInput instanceof Date) {
+    // Handle Date object
+    parsedDate = dayjs.tz(dateInput, timezoneName);
+  } else {
+    return null;
+  }
+
+  if (!parsedDate.isValid()) {
+    return null;
+  }
+
+  // Get year and month in Manila timezone and format as YYYY-MM-01
+  const year = parsedDate.year();
+  const month = String(parsedDate.month() + 1).padStart(2, "0");
+  return `${year}-${month}-01`;
+}
+
+/**
+ * Format a date string to "Month Year" format in Asia/Manila timezone
+ * Respects Manila timezone for accurate month/year display
+ * @param dateString Date string in YYYY-MM-DD format (e.g., "2026-05-01")
+ * @returns Formatted string like "May 2026"
+ * @example
+ * formatDateToMonthYear("2026-05-01")  // "May 2026"
+ * formatDateToMonthYear("2026-12-25")  // "December 2026"
+ */
+export function formatDateToMonthYear(dateString: string): string {
+  try {
+    const dayjs = require("dayjs");
+    const utc = require("dayjs/plugin/utc");
+    const timezone = require("dayjs/plugin/timezone");
+
+    dayjs.extend(utc);
+    dayjs.extend(timezone);
+
+    const timezoneName = getTimeZoneName();
+    const parsedDate = dayjs.tz(dateString, timezoneName);
+
+    if (!parsedDate.isValid()) {
+      return "Invalid date";
+    }
+
+    // Format as "Month Year" (e.g., "May 2026")
+    return parsedDate.format("MMMM YYYY");
+  } catch (error) {
+    return "Invalid date";
+  }
+}
