@@ -563,6 +563,7 @@ export class TransactionsService {
           a.whs_code,
           c.id as warehouse_id,
           c.warehouse_name as whs_name,
+          c.warehouse_ifs as warehouse_ifs,
           SUM(a.quantity) AS quantity,
           SUM(a.converted_quantity) AS converted_quantity,
           a.doc_date,
@@ -603,6 +604,8 @@ export class TransactionsService {
         const budgetMonthly = budgetMonthlyMap.get(s.whs_code);
         merged.push({
           warehouse_id: s.warehouse_id,
+          warehouse_ifs: s.warehouse_ifs,
+          warehouse_name: s.whs_name,
           sales_det_qty_2: budget ? Number(budget.sales_det_qty_2) : 0,
           budget_volume_monthly: budgetMonthly
             ? Number(budgetMonthly.sales_det_qty_2)
@@ -621,6 +624,56 @@ export class TransactionsService {
         });
         continue;
       }
+
+      // Validate that all warehouses have assigned personnel for this period
+      const warehousesWithNoAssignment: Array<{
+        warehouse_ifs: string;
+        warehouse_name: string;
+      }> = [];
+      for (const row of merged) {
+        const empRecord = await this.dataSource.query(
+          `SELECT assigned_ss FROM warehouse_employees WHERE warehouse_id = ? AND assignment_date = ? AND status_id = 1`,
+          [row.warehouse_id, trans_date],
+        );
+        const hasAssignment =
+          empRecord && empRecord.length > 0 && empRecord[0].assigned_ss;
+        if (!hasAssignment) {
+          warehousesWithNoAssignment.push({
+            warehouse_ifs: row.warehouse_ifs,
+            warehouse_name: row.warehouse_name,
+          });
+        }
+      }
+
+      if (warehousesWithNoAssignment.length > 0) {
+        const warehouseList = warehousesWithNoAssignment
+          .map((w) => `${w.warehouse_ifs} - ${w.warehouse_name}`)
+          .join(", ");
+
+        results.push({
+          location_id,
+          location_name,
+          status: "skipped",
+          reason: `The following warehouses have no assigned personnel for this period: ${warehouseList}. Please contact your location admin to assign personnel before creating this transaction.`,
+        });
+
+        // Send notification email asynchronously (fire and forget)
+        this.sendNoAssignmentNotificationEmails(
+          location_id,
+          location_name,
+          warehousesWithNoAssignment,
+          created_by,
+          trans_date,
+        ).catch((err) => {
+          logger.error(
+            `Background email sending failed for location ${location_name}:`,
+            err,
+          );
+        });
+
+        continue;
+      }
+
       // 5. Insert transaction_header
       const header = await this.headerRepo.save({
         trans_date,
