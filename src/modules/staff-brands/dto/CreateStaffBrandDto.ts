@@ -12,6 +12,8 @@ export class CreateStaffBrandDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
-  
 
+  @IsInt()
+  @IsNotEmpty()
+  access_key_id!: number;
 }

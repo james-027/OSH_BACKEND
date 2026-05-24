@@ -31,7 +31,7 @@ export class StaffWarehousesService {
 
   constructor(
     @InjectRepository(StaffWarehouse)
-  private staffWarehousesRepository: Repository<StaffWarehouse>,
+    private staffWarehousesRepository: Repository<StaffWarehouse>,
     @InjectRepository(Staff)
     private staffRepository: Repository<Staff>,
     private usersService: UsersService,
@@ -110,7 +110,7 @@ export class StaffWarehousesService {
         created_by: userId,
         updated_by: userId,
         access_key_id: accessKeyId,
-        staff_code : staff.staff_code
+        staff_code: staff.staff_code,
       });
 
       const savedRecord = await this.staffWarehousesRepository.save(newRecord);
