@@ -11,6 +11,7 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { Category } from "./Category";
+import { AccessKey } from "./AccessKey";
 
 @Entity("vendors")
 @Unique("UQ_service_provider_code", ["service_provider_code"])
@@ -47,6 +48,9 @@ export class Vendor {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -92,4 +96,8 @@ export class Vendor {
   })
   @JoinColumn({ name: "category_id" })
   category: Category;
+
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 }

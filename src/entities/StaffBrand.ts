@@ -11,6 +11,7 @@ import { Status } from "./Status";
 import { User } from "./User";
 import { Staff } from "./Staff";
 import { Brand } from "./Brand";
+import { AccessKey } from "./AccessKey";
 
 @Entity("staff_brands")
 export class StaffBrand {
@@ -31,6 +32,9 @@ export class StaffBrand {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -84,4 +88,8 @@ export class StaffBrand {
   })
   @JoinColumn({ name: "brand_id" })
   brand: Brand;
+
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 }

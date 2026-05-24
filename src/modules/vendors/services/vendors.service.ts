@@ -29,7 +29,7 @@ export class VendorsService {
   async findAll(): Promise<any[]> {
     try {
       const vendors = await this.vendorsRepository.find({
-        relations: ["status", "createdBy", "updatedBy", "category"],
+        relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
       });
 
       return this.responseMapperService.mapEntitiesToResponse(vendors);
@@ -43,7 +43,7 @@ export class VendorsService {
     try {
       const vendor = await this.vendorsRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy", "category"],
+        relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
       });
 
       if (!vendor) {
@@ -80,6 +80,7 @@ export class VendorsService {
         service_provider_name: createVendorDto.service_provider_name.toUpperCase(),
         service_provider_code: createVendorDto.service_provider_code.toUpperCase(),
         category_id: createVendorDto.category_id,
+        access_key_id: createVendorDto.access_key_id,
         tax: createVendorDto.tax || null,
         vat: createVendorDto.vat || null,
         asf: createVendorDto.asf || null,

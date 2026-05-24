@@ -12,4 +12,10 @@ export class CreateStaffCategoryTypeDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  access_key_id!: number;
+
+
 }

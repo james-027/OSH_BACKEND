@@ -108,6 +108,7 @@ export class StaffWarehousesService {
           : null,
         remarks: createStaffWarehouseDto.remarks || null,
         status_id: createStaffWarehouseDto.status_id || 1,
+        access_key_id: createStaffWarehouseDto.access_key_id,
         created_by: userId,
         updated_by: userId,
       });
@@ -212,6 +213,7 @@ async update(
       end_date,
       remarks: updateStaffWarehouseDto.remarks,
       status_id: updateStaffWarehouseDto.status_id,
+      access_key_id: updateStaffWarehouseDto.access_key_id,
       updated_by: userId,
     });
 
@@ -228,6 +230,7 @@ async update(
           warehouse_id: updateStaffWarehouseDto.warehouse_id,
           location_id: updateStaffWarehouseDto.location_id,
           vendor_id: updateStaffWarehouseDto.vendor_id,
+          access_key_id: updateStaffWarehouseDto.access_key_id,
           effectivity_date,
           end_date,
           status_id: updateStaffWarehouseDto.status_id,

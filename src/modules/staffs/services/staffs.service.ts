@@ -37,6 +37,7 @@ export class StaffsService {
           "location",
           "vendor",
           "position",
+          "accessKey",
         ],
       });
 
@@ -110,6 +111,7 @@ export class StaffsService {
         vendor_id: createStaffDto.vendor_id,
         assign_status_id: createStaffDto.assign_status_id,
         position_id: createStaffDto.position_id,
+        access_key_id: createStaffDto.access_key_id,
         sss_number: createStaffDto.sss_number || null,
         pagibig_number: createStaffDto.pagibig_number || null,
         tin: createStaffDto.tin || null,
