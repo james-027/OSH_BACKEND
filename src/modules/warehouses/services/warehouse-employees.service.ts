@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, In } from "typeorm";
 import { WarehouseEmployee } from "../../../entities/WarehouseEmployee";
 import { CreateWarehouseEmployeeDto } from "../dto/CreateWarehouseEmployeeDto";
 import { UpdateWarehouseEmployeeDto } from "../dto/UpdateWarehouseEmployeeDto";
@@ -502,5 +502,260 @@ export class WarehouseEmployeesService {
       }
     }
     return { success, errors, inserted, updated };
+  }
+
+  /**
+   * Get warehouse assignment report - Flat listing of ALL warehouses with personnel assignments per month
+   * Shows gaps (warehouses with missing assignments) by LEFT JOINing warehouse_employees
+   * Even warehouses with NO assignment for a month will appear in results (NULL values)
+   *
+   * @param location_ids Optional comma-separated location IDs (defaults to user's allowed locations)
+   * @param date_from Start date for assignment date range (YYYY-MM-DD format)
+   * @param date_to End date for assignment date range (YYYY-MM-DD format)
+   * @param userId User ID for access control
+   * @param roleId User's role ID for access control
+   * @param accessKeyId Optional access key filter
+   * @returns Flat array of warehouse-month rows with personnel assignments
+   */
+  async getWarehouseAssignmentReport(
+    location_ids?: number[],
+    date_from?: string,
+    date_to?: string,
+    store_status_ids?: number[],
+    status_id?: number,
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number,
+  ): Promise<any[]> {
+    try {
+      // Step 1: Parse location_ids if provided (comma-separated)
+      let filterLocationIds: number[] = [];
+      if (location_ids && location_ids.length > 0) {
+        filterLocationIds = location_ids
+          .map((id) => Number(id))
+          .filter((id) => !isNaN(id));
+      }
+
+      // Step 2: Get allowed location IDs based on user and role
+      let allowedLocationIds: number[] | undefined = undefined;
+      if (userId && roleId) {
+        allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+      }
+
+      // Step 3: Determine final location IDs to use
+      let finalLocationIds = allowedLocationIds || [];
+      if (filterLocationIds.length > 0) {
+        // Intersect: only use location_ids that are also in allowed locations
+        finalLocationIds = filterLocationIds.filter((id) =>
+          allowedLocationIds?.includes(id),
+        );
+      }
+
+      if (finalLocationIds.length === 0) {
+        return [];
+      }
+
+      // Step 4: Build query - LEFT JOIN to show all warehouses even with no assignment
+      let query = this.warehousesRepository
+        .createQueryBuilder("w")
+        .select([
+          "w.id",
+          "w.warehouse_ifs",
+          "w.warehouse_name",
+          "w.warehouse_code",
+          "w.location_id",
+          "l.location_name",
+          "l.location_abbr",
+          "we.id as assignment_id",
+          "we.assignment_date",
+          "we.assigned_ss",
+          "we.assigned_ah",
+          "we.assigned_bch",
+          "we.assigned_gbch",
+          "we.assigned_rh",
+          "we.assigned_grh",
+          "we.status_id as assignment_status_id",
+        ])
+        .leftJoinAndSelect("w.location", "l");
+
+      // LEFT JOIN warehouse_employees with date filter in ON clause
+      // Build join condition and accumulate parameters to avoid overwrites
+      let joinCondition = "we.warehouse_id = w.id";
+      const queryParams: any = { finalLocationIds };
+
+      // Add status_id filter to join if provided
+      if (status_id !== undefined && status_id !== null) {
+        joinCondition += ` AND we.status_id = :status_id`;
+        queryParams.status_id = status_id;
+      }
+
+      // Add date filter to join condition if provided
+      if (date_from && date_to) {
+        joinCondition += ` AND (we.assignment_date IS NULL OR (we.assignment_date >= :date_from AND we.assignment_date <= :date_to))`;
+        queryParams.date_from = date_from;
+        queryParams.date_to = date_to;
+      }
+
+      query = query
+        .leftJoinAndSelect("warehouse_employees", "we", joinCondition)
+        .where("w.location_id IN (:...finalLocationIds)");
+
+      // Add warehouse status filter if provided (accumulate before setParameters)
+      if (store_status_ids && store_status_ids.length > 0) {
+        query = query.andWhere("w.rem_status_id IN (:...store_status_ids)");
+        queryParams.store_status_ids = store_status_ids;
+      }
+
+      // Apply access_key_id filter if provided (accumulate before setParameters)
+      if (accessKeyId !== undefined && accessKeyId !== null) {
+        query = query.andWhere("w.access_key_id = :access_key_id");
+        queryParams.access_key_id = accessKeyId;
+      }
+
+      // Set ALL parameters at once to avoid overwrites
+      query = query.setParameters(queryParams);
+
+      // Step 5: Execute query with sorting
+      // Note: MySQL uses IS NOT NULL DESC to put NULLs last
+      const results = await query
+        .orderBy("w.warehouse_name", "ASC")
+        .addOrderBy("we.assignment_date IS NOT NULL", "DESC")
+        .addOrderBy("we.assignment_date", "ASC")
+        .getRawMany();
+
+      // Step 6: Map results to include personnel names (from assignment IDs if available)
+      if (results.length === 0) {
+        return [];
+      }
+
+      // Get all assignment IDs for bulk loading employee names
+      const assignmentIds = results
+        .filter((r) => r.assignment_id)
+        .map((r) => r.assignment_id);
+
+      let employeeNamesMap = new Map<number, any>();
+      if (assignmentIds.length > 0) {
+        const assignments = await this.warehouseEmployeesRepository.find({
+          where: { id: In(assignmentIds) },
+          relations: [
+            "assignedSs",
+            "assignedAh",
+            "assignedBch",
+            "assignedGbch",
+            "assignedRh",
+            "assignedGrh",
+          ],
+        });
+
+        assignments.forEach((assignment) => {
+          employeeNamesMap.set(assignment.id, {
+            assigned_ss_name: assignment.assignedSs
+              ? `${assignment.assignedSs.employee_first_name} ${assignment.assignedSs.employee_last_name}`
+              : null,
+            assigned_ss_employee_number: assignment.assignedSs
+              ? assignment.assignedSs.employee_number
+              : null,
+            assigned_ah_name: assignment.assignedAh
+              ? `${assignment.assignedAh.employee_first_name} ${assignment.assignedAh.employee_last_name}`
+              : null,
+            assigned_ah_employee_number: assignment.assignedAh
+              ? assignment.assignedAh.employee_number
+              : null,
+            assigned_bch_name: assignment.assignedBch
+              ? `${assignment.assignedBch.employee_first_name} ${assignment.assignedBch.employee_last_name}`
+              : null,
+            assigned_bch_employee_number: assignment.assignedBch
+              ? assignment.assignedBch.employee_number
+              : null,
+            assigned_gbch_name: assignment.assignedGbch
+              ? `${assignment.assignedGbch.employee_first_name} ${assignment.assignedGbch.employee_last_name}`
+              : null,
+            assigned_gbch_employee_number: assignment.assignedGbch
+              ? assignment.assignedGbch.employee_number
+              : null,
+            assigned_rh_name: assignment.assignedRh
+              ? `${assignment.assignedRh.employee_first_name} ${assignment.assignedRh.employee_last_name}`
+              : null,
+            assigned_rh_employee_number: assignment.assignedRh
+              ? assignment.assignedRh.employee_number
+              : null,
+            assigned_grh_name: assignment.assignedGrh
+              ? `${assignment.assignedGrh.employee_first_name} ${assignment.assignedGrh.employee_last_name}`
+              : null,
+            assigned_grh_employee_number: assignment.assignedGrh
+              ? assignment.assignedGrh.employee_number
+              : null,
+          });
+        });
+      }
+
+      // Step 7: Build final report rows with grouped personnel structure
+      const roleOrder = ["SS", "AH", "BCH", "GBCH", "RH", "GRH"];
+      const report = results.map((row) => {
+        const employeeNames = employeeNamesMap.get(row.assignment_id) || {};
+
+        // Build personnel object grouped by role
+        const personnel: Record<string, any> = {
+          SS: {
+            id: row.we_assigned_ss,
+            name: employeeNames.assigned_ss_name,
+            emp_number: employeeNames.assigned_ss_employee_number,
+          },
+          AH: {
+            id: row.we_assigned_ah,
+            name: employeeNames.assigned_ah_name,
+            emp_number: employeeNames.assigned_ah_employee_number,
+          },
+          BCH: {
+            id: row.we_assigned_bch,
+            name: employeeNames.assigned_bch_name,
+            emp_number: employeeNames.assigned_bch_employee_number,
+          },
+          GBCH: {
+            id: row.we_assigned_gbch,
+            name: employeeNames.assigned_gbch_name,
+            emp_number: employeeNames.assigned_gbch_employee_number,
+          },
+          RH: {
+            id: row.we_assigned_rh,
+            name: employeeNames.assigned_rh_name,
+            emp_number: employeeNames.assigned_rh_employee_number,
+          },
+          GRH: {
+            id: row.we_assigned_grh,
+            name: employeeNames.assigned_grh_name,
+            emp_number: employeeNames.assigned_grh_employee_number,
+          },
+        };
+
+        return {
+          warehouse_id: row.w_id,
+          warehouse_ifs: row.w_warehouse_ifs,
+          warehouse_name: row.w_warehouse_name,
+          warehouse_code: row.w_warehouse_code,
+          location_id: row.w_location_id,
+          location_name: row.l_location_name,
+          location_abbr: row.l_location_abbr,
+          assignment_date: row.we_assignment_date
+            ? dayjs(row.we_assignment_date).format("MMMM YYYY")
+            : null,
+          role_order: roleOrder,
+          personnel,
+          assignment_status_id: row.assignment_status_id,
+          has_assignment: row.assignment_status_id === 1,
+        };
+      });
+
+      return report;
+    } catch (error) {
+      logger.error("Error fetching warehouse assignment report:", error);
+      throw new BadRequestException(
+        `Failed to fetch warehouse assignment report: ${this.getErrorMessage(error)}`,
+      );
+    }
   }
 }
