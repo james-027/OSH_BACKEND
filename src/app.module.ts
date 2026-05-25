@@ -96,6 +96,7 @@ import { ProfitcenterModule } from "./modules/profitcenters/profitcenter.module"
 import { Profitcenter } from "./entities/Profitcenter";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
 import { Supplier} from "./entities/Supplier";
+import { DebitAdviceModule } from "./modules/debit-advice/debit-advice.module";
 import logger from "./config/logger";
 import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
 import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
@@ -109,6 +110,7 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
       isGlobal: true,
       load: [configuration],
     }),
+
 
     // Rate limiting
     ThrottlerModule.forRoot([
@@ -142,6 +144,7 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
       }),
     }),
     ScheduleModule.forRoot(),
+    DebitAdviceModule,
     UsersModule,
     EmployeesModule,
     RolesModule,
