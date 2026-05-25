@@ -102,6 +102,8 @@ import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit
 import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
 import { DebitAdviceGLAccounts } from "./entities/DebitAdviceGLAccounts";
 import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
+import { ApprovalStagesList } from "./entities/ApprovalStagesList";
+import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit-advice-approval.module";
 
 @Module({
   imports: [
@@ -133,7 +135,8 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
       Profitcenter,
       Supplier,
       DebitAdviceCategory,
-      DebitAdviceGLAccounts
+      DebitAdviceGLAccounts,
+      ApprovalStagesList
     ]),
     // Authentication
     PassportModule,
@@ -195,7 +198,8 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
     ProfitcenterModule,
     SupplierModule,
     DebitAdviceCategoryModule,
-    DebitAdviceGlAccountModule
+    DebitAdviceGlAccountModule,
+    DebitAdviceApprovalModule
     
   ],
   providers: [

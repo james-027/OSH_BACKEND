@@ -29,7 +29,7 @@ export class ProfitcenterController {
 
   @Get()
   @RequirePermissions({
-    module: "PROFIT CENTERS",
+    module: ["PROFIT CENTERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
     action: "VIEW",
   })
   async findAll(@Request() req) {

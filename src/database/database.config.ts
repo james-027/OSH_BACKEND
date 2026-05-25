@@ -65,7 +65,7 @@ import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Profitcenter } from "../entities/Profitcenter";
 import { Supplier } from "../entities/Supplier";
 import { DebitAdviceGLAccounts } from "../entities/DebitAdviceGLAccounts";
-import { DebitAdviceCategory } from "src/entities/DebitAdviceCategory";
+import { DebitAdviceCategory } from "../entities/DebitAdviceCategory";
 import { DebitAdvice_header } from "../entities/DebitAdviceHeader";
 import { DebitAdviceLine } from "../entities/DebitAdviceItems";
 import { DebitAdviceGLItems } from "../entities/DebitAdviceGLItems";
@@ -79,6 +79,7 @@ import { StaffVendorSalary } from "../entities/StaffVendorSalary";
 import { StaffBrand } from "../entities/StaffBrand";
 import { StaffCategoryType } from "../entities/StaffCategoryType";
 import { StaffWarehouse } from "../entities/StaffWarehouse";
+import { ApprovalStagesList } from "../entities/ApprovalStagesList";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -161,6 +162,7 @@ export const entities = [
   DebitAdvice_header,
   DebitAdviceLine,
   DebitAdviceGLItems,
+  ApprovalStagesList
   // Category,
   // CategoryType,
   // Vendor,

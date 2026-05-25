@@ -25,7 +25,7 @@ export class DebitAdviceCategoryController {
   ) { }
 
   @Get()
-  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "VIEW" })
+  @RequirePermissions({ module: ["DEBIT ADVICE MASTERDATA", "DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
   async findAll(@Request() req) {
     return this.debitAdviceCategoryService.findAll();
   }
