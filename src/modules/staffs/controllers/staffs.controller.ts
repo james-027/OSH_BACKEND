@@ -25,7 +25,8 @@ export class StaffsController {
   @Get()
   @RequirePermissions({ module: "STAFFS", action: "VIEW" })
   async findAll(@Request() req) {
-    return this.staffsService.findAll();
+    const accessKeyId = req.user.current_access_key;
+    return this.staffsService.findAll(accessKeyId);
   }
 
   @Get(":id")

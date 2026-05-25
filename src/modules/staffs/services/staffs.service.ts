@@ -26,9 +26,14 @@ export class StaffsService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
       const staffs = await this.staffsRepository.find({
+        where,
         relations: [
           "status",
           "assignmentStatus",
@@ -84,7 +89,6 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      
       const existingRecord = await this.staffsRepository.findOne({
         where: {
           staff_code: createStaffDto.staff_code,
@@ -96,7 +100,6 @@ export class StaffsService {
           `Staff code '${createStaffDto.staff_code}' already exists`,
         );
       }
-
 
       const newStaff = this.staffsRepository.create({
         staff_code: createStaffDto.staff_code
@@ -214,16 +217,16 @@ export class StaffsService {
       }
 
       const existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: updateStaffDto.staff_code,
-          },
-        });
+        where: {
+          staff_code: updateStaffDto.staff_code,
+        },
+      });
 
-        if (existingRecord && existingRecord.id !== id) {
-          throw new BadRequestException(
-            `Staff code '${updateStaffDto.staff_code}' already exists`,
-          );
-        }
+      if (existingRecord && existingRecord.id !== id) {
+        throw new BadRequestException(
+          `Staff code '${updateStaffDto.staff_code}' already exists`,
+        );
+      }
 
       const updatedByUser = await this.usersService.findUserById(userId);
       if (!updatedByUser) {

@@ -35,6 +35,7 @@ export class WarehousesService {
     if (accessKeyId !== undefined) {
       where.access_key_id = accessKeyId;
     }
+    
     if (userId && roleId) {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(

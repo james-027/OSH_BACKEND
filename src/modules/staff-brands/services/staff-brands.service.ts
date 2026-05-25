@@ -23,6 +23,7 @@ export class StaffBrandsService {
     "updatedBy",
     "staff",
     "brand",
+    "accessKey",
   ];
 
   constructor(
@@ -34,9 +35,14 @@ export class StaffBrandsService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
       const records = await this.staffBrandsRepository.find({
+        where,
         relations: this.relationFields,
       });
       return this.responseMapperService.mapEntitiesToResponse(records);
@@ -87,12 +93,15 @@ export class StaffBrandsService {
       });
 
       if (existingRecord) {
-        throw new BadRequestException("Staff brand mapping with this staff  and brand already exists");
+        throw new BadRequestException(
+          "Staff brand mapping with this staff  and brand already exists",
+        );
       }
 
       const newRecord = this.staffBrandsRepository.create({
         staff_id: createStaffBrandDto.staff_id,
         brand_id: createStaffBrandDto.brand_id,
+        access_key_id: createStaffBrandDto.access_key_id,
         status_id: createStaffBrandDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
@@ -156,21 +165,19 @@ export class StaffBrandsService {
         );
       }
 
-          const staffId = updateStaffBrandDto.staff_id ?? record.staff_id;
-          const brandId = updateStaffBrandDto.brand_id ?? record.brand_id;
+      const staffId = updateStaffBrandDto.staff_id ?? record.staff_id;
+      const brandId = updateStaffBrandDto.brand_id ?? record.brand_id;
 
-          const existingRecord = await this.staffBrandsRepository.findOne({
-            where: {
-              staff_id: staffId,
-              brand_id: brandId,
-            },
-          });
+      const existingRecord = await this.staffBrandsRepository.findOne({
+        where: {
+          staff_id: staffId,
+          brand_id: brandId,
+        },
+      });
 
-          if (existingRecord && existingRecord.id !== id) {
-            throw new BadRequestException(
-              `Staff brand mapping already exists`,
-            );
-          }
+      if (existingRecord && existingRecord.id !== id) {
+        throw new BadRequestException(`Staff brand mapping already exists`);
+      }
 
       const user = await this.usersService.findUserById(userId);
       if (!user) {

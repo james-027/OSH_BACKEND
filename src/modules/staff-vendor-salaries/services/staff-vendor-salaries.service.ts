@@ -26,10 +26,15 @@ export class StaffVendorSalariesService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
       const staffVendorSalaries = await this.staffVendorSalariesRepository.find(
         {
+          where,
           relations: [
             "status",
             "createdBy",
@@ -37,6 +42,7 @@ export class StaffVendorSalariesService {
             "staff",
             "vendor",
             "location",
+            "accessKey",
           ],
         },
       );
@@ -62,6 +68,7 @@ export class StaffVendorSalariesService {
             "staff",
             "vendor",
             "location",
+            "accessKey",
           ],
         });
 
@@ -95,6 +102,7 @@ export class StaffVendorSalariesService {
         staff_id: createStaffVendorSalaryDto.staff_id,
         vendor_id: createStaffVendorSalaryDto.vendor_id,
         location_id: createStaffVendorSalaryDto.location_id,
+        access_key_id: createStaffVendorSalaryDto.access_key_id,
         allowance: createStaffVendorSalaryDto.allowance,
         salary_rate: createStaffVendorSalaryDto.salary_rate,
         status_id: createStaffVendorSalaryDto.status_id || 1,
@@ -127,6 +135,7 @@ export class StaffVendorSalariesService {
             "staff",
             "vendor",
             "location",
+            "accessKey",
           ],
         });
 
@@ -209,6 +218,7 @@ export class StaffVendorSalariesService {
             "staff",
             "vendor",
             "location",
+            "accessKey",
           ],
         });
 
