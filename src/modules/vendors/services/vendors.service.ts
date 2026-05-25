@@ -34,6 +34,9 @@ export class VendorsService {
       }
       const vendors = await this.vendorsRepository.find({
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 83e05a6 (enable access key based on user access)
         where,
         relations: [
           "status",
@@ -42,9 +45,12 @@ export class VendorsService {
           "category",
           "accessKey",
         ],
+<<<<<<< HEAD
 =======
         relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
 >>>>>>> 934d674 (add access key field)
+=======
+>>>>>>> 83e05a6 (enable access key based on user access)
       });
 
       return this.responseMapperService.mapEntitiesToResponse(vendors);
@@ -59,6 +65,9 @@ export class VendorsService {
       const vendor = await this.vendorsRepository.findOne({
         where: { id },
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 83e05a6 (enable access key based on user access)
         relations: [
           "status",
           "createdBy",
@@ -66,9 +75,12 @@ export class VendorsService {
           "category",
           "accessKey",
         ],
+<<<<<<< HEAD
 =======
         relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
 >>>>>>> 934d674 (add access key field)
+=======
+>>>>>>> 83e05a6 (enable access key based on user access)
       });
 
       if (!vendor) {
