@@ -264,7 +264,7 @@ export class ReportsController {
       locationIds,
       date_from,
       date_to,
-      store_status_ids ? warehouseRemStatusId : undefined,
+      warehouseRemStatusId,
       status_id ? Number(status_id) : undefined,
       userId,
       roleId,
