@@ -5,6 +5,7 @@ import {
   Req,
   UseGuards,
   ParseIntPipe,
+  BadRequestException,
 } from "@nestjs/common";
 import { TransactionsService } from "../../transactions/services/transactions.service";
 import { LocationHurdlesService } from "src/modules/locations/services/location-hurdles.service";
@@ -12,6 +13,8 @@ import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { WarehouseRequirementsService } from "../../warehouse-requirements/services/warehouse-requirements.service";
+import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
+import { validateDateRangeParam } from "src/utils/query-validators";
 
 @Controller("reports")
 @UseGuards(JwtAuthGuard)
@@ -20,6 +23,7 @@ export class ReportsController {
     private readonly service: TransactionsService,
     private readonly locationHurdlesService: LocationHurdlesService,
     private readonly warehouseRequirementsService: WarehouseRequirementsService,
+    private readonly warehouseEmployeesService: WarehouseEmployeesService,
   ) {}
 
   /**
@@ -206,5 +210,65 @@ export class ReportsController {
       user_id: userId,
       role_id: roleId,
     });
+  }
+
+  /**
+   * Get warehouse assignment report - ALL warehouses with personnel assignments per month
+   * Shows gaps (warehouses with missing assignments) via LEFT JOIN
+   * Query params: location_ids (comma-separated), date_from (YYYY-MM-DD), date_to (YYYY-MM-DD), store_status_ids (comma-separated), status_id
+   * Example: /reports/warehouse-employees-assignments?location_ids=1,2&date_from=2026-05-01&date_to=2026-05-31
+   */
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({
+    module: "STORE EMPLOYEES ASSIGNMENT REPORTS",
+    action: "VIEW",
+  })
+  @Get("warehouse-employees-assignments")
+  async getWarehouseAssignmentReport(
+    @Query("location_ids") locationIdsParam?: string,
+    @Query("date_from") date_from?: string,
+    @Query("date_to") date_to?: string,
+    @Query("store_status_ids") store_status_ids?: string,
+    @Query("status_id") status_id?: string,
+    @Req() req?: any,
+  ) {
+    if (!locationIdsParam || !date_from || !date_to) {
+      throw new BadRequestException(
+        "location_ids, date_from, and date_to query parameters are required",
+      );
+    }
+
+    // Parse and validate location_ids (ensure all are valid numbers)
+    const locationIds = locationIdsParam.split(",").map((id) => {
+      const parsed = parseInt(id.trim(), 10);
+      if (isNaN(parsed)) {
+        throw new BadRequestException(
+          `Invalid location_id: ${id}. Must be a valid number.`,
+        );
+      }
+      return parsed;
+    });
+
+    const warehouseRemStatusId: number[] = store_status_ids
+      ? store_status_ids.split(",").map((id) => Number(id.trim()))
+      : [8];
+
+    // Validate date range format and order
+    validateDateRangeParam(date_from, date_to);
+
+    const userId = req?.user?.id;
+    const roleId = req?.user?.role_id;
+    const accessKeyId = req?.user?.current_access_key;
+
+    return await this.warehouseEmployeesService.getWarehouseAssignmentReport(
+      locationIds,
+      date_from,
+      date_to,
+      store_status_ids ? warehouseRemStatusId : undefined,
+      status_id ? Number(status_id) : undefined,
+      userId,
+      roleId,
+      accessKeyId,
+    );
   }
 }
