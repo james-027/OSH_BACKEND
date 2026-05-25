@@ -44,7 +44,7 @@ export class ModulesService {
         },
       });
 
-      console.log("Modules log:", modules);
+      // logger.info("Modules log:", modules);
 
       const flattenedModules = modules.map((module) => ({
         id: module.id,
