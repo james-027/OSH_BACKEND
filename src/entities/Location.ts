@@ -32,7 +32,7 @@ export class Location {
 
   // Foreign key to LocationType entity
   @ManyToOne(() => LocationType, (locationType) => locationType.locations, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "location_type_id" })
@@ -43,7 +43,7 @@ export class Location {
 
   // Foreign key to Status entity
   @ManyToOne(() => Status, (status) => status.locations, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "status_id" })
@@ -57,7 +57,7 @@ export class Location {
 
   // Foreign key to User entity for created_by
   @ManyToOne(() => User, (user) => user.createdLocations, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "created_by" })
@@ -68,7 +68,7 @@ export class Location {
 
   // Foreign key to User entity for updated_by
   @ManyToOne(() => User, (user) => user.updatedLocations, {
-    eager: true,
+    eager: false,
     nullable: true,
   })
   @JoinColumn({ name: "updated_by" })
@@ -85,7 +85,7 @@ export class Location {
   modified_at!: Date;
 
   // Foreign key to Region entity
-  @ManyToOne(() => Region, { eager: true, nullable: true })
+  @ManyToOne(() => Region, { eager: false, nullable: true })
   @JoinColumn({ name: "region_id" })
   region?: Region;
 
@@ -102,7 +102,7 @@ export class Location {
 
   @OneToMany(
     () => ReqTransactionHeader,
-    (reqTransactionHeader) => reqTransactionHeader.location
+    (reqTransactionHeader) => reqTransactionHeader.location,
   )
   reqTransactionHeaders!: ReqTransactionHeader[];
 }

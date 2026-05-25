@@ -23,6 +23,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
+import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 
 dayjs.extend(utc);
 
@@ -560,14 +561,8 @@ export class WarehouseHurdlesService {
         continue;
       }
       try {
-        // Robust UTC date handling for Excel upload
-        let formattedDate: string;
-        if (row.hurdle_date) {
-          const d = dayjs.utc(row.hurdle_date);
-          formattedDate = d.startOf("month").format("YYYY-MM-01");
-        } else {
-          formattedDate = null;
-        }
+        // Parse hurdle date to first day of month (YYYY-MM-01)
+        const formattedDate = row.hurdle_date ? parseToFirstDayOfMonth(row.hurdle_date) : null;
         try {
           // CALL CREATE SERVICE
           await this.create(

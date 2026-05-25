@@ -7,6 +7,7 @@ import {
   Unique,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 import { Warehouse } from "./Warehouse";
 import { Employee } from "./Employee";
@@ -15,7 +16,8 @@ import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 
 @Entity("warehouse_employees")
-@Unique([
+@Index("IDX_we_warehouse_id", ["warehouse_id"])
+@Unique("UQ_assignment_emp_per_month", [
   "warehouse_id",
   "assigned_ss",
   "assigned_ah",
@@ -23,6 +25,7 @@ import { AccessKey } from "./AccessKey";
   "assigned_gbch",
   "assigned_rh",
   "assigned_grh",
+  "assignment_date",
 ])
 export class WarehouseEmployee {
   @PrimaryGeneratedColumn()
@@ -75,6 +78,9 @@ export class WarehouseEmployee {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ type: "date" })
+  assignment_date: string;
 
   @ManyToOne(() => Warehouse)
   @JoinColumn({ name: "warehouse_id" })
