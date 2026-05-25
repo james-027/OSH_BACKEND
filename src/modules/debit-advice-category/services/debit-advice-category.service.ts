@@ -33,7 +33,7 @@ export class DebitAdviceCategoryService {
     private statusRepository: Repository<Status>,
   ) { }
 
-  
+
 
   // Get all debit advice categories
   async findAll(): Promise<any[]> {
@@ -51,9 +51,9 @@ export class DebitAdviceCategoryService {
         company: debitAdviceCategory.company,
         status_id: debitAdviceCategory.status_id,
         status_name:
-        debitAdviceCategory.status
-          ? debitAdviceCategory.status.status_name
-          : null,
+          debitAdviceCategory.status
+            ? debitAdviceCategory.status.status_name
+            : null,
         created_at: debitAdviceCategory.created_at,
         updated_at: debitAdviceCategory.updated_at,
         created_by: debitAdviceCategory.created_by,
@@ -69,9 +69,9 @@ export class DebitAdviceCategoryService {
     try {
       const debitAdviceCategory =
         await this.debitAdviceCategoryRepository.findOne({
-        where: { id },
-        relations: ["status"],
-      })
+          where: { id },
+          relations: ["status"],
+        })
 
       if (!debitAdviceCategory) {
         throw new NotFoundException(
@@ -86,10 +86,10 @@ export class DebitAdviceCategoryService {
         old_code: debitAdviceCategory.old_code,
         company: debitAdviceCategory.company,
         status_id: debitAdviceCategory.status_id,
-       status_name:
-        debitAdviceCategory.status
-          ? debitAdviceCategory.status.status_name
-          : null,
+        status_name:
+          debitAdviceCategory.status
+            ? debitAdviceCategory.status.status_name
+            : null,
         created_at: debitAdviceCategory.created_at,
         updated_at: debitAdviceCategory.updated_at,
         created_by: debitAdviceCategory.created_by,
@@ -109,7 +109,7 @@ export class DebitAdviceCategoryService {
     createDebitAdviceCategoryDto: CreateDebitAdviceCategoryDto,
     userId: number,
   ): Promise<any> {
-    const {  status_id } = createDebitAdviceCategoryDto;
+    const { status_id } = createDebitAdviceCategoryDto;
     try {
       // Check if debit advice category already exists
       const existingDebitAdviceCategory =
@@ -117,7 +117,7 @@ export class DebitAdviceCategoryService {
           where: {
             category_code:
               createDebitAdviceCategoryDto.category_code,
-              
+
           },
         });
 
@@ -175,15 +175,15 @@ export class DebitAdviceCategoryService {
       } catch (err) {
         logger.error("SSE create event failed:", err);
       }
-    const resolvedStatusId = status_id || 1;
-    const statusEntity = await this.statusRepository.findOneBy({
-      id: resolvedStatusId,
-    });
-    if (!statusEntity) {
-      throw new BadRequestException(
-        `Status with ID ${resolvedStatusId} not found.`,
-      );
-    }
+      const resolvedStatusId = status_id || 1;
+      const statusEntity = await this.statusRepository.findOneBy({
+        id: resolvedStatusId,
+      });
+      if (!statusEntity) {
+        throw new BadRequestException(
+          `Status with ID ${resolvedStatusId} not found.`,
+        );
+      }
       return {
         id: savedDebitAdviceCategory.id,
         category_code: savedDebitAdviceCategory.category_code,
@@ -192,9 +192,9 @@ export class DebitAdviceCategoryService {
         company: savedDebitAdviceCategory.company,
         status_id: savedDebitAdviceCategory.status_id,
         status_name:
-        savedDebitAdviceCategory.status
-          ? savedDebitAdviceCategory.status.status_name
-          : null,
+          savedDebitAdviceCategory.status
+            ? savedDebitAdviceCategory.status.status_name
+            : null,
         created_at: savedDebitAdviceCategory.created_at,
         updated_at: savedDebitAdviceCategory.updated_at,
         created_by: savedDebitAdviceCategory.created_by,
@@ -307,10 +307,10 @@ export class DebitAdviceCategoryService {
         old_code: updatedDebitAdviceCategory.old_code,
         company: updatedDebitAdviceCategory.company,
         status_id: updatedDebitAdviceCategory.status_id,
-       status_name:
-       updatedDebitAdviceCategory.status
-        ? updatedDebitAdviceCategory.status.status_name
-        : null,
+        status_name:
+          updatedDebitAdviceCategory.status
+            ? updatedDebitAdviceCategory.status.status_name
+            : null,
         created_at: updatedDebitAdviceCategory.created_at,
         updated_at: updatedDebitAdviceCategory.updated_at,
         created_by: updatedDebitAdviceCategory.created_by,
@@ -399,7 +399,7 @@ export class DebitAdviceCategoryService {
       newStatusId = 1; // Set to active
     }
 
-   const newStatusEntity = await this.statusRepository.findOneBy({
+    const newStatusEntity = await this.statusRepository.findOneBy({
       id: newStatusId,
     });
     if (!newStatusEntity) {
@@ -408,7 +408,7 @@ export class DebitAdviceCategoryService {
       );
     }
     debitAdviceCategoryToUpdate.status =
-    newStatusEntity;
+      newStatusEntity;
 
     debitAdviceCategoryToUpdate.status_id =
       newStatusEntity.id;
@@ -436,10 +436,10 @@ export class DebitAdviceCategoryService {
 
     // SSE UPDATE
     try {
-     this.sseEventEmitter.emitUpdateSignal(
-      "debit-advice-category",
-      updatedDebitAdviceCategory.id,
-    );
+      this.sseEventEmitter.emitUpdateSignal(
+        "debit-advice-category",
+        updatedDebitAdviceCategory.id,
+      );
     } catch (err) {
       logger.error("SSE toggle event failed:", err);
     }
@@ -449,10 +449,10 @@ export class DebitAdviceCategoryService {
         }.`,
       debit_advice_category: {
         ...updatedDebitAdviceCategory,
-       status_name:
-        updatedDebitAdviceCategory.status
-          ? updatedDebitAdviceCategory.status.status_name
-          : null,
+        status_name:
+          updatedDebitAdviceCategory.status
+            ? updatedDebitAdviceCategory.status.status_name
+            : null,
       },
     };
   }

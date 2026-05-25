@@ -25,11 +25,11 @@ import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 export class ProfitcenterController {
   constructor(
     private readonly profitcenterService: ProfitcenterService,
-  ) {}
+  ) { }
 
   @Get()
   @RequirePermissions({
-    module: "PROFIT CENTERS",
+    module: ["PROFIT CENTERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
     action: "VIEW",
   })
   async findAll(@Request() req) {

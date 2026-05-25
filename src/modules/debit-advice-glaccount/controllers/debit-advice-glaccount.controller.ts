@@ -24,10 +24,10 @@ import { RequirePermissions } from "../../../decorators/permissions.decorator";
 export class DebitAdviceGlAccountController {
   constructor(
     private readonly debitAdviceGlAccountService: DebitAdviceGlAccountService,
-  ) {}
+  ) { }
 
   @Get()
-  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "VIEW" })
+  @RequirePermissions({ module: ["DEBIT ADVICE MASTERDATA", "DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
   async findAll(@Request() req) {
     return this.debitAdviceGlAccountService.findAll();
   }

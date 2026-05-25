@@ -34,7 +34,7 @@ import {
 @Controller("employees")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(private readonly employeesService: EmployeesService) { }
 
   @Get()
   @RequirePermissions({ module: "EMPLOYEES", action: "VIEW" })
