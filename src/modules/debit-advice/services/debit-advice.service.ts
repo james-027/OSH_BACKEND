@@ -19,6 +19,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Inject } from "@nestjs/common";
 import { stat } from "fs";
+import { Brackets } from "typeorm";
 
 
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as 
@@ -344,20 +345,34 @@ export class DebitAdviceService {
 
 
             let action_id = 1;
+            let description = ``;
             // console.log("Current status ID:", current_status_id);
             // console.log("New status ID:", reloadedDebitAdvice.status_id);
             if (reloadedDebitAdvice.status_id === current_status_id) {
                 action_id = 2; // EDIT
-            } else if (reloadedDebitAdvice.status_id === 3 || reloadedDebitAdvice.status_id === 13) {
+                switch (reloadedDebitAdvice.status_id) {
+                    case 13:
+                        description = `Edit Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
+                        break;
+
+                }
+            } else if (reloadedDebitAdvice.status_id === 3 || reloadedDebitAdvice.status_id === 13 && current_status_id !== 7) {
                 action_id = 1; // ADD
+                description = `Add New Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
             } else if (reloadedDebitAdvice.status_id === 4) {
                 action_id = 4; // Posting
+                description = `Post Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
             }
             else if (reloadedDebitAdvice.status_id === 7) {
                 action_id = 7; // Approve
+                description = `Approve Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
             }
             else if (reloadedDebitAdvice.status_id === 14) {
                 action_id = 6; // Deactivate
+                description = `Deactivate Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
+            } else if (reloadedDebitAdvice.status_id === 13 && current_status_id === 7) {
+                action_id = 2;
+                description = `Return to Maker Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`;
             }
 
 
@@ -367,7 +382,7 @@ export class DebitAdviceService {
                 action_id: action_id, // add
                 ref_id: reloadedDebitAdvice.id,
                 module_id: 34, // DEBIT ADVICES
-                description: `Update Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || 'Unknown'}`,
+                description: description,
                 raw_data: JSON.stringify(reloadedDebitAdvice),
                 created_by: userId,
             });
@@ -591,6 +606,76 @@ export class DebitAdviceService {
             success,
         };
 
+    }
+
+    async GetbysearchAndPages(
+        page: number,
+        pageSize: number,
+        search: string,
+        statusId: number | string,
+    ) {
+        try {
+            const query =
+                this.debitAdviceRepository.createQueryBuilder("da");
+
+            query
+                .leftJoinAndSelect("da.status", "status")
+                .leftJoinAndSelect("da.createdBy", "createdBy")
+
+
+            // SEARCH
+            if (search) {
+                query.andWhere(
+                    new Brackets((qb) => { // Search in document number, created by first name, or created by last name
+                        qb.where("da.document_number LIKE :search")
+                            .orWhere("createdBy.first_name LIKE :search")
+                            .orWhere("createdBy.last_name LIKE :search");
+                    }),
+                    { search: `%${search}%` }
+                );
+            }
+
+            // FILTER BY STATUS
+            if (statusId) {
+                query.andWhere("da.status_id = :statusId", {
+                    statusId: Number(statusId),
+                });
+            }
+
+            // PAGINATION
+            query.skip((page - 1) * pageSize);
+            query.take(pageSize);
+
+            // SORT
+            query.orderBy("da.id", "ASC");
+
+            const [items, totalCount] =
+                await query.getManyAndCount();
+
+            return {
+                items: items.map((item) => ({
+                    id: item.id,
+                    document_number: item.document_number,
+                    transaction_date: item.transaction_date,
+                    status_id: item.status_id,
+                    status_name: item.status
+                        ? item.status.status_name
+                        : null,
+                    created_at: item.created_at,
+                    updated_at: item.updated_at,
+                    created_user: item.createdBy
+                        ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
+                        : null,
+                })),
+
+                totalCount,
+                page,
+                pageSize,
+            };
+        } catch (error) {
+            logger.error("Error fetching debit advices:", error);
+            throw new Error("Failed to fetch debit advices");
+        }
     }
 
 

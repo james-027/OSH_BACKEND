@@ -25,7 +25,7 @@ export class DebitAdviceCategoryController {
   ) { }
 
   @Get()
-  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "VIEW" })
+  @RequirePermissions({ module: ["DEBIT ADVICE MASTERDATA", "DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
   async findAll(@Request() req) {
     return this.debitAdviceCategoryService.findAll();
   }
@@ -70,7 +70,7 @@ export class DebitAdviceCategoryController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA",action: "ACTIVATE",})
+  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "ACTIVATE", })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -81,7 +81,7 @@ export class DebitAdviceCategoryController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "DEACTIVATE",})
+  @RequirePermissions({ module: "DEBIT ADVICE MASTERDATA", action: "DEACTIVATE", })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,

@@ -65,7 +65,7 @@ import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Profitcenter } from "../entities/Profitcenter";
 import { Supplier } from "../entities/Supplier";
 import { DebitAdviceGLAccounts } from "../entities/DebitAdviceGLAccounts";
-import { DebitAdviceCategory } from "src/entities/DebitAdviceCategory";
+import { DebitAdviceCategory } from "../entities/DebitAdviceCategory";
 import { DebitAdvice_header } from "../entities/DebitAdviceHeader";
 import { DebitAdviceLine } from "../entities/DebitAdviceItems";
 import { DebitAdviceGLItems } from "../entities/DebitAdviceGLItems";
