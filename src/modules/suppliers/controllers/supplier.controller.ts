@@ -23,38 +23,29 @@ import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 @Controller("suppliers")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SupplierController {
-  constructor(
-    private readonly supplierService: SupplierService,
-  ) { }
+  constructor(private readonly supplierService: SupplierService) {}
 
   @Get()
-  @RequirePermissions({ module: ["SUPPLIERS","DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
-  @RequirePermissions({ module: ["SUPPLIERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
+  @RequirePermissions({
+    module: ["SUPPLIERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
+    action: "VIEW",
+  })
   async findAll(@Request() req) {
     return this.supplierService.findAll();
   }
 
   @Get(":id")
   @RequirePermissions({ module: "SUPPLIERS", action: "VIEW" })
-  async findOne(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req,
-  ) {
+  async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.supplierService.findOne(id);
   }
 
   @Post()
   @RequirePermissions({ module: "SUPPLIERS", action: "ADD" })
-  async create(
-    @Body() createSupplierDto: CreateSupplierDto,
-    @Request() req,
-  ) {
+  async create(@Body() createSupplierDto: CreateSupplierDto, @Request() req) {
     const userId = req.user.id;
 
-    return this.supplierService.create(
-      createSupplierDto,
-      userId,
-    );
+    return this.supplierService.create(createSupplierDto, userId);
   }
 
   @Put(":id")
@@ -66,11 +57,7 @@ export class SupplierController {
   ) {
     const userId = req.user.id;
 
-    return this.supplierService.update(
-      id,
-      updateSupplierDto,
-      userId,
-    );
+    return this.supplierService.update(id, updateSupplierDto, userId);
   }
 
   @Patch(":id/toggle-status-activate")
