@@ -41,6 +41,56 @@ export class WarehouseEmployeesService {
     }
     return "An unexpected error occurred";
   }
+
+  /**
+   * Map raw WarehouseEmployee entity to API response format
+   * Extracts the mapping logic to avoid code duplication
+   */
+  private mapToResponse(rec: WarehouseEmployee): any {
+    return {
+      id: rec.id,
+      warehouse_id: rec.warehouse_id,
+      warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
+      assignment_date: rec.assignment_date,
+      assigned_ss: rec.assigned_ss,
+      assigned_ss_name: rec.assignedSs
+        ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
+        : null,
+      assigned_ah: rec.assigned_ah,
+      assigned_ah_name: rec.assignedAh
+        ? `${rec.assignedAh.employee_first_name} ${rec.assignedAh.employee_last_name}`
+        : null,
+      assigned_bch: rec.assigned_bch,
+      assigned_bch_name: rec.assignedBch
+        ? `${rec.assignedBch.employee_first_name} ${rec.assignedBch.employee_last_name}`
+        : null,
+      assigned_gbch: rec.assigned_gbch,
+      assigned_gbch_name: rec.assignedGbch
+        ? `${rec.assignedGbch.employee_first_name} ${rec.assignedGbch.employee_last_name}`
+        : null,
+      assigned_rh: rec.assigned_rh,
+      assigned_rh_name: rec.assignedRh
+        ? `${rec.assignedRh.employee_first_name} ${rec.assignedRh.employee_last_name}`
+        : null,
+      assigned_grh: rec.assigned_grh,
+      assigned_grh_name: rec.assignedGrh
+        ? `${rec.assignedGrh.employee_first_name} ${rec.assignedGrh.employee_last_name}`
+        : null,
+      status_id: rec.status_id,
+      status_name: rec.status ? rec.status.status_name : null,
+      created_at: rec.created_at,
+      created_by: rec.created_by,
+      updated_by: rec.updated_by,
+      modified_at: rec.modified_at,
+      created_user: rec.createdBy
+        ? `${rec.createdBy.first_name} ${rec.createdBy.last_name}`
+        : null,
+      updated_user: rec.updatedBy
+        ? `${rec.updatedBy.first_name} ${rec.updatedBy.last_name}`
+        : null,
+    };
+  }
+
   /**
    * Build human-readable personnel change description for action logs
    * Shows which roles changed with from/to employee names (or N/A for empty positions)
@@ -252,48 +302,7 @@ export class WarehouseEmployeesService {
     });
     if (!rec)
       throw new NotFoundException("Warehouse employee record not found");
-    return {
-      id: rec.id,
-      warehouse_id: rec.warehouse_id,
-      warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
-      assignment_date: rec.assignment_date,
-      assigned_ss: rec.assigned_ss,
-      assigned_ss_name: rec.assignedSs
-        ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
-        : null,
-      assigned_ah: rec.assigned_ah,
-      assigned_ah_name: rec.assignedAh
-        ? `${rec.assignedAh.employee_first_name} ${rec.assignedAh.employee_last_name}`
-        : null,
-      assigned_bch: rec.assigned_bch,
-      assigned_bch_name: rec.assignedBch
-        ? `${rec.assignedBch.employee_first_name} ${rec.assignedBch.employee_last_name}`
-        : null,
-      assigned_gbch: rec.assigned_gbch,
-      assigned_gbch_name: rec.assignedGbch
-        ? `${rec.assignedGbch.employee_first_name} ${rec.assignedGbch.employee_last_name}`
-        : null,
-      assigned_rh: rec.assigned_rh,
-      assigned_rh_name: rec.assignedRh
-        ? `${rec.assignedRh.employee_first_name} ${rec.assignedRh.employee_last_name}`
-        : null,
-      assigned_grh: rec.assigned_grh,
-      assigned_grh_name: rec.assignedGrh
-        ? `${rec.assignedGrh.employee_first_name} ${rec.assignedGrh.employee_last_name}`
-        : null,
-      status_id: rec.status_id,
-      status_name: rec.status ? rec.status.status_name : null,
-      created_at: rec.created_at,
-      created_by: rec.created_by,
-      updated_by: rec.updated_by,
-      modified_at: rec.modified_at,
-      created_user: rec.createdBy
-        ? `${rec.createdBy.first_name} ${rec.createdBy.last_name}`
-        : null,
-      updated_user: rec.updatedBy
-        ? `${rec.updatedBy.first_name} ${rec.updatedBy.last_name}`
-        : null,
-    };
+    return this.mapToResponse(rec);
   }
 
   async create(
