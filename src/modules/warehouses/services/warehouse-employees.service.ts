@@ -14,6 +14,7 @@ import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
+import { ActionLogsService } from "../../actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
 const dayjs = require("dayjs");
@@ -31,6 +32,7 @@ export class WarehouseEmployeesService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
     private cacheInvalidationService: CacheInvalidationService,
+    private actionLogsService: ActionLogsService,
   ) {}
 
   private getErrorMessage(error: unknown): string {
@@ -344,6 +346,49 @@ export class WarehouseEmployeesService {
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
+
+      // Action Log - Log warehouse personnel assignment creation
+      if (!skipActionLogs) {
+        try {
+          const warehouse = await this.warehousesRepository.findOne({
+            where: { id: saved.warehouse_id },
+          });
+          const assignmentDateFormatted = formatDateToMonthYear(
+            saved.assignment_date,
+          );
+          // Fetch with relations for informative description
+          const savedWithRelations =
+            await this.warehouseEmployeesRepository.findOne({
+              where: { id: saved.id },
+              relations: [
+                "assignedSs",
+                "assignedAh",
+                "assignedBch",
+                "assignedGbch",
+                "assignedRh",
+                "assignedGrh",
+              ],
+            });
+          const description = this.buildPersonnelChangeDescription(
+            warehouse || { warehouse_name: "Unknown", warehouse_ifs: "N/A" },
+            assignmentDateFormatted,
+            null, // No old assignment on create
+            savedWithRelations,
+          );
+          await this.actionLogsService.logAction({
+            module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+            ref_id: saved.id,
+            action_id: 1, // ADD
+            description,
+            raw_data: JSON.stringify(createDto),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error("Action log failed for create:", err);
+          // Don't throw - action log failure shouldn't block creation
+        }
+      }
+
       return saved;
     } catch (error) {
       throw new BadRequestException(this.getErrorMessage(error));
