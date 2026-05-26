@@ -39,6 +39,67 @@ export class WarehouseEmployeesService {
     }
     return "An unexpected error occurred";
   }
+  /**
+   * Build human-readable personnel change description for action logs
+   * Shows which roles changed with from/to employee names (or N/A for empty positions)
+   * Format (newline-separated):
+   * Updated Warehouse Name (Code) - Month Year:
+   * SS: OldName → NewName
+   * AH: OldName → NewName
+   * ... (one per line)
+   */
+  private buildPersonnelChangeDescription(
+    warehouse: { warehouse_name: string; warehouse_ifs: string },
+    assignmentDate: string, // Format: "May 2026"
+    oldAssignment: any, // Previous warehouse_employee record with relations (or null for create)
+    newAssignment: any, // New/current warehouse_employee record with relations
+    viaUpload: boolean = false, // Indicate if the change is from bulk upload
+  ): string {
+    const roles = ["SS", "AH", "BCH", "GBCH", "RH", "GRH"];
+    const relationMap = {
+      ss: "assignedSs",
+      ah: "assignedAh",
+      bch: "assignedBch",
+      gbch: "assignedGbch",
+      rh: "assignedRh",
+      grh: "assignedGrh",
+    };
+
+    const changes = roles
+      .map((role) => {
+        const fieldName = `assigned_${role.toLowerCase()}`;
+        const relationName = relationMap[role.toLowerCase()];
+
+        // Get old employee name (from oldAssignment relation if exists)
+        let oldValue = "N/A";
+        if (oldAssignment?.[relationName]) {
+          const oldEmployee = oldAssignment[relationName];
+          oldValue =
+            `${oldEmployee.employee_first_name} ${oldEmployee.employee_last_name}`.trim();
+        }
+
+        // Get new employee name (from newAssignment relation if exists)
+        let newValue = "N/A";
+        if (newAssignment?.[relationName]) {
+          const newEmployee = newAssignment[relationName];
+          newValue =
+            `${newEmployee.employee_first_name} ${newEmployee.employee_last_name}`.trim();
+        }
+
+        // No change: show old value → [unchanged] (including N/A if empty)
+        if (oldValue === newValue) {
+          return `${role}: ${oldValue} → [unchanged]`;
+        }
+
+        // Changed: show old → new with employee names
+        return `${role}: ${oldValue} → ${newValue}`;
+      })
+      .join(" | ");
+
+    const prefixDesc = viaUpload ? `Updated via upload` : `Updated via form`;
+
+    return `${prefixDesc} ${warehouse.warehouse_name} (${warehouse.warehouse_ifs}) - ${assignmentDate}: ${changes}`;
+  }
 
   async findAll(
     accessKeyId?: number,
