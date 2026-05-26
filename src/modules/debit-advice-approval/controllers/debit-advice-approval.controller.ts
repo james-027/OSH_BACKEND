@@ -7,12 +7,11 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   ParseIntPipe,
   UseGuards,
   Request,
+  BadRequestException,
 } from "@nestjs/common";
-
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
@@ -87,6 +86,99 @@ export class DebitAdviceApprovalController {
     return this.approvalStagesListService.remove(id);
   }
 
+  @Patch(":id/toggle-status-back-to-pending")
+  @RequirePermissions({
+    module: "DEBIT ADVICE APPROVAL",
+    action: "REVERT",
+  })
+  async toggleStatusBackToPending(
+    @Param("id", ParseIntPipe)
+    id: number,
+
+    @Body() body: any,
+
+    @Request() req,
+  ) {
+    const userId =
+      req.user.id;
+
+    const status_id = 3;
+
+    return this.approvalStagesListService.toggleStatus(
+      id,
+
+      userId,
+
+      status_id,
+
+      body?.approval_remarks,
+    );
+  }
+
+  @Post("/change-bulk-status")
+  @RequirePermissions({
+    module: "DEBIT ADVICE APPROVAL",
+    action: [
+      "POST",
+      "APPROVE",
+      "REJECT",
+      "REVERT",
+    ],
+  })
+  async toggleBulkStatus(
+      @Body()
+      body: {
+        ids: number[];
+        status_id: number;
+        approval_remarks?: string;
+      },
+
+      @Request() req,
+    ) {
+      const userId =
+        req.user.id;
+
+      const {
+        ids,
+        status_id,
+        approval_remarks,
+      } = body;
+
+      if (
+        !Array.isArray(ids) ||
+        typeof status_id !==
+          "number"
+      ) {
+        throw new BadRequestException(
+          "Invalid payload: ids and status_id are required.",
+        );
+      }
+
+      return this.approvalStagesListService.toggleBulkStatus(
+        ids,
+
+        status_id,
+
+        userId,
+
+        approval_remarks,
+      );
+  }
+
+  @Get("history/:id")
+  @RequirePermissions({
+    module: "DEBIT ADVICE APPROVAL",
+    action: "VIEW",
+  })
+  async findOneHistory(
+    @Param("id", ParseIntPipe)
+    id: number,
+  ) {
+    return this.approvalStagesListService.findOneHistory(
+      id,
+    );
+  }
+
   @Patch(":id/toggle-status-approved")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
@@ -117,7 +209,7 @@ export class DebitAdviceApprovalController {
     @Request() req,
   ) {
     const userId = req.user.id;
-    const status_id = 8;
+    const status_id = 15;
 
     return this.approvalStagesListService.toggleStatus(
       id,
@@ -127,24 +219,7 @@ export class DebitAdviceApprovalController {
     );
   }
 
-  @Patch(":id/toggle-status-for-approval")
-  @RequirePermissions({
-    module: "DEBIT ADVICE APPROVAL",
-    action: "EDIT",
-  })
-  async toggleStatusForApproval(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req,
-  ) {
-    const userId = req.user.id;
-    const status_id = 6;
 
-    return this.approvalStagesListService.toggleStatus(
-      id,
-      userId,
-      status_id,
-    );
-  }
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({

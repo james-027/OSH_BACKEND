@@ -115,6 +115,9 @@ export const CACHE_PATTERNS = {
 
   // Warehouse Employees
   WAREHOUSE_EMPLOYEES: "warehouse-employees:*",
+
+  APPROVAL_STAGES_LIST:
+  "approval-stageslist:*",
 };
 
 export const CACHE_TTL = {
@@ -297,6 +300,30 @@ export function buildWarehouseEmployeeKey(
     : "all";
   return `${base}:${userId}:${roleId}:${accessKeyId}:${assignmentDate}`;
 }
+
+export function buildApprovalStagesListKey(
+  query: any,
+  params: any,
+  user: any,
+): string {
+  const base =
+    CACHE_KEYS.FIND_ALL(
+      "approval-stageslist",
+    );
+
+  const userId =
+    user?.id || "all";
+
+  const roleId =
+    user?.role_id || "all";
+
+  const accessKeyId =
+    user?.current_access_key ||
+    "all";
+
+  return `${base}:${userId}:${roleId}:${accessKeyId}`;
+}
+
 
 // Type for cache key builder functions
 export type CacheKeyBuilder = (query: any, params?: any, user?: any) => string;

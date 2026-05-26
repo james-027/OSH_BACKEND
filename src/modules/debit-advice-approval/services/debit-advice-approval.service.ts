@@ -245,17 +245,14 @@ export class ApprovalStagesListService {
 
     // SSE EVENTS
     try {
+      await this.cacheInvalidationService.invalidateApprovalStagesList();
+
       this.sseEventEmitter.emitUpdateSignal(
-        "approval_stageslist",
+        "approval-stageslist",
         saved.id,
       );
-
-      await this.cacheInvalidationService.invalidateApprovalStagesList();
     } catch (err) {
-      logger.error(
-        "SSE event failed for update:",
-        err,
-      );
+      logger.error("SSE event failed:", err);
     }
 
     return saved;
@@ -279,6 +276,7 @@ export class ApprovalStagesListService {
       approval,
     );
   }
+  
 
   async toggleStatus(
     id: number,
@@ -307,13 +305,9 @@ export class ApprovalStagesListService {
       newStatusName =
         "Approved";
 
-    else if (status_id === 8)
+    else if (status_id === 15)
       newStatusName =
         "Rejected";
-
-    else if (status_id === 6)
-      newStatusName =
-        "For Approval";
 
     else if (status_id === 3)
       newStatusName =
@@ -389,20 +383,17 @@ export class ApprovalStagesListService {
         userId,
     });
 
-    // SSE EVENTS
-    try {
-      this.sseEventEmitter.emitUpdateSignal(
-        "approval_stageslist",
-        id,
-      );
+      // SSE EVENTS
+      try {
+        await this.cacheInvalidationService.invalidateApprovalStagesList();
 
-      await this.cacheInvalidationService.invalidateApprovalStagesList();
-    } catch (err) {
-      logger.error(
-        "[SSE] SSE event failed for update:",
-        err,
-      );
-    }
+        this.sseEventEmitter.emitUpdateSignal(
+          "approval-stageslist",
+          id,
+        );
+      } catch (err) {
+        logger.error("[SSE] SSE event failed for update:", err);
+      }
 
     return this.findOne(id);
   }
@@ -451,14 +442,10 @@ export class ApprovalStagesListService {
       newStatusName =
         "Approved";
 
-    else if (status_id === 8)
+    else if (status_id === 15)
       newStatusName =
         "Rejected";
-
-    else if (status_id === 6)
-      newStatusName =
-        "For Approval";
-
+        
     const action_id =
       await this.actionLogsService.get_action_id_from_status(
         status_id,
@@ -510,20 +497,17 @@ export class ApprovalStagesListService {
       userId,
     );
 
-    // SSE EVENTS
-    try {
-      this.sseEventEmitter.emitUpdateSignal(
-        "approval_stageslist",
-        0,
-      );
+        // SSE EVENTS
+      try {
+        await this.cacheInvalidationService.invalidateApprovalStagesList();
 
-      await this.cacheInvalidationService.invalidateApprovalStagesList();
-    } catch (err) {
-      logger.error(
-        "SSE event failed:",
-        err,
-      );
-    }
+        this.sseEventEmitter.emitUpdateSignal(
+          "approval-stageslist",
+          0,
+        );
+      } catch (err) {
+        logger.error("SSE event failed for update:", err);
+      }
 
     return Promise.all(
       ids.map((id) =>
