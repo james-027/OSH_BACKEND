@@ -25,7 +25,7 @@ import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 export class ProfitcenterController {
   constructor(
     private readonly profitcenterService: ProfitcenterService,
-  ) {}
+  ) { }
 
   @Get()
   @RequirePermissions({

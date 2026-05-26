@@ -12,6 +12,7 @@ import {
     UploadedFile,
     UseInterceptors,
     BadRequestException,
+    Query,
 } from "@nestjs/common";
 import {
     FileInterceptor,
@@ -39,6 +40,23 @@ export class DebitAdviceController {
     async findAll(@Request() req) {
         return this.debitAdviceService.findAll();
     }
+
+    @Get("pagination")
+    async Getbypagination(
+        @Query("page") page = 1,
+        @Query("pageSize") pageSize = 5,
+        @Query("search") search = "",
+        @Query("statusid") statusId = "",
+    ) {
+        return this.debitAdviceService.GetbysearchAndPages(
+            Number(page),
+            Number(pageSize),
+            search,
+            statusId,
+        );
+    }
+
+
     @Get('test')
     test() {
         console.log('✅ DebitAdviceController hit');

@@ -25,10 +25,11 @@ import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
 export class SupplierController {
   constructor(
     private readonly supplierService: SupplierService,
-  ) {}
+  ) { }
 
   @Get()
   @RequirePermissions({ module: ["SUPPLIERS","DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
+  @RequirePermissions({ module: ["SUPPLIERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"], action: "VIEW" })
   async findAll(@Request() req) {
     return this.supplierService.findAll();
   }
