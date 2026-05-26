@@ -16,7 +16,10 @@ import { CommonUtilitiesService } from "../../../services/common-utilities.servi
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
 import { ActionLogsService } from "../../actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
-import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+import {
+  parseToFirstDayOfMonth,
+  formatDateToMonthYear,
+} from "../../../utils/date.utils";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 
@@ -309,6 +312,7 @@ export class WarehouseEmployeesService {
     createDto: CreateWarehouseEmployeeDto,
     userId: number,
     skipAuditTrail: boolean = false,
+    skipActionLogs: boolean = false,
   ): Promise<WarehouseEmployee> {
     // Uniqueness check - warehouse_id + assignment_date must be unique
     const exists = await this.warehouseEmployeesRepository.findOne({
@@ -736,11 +740,12 @@ export class WarehouseEmployeesService {
             const { __rowNum__, ...updatePayload } = record;
             updatePayload.access_key_id =
               accessKeyId ?? record.access_key_id ?? null;
-            const updatedRec = await this.update(
+            await this.update(
               existing.id,
               updatePayload,
               userId,
               true, // skipAuditTrail for bulk upload updates
+              true, // skipActionLogs for bulk upload updates (batch insert later)
             );
 
             // FETCH UPDATED STATE ONCE - raw entity with relations
@@ -766,6 +771,13 @@ export class WarehouseEmployeesService {
           } else {
             // Create new
             record.access_key_id = accessKeyId ?? record.access_key_id ?? null;
+            const createdRec = await this.create(
+              record,
+              userId,
+              true, // skipAuditTrail for bulk upload creates
+              true, // skipActionLogs for bulk upload creates (batch insert later)
+            );
+
             // FETCH CREATED STATE ONCE - raw entity with relations
             newAssignmentRaw = await this.warehouseEmployeesRepository.findOne({
               where: { id: createdRec.id },
