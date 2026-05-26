@@ -12,6 +12,7 @@ import { User } from "./User";
 import { Staff } from "./Staff";
 import { Vendor } from "./Vendor";
 import { Location } from "./Location";
+import { AccessKey } from "./AccessKey";
 
 @Entity("staff_vendor_salaries")
 export class StaffVendorSalary {
@@ -41,6 +42,9 @@ export class StaffVendorSalary {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -102,4 +106,8 @@ export class StaffVendorSalary {
   })
   @JoinColumn({ name: "location_id" })
   location: Location;
+
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 }

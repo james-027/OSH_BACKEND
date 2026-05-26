@@ -39,6 +39,7 @@ export class ResponseMapperService {
           "requirementType",
           "requirementReminders",
           "categoryTypes",
+          "accessKey",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -138,6 +139,11 @@ export class ResponseMapperService {
     // Map position relation
     if (entity.position && typeof entity.position === "object") {
       response.position_name = entity.position.position_name || null;
+    }
+
+    // Map accessKey relation
+    if (entity.accessKey && typeof entity.accessKey === "object") {
+      response.access_key_name = entity.accessKey.access_key_name || null;
     }
 
     // Flatten categoryTypes if present

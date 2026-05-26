@@ -27,7 +27,8 @@ export class StaffCategoryTypesController {
   @Get()
   @RequirePermissions({ module: "STAFF CATEGORY TYPES", action: "VIEW" })
   async findAll(@Request() req) {
-    return this.staffCategoryTypesService.findAll();
+    const accessKeyId = req.user.current_access_key;
+    return this.staffCategoryTypesService.findAll( accessKeyId);
   }
 
   @Get(":id")
@@ -43,9 +44,11 @@ export class StaffCategoryTypesController {
     @Request() req,
   ) {
     const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
     return this.staffCategoryTypesService.create(
       createStaffCategoryTypeDto,
       userId,
+      accessKeyId
     );
   }
 
