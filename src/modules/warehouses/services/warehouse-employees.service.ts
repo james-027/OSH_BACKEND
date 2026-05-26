@@ -198,6 +198,7 @@ export class WarehouseEmployeesService {
         assignmentDate,
       });
     }
+    query.orderBy("we.modified_at", "DESC").addOrderBy("we.id", "DESC");
     const records = await query.getMany();
     return records.map((rec) => ({
       id: rec.id,
