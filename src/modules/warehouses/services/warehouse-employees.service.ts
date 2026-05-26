@@ -690,6 +690,8 @@ export class WarehouseEmployeesService {
     const errors = [];
     const inserted = [];
     const updated = [];
+    const actionLogs = []; // Collect action logs for batch insert
+
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       const batchPromises = batch.map(async (record, idx) => {
@@ -703,7 +705,24 @@ export class WarehouseEmployeesService {
             },
           });
           let fullRec: any;
+          let isInsert = false;
+          let oldAssignment: any = null;
+          let newAssignmentRaw: any = null;
+
           if (existing) {
+            // FETCH OLD STATE BEFORE UPDATE (to capture previous personnel assignments)
+            oldAssignment = await this.warehouseEmployeesRepository.findOne({
+              where: { id: existing.id },
+              relations: [
+                "assignedSs",
+                "assignedAh",
+                "assignedBch",
+                "assignedGbch",
+                "assignedRh",
+                "assignedGrh",
+              ],
+            });
+
             // Remove __rowNum__ before update
             const { __rowNum__, ...updatePayload } = record;
             updatePayload.access_key_id =
@@ -714,15 +733,82 @@ export class WarehouseEmployeesService {
               userId,
               true, // skipAuditTrail for bulk upload updates
             );
-            fullRec = await this.findOne(existing.id);
-            updated.push({ row: rowNum, id: updatedRec.id });
+
+            // FETCH UPDATED STATE ONCE - raw entity with relations
+            newAssignmentRaw = await this.warehouseEmployeesRepository.findOne({
+              where: { id: existing.id },
+              relations: [
+                "warehouse",
+                "assignedSs",
+                "assignedAh",
+                "assignedBch",
+                "assignedGbch",
+                "assignedRh",
+                "assignedGrh",
+                "status",
+                "createdBy",
+                "updatedBy",
+              ],
+            });
+
+            // Map raw entity to response format
+            fullRec = this.mapToResponse(newAssignmentRaw);
+            updated.push({ row: rowNum, id: existing.id });
           } else {
             // Create new
             record.access_key_id = accessKeyId ?? record.access_key_id ?? null;
-            const createdRec = await this.create(record, userId, true); // skipAuditTrail for bulk upload creates
-            fullRec = await this.findOne(createdRec.id);
+            // FETCH CREATED STATE ONCE - raw entity with relations
+            newAssignmentRaw = await this.warehouseEmployeesRepository.findOne({
+              where: { id: createdRec.id },
+              relations: [
+                "warehouse",
+                "assignedSs",
+                "assignedAh",
+                "assignedBch",
+                "assignedGbch",
+                "assignedRh",
+                "assignedGrh",
+                "status",
+                "createdBy",
+                "updatedBy",
+              ],
+            });
+
+            // Map raw entity to response format
+            fullRec = this.mapToResponse(newAssignmentRaw);
             inserted.push({ row: rowNum, id: createdRec.id });
+            isInsert = true;
           }
+
+          // Collect action log for batch insert
+          try {
+            const warehouse = await this.warehousesRepository.findOne({
+              where: { id: fullRec.warehouse_id },
+            });
+            const assignmentDateFormatted = formatDateToMonthYear(
+              fullRec.assignment_date,
+            );
+            const actionId = isInsert ? 1 : 2; // 1=ADD, 2=EDIT
+            const description = this.buildPersonnelChangeDescription(
+              warehouse || { warehouse_name: "Unknown", warehouse_ifs: "N/A" },
+              assignmentDateFormatted,
+              oldAssignment, // Use captured old assignment state (with relations)
+              newAssignmentRaw, // Use raw entity with relations
+              true, // Indicate this is from bulk upload for description formatting
+            );
+            actionLogs.push({
+              module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+              ref_id: fullRec.id,
+              action_id: actionId,
+              description,
+              raw_data: JSON.stringify(record),
+              created_by: userId,
+            });
+          } catch (err) {
+            logger.error("Failed to build action log for bulk record:", err);
+            // Don't fail the bulk operation if action log prep fails
+          }
+
           // Attach __rowNum__ to the response object
           success.push({ ...fullRec, __rowNum__: rowNum });
         } catch (err) {
@@ -731,6 +817,7 @@ export class WarehouseEmployeesService {
       });
       await Promise.all(batchPromises); // Run batch in parallel
     }
+
     if (success.length > 0) {
       // SSE Events
       try {
@@ -740,6 +827,17 @@ export class WarehouseEmployeesService {
         logger.error("SSE event failed:", err);
       }
     }
+
+    // Batch insert all action logs (optimized DB roundtrip)
+    if (actionLogs.length > 0) {
+      try {
+        await this.actionLogsService.logActionBatch(actionLogs);
+      } catch (err) {
+        logger.error("Failed to batch insert action logs:", err);
+        // Don't throw - action log failure shouldn't block bulk operation
+      }
+    }
+
     return { success, errors, inserted, updated };
   }
 
