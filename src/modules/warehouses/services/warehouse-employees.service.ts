@@ -400,8 +400,31 @@ export class WarehouseEmployeesService {
     updateDto: UpdateWarehouseEmployeeDto,
     userId: number,
     skipAuditTrail: boolean = false,
+    skipActionLogs: boolean = false,
   ): Promise<WarehouseEmployee> {
-    const rec = await this.findOne(id);
+    // SINGLE OPTIMIZED FETCH: Get raw entity with ALL relations needed for entire method
+    const recRaw = await this.warehouseEmployeesRepository.findOne({
+      where: { id },
+      relations: [
+        "warehouse",
+        "assignedSs",
+        "assignedAh",
+        "assignedBch",
+        "assignedGbch",
+        "assignedRh",
+        "assignedGrh",
+        "status",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
+
+    if (!recRaw) {
+      throw new NotFoundException("Warehouse employee record not found");
+    }
+
+    // Map to response format for logic operations
+    const rec = this.mapToResponse(recRaw);
 
     // assignment_date is immutable - prevent updates
     if (
@@ -425,21 +448,14 @@ export class WarehouseEmployeesService {
         },
       });
       if (exists && exists.id !== id) {
-        // Update the existing record with updateDto values
-        Object.assign(exists, updateDto, {
-          assigned_gbch:
-            updateDto.assigned_gbch ?? exists.assigned_gbch ?? null,
-          assigned_grh: updateDto.assigned_grh ?? exists.assigned_grh ?? null,
-          access_key_id: updateDto.access_key_id ?? exists.access_key_id,
-          updated_by: userId,
-        });
-        try {
-          return await this.warehouseEmployeesRepository.save(exists);
-        } catch (error) {
-          throw new BadRequestException(this.getErrorMessage(error));
-        }
+        throw new BadRequestException(
+          `A record with this warehouse and assignment date (${rec.assignment_date}) already exists.`,
+        );
       }
     }
+
+    // Store old assignment BEFORE update - use raw entity with loaded relations
+    const oldAssignment = { ...recRaw };
 
     Object.assign(rec, updateDto, {
       assignment_date: rec.assignment_date, // Ensure assignment_date is not updated
@@ -448,6 +464,7 @@ export class WarehouseEmployeesService {
       access_key_id: updateDto.access_key_id ?? rec.access_key_id,
       updated_by: userId,
     });
+
     try {
       await this.warehouseEmployeesRepository.update(id, {
         ...updateDto,
@@ -461,7 +478,7 @@ export class WarehouseEmployeesService {
             service: "WarehouseEmployeesService",
             method: "update",
             raw_data: JSON.stringify({ ...updateDto }),
-            description: `Updated warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
+            description: `Updated warehouse employee ID: ${id} - ${rec.warehouse_name || ""}`,
             status_id: 1,
           },
           userId,
@@ -474,6 +491,52 @@ export class WarehouseEmployeesService {
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
+
+      // Action Log - Log personnel assignment changes
+      if (!skipActionLogs) {
+        try {
+          // SECOND OPTIMIZED FETCH: Get updated entity with relations for action log
+          const updatedRecRaw = await this.warehouseEmployeesRepository.findOne(
+            {
+              where: { id },
+              relations: [
+                "warehouse",
+                "assignedSs",
+                "assignedAh",
+                "assignedBch",
+                "assignedGbch",
+                "assignedRh",
+                "assignedGrh",
+              ],
+            },
+          );
+
+          if (updatedRecRaw) {
+            const warehouse = updatedRecRaw.warehouse;
+            const assignmentDateFormatted = formatDateToMonthYear(
+              updatedRecRaw.assignment_date,
+            );
+            const description = this.buildPersonnelChangeDescription(
+              warehouse || { warehouse_name: "Unknown", warehouse_ifs: "N/A" },
+              assignmentDateFormatted,
+              oldAssignment,
+              updatedRecRaw,
+            );
+            await this.actionLogsService.logAction({
+              module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+              ref_id: id,
+              action_id: 2, // EDIT
+              description,
+              raw_data: JSON.stringify(updateDto),
+              created_by: userId,
+            });
+          }
+        } catch (err) {
+          logger.error("Action log failed for update:", err);
+          // Don't throw - action log failure shouldn't block update
+        }
+      }
+
       return this.findOne(id);
     } catch (error) {
       throw new BadRequestException(this.getErrorMessage(error));
