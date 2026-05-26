@@ -553,8 +553,21 @@ export class WarehouseEmployeesService {
   }
 
   async toggleStatus(id: number, userId: number): Promise<any> {
+    // SINGLE FETCH with all needed relations
     const rec = await this.warehouseEmployeesRepository.findOne({
       where: { id },
+      relations: [
+        "warehouse",
+        "assignedSs",
+        "assignedAh",
+        "assignedBch",
+        "assignedGbch",
+        "assignedRh",
+        "assignedGrh",
+        "status",
+        "createdBy",
+        "updatedBy",
+      ],
     });
     if (!rec) {
       throw new NotFoundException(
@@ -595,7 +608,64 @@ export class WarehouseEmployeesService {
       logger.error("SSE event failed for update:", err);
     }
 
-    return this.findOne(id);
+    // Action Log - Log status toggle (activation/deactivation)
+    try {
+      const warehouse = rec.warehouse;
+      const assignmentDateFormatted = formatDateToMonthYear(
+        rec.assignment_date,
+      );
+      const actionId = newStatusId === 1 ? 5 : 6; // 5=ACTIVATE, 6=DEACTIVATE
+
+      // Build detailed personnel list for description
+      const personnelDetails = [
+        rec.assignedSs
+          ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
+          : null,
+        rec.assignedAh
+          ? `${rec.assignedAh.employee_first_name} ${rec.assignedAh.employee_last_name}`
+          : null,
+        rec.assignedBch
+          ? `${rec.assignedBch.employee_first_name} ${rec.assignedBch.employee_last_name}`
+          : null,
+        rec.assignedGbch
+          ? `${rec.assignedGbch.employee_first_name} ${rec.assignedGbch.employee_last_name}`
+          : null,
+        rec.assignedRh
+          ? `${rec.assignedRh.employee_first_name} ${rec.assignedRh.employee_last_name}`
+          : null,
+        rec.assignedGrh
+          ? `${rec.assignedGrh.employee_first_name} ${rec.assignedGrh.employee_last_name}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      const description = `${newStatusName} personnel assignment for ${warehouse?.warehouse_name || "Unknown"} (${warehouse?.warehouse_code || "N/A"}) - ${assignmentDateFormatted}${personnelDetails ? ": " + personnelDetails : ""}`;
+
+      await this.actionLogsService.logAction({
+        module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+        ref_id: id,
+        action_id: actionId,
+        description,
+        raw_data: JSON.stringify({
+          id,
+          prev_status_id: rec.status_id,
+          new_status_id: newStatusId,
+        }),
+        created_by: userId,
+      });
+    } catch (err) {
+      logger.error("Action log failed for toggleStatus:", err);
+      // Don't throw - action log failure shouldn't block status toggle
+    }
+
+    // Return mapped response using existing data
+    return this.mapToResponse(rec);
+  }
+
+  async findOneHistory(ref_id: number) {
+    const module_id = 14;
+    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
   /**
