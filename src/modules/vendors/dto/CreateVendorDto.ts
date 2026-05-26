@@ -39,9 +39,4 @@ export class CreateVendorDto {
   @IsInt()
   status_id?: number;
   
-  @IsInt()
-  @IsNotEmpty()
-  access_key_id!: number;
-
-  
 }

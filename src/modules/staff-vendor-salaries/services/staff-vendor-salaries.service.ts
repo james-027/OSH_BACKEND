@@ -91,6 +91,7 @@ export class StaffVendorSalariesService {
   async create(
     createStaffVendorSalaryDto: CreateStaffVendorSalaryDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const createdByUser = await this.usersService.findUserById(userId);
@@ -102,7 +103,7 @@ export class StaffVendorSalariesService {
         staff_id: createStaffVendorSalaryDto.staff_id,
         vendor_id: createStaffVendorSalaryDto.vendor_id,
         location_id: createStaffVendorSalaryDto.location_id,
-        access_key_id: createStaffVendorSalaryDto.access_key_id,
+        access_key_id: accessKeyId,
         allowance: createStaffVendorSalaryDto.allowance,
         salary_rate: createStaffVendorSalaryDto.salary_rate,
         status_id: createStaffVendorSalaryDto.status_id || 1,

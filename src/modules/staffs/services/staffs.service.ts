@@ -27,11 +27,13 @@ export class StaffsService {
   ) {}
 
   async findAll(accessKeyId?: number): Promise<any[]> {
+    
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
       const staffs = await this.staffsRepository.find({
         where,
         relations: [
@@ -82,29 +84,18 @@ export class StaffsService {
     }
   }
 
-  async create(createStaffDto: CreateStaffDto, userId: number): Promise<any> {
+  async create(
+    createStaffDto: CreateStaffDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
     try {
       const createdByUser = await this.usersService.findUserById(userId);
       if (!createdByUser) {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      const existingRecord = await this.staffsRepository.findOne({
-        where: {
-          staff_code: createStaffDto.staff_code,
-        },
-      });
-
-      if (existingRecord) {
-        throw new BadRequestException(
-          `Staff code '${createStaffDto.staff_code}' already exists`,
-        );
-      }
-
       const newStaff = this.staffsRepository.create({
-        staff_code: createStaffDto.staff_code
-          ? createStaffDto.staff_code.toUpperCase()
-          : null,
         last_name: createStaffDto.last_name.toUpperCase(),
         first_name: createStaffDto.first_name.toUpperCase(),
         middle_name: createStaffDto.middle_name
@@ -114,7 +105,7 @@ export class StaffsService {
         vendor_id: createStaffDto.vendor_id,
         assign_status_id: createStaffDto.assign_status_id,
         position_id: createStaffDto.position_id,
-        access_key_id: createStaffDto.access_key_id,
+        access_key_id: accessKeyId,
         sss_number: createStaffDto.sss_number || null,
         pagibig_number: createStaffDto.pagibig_number || null,
         tin: createStaffDto.tin || null,

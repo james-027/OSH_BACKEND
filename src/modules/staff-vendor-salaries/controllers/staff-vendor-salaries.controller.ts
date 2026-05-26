@@ -45,9 +45,11 @@ export class StaffVendorSalariesController {
     @Request() req,
   ) {
     const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
     return this.staffVendorSalariesService.create(
       createStaffVendorSalaryDto,
       userId,
+      accessKeyId
     );
   }
 

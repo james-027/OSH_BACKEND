@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
+import { Staff } from "src/entities/Staff";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
@@ -30,7 +31,9 @@ export class StaffWarehousesService {
 
   constructor(
     @InjectRepository(StaffWarehouse)
-    private staffWarehousesRepository: Repository<StaffWarehouse>,
+  private staffWarehousesRepository: Repository<StaffWarehouse>,
+    @InjectRepository(Staff)
+    private staffRepository: Repository<Staff>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
@@ -80,28 +83,19 @@ export class StaffWarehousesService {
   async create(
     createStaffWarehouseDto: CreateStaffWarehouseDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const user = await this.usersService.findUserById(userId);
       if (!user) {
         throw new BadRequestException("Authenticated user not found");
       }
-
-      const existingRecord = await this.staffWarehousesRepository.findOne({
-        where: {
-          staff_code: createStaffWarehouseDto.staff_code,
-        },
+      const staff = await this.staffRepository.findOne({
+        where: { id: createStaffWarehouseDto.staff_id },
       });
-
-      if (existingRecord) {
-        throw new BadRequestException(
-          `Staff code '${createStaffWarehouseDto.staff_code}' already exists`,
-        );
-      }
 
       const newRecord = this.staffWarehousesRepository.create({
         staff_id: createStaffWarehouseDto.staff_id,
-        staff_code: createStaffWarehouseDto.staff_code,
         warehouse_id: createStaffWarehouseDto.warehouse_id,
         location_id: createStaffWarehouseDto.location_id,
         vendor_id: createStaffWarehouseDto.vendor_id,
@@ -113,9 +107,10 @@ export class StaffWarehousesService {
           : null,
         remarks: createStaffWarehouseDto.remarks || null,
         status_id: createStaffWarehouseDto.status_id || 1,
-        access_key_id: createStaffWarehouseDto.access_key_id,
         created_by: userId,
         updated_by: userId,
+        access_key_id: accessKeyId,
+        staff_code : staff.staff_code
       });
 
       const savedRecord = await this.staffWarehousesRepository.save(newRecord);
@@ -186,20 +181,6 @@ export class StaffWarehousesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      if (updateStaffWarehouseDto.staff_code) {
-        const existingRecord = await this.staffWarehousesRepository.findOne({
-          where: {
-            staff_code: updateStaffWarehouseDto.staff_code,
-          },
-        });
-
-        if (existingRecord && existingRecord.id !== id) {
-          throw new BadRequestException(
-            `Staff code '${updateStaffWarehouseDto.staff_code}' already exists`,
-          );
-        }
-      }
-
       const effectivity_date = updateStaffWarehouseDto.effectivity_date
         ? new Date(updateStaffWarehouseDto.effectivity_date)
         : null;
@@ -213,12 +194,10 @@ export class StaffWarehousesService {
         warehouse: { id: updateStaffWarehouseDto.warehouse_id } as any,
         location: { id: updateStaffWarehouseDto.location_id } as any,
         vendor: { id: updateStaffWarehouseDto.vendor_id } as any,
-        staff_code: updateStaffWarehouseDto.staff_code,
         effectivity_date,
         end_date,
         remarks: updateStaffWarehouseDto.remarks,
         status_id: updateStaffWarehouseDto.status_id,
-        access_key_id: updateStaffWarehouseDto.access_key_id,
         updated_by: userId,
       });
 
@@ -230,12 +209,10 @@ export class StaffWarehousesService {
           method: "update",
           raw_data: JSON.stringify({
             id: record.id,
-            staff_code: record.staff_code,
             staff_id: updateStaffWarehouseDto.staff_id,
             warehouse_id: updateStaffWarehouseDto.warehouse_id,
             location_id: updateStaffWarehouseDto.location_id,
             vendor_id: updateStaffWarehouseDto.vendor_id,
-            access_key_id: updateStaffWarehouseDto.access_key_id,
             effectivity_date,
             end_date,
             status_id: updateStaffWarehouseDto.status_id,

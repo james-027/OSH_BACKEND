@@ -77,7 +77,11 @@ export class VendorsService {
     }
   }
 
-  async create(createVendorDto: CreateVendorDto, userId: number): Promise<any> {
+  async create(
+    createVendorDto: CreateVendorDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
     try {
       // Check if vendor with this code already exists
       const existingVendor = await this.vendorsRepository.findOne({
@@ -99,7 +103,7 @@ export class VendorsService {
         service_provider_code:
           createVendorDto.service_provider_code.toUpperCase(),
         category_id: createVendorDto.category_id,
-        access_key_id: createVendorDto.access_key_id,
+        access_key_id: accessKeyId,
         tax: createVendorDto.tax || null,
         vat: createVendorDto.vat || null,
         asf: createVendorDto.asf || null,

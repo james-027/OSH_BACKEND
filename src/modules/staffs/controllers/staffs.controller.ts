@@ -39,7 +39,8 @@ export class StaffsController {
   @RequirePermissions({ module: "STAFFS", action: "ADD" })
   async create(@Body() createStaffDto: CreateStaffDto, @Request() req) {
     const userId = req.user.id;
-    return this.staffsService.create(createStaffDto, userId);
+    const accessKeyId = req.user.current_access_key;
+    return this.staffsService.create(createStaffDto, userId,accessKeyId);
   }
 
   @Put(":id")

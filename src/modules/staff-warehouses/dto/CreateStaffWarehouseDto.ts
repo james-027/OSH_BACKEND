@@ -11,9 +11,6 @@ export class CreateStaffWarehouseDto {
   @IsNotEmpty()
   staff_id!: number;
 
-  @IsString()
-  @IsNotEmpty()
-  staff_code!: string;
 
   @IsInt()
   @IsNotEmpty()
@@ -43,7 +40,5 @@ export class CreateStaffWarehouseDto {
   @IsInt()
   status_id?: number;
 
-  @IsInt()
-  @IsNotEmpty()
-  access_key_id!: number;
+
 }

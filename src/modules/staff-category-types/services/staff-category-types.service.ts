@@ -78,6 +78,7 @@ export class StaffCategoryTypesService {
   async create(
     createStaffCategoryTypeDto: CreateStaffCategoryTypeDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const user = await this.usersService.findUserById(userId);
@@ -88,7 +89,7 @@ export class StaffCategoryTypesService {
       const newRecord = this.staffCategoryTypesRepository.create({
         staff_id: createStaffCategoryTypeDto.staff_id,
         category_type_id: createStaffCategoryTypeDto.category_type_id,
-        access_key_id: createStaffCategoryTypeDto.access_key_id,
+        access_key_id: accessKeyId,
         status_id: createStaffCategoryTypeDto.status_id || 1,
         created_by: userId,
         updated_by: userId,

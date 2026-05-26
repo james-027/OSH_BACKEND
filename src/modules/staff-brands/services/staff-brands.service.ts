@@ -78,6 +78,7 @@ export class StaffBrandsService {
   async create(
     createStaffBrandDto: CreateStaffBrandDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const user = await this.usersService.findUserById(userId);
@@ -101,7 +102,7 @@ export class StaffBrandsService {
       const newRecord = this.staffBrandsRepository.create({
         staff_id: createStaffBrandDto.staff_id,
         brand_id: createStaffBrandDto.brand_id,
-        access_key_id: createStaffBrandDto.access_key_id,
+        access_key_id: accessKeyId,
         status_id: createStaffBrandDto.status_id || 1,
         created_by: userId,
         updated_by: userId,

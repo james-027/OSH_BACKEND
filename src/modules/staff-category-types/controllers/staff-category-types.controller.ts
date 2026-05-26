@@ -44,9 +44,11 @@ export class StaffCategoryTypesController {
     @Request() req,
   ) {
     const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
     return this.staffCategoryTypesService.create(
       createStaffCategoryTypeDto,
       userId,
+      accessKeyId
     );
   }
 
