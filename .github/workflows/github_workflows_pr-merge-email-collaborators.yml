@@ -1,0 +1,47 @@
+name: PR Merge Email Notification (Collaborators File)
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read collaborator emails file
+        id: get_emails
+        run: |
+          # Combine all emails in file into a single comma-separated string
+          TO_LIST=$(tr '\n' ',' < .github/collaborator-emails.txt | sed 's/,$//')
+          echo "to=$TO_LIST" >> $GITHUB_OUTPUT
+      - name: Send email to collaborators
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GWS_SMTP_USERNAME }}
+          password: ${{ secrets.GWS_SMTP_APP_PASSWORD }}
+          subject: "[${{ github.repository }}] PR merged to main: #${{ github.event.pull_request.number }}"
+          to: ${{ steps.get_emails.outputs.to }}
+          from: ${{ secrets.GWS_MAIL_FROM }}
+          body: |
+            A pull request was merged into main.
+
+            Repository: ${{ github.repository }}
+            PR: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
+            Merged by: ${{ github.event.pull_request.merged_by.login }}
+            Source branch: ${{ github.event.pull_request.head.ref }}
+            Target branch: ${{ github.event.pull_request.base.ref }}
+
+            URL: ${{ github.event.pull_request.html_url }}
+
+            Please sync with main to get the latest changes.
+            1. git checkout main
+            2. git pull origin main
+            3. git checkout <your-working-branch>
+            4. git rebase main
+            5. Resolve any conflicts if they arise
+            6. if everything goes well, git push origin <your-working-branch> (to make sure you have always a backup of your local working branch)
