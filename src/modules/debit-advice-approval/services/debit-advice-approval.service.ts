@@ -240,7 +240,6 @@ export class ApprovalStagesListService {
 
     await this.approvalStagesListRepository.remove(approval);
   }
-  
 
   async toggleStatus(
     id: number,
