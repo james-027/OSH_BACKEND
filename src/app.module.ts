@@ -106,7 +106,7 @@ import { DebitAdviceGLAccounts } from "./entities/DebitAdviceGLAccounts";
 import { GLAccounts } from "./entities/GLAccounts";
 import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import { ApprovalStagesList } from "./entities/ApprovalStagesList";
-
+import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module";
 @Module({
   imports: [
     // Configuration
@@ -203,6 +203,7 @@ import { ApprovalStagesList } from "./entities/ApprovalStagesList";
     DebitAdviceGlAccountModule,
     GlAccountsModule,
     DebitAdviceApprovalModule,
+    ApprovalLogsModule,
   ],
   providers: [
     EmailService,

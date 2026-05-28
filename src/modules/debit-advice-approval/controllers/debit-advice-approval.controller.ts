@@ -26,24 +26,22 @@ export class DebitAdviceApprovalController {
     private readonly approvalStagesListService: ApprovalStagesListService,
   ) {}
 
-
-    @Get()
-    @RequirePermissions({
+  @Get()
+  @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
     action: "VIEW",
-    })
-    async findAll() {
-    return this.approvalStagesListService.findAll();
-    }
+  })
+  async findAll(@Request() req) {
+    const userId = req.user.id;
 
+    return this.approvalStagesListService.findAll(userId);
+  }
   @Get(":id")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
     action: "VIEW",
   })
-  async findOne(
-    @Param("id", ParseIntPipe) id: number,
-  ) {
+  async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.approvalStagesListService.findOne(id);
   }
 
@@ -52,9 +50,6 @@ export class DebitAdviceApprovalController {
     module: "DEBIT ADVICE APPROVAL",
     action: "ADD",
   })
-
-
-
   @Put(":id")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
@@ -68,11 +63,7 @@ export class DebitAdviceApprovalController {
   ) {
     const userId = req.user.id;
 
-    return this.approvalStagesListService.update(
-      id,
-      updateDto,
-      userId,
-    );
+    return this.approvalStagesListService.update(id, updateDto, userId);
   }
 
   @Delete(":id")
@@ -80,9 +71,7 @@ export class DebitAdviceApprovalController {
     module: "DEBIT ADVICE APPROVAL",
     action: "CANCEL",
   })
-  async remove(
-    @Param("id", ParseIntPipe) id: number,
-  ) {
+  async remove(@Param("id", ParseIntPipe) id: number) {
     return this.approvalStagesListService.remove(id);
   }
 
@@ -99,8 +88,7 @@ export class DebitAdviceApprovalController {
 
     @Request() req,
   ) {
-    const userId =
-      req.user.id;
+    const userId = req.user.id;
 
     const status_id = 3;
 
@@ -118,51 +106,37 @@ export class DebitAdviceApprovalController {
   @Post("/change-bulk-status")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
-    action: [
-      "POST",
-      "APPROVE",
-      "REJECT",
-      "REVERT",
-    ],
+    action: ["POST", "APPROVE", "REJECT", "REVERT"],
   })
   async toggleBulkStatus(
-      @Body()
-      body: {
-        ids: number[];
-        status_id: number;
-        approval_remarks?: string;
-      },
+    @Body()
+    body: {
+      ids: number[];
+      status_id: number;
+      approval_remarks?: string;
+    },
 
-      @Request() req,
-    ) {
-      const userId =
-        req.user.id;
+    @Request() req,
+  ) {
+    const userId = req.user.id;
 
-      const {
-        ids,
-        status_id,
-        approval_remarks,
-      } = body;
+    const { ids, status_id, approval_remarks } = body;
 
-      if (
-        !Array.isArray(ids) ||
-        typeof status_id !==
-          "number"
-      ) {
-        throw new BadRequestException(
-          "Invalid payload: ids and status_id are required.",
-        );
-      }
-
-      return this.approvalStagesListService.toggleBulkStatus(
-        ids,
-
-        status_id,
-
-        userId,
-
-        approval_remarks,
+    if (!Array.isArray(ids) || typeof status_id !== "number") {
+      throw new BadRequestException(
+        "Invalid payload: ids and status_id are required.",
       );
+    }
+
+    return this.approvalStagesListService.toggleBulkStatus(
+      ids,
+
+      status_id,
+
+      userId,
+
+      approval_remarks,
+    );
   }
 
   @Get("history/:id")
@@ -174,9 +148,7 @@ export class DebitAdviceApprovalController {
     @Param("id", ParseIntPipe)
     id: number,
   ) {
-    return this.approvalStagesListService.findOneHistory(
-      id,
-    );
+    return this.approvalStagesListService.findOneHistory(id);
   }
 
   @Patch(":id/toggle-status-approved")
@@ -191,11 +163,7 @@ export class DebitAdviceApprovalController {
     const userId = req.user.id;
     const status_id = 7;
 
-    return this.approvalStagesListService.toggleStatus(
-      id,
-      userId,
-      status_id,
-    );
+    return this.approvalStagesListService.toggleStatus(id, userId, status_id);
   }
 
   @Patch(":id/toggle-status-rejected")
@@ -219,8 +187,6 @@ export class DebitAdviceApprovalController {
     );
   }
 
-
-
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
@@ -233,11 +199,7 @@ export class DebitAdviceApprovalController {
     const userId = req.user.id;
     const status_id = 2;
 
-    return this.approvalStagesListService.toggleStatus(
-      id,
-      userId,
-      status_id,
-    );
+    return this.approvalStagesListService.toggleStatus(id, userId, status_id);
   }
 
   @Patch(":id/toggle-status-deactivate")
@@ -252,10 +214,6 @@ export class DebitAdviceApprovalController {
     const userId = req.user.id;
     const status_id = 1;
 
-    return this.approvalStagesListService.toggleStatus(
-      id,
-      userId,
-      status_id,
-    );
+    return this.approvalStagesListService.toggleStatus(id, userId, status_id);
   }
 }
