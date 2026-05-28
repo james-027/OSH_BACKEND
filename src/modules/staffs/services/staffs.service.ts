@@ -27,13 +27,11 @@ export class StaffsService {
   ) {}
 
   async findAll(accessKeyId?: number): Promise<any[]> {
-    
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
-
       const staffs = await this.staffsRepository.find({
         where,
         relations: [
@@ -95,7 +93,23 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      const existingRecord = await this.staffsRepository.findOne({
+        where: {
+          first_name: createStaffDto.first_name.toUpperCase(),
+          last_name: createStaffDto.last_name.toUpperCase(),
+        },
+      });
+
+      if (existingRecord) {
+        throw new BadRequestException(
+          `Staff '${createStaffDto.first_name} ${createStaffDto.last_name}' may already exist`,
+        );
+      }
+
       const newStaff = this.staffsRepository.create({
+        staff_code: createStaffDto.staff_code
+          ? createStaffDto.staff_code.toUpperCase()
+          : null,
         last_name: createStaffDto.last_name.toUpperCase(),
         first_name: createStaffDto.first_name.toUpperCase(),
         middle_name: createStaffDto.middle_name
@@ -209,13 +223,14 @@ export class StaffsService {
 
       const existingRecord = await this.staffsRepository.findOne({
         where: {
-          staff_code: updateStaffDto.staff_code,
+          first_name: updateStaffDto.first_name.toUpperCase(),
+          last_name: updateStaffDto.last_name.toUpperCase(),
         },
       });
 
       if (existingRecord && existingRecord.id !== id) {
         throw new BadRequestException(
-          `Staff code '${updateStaffDto.staff_code}' already exists`,
+          `Staff '${updateStaffDto.first_name} ${updateStaffDto.last_name}' may already exist`,
         );
       }
 
@@ -224,51 +239,30 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      const safeDate = (value: any) => {
+        if (!value || value === "") return null;
+
+        const date = new Date(value);
+
+        if (isNaN(date.getTime())) {
+          throw new BadRequestException(`Invalid date: ${value}`);
+        }
+
+        return date;
+      };
+
       // Convert date strings to Date objects
       const updateData: any = { ...updateStaffDto };
-      if (updateData.hired_date && typeof updateData.hired_date === "string") {
-        updateData.hired_date = new Date(updateData.hired_date);
-      }
-      if (updateData.to_hr_date && typeof updateData.to_hr_date === "string") {
-        updateData.to_hr_date = new Date(updateData.to_hr_date);
-      }
-      if (
-        updateData.to_sts_date &&
-        typeof updateData.to_sts_date === "string"
-      ) {
-        updateData.to_sts_date = new Date(updateData.to_sts_date);
-      }
-      if (
-        updateData.approved_eprf_date &&
-        typeof updateData.approved_eprf_date === "string"
-      ) {
-        updateData.approved_eprf_date = new Date(updateData.approved_eprf_date);
-      }
-      if (
-        updateData.req_completion_date &&
-        typeof updateData.req_completion_date === "string"
-      ) {
-        updateData.req_completion_date = new Date(
-          updateData.req_completion_date,
-        );
-      }
-      if (
-        updateData.actual_deployment_date &&
-        typeof updateData.actual_deployment_date === "string"
-      ) {
-        updateData.actual_deployment_date = new Date(
-          updateData.actual_deployment_date,
-        );
-      }
-      if (
-        updateData.separated_date &&
-        typeof updateData.separated_date === "string"
-      ) {
-        updateData.separated_date = new Date(updateData.separated_date);
-      }
-      if (updateData.birthday && typeof updateData.birthday === "string") {
-        updateData.birthday = new Date(updateData.birthday);
-      }
+      updateData.hired_date = safeDate(updateData.hired_date);
+      updateData.to_hr_date = safeDate(updateData.to_hr_date);
+      updateData.to_sts_date = safeDate(updateData.to_sts_date);
+      updateData.approved_eprf_date = safeDate(updateData.approved_eprf_date);
+      updateData.req_completion_date = safeDate(updateData.req_completion_date);
+      updateData.actual_deployment_date = safeDate(
+        updateData.actual_deployment_date,
+      );
+      updateData.separated_date = safeDate(updateData.separated_date);
+      updateData.birthday = safeDate(updateData.birthday);
 
       // Uppercase name fields if provided
       if (updateData.last_name) {
@@ -281,7 +275,9 @@ export class StaffsService {
         updateData.middle_name = updateData.middle_name.toUpperCase();
       }
       if (updateData.staff_code) {
-        updateData.staff_code = updateData.staff_code.toUpperCase();
+        updateData.staff_code = updateData.staff_code
+          ? updateData.staff_code.toUpperCase()
+          : "";
       }
 
       Object.assign(staff, updateData, {
@@ -331,13 +327,16 @@ export class StaffsService {
 
       return response;
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      throw new Error("Failed to update staff");
+      console.error("UPDATE STAFF ERROR:", error);
+      throw error;
+
+      // if (
+      //   error instanceof NotFoundException ||
+      //   error instanceof BadRequestException
+      // ) {
+      //   throw error;
+      // }
+      // throw new Error("Failed to update staff");
     }
   }
 
@@ -416,5 +415,76 @@ export class StaffsService {
       }
       throw new Error("Failed to toggle status for staff");
     }
+  }
+
+  async uploadExcel(file: Express.Multer.File, userId: number) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: "",
+    });
+
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        const dto: CreateStaffDto = {
+          first_name: row["First Name"],
+          last_name: row["Last Name"],
+          middle_name: row["Middle Name"],
+          birthday: row["Birthday"],
+          location_id: row["Location"],
+          vendor_id: row["Vendor"],
+          position_id: row["Position"],
+          access_key_id: row["Access Keys"],
+          store_request: row["Store Request"],
+          sss_number: row["SSS Number"],
+          tin: row["TIN"],
+          pagibig_number: row["PAGIBIG Number"],
+          remarks: row["Remarks"],
+          hired_date: row["Hired Date"],
+          to_hr_date: row["To HR Date"],
+          separated_date: row["Seperated Date"],
+          to_sts_date: row["To STS Date"],
+          approved_eprf_date: row["Approved EPRF Date"],
+          req_completion_date: row["Req Completion Date"],
+          actual_deployment_date: row["Actual Deployment Date"],
+          overall_remarks: row["Overall Remarks"],
+          assign_status_id: row["Assignment Status"],
+        };
+
+        return dto;
+        const created = await this.create(dto, userId);
+
+        success.push({
+          row: i + 2,
+          data: created,
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.length,
+      updated_count: 0,
+      inserted_row_numbers: success.map((s) => s.row),
+      updated_row_numbers: [],
+      success,
+      errors,
+    };
   }
 }

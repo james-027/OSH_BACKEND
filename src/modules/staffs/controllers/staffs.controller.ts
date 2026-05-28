@@ -9,13 +9,27 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+    UploadedFile,
+   UseInterceptors,
 } from "@nestjs/common";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../../../adapters";
+import {
+  imageFileFilter,
+  excelFileFilter,
+  FILE_SIZE_LIMITS,
+  generateTimestampFilename,
+} from "../../../utils/file-upload.utils";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffsService } from "src/modules/staffs/services/staffs.service";
 import { CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
+
 
 @Controller("staffs")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -38,7 +52,7 @@ export class StaffsController {
   @Post()
   @RequirePermissions({ module: "STAFFS", action: "ADD" })
   async create(@Body() createStaffDto: CreateStaffDto, @Request() req) {
-    const userId = req.user.id;
+     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
     return this.staffsService.create(createStaffDto, userId,accessKeyId);
   }
@@ -73,4 +87,28 @@ export class StaffsController {
     const userId = req.user.id;
     return this.staffsService.toggleStatus(id, userId);
   }
+
+@Post("upload-excel")
+@UseInterceptors(
+  FileInterceptor("file", {
+    storage: diskStorage({
+      destination: "./uploads/staffs",
+      filename: generateTimestampFilename,
+    }),
+    fileFilter: excelFileFilter,
+    limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+  }),
+)
+async uploadExcel(
+  @UploadedFile() file: Express.Multer.File,
+  @Request() req,
+) {
+  return this.staffsService.uploadExcel(
+    file,
+    req.user.id,
+  );
 }
+
+}
+
+

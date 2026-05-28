@@ -11,6 +11,7 @@ export function formatDateToString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+
 /**
  * Get current timestamp in local timezone (ISO-8601 format with timezone offset)
  * Fixes issue where toISOString() returns UTC, causing timezone mismatch
