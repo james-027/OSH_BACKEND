@@ -440,6 +440,7 @@ export class StaffsService {
       try {
         const dto: CreateStaffDto = {
           first_name: row["First Name"],
+          contact_number: row["Contact Number"],
           last_name: row["Last Name"],
           middle_name: row["Middle Name"],
           birthday: row["Birthday"],
