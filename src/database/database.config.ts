@@ -65,6 +65,7 @@ import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Profitcenter } from "../entities/Profitcenter";
 import { Supplier } from "../entities/Supplier";
 import { DebitAdviceGLAccounts } from "../entities/DebitAdviceGLAccounts";
+import { GLAccounts } from "../entities/GLAccounts";
 import { DebitAdviceCategory } from "../entities/DebitAdviceCategory";
 import { DebitAdvice_header } from "../entities/DebitAdviceHeader";
 import { DebitAdviceLine } from "../entities/DebitAdviceItems";
@@ -162,7 +163,8 @@ export const entities = [
   DebitAdvice_header,
   DebitAdviceLine,
   DebitAdviceGLItems,
-  ApprovalStagesList
+  ApprovalStagesList,
+  GLAccounts,
   // Category,
   // CategoryType,
   // Vendor,

@@ -95,15 +95,17 @@ import { CacheInvalidationModule } from "./modules/cache/cache.module";
 import { ProfitcenterModule } from "./modules/profitcenters/profitcenter.module";
 import { Profitcenter } from "./entities/Profitcenter";
 import { SupplierModule } from "./modules/suppliers/supplier.module";
-import { Supplier} from "./entities/Supplier";
+import { Supplier } from "./entities/Supplier";
 import { DebitAdviceModule } from "./modules/debit-advice/debit-advice.module";
 import logger from "./config/logger";
 import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
 import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
+import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit-advice-approval.module";
+import { GlAccountsModule } from "./modules/gl-accounts/gl-accounts.module";
 import { DebitAdviceGLAccounts } from "./entities/DebitAdviceGLAccounts";
+import { GLAccounts } from "./entities/GLAccounts";
 import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import { ApprovalStagesList } from "./entities/ApprovalStagesList";
-import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit-advice-approval.module";
 
 @Module({
   imports: [
@@ -112,7 +114,6 @@ import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit
       isGlobal: true,
       load: [configuration],
     }),
-
 
     // Rate limiting
     ThrottlerModule.forRoot([
@@ -136,7 +137,8 @@ import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit
       Supplier,
       DebitAdviceCategory,
       DebitAdviceGLAccounts,
-      ApprovalStagesList
+      GLAccounts,
+      ApprovalStagesList,
     ]),
     // Authentication
     PassportModule,
@@ -199,8 +201,8 @@ import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit
     SupplierModule,
     DebitAdviceCategoryModule,
     DebitAdviceGlAccountModule,
-    DebitAdviceApprovalModule
-    
+    GlAccountsModule,
+    DebitAdviceApprovalModule,
   ],
   providers: [
     EmailService,
