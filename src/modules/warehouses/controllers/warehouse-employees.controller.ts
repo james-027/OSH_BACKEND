@@ -112,6 +112,12 @@ export class WarehouseEmployeesController {
     );
   }
 
+  @Get("history/:id")
+  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.warehouseEmployeesService.findOneHistory(id);
+  }
+
   @Get(":id")
   @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
