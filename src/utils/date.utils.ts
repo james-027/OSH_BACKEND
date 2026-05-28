@@ -11,6 +11,14 @@ export function formatDateToString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function parseExcelDate(value: any): Date | null {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  return isNaN(date.getTime()) ? null : date;
+}
+
 
 /**
  * Get current timestamp in local timezone (ISO-8601 format with timezone offset)

@@ -9,17 +9,30 @@ import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
 import { Staff } from "src/entities/Staff";
+import { Location } from "src/entities/Location";
 import { CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
+import { parseExcelDate } from "src/utils/date.utils";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
+import { Position } from "src/entities/Position";
+import { Vendor } from "src/entities/Vendor";
+import { Status } from "src/entities/Status";
 
 @Injectable()
 export class StaffsService {
   constructor(
     @InjectRepository(Staff)
     private staffsRepository: Repository<Staff>,
+    @InjectRepository(Location)
+    private locationRepository: Repository<Location>,
+    @InjectRepository(Position)
+    private positionRepository: Repository<Position>,
+    @InjectRepository(Vendor)
+    private vendorRepository: Repository<Vendor>,
+    @InjectRepository(Status)
+    private statusRepository: Repository<Status>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
@@ -417,7 +430,11 @@ export class StaffsService {
     }
   }
 
-  async uploadExcel(file: Express.Multer.File, userId: number) {
+  async uploadExcel(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
     const XLSX = require("xlsx");
 
     const workbook = XLSX.readFile(file.path);
@@ -427,9 +444,8 @@ export class StaffsService {
     const rows = XLSX.utils.sheet_to_json(sheet, {
       raw: false,
       dateNF: "yyyy-mm-dd",
-      defval: "",
+      defval: null,
     });
-
 
     const success = [];
     const errors = [];
@@ -437,39 +453,121 @@ export class StaffsService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
+
+      if (!row["First Name"] && !row["Last Name"]) {
+        continue;
+      }
+
+      const location = await this.locationRepository.findOne({
+        where: { location_name: row["Location"] },
+      });
+      const position = await this.positionRepository.findOne({
+        where: { position_name: row["Position"] },
+      });
+
+      const vendor = await this.vendorRepository.findOne({
+        where: { service_provider_name: row["Vendor"] },
+      });
+      const status = await this.statusRepository.findOne({
+        where: { status_name: row["Assign Status"] },
+      });
+
+      if (!location) {
+        throw new BadRequestException(
+          `Location '${row["Location"]}' not found`,
+        );
+      }
+
+      if (!position) {
+        throw new BadRequestException(
+          `Position '${row["Position"]}' not found`,
+        );
+      }
+
+      if (!vendor) {
+        throw new BadRequestException(`Vendor '${row["Vendor"]}' not found`);
+      }
+
+      if (!status) {
+        throw new BadRequestException(
+          `Assign Status '${row["Assign Status"]}' not found`,
+        );
+      }
+
+      const existingRecord = await this.staffsRepository.findOne({
+        where: {
+          first_name: row["First Name"].toUpperCase(),
+          last_name: row["Last Name"].toUpperCase(),
+        },
+      });
+
+      if (existingRecord) {
+        throw new BadRequestException(`Staff ${row["First Name"]} ${row["Last Name"]} already exists`);
+      }
+
+
+
       try {
-        const dto: CreateStaffDto = {
+        const newStaff = this.staffsRepository.create({
           first_name: row["First Name"],
           contact_number: row["Contact Number"],
           last_name: row["Last Name"],
           middle_name: row["Middle Name"],
-          birthday: row["Birthday"],
-          location_id: row["Location"],
-          vendor_id: row["Vendor"],
-          position_id: row["Position"],
-          access_key_id: row["Access Keys"],
+          birthday: parseExcelDate(row["Birthday"]),
+          // birthday: parseExcelDate(row["Birthday"]),
+          location_id: location.id,
+          vendor_id: vendor.id,
+          position_id: position.id,
+          access_key_id: accessKeyId,
+          assign_status_id: status.id,
           store_request: row["Store Request"],
           sss_number: row["SSS Number"],
           tin: row["TIN"],
           pagibig_number: row["PAGIBIG Number"],
           remarks: row["Remarks"],
-          hired_date: row["Hired Date"],
-          to_hr_date: row["To HR Date"],
-          separated_date: row["Seperated Date"],
-          to_sts_date: row["To STS Date"],
-          approved_eprf_date: row["Approved EPRF Date"],
-          req_completion_date: row["Req Completion Date"],
-          actual_deployment_date: row["Actual Deployment Date"],
+          hired_date: parseExcelDate(row["Hired Date"]),
+          to_hr_date: parseExcelDate(row["To HR Date"]),
+          separated_date: parseExcelDate(row["Seperated Date"]),
+          to_sts_date: parseExcelDate(row["To STS Date"]),
+          approved_eprf_date: parseExcelDate(row["Approved EPRF Date"]),
+          req_completion_date: parseExcelDate(row["Req Completion Date"]),
+          actual_deployment_date: parseExcelDate(row["Actual Deployment Date"]),
           overall_remarks: row["Overall Remarks"],
-          assign_status_id: row["Assignment Status"],
-        };
+          status_id: 1,
+          created_by: userId,
+          updated_by: userId,
+        });
 
-        return dto;
-        const created = await this.create(dto, userId);
+        const savedStaff = await this.staffsRepository.save(newStaff);
+
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffsService",
+            method: "create",
+            raw_data: JSON.stringify(savedStaff),
+            description: `Created staff ${savedStaff.id} - ${savedStaff.first_name} ${savedStaff.last_name}`,
+            status_id: 1,
+          },
+          userId,
+        );
+
+        const staffWithRelations = await this.staffsRepository.findOne({
+          where: { id: savedStaff.id },
+          relations: [
+            "status",
+            "assignmentStatus",
+            "createdBy",
+            "updatedBy",
+            "location",
+            "vendor",
+            "position",
+          ],
+        });
 
         success.push({
           row: i + 2,
-          data: created,
+          data: staffWithRelations,
         });
       } catch (error) {
         errors.push({
