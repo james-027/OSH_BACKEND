@@ -18,7 +18,6 @@ export class DebitAdviceGLAccounts {
   @Column({
     name: "gl_code",
     length: 100,
-    unique: true,
   })
   gl_code: string;
 

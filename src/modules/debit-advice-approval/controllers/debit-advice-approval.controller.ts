@@ -199,10 +199,10 @@ export class DebitAdviceApprovalController {
   }
 
   @Patch(":id/toggle-status-rejected")
-  @RequirePermissions({
-    module: "DEBIT ADVICE APPROVAL",
-    action: "REJECT",
-  })
+  // @RequirePermissions({
+  //   module: "DEBIT ADVICE APPROVAL",
+  //   action: "REJECT",
+  // })
   async toggleStatusRejected(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: any,
