@@ -514,7 +514,6 @@ export class StaffsService {
           last_name: row["Last Name"],
           middle_name: row["Middle Name"],
           birthday: parseExcelDate(row["Birthday"]),
-          // birthday: parseExcelDate(row["Birthday"]),
           location_id: location.id,
           vendor_id: vendor.id,
           position_id: position.id,
