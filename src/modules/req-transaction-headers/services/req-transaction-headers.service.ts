@@ -1457,12 +1457,20 @@ export class ReqTransactionHeadersService {
             );
             const preDueReminderDateString =
               formatDateToString(preDueReminderDate);
+
             const postDueReminderDate = new Date(start_date);
             postDueReminderDate.setDate(
               postDueReminderDate.getDate() + requirement.requirement_reminder,
             );
             const postDueReminderDateString =
               formatDateToString(postDueReminderDate);
+
+            // minus # of days from end_date to get due date for renewal reminder in type 2 reminder (store rental lease contract)
+            const actualDueDate = new Date(end_date);
+            actualDueDate.setDate(
+              actualDueDate.getDate() - requirement.requirement_due_days,
+            );
+            const actualDueDateString = formatDateToString(actualDueDate);
             const dueRecord = queryRunner.manager.create(
               WarehouseRequirementDue,
               {
@@ -1473,7 +1481,7 @@ export class ReqTransactionHeadersService {
                   preDueReminderDateString,
                 warehouse_requirement_due_post_reminder_date:
                   postDueReminderDateString,
-                warehouse_requirement_due_date: end_date, // Expiration date
+                warehouse_requirement_due_date: actualDueDateString, // due for renewal date
                 status_id: 2,
                 created_by: userId,
               },
@@ -1561,16 +1569,16 @@ export class ReqTransactionHeadersService {
     }
 
     // Bulk create transaction dues
-        let duesResult: any = { records: [], ids: [], status: 1 };
-        if (transactionDuesToCreate.length > 0) {
-          try {
-            duesResult = await this.reqTransactionDuesService.bulkCreate(
-              transactionDuesToCreate,
-              userId,
-              queryRunner, // ✅ Pass queryRunner to use same transaction context
-              true, // ✅ Skip individual audit trail, consolidate into batch summary
-            );
-            const createdDues = duesResult.records;
+    let duesResult: any = { records: [], ids: [], status: 1 };
+    if (transactionDuesToCreate.length > 0) {
+      try {
+        duesResult = await this.reqTransactionDuesService.bulkCreate(
+          transactionDuesToCreate,
+          userId,
+          queryRunner, // ✅ Pass queryRunner to use same transaction context
+          true, // ✅ Skip individual audit trail, consolidate into batch summary
+        );
+        const createdDues = duesResult.records;
         createdDues.forEach((due) => {
           const result = successResults.find(
             (r) =>
@@ -2188,7 +2196,8 @@ export class ReqTransactionHeadersService {
             req_transaction_detail_ids: detailsResult.ids,
             req_transaction_detail_status: detailsResult.status,
             req_transaction_due_ids: typeSpecificResult.duesResult?.ids || [],
-            req_transaction_due_status: typeSpecificResult.duesResult?.status || 1,
+            req_transaction_due_status:
+              typeSpecificResult.duesResult?.status || 1,
           }),
           description: `Batch transaction created - trans_number: ${trans_number} | Files: ${filesProcessed}/${totalFiles} successful | Stores: ${successResults.length} | Headers: ${successResults.length} | Details: ${detailsResult.ids.length} | Dues: ${typeSpecificResult.duesResult?.ids?.length || 0} | Heap peak: ${heapDiffTotal}MB | RSS peak: ${rssDiffTotal}MB`,
           status_id: 1,
