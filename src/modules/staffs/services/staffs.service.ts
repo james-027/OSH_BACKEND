@@ -106,11 +106,23 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      const firstName = createStaffDto.first_name.toUpperCase().trim();
+      const lastName = createStaffDto.last_name.trim();
+      const middleName = (createStaffDto.middle_name || "")
+        .toUpperCase()
+        .trim();
+
+      const whereCondition: any = {
+        first_name: firstName,
+        last_name: lastName,
+      };
+
+      if (middleName) {
+        whereCondition.middle_name = middleName;
+      }
+
       const existingRecord = await this.staffsRepository.findOne({
-        where: {
-          first_name: createStaffDto.first_name.toUpperCase(),
-          last_name: createStaffDto.last_name.toUpperCase(),
-        },
+        where: whereCondition,
       });
 
       if (existingRecord) {
@@ -234,16 +246,28 @@ export class StaffsService {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
 
+      const firstName = updateStaffDto.first_name.toUpperCase().trim();
+      const lastName = updateStaffDto.last_name.trim();
+      const middleName = (updateStaffDto.middle_name || "")
+        .toUpperCase()
+        .trim();
+
+      const whereCondition: any = {
+        first_name: firstName,
+        last_name: lastName,
+      };
+
+      if (middleName) {
+        whereCondition.middle_name = middleName;
+      }
+
       const existingRecord = await this.staffsRepository.findOne({
-        where: {
-          first_name: updateStaffDto.first_name.toUpperCase(),
-          last_name: updateStaffDto.last_name.toUpperCase(),
-        },
+        where: whereCondition,
       });
 
       if (existingRecord && existingRecord.id !== id) {
         throw new BadRequestException(
-          `Staff '${updateStaffDto.first_name} ${updateStaffDto.last_name}' may already exist`,
+          `Staff '${updateStaffDto.first_name} ${updateStaffDto.middle_name} ${updateStaffDto.last_name}' may already exist`,
         );
       }
 
@@ -453,66 +477,139 @@ export class StaffsService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
+      try {
+        // Skip completely empty row
+        if (!row["First Name"] && !row["Last Name"]) {
+          continue;
+        }
 
-      if (!row["First Name"] && !row["Last Name"]) {
-        continue;
-      }
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = [
+          "First Name",
+          "Last Name",
+          "Location",
+          "Position",
+          "Vendor",
+          "Assign Status",
+        ];
 
-      const location = await this.locationRepository.findOne({
-        where: { location_name: row["Location"] },
-      });
-      const position = await this.positionRepository.findOne({
-        where: { position_name: row["Position"] },
-      });
-
-      const vendor = await this.vendorRepository.findOne({
-        where: { service_provider_name: row["Vendor"] },
-      });
-      const status = await this.statusRepository.findOne({
-        where: { status_name: row["Assign Status"] },
-      });
-
-      if (!location) {
-        throw new BadRequestException(
-          `Location '${row["Location"]}' not found`,
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
         );
-      }
 
-      if (!position) {
-        throw new BadRequestException(
-          `Position '${row["Position"]}' not found`,
-        );
-      }
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
 
-      if (!vendor) {
-        throw new BadRequestException(`Vendor '${row["Vendor"]}' not found`);
-      }
+          continue;
+        }
 
-      if (!status) {
-        throw new BadRequestException(
-          `Assign Status '${row["Assign Status"]}' not found`,
-        );
-      }
+        const location = await this.locationRepository.findOne({
+          where: { location_name: row["Location"] },
+        });
 
-      const existingRecord = await this.staffsRepository.findOne({
-        where: {
-          first_name: row["First Name"].toUpperCase(),
-          last_name: row["Last Name"].toUpperCase(),
-        },
-      });
+        const position = await this.positionRepository.findOne({
+          where: { position_name: row["Position"] },
+        });
+
+        const vendor = await this.vendorRepository.findOne({
+          where: { service_provider_name: row["Vendor"] },
+        });
+
+        const status = await this.statusRepository.findOne({
+          where: { status_name: row["Assign Status"] },
+        });
+
+        if (!location) {
+          errors.push({
+            row: i + 2,
+            error: `Location '${row["Location"]}' not found`,
+          });
+          continue;
+        }
+
+        if (!position) {
+          errors.push({
+            row: i + 2,
+            error: `Position '${row["Position"]}' not found`,
+          });
+          continue;
+        }
+
+        if (!vendor) {
+          errors.push({
+            row: i + 2,
+            error: `Vendor '${row["Vendor"]}' not found`,
+          });
+          continue;
+        }
+
+        if (!status) {
+          errors.push({
+            row: i + 2,
+            error: `Assign Status '${row["Assign Status"]}' not found`,
+          });
+          continue;
+        }
+
+        const firstName = row["First Name"].toUpperCase().trim();
+        const lastName = row["Last Name"].toUpperCase().trim();
+        const middleName = (row["Middle Name"] || "").toUpperCase().trim();
+
+        const whereCondition: any = {
+          first_name: firstName,
+          last_name: lastName,
+        };
+
+        if (middleName) {
+          whereCondition.middle_name = middleName;
+        }
+
+        const existingRecord = await this.staffsRepository.findOne({
+          where: whereCondition,
+        });
+
+        let savedStaff;
 
       if (existingRecord) {
-        throw new BadRequestException(`Staff ${row["First Name"]} ${row["Last Name"]} already exists`);
-      }
+        // UPDATE EXISTING
+        existingRecord.contact_number = row["Contact Number"];
+        existingRecord.middle_name = middleName;
+        existingRecord.birthday = parseExcelDate(row["Birthday"]);
+        existingRecord.location_id = location.id;
+        existingRecord.vendor_id = vendor.id;
+        existingRecord.position_id = position.id;
+        existingRecord.access_key_id = accessKeyId;
+        existingRecord.assign_status_id = status.id;
+        existingRecord.store_request = row["Store Request"];
+        existingRecord.sss_number = row["SSS Number"];
+        existingRecord.tin = row["TIN"];
+        existingRecord.pagibig_number = row["PAGIBIG Number"];
+        existingRecord.remarks = row["Remarks"];
+        existingRecord.hired_date = parseExcelDate(row["Hired Date"]);
+        existingRecord.to_hr_date = parseExcelDate(row["To HR Date"]);
+        existingRecord.separated_date = parseExcelDate(row["Seperated Date"]);
+        existingRecord.to_sts_date = parseExcelDate(row["To STS Date"]);
+        existingRecord.approved_eprf_date = parseExcelDate(row["Approved EPRF Date"]);
+        existingRecord.req_completion_date = parseExcelDate(row["Req Completion Date"]);
+        existingRecord.actual_deployment_date = parseExcelDate(row["Actual Deployment Date"]);
+        existingRecord.overall_remarks = row["Overall Remarks"];
+        existingRecord.updated_by = userId;
 
+        savedStaff = await this.staffsRepository.save(existingRecord);
 
-
-      try {
+      } else {
+        // CREATE NEW
         const newStaff = this.staffsRepository.create({
-          first_name: row["First Name"],
+          first_name: firstName,
           contact_number: row["Contact Number"],
-          last_name: row["Last Name"],
-          middle_name: row["Middle Name"],
+          last_name: lastName,
+          middle_name: middleName,
           birthday: parseExcelDate(row["Birthday"]),
           location_id: location.id,
           vendor_id: vendor.id,
@@ -537,15 +634,17 @@ export class StaffsService {
           updated_by: userId,
         });
 
-        const savedStaff = await this.staffsRepository.save(newStaff);
+        savedStaff = await this.staffsRepository.save(newStaff);
+      }
 
-        // Audit trail
+     
+
         await this.userAuditTrailCreateService.create(
           {
             service: "StaffsService",
-            method: "create",
+            method: "uploadExcel",
             raw_data: JSON.stringify(savedStaff),
-            description: `Created staff ${savedStaff.id} - ${savedStaff.first_name} ${savedStaff.last_name}`,
+            description: `Upload staff ${savedStaff.id} - ${savedStaff.first_name} ${savedStaff.last_name}`,
             status_id: 1,
           },
           userId,
@@ -566,6 +665,7 @@ export class StaffsService {
 
         success.push({
           row: i + 2,
+          action: existingRecord ? "updated" : "inserted",
           data: staffWithRelations,
         });
       } catch (error) {
@@ -577,10 +677,17 @@ export class StaffsService {
     }
 
     return {
-      inserted_count: success.length,
-      updated_count: 0,
-      inserted_row_numbers: success.map((s) => s.row),
-      updated_row_numbers: [],
+      inserted_count: success.filter(s => s.action === "inserted").length,
+      updated_count: success.filter(s => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter(s => s.action === "inserted")
+        .map(s => s.row),
+
+      updated_row_numbers: success
+        .filter(s => s.action === "updated")
+        .map(s => s.row),
+
       success,
       errors,
     };
