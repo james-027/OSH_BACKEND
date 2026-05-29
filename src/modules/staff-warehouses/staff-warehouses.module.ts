@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
+import { Staff } from "src/entities/Staff";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "src/entities/Module";
@@ -16,6 +17,7 @@ import { SSEModule } from "../sse/sse.module";
   imports: [
     TypeOrmModule.forFeature([
       StaffWarehouse,
+      Staff,
       UserAuditTrail,
       UserPermissions,
       AppModule,

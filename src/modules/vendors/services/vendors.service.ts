@@ -26,10 +26,21 @@ export class VendorsService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
       const vendors = await this.vendorsRepository.find({
-        relations: ["status", "createdBy", "updatedBy", "category"],
+        where,
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "category",
+          "accessKey",
+        ],
       });
 
       return this.responseMapperService.mapEntitiesToResponse(vendors);
@@ -43,7 +54,13 @@ export class VendorsService {
     try {
       const vendor = await this.vendorsRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy", "category"],
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "category",
+          "accessKey",
+        ],
       });
 
       if (!vendor) {
@@ -60,7 +77,11 @@ export class VendorsService {
     }
   }
 
-  async create(createVendorDto: CreateVendorDto, userId: number): Promise<any> {
+  async create(
+    createVendorDto: CreateVendorDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
     try {
       // Check if vendor with this code already exists
       const existingVendor = await this.vendorsRepository.findOne({
@@ -77,9 +98,12 @@ export class VendorsService {
       }
 
       const newVendor = this.vendorsRepository.create({
-        service_provider_name: createVendorDto.service_provider_name.toUpperCase(),
-        service_provider_code: createVendorDto.service_provider_code.toUpperCase(),
+        service_provider_name:
+          createVendorDto.service_provider_name.toUpperCase(),
+        service_provider_code:
+          createVendorDto.service_provider_code.toUpperCase(),
         category_id: createVendorDto.category_id,
+        access_key_id: accessKeyId,
         tax: createVendorDto.tax || null,
         vat: createVendorDto.vat || null,
         asf: createVendorDto.asf || null,
@@ -149,7 +173,9 @@ export class VendorsService {
       // Check for unique constraints if updating code
       if (updateVendorDto.service_provider_code) {
         const existingVendor = await this.vendorsRepository.findOne({
-          where: { service_provider_code: updateVendorDto.service_provider_code },
+          where: {
+            service_provider_code: updateVendorDto.service_provider_code,
+          },
         });
 
         if (existingVendor && existingVendor.id !== id) {
@@ -163,11 +189,13 @@ export class VendorsService {
       }
 
       if (updateVendorDto.service_provider_name) {
-        updateVendorDto.service_provider_name = updateVendorDto.service_provider_name.toUpperCase();
+        updateVendorDto.service_provider_name =
+          updateVendorDto.service_provider_name.toUpperCase();
       }
 
       if (updateVendorDto.service_provider_code) {
-        updateVendorDto.service_provider_code = updateVendorDto.service_provider_code.toUpperCase();
+        updateVendorDto.service_provider_code =
+          updateVendorDto.service_provider_code.toUpperCase();
       }
 
       Object.assign(vendor, updateVendorDto, {

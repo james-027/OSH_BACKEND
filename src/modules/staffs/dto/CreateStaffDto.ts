@@ -39,6 +39,10 @@ export class CreateStaffDto {
   @IsNotEmpty()
   position_id!: number;
 
+  @IsInt()
+  @IsNotEmpty()
+  access_key_id!: number;
+
   @IsOptional()
   @IsString()
   sss_number?: string;

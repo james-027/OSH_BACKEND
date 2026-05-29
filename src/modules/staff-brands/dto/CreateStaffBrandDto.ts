@@ -12,4 +12,6 @@ export class CreateStaffBrandDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+  
+
 }

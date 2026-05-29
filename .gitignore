@@ -12,3 +12,4 @@ EXT/*
 src/migrations/*
 tsconfig.tsbuildinfo
 package-lock.json
+uploads/staffs/*

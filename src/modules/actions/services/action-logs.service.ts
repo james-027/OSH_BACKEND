@@ -89,6 +89,30 @@ export class ActionLogsService {
     return this.actionLogRepository.save(actionLog);
   }
 
+  /**
+   * Batch insert action logs for optimized DB performance
+   * Used when logging multiple actions at once (e.g., bulk upload)
+   */
+  async logActionBatch(logs: Array<{
+    module_id: number;
+    ref_id: number;
+    action_id: number;
+    description: string;
+    raw_data?: any;
+    created_by: number;
+  }>) {
+    if (!logs || logs.length === 0) {
+      return [];
+    }
+    const actionLogs = logs.map((log) =>
+      this.actionLogRepository.create({
+        ...log,
+        status_id: 1,
+      })
+    );
+    return this.actionLogRepository.save(actionLogs);
+  }
+
   async get_action_id_from_status(status_id: number): Promise<number | null> {
     let action_id = 0;
     if (status_id === 7)

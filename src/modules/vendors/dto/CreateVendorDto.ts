@@ -38,4 +38,5 @@ export class CreateVendorDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+  
 }

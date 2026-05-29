@@ -12,6 +12,7 @@ export class CreateStaffVendorSalaryDto {
   @IsInt()
   @IsNotEmpty()
   location_id!: number;
+  
 
   @IsNumber()
   @IsNotEmpty()

@@ -25,7 +25,8 @@ export class VendorsController {
   @Get()
   @RequirePermissions({ module: "VENDORS", action: "VIEW" })
   async findAll(@Request() req) {
-    return this.vendorsService.findAll();
+    const accessKeyId = req.user.current_access_key;
+    return this.vendorsService.findAll(accessKeyId);
   }
 
   @Get(":id")
@@ -38,7 +39,8 @@ export class VendorsController {
   @RequirePermissions({ module: "VENDORS", action: "ADD" })
   async create(@Body() createVendorDto: CreateVendorDto, @Request() req) {
     const userId = req.user.id;
-    return this.vendorsService.create(createVendorDto, userId);
+    const accessKeyId = req.user.current_access_key;
+    return this.vendorsService.create(createVendorDto, userId,accessKeyId);
   }
 
   @Put(":id")

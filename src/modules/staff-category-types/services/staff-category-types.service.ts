@@ -23,6 +23,7 @@ export class StaffCategoryTypesService {
     "updatedBy",
     "staff",
     "categoryType",
+    "accessKey",
   ];
 
   constructor(
@@ -34,9 +35,14 @@ export class StaffCategoryTypesService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
     try {
+      const where: any = {};
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
       const records = await this.staffCategoryTypesRepository.find({
+        where,
         relations: this.relationFields,
       });
       return this.responseMapperService.mapEntitiesToResponse(records);
@@ -72,6 +78,7 @@ export class StaffCategoryTypesService {
   async create(
     createStaffCategoryTypeDto: CreateStaffCategoryTypeDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const user = await this.usersService.findUserById(userId);
@@ -82,6 +89,7 @@ export class StaffCategoryTypesService {
       const newRecord = this.staffCategoryTypesRepository.create({
         staff_id: createStaffCategoryTypeDto.staff_id,
         category_type_id: createStaffCategoryTypeDto.category_type_id,
+        access_key_id: accessKeyId,
         status_id: createStaffCategoryTypeDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
@@ -143,7 +151,6 @@ export class StaffCategoryTypesService {
     try {
       const record = await this.staffCategoryTypesRepository.findOne({
         where: { id },
-        relations: this.relationFields,
       });
 
       if (!record) {
