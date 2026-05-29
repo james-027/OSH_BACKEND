@@ -1829,6 +1829,9 @@ export class WarehouseRequirementsService {
    * Get warehouse requirements report grouped by location
    * Shows count of warehouses per location that have each requirement
    * Dynamic columns based on active requirements (status_id = 1)
+   *
+   * For requirementTypeId = 1: Shows single column per requirement (actual_no + %)
+   * For requirementTypeId = 2: Shows 3 columns per requirement (ACTIVE, DUE FOR RENEWAL, EXPIRED) with due_age
    */
   async getWarehouseRequirementsListingPerLocation(
     warehouse_type_id: number,
@@ -1888,6 +1891,63 @@ export class WarehouseRequirementsService {
 
       // Step 7: Build report rows per location
       const result: any[] = [];
+      const today = formatDateToString(new Date());
+      const todayDate = new Date(today);
+
+      // For requirementTypeId = 2: Fetch ALL transaction data upfront (per location) with warehouse_requirement_dues
+      let allTransactionsByLocation: Map<
+        number,
+        Map<number, any[]>
+      > = new Map();
+
+      if (requirementTypeId === 2) {
+        for (const [locationId, locationWarehouses] of Array.from(
+          warehousesByLocation.entries(),
+        )) {
+          const warehouseIds = locationWarehouses.map((w) => w.id);
+
+          // Single query per location: fetch ALL transactions for requirementTypeId=2 with warehouse_requirement_dues
+          let transactionQuery = this.reqTransactionHeaderRepository
+            .createQueryBuilder("rth")
+            .leftJoinAndSelect("rth.requirement", "requirement")
+            .leftJoinAndSelect("rth.reqTransactionDues", "rtd")
+            .leftJoinAndSelect("rtd.warehouseRequirementDue", "wrd")
+            .where("rth.warehouse_id IN (:...warehouseIds)", {
+              warehouseIds,
+            })
+            .andWhere("rth.status_id = :header_status_id", {
+              header_status_id: status_id || 1,
+            })
+            .andWhere("requirement.requirement_type_id = :requirementTypeId", {
+              requirementTypeId,
+            });
+
+          // Apply transaction date filtering if provided
+          if (date_from && date_to) {
+            const filterDateFrom = formatDateToString(new Date(date_from));
+            const filterDateTo = formatDateToString(new Date(date_to));
+            transactionQuery = transactionQuery.andWhere(
+              "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
+              { filterDateFrom, filterDateTo },
+            );
+          }
+
+          const transactionHeaders = await transactionQuery
+            .orderBy("rth.id", "ASC")
+            .getMany();
+
+          // Index by requirement_id for fast lookup
+          const byRequirement = new Map<number, any[]>();
+          transactionHeaders.forEach((header) => {
+            if (!byRequirement.has(header.requirement_id)) {
+              byRequirement.set(header.requirement_id, []);
+            }
+            byRequirement.get(header.requirement_id).push(header);
+          });
+
+          allTransactionsByLocation.set(locationId, byRequirement);
+        }
+      }
 
       for (const [locationId, locationWarehouses] of Array.from(
         warehousesByLocation.entries(),
@@ -1909,42 +1969,120 @@ export class WarehouseRequirementsService {
 
         // Step 8: For each active requirement, count warehouses in this location that have TRANSACTED that requirement
         for (const requirement of activeRequirements) {
-          // Query transacted requirements (req_transaction_headers + req_transaction_details)
-          let transactionQuery = this.buildTransactionCountQuery(
-            warehouseIds,
-            requirement.id,
-            status_id || 1,
-            status_id || 1,
-          );
+          if (requirementTypeId === 2) {
+            // NEW FORMAT: Process in-memory from pre-fetched data
+            const transactionsByReq =
+              allTransactionsByLocation.get(locationId) || new Map();
+            const transactionsForReq =
+              transactionsByReq.get(requirement.id) || [];
 
-          // Apply date filtering on transaction date if provided
-          if (date_from && date_to) {
-            const filterDateFrom = formatDateToString(new Date(date_from));
-            const filterDateTo = formatDateToString(new Date(date_to));
-            // filterDateTo.setHours(23, 59, 59, 999);
+            // Categorize transactions by status
+            const activeWarehouses = new Set<number>();
+            const dueWarehouses = new Set<number>();
+            const expiredWarehouses = new Set<number>();
+            const dueAges: number[] = [];
 
-            transactionQuery = transactionQuery.andWhere(
-              "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
-              { filterDateFrom, filterDateTo },
+            transactionsForReq.forEach((header) => {
+              // Get warehouse_requirement_dues for this transaction
+              const dues = header.reqTransactionDues || [];
+              dues.forEach((due: any) => {
+                const wrd = due.warehouseRequirementDue;
+                if (!wrd) return;
+
+                const dueDate = new Date(wrd.warehouse_requirement_due_date);
+                const dueEndDate = new Date(wrd.warehouse_requirement_due_end);
+
+                // Categorize based on dates
+                if (dueDate > todayDate) {
+                  // ACTIVE
+                  activeWarehouses.add(header.warehouse_id);
+                } else if (dueDate <= todayDate && dueEndDate > todayDate) {
+                  // DUE FOR RENEWAL
+                  dueWarehouses.add(header.warehouse_id);
+                }
+
+                if (dueEndDate <= todayDate) {
+                  // EXPIRED
+                  expiredWarehouses.add(header.warehouse_id);
+                }
+
+                // Track due_age for average calculation
+                const daysUntilEnd = Math.floor(
+                  (dueEndDate.getTime() - todayDate.getTime()) /
+                    (1000 * 60 * 60 * 24),
+                );
+                dueAges.push(daysUntilEnd);
+              });
+            });
+
+            const activeCount = activeWarehouses.size;
+            const dueCount = dueWarehouses.size;
+            const expiredCount = expiredWarehouses.size;
+
+            // Calculate average due_age for location-level aggregation
+            const avgDueAge =
+              dueAges.length > 0
+                ? Math.round(
+                    dueAges.reduce((sum, age) => sum + age, 0) / dueAges.length,
+                  )
+                : null;
+
+            row.requirements[requirement.requirement_name] = {
+              active: {
+                actual_no: activeCount,
+                percentage:
+                  totalStores > 0
+                    ? Math.round((activeCount / totalStores) * 100)
+                    : 0,
+              },
+              due_for_renewal: {
+                actual_no: dueCount,
+                percentage:
+                  totalStores > 0
+                    ? Math.round((dueCount / totalStores) * 100)
+                    : 0,
+              },
+              expired: {
+                actual_no: expiredCount,
+                percentage:
+                  totalStores > 0
+                    ? Math.round((expiredCount / totalStores) * 100)
+                    : 0,
+              },
+              ave_due_age: avgDueAge,
+            };
+          } else {
+            // ORIGINAL FORMAT (requirementTypeId = 1): Single column per requirement
+            let transactionQuery = this.buildTransactionCountQuery(
+              warehouseIds,
+              requirement.id,
+              status_id || 1,
+              status_id || 1,
             );
-            // console.log("date from & to:", filterDateFrom, filterDateTo);
+
+            // Apply date filtering on transaction date if provided
+            if (date_from && date_to) {
+              const filterDateFrom = formatDateToString(new Date(date_from));
+              const filterDateTo = formatDateToString(new Date(date_to));
+
+              transactionQuery = transactionQuery.andWhere(
+                "rth.trans_date >= :filterDateFrom AND rth.trans_date <= :filterDateTo",
+                { filterDateFrom, filterDateTo },
+              );
+            }
+
+            const results = await transactionQuery.getRawMany();
+            const requirementCount = results.length;
+            const percentage =
+              totalStores > 0
+                ? Math.round((requirementCount / totalStores) * 100)
+                : 0;
+
+            row.requirements[requirement.requirement_name] = {
+              actual_no: requirementCount,
+              percentage: percentage,
+            };
           }
-
-          const results = await transactionQuery.getRawMany();
-          const requirementCount = results.length;
-          const percentage =
-            totalStores > 0
-              ? Math.round((requirementCount / totalStores) * 100)
-              : 0;
-
-          // const [sql, params] = transactionQuery.getQueryAndParameters();
-          // console.log("SQL:", sql);
-          // console.log("Params:", params);
-
-          row.requirements[requirement.requirement_name] = {
-            actual_no: requirementCount,
-            percentage: percentage,
-          };
         }
 
         result.push(row);
