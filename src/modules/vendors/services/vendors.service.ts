@@ -33,10 +33,6 @@ export class VendorsService {
         where.access_key_id = accessKeyId;
       }
       const vendors = await this.vendorsRepository.find({
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 83e05a6 (enable access key based on user access)
         where,
         relations: [
           "status",
@@ -45,12 +41,6 @@ export class VendorsService {
           "category",
           "accessKey",
         ],
-<<<<<<< HEAD
-=======
-        relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
->>>>>>> 934d674 (add access key field)
-=======
->>>>>>> 83e05a6 (enable access key based on user access)
       });
 
       return this.responseMapperService.mapEntitiesToResponse(vendors);
@@ -64,10 +54,6 @@ export class VendorsService {
     try {
       const vendor = await this.vendorsRepository.findOne({
         where: { id },
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 83e05a6 (enable access key based on user access)
         relations: [
           "status",
           "createdBy",
@@ -75,12 +61,6 @@ export class VendorsService {
           "category",
           "accessKey",
         ],
-<<<<<<< HEAD
-=======
-        relations: ["status", "createdBy", "updatedBy", "category", "accessKey"],
->>>>>>> 934d674 (add access key field)
-=======
->>>>>>> 83e05a6 (enable access key based on user access)
       });
 
       if (!vendor) {
@@ -123,15 +103,7 @@ export class VendorsService {
         service_provider_code:
           createVendorDto.service_provider_code.toUpperCase(),
         category_id: createVendorDto.category_id,
-<<<<<<< HEAD
-<<<<<<< HEAD
         access_key_id: accessKeyId,
-=======
-        access_key_id: createVendorDto.access_key_id,
->>>>>>> 934d674 (add access key field)
-=======
-        access_key_id: accessKeyId,
->>>>>>> a30fcf2 (Adjust for Access Key Create and Staff Management)
         tax: createVendorDto.tax || null,
         vat: createVendorDto.vat || null,
         asf: createVendorDto.asf || null,
