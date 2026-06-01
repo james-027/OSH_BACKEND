@@ -37,6 +37,7 @@ import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { GlobalFileProcessingQueueService } from "../../../services/global-file-processing-queue.service";
 import { UploadProgressLoggerService } from "../../../services/upload-progress-logger.service";
+import { WarehouseRequirementsService } from "src/modules/warehouse-requirements/services/warehouse-requirements.service";
 
 @Injectable()
 export class ReqTransactionHeadersService {
@@ -75,6 +76,7 @@ export class ReqTransactionHeadersService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
     private uploadProgressLogger: UploadProgressLoggerService,
+    private warehouseRequirementsService: WarehouseRequirementsService,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -90,6 +92,7 @@ export class ReqTransactionHeadersService {
       "transDueStatus",
       "reqTransactionDetails",
       "reqTransactionDues",
+      "reqTransactionDues.warehouseRequirementDue",
       "location",
     ];
   }
@@ -272,6 +275,24 @@ export class ReqTransactionHeadersService {
           }),
         ),
         reqTransactionDues: record.reqTransactionDues || [],
+        warehouse_requirement_due_date:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_date || null,
+        warehouse_requirement_due_start:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_start || null,
+        warehouse_requirement_due_end:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_end || null,
+        warehouse_requirement_due_status_name:
+          this.warehouseRequirementsService.getWarehouseRequirementDueStatus(
+            record.requirement?.requirement_type_id,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue
+              ?.warehouse_requirement_due_date,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue
+              ?.warehouse_requirement_due_end,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue?.status_id,
+          ) || null,
       }));
       // return this.responseMapperService.mapEntitiesToResponse(records);
     } catch (error) {
