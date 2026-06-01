@@ -2401,6 +2401,9 @@ export class WarehouseRequirementsService {
       );
 
       // Step 10: Build final response per warehouse
+      const today = formatDateToString(new Date());
+      const todayDate = new Date(today);
+
       const result = warehouses.map((warehouse, idx) => {
         const baseRequirementsData = baseRequirementsDataArray[idx];
         const transactionsByReq =
@@ -2417,6 +2420,79 @@ export class WarehouseRequirementsService {
           const reqTransactions = transactionsByReq.get(reqName) || [];
           const actualNo = reqTransactions.length;
 
+          if (requirementTypeId === 2) {
+            // NEW FORMAT: Three-column categorization with ave_due_age and min_due_age
+            const activeTransactions = new Set<number>();
+            const dueTransactions = new Set<number>();
+            const expiredTransactions = new Set<number>();
+            const dueAges: number[] = [];
+
+            reqTransactions.forEach((transaction) => {
+              // Extract warehouse_requirement_due information
+              const wrd = transaction.warehouse_requirement_due_id
+                ? {
+                    warehouse_requirement_due_date: transaction.warehouse_requirement_due_date,
+                    warehouse_requirement_due_end: transaction.warehouse_requirement_due_end,
+                  }
+                : null;
+
+              if (!wrd) return;
+
+              const dueDate = new Date(wrd.warehouse_requirement_due_date);
+              const dueEndDate = new Date(wrd.warehouse_requirement_due_end);
+
+              // Categorize based on dates
+              if (dueDate > todayDate) {
+                // ACTIVE
+                activeTransactions.add(transaction.trans_header_id);
+              } else if (dueDate <= todayDate && dueEndDate > todayDate) {
+                // DUE FOR RENEWAL
+                dueTransactions.add(transaction.trans_header_id);
+              }
+
+              if (dueEndDate <= todayDate) {
+                // EXPIRED
+                expiredTransactions.add(transaction.trans_header_id);
+              }
+
+              // Collect all daysUntilEnd values (including negative/expired)
+              const daysUntilEnd = Math.floor(
+                (dueEndDate.getTime() - todayDate.getTime()) /
+                  (1000 * 60 * 60 * 24),
+              );
+              dueAges.push(daysUntilEnd);
+            });
+
+            const activeCount = activeTransactions.size;
+            const dueCount = dueTransactions.size;
+            const expiredCount = expiredTransactions.size;
+
+            // Calculate average and minimum due_age using reusable method (excludeExpired=true)
+            const dueAgeResult = this.calculateDueAges(dueAges, true);
+            const aveDueAge = dueAgeResult.ave_due_age;
+            const minDueAge = dueAgeResult.min_due_age;
+
+            requirementsObj[reqName] = {
+              active: {
+                actual_no: activeCount,
+                percentage: activeCount > 0 ? 100 : 0,
+              },
+              due_for_renewal: {
+                actual_no: dueCount,
+                percentage: dueCount > 0 ? 100 : 0,
+              },
+              expired: {
+                actual_no: expiredCount,
+                percentage: expiredCount > 0 ? 100 : 0,
+              },
+              ave_due_age: aveDueAge,
+              min_due_age: minDueAge,
+              transactedRequirements: reqTransactions,
+            };
+
+            totalTransactedCount += actualNo;
+          } else {
+            // ORIGINAL FORMAT (requirementTypeId = 1): Single column per requirement
           requirementsObj[reqName] = {
             actual_no: actualNo,
             percentage: actualNo > 0 ? 100 : 0, // 100 if has transactions, 0 if none
@@ -2424,6 +2500,7 @@ export class WarehouseRequirementsService {
           };
 
           totalTransactedCount += actualNo;
+          }
         }
 
         const totalTransactedPercentageCalc =
