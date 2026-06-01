@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { Brand } from "src/entities/Brand";
-import { BrandsService } from "./services/brands.service";
-import { BrandsController } from "src/modules/brands/controllers/brands.controller";
+import { BrandGroup } from "src/entities/BrandGroup";
+import { BrandGroupsService } from "./services/brand-groups.service";
+import { BrandGroupsController } from "src/modules/brands/controllers/brand-groups.controller";
 import { UsersService } from "src/modules/users/services/users.service";
 import { User } from "src/entities/User";
 import { Status } from "src/entities/Status";
@@ -20,7 +20,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Brand,
+     BrandGroup,
       User,
       Status,
       Role,
@@ -28,17 +28,15 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
       UserPermissions,
       AppModule,
       Action,
-      UserAuditTrail,
+      UserAuditTrail
     ]),
     UsersModule,
     SSEModule,
   ],
-  providers: [
-    BrandsService,
-    UserAuditTrailCreateService,
-    ResponseMapperService,
-  ],
-  controllers: [BrandsController],
-  exports: [BrandsService],
+  providers: [BrandGroupsService,  
+        UserAuditTrailCreateService,
+      ResponseMapperService,],
+  controllers: [BrandGroupsController],
+  exports: [BrandGroupsService],
 })
-export class BrandsModule {}
+export class BrandGroupModule {}
