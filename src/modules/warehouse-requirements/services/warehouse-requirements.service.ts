@@ -1153,7 +1153,12 @@ export class WarehouseRequirementsService {
                   warehouse_requirement_due_id: due.id,
                   warehouse_requirement_due_status_id: due.status_id,
                   warehouse_requirement_due_status_name:
-                    due.status_id === 1 ? "NOT FULFILLED" : "FULFILLED",
+                    this.getWarehouseRequirementDueStatus(
+                      requirementTypeId,
+                      due.warehouse_requirement_due_date,
+                      due.warehouse_requirement_due_end,
+                      due.status_id,
+                    ),
                   warehouse_requirement_due_reminder_name:
                     due.status_id === 1
                       ? reminderStatus?.reminderTypeName
@@ -1361,6 +1366,20 @@ export class WarehouseRequirementsService {
                 header.reqTransactionDues &&
                 header.reqTransactionDues.length > 0
                   ? header.reqTransactionDues[0].id
+                  : null,
+              warehouse_requirement_due_status_name:
+                header.reqTransactionDues &&
+                header.reqTransactionDues.length > 0 &&
+                header.reqTransactionDues[0].warehouseRequirementDue
+                  ? this.getWarehouseRequirementDueStatus(
+                      requirementTypeId,
+                      header.reqTransactionDues[0].warehouseRequirementDue
+                        .warehouse_requirement_due_date,
+                      header.reqTransactionDues[0].warehouseRequirementDue
+                        .warehouse_requirement_due_end,
+                      header.reqTransactionDues[0].warehouseRequirementDue
+                        .status_id,
+                    )
                   : null,
               trans_details: activeDetails.map((detail) => ({
                 trans_detail_id: detail.id,
@@ -2364,10 +2383,15 @@ export class WarehouseRequirementsService {
             header.reqTransactionDues &&
             header.reqTransactionDues.length > 0 &&
             header.reqTransactionDues[0].warehouseRequirementDue
-              ? header.reqTransactionDues[0].warehouseRequirementDue
-                  .status_id === 1
-                ? "NOT FULFILLED"
-                : "FULFILLED"
+              ? this.getWarehouseRequirementDueStatus(
+                  requirementTypeId,
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_date,
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_end,
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .status_id,
+                )
               : null,
           warehouse_requirement_due_reminder_name: "-",
           warehouse_requirement_due_reminder_days_diff: null,
@@ -2429,8 +2453,10 @@ export class WarehouseRequirementsService {
               // Extract warehouse_requirement_due information
               const wrd = transaction.warehouse_requirement_due_id
                 ? {
-                    warehouse_requirement_due_date: transaction.warehouse_requirement_due_date,
-                    warehouse_requirement_due_end: transaction.warehouse_requirement_due_end,
+                    warehouse_requirement_due_date:
+                      transaction.warehouse_requirement_due_date,
+                    warehouse_requirement_due_end:
+                      transaction.warehouse_requirement_due_end,
                   }
                 : null;
 
