@@ -2004,7 +2004,7 @@ export class WarehouseRequirementsService {
             const transactionsForReq =
               transactionsByReq.get(requirement.id) || [];
 
-            // Categorize transactions by status
+            // Categorize transactions by status and collect daysUntilEnd values
             const activeWarehouses = new Set<number>();
             const dueWarehouses = new Set<number>();
             const expiredWarehouses = new Set<number>();
@@ -2034,7 +2034,7 @@ export class WarehouseRequirementsService {
                   expiredWarehouses.add(header.warehouse_id);
                 }
 
-                // Track due_age for average calculation
+                // Collect all daysUntilEnd values (including negative/expired)
                 const daysUntilEnd = Math.floor(
                   (dueEndDate.getTime() - todayDate.getTime()) /
                     (1000 * 60 * 60 * 24),
@@ -2047,13 +2047,10 @@ export class WarehouseRequirementsService {
             const dueCount = dueWarehouses.size;
             const expiredCount = expiredWarehouses.size;
 
-            // Calculate average due_age for location-level aggregation
-            const avgDueAge =
-              dueAges.length > 0
-                ? Math.round(
-                    dueAges.reduce((sum, age) => sum + age, 0) / dueAges.length,
-                  )
-                : null;
+            // Calculate average and minimum due_age using reusable method (excludeExpired=true)
+            const dueAgeResult = this.calculateDueAges(dueAges, true);
+            const avgDueAge = dueAgeResult.ave_due_age;
+            const minDueAge = dueAgeResult.min_due_age;
 
             row.requirements[requirement.requirement_name] = {
               active: {
@@ -2078,6 +2075,7 @@ export class WarehouseRequirementsService {
                     : 0,
               },
               ave_due_age: avgDueAge,
+              min_due_age: minDueAge,
             };
           } else {
             // ORIGINAL FORMAT (requirementTypeId = 1): Single column per requirement
@@ -2493,13 +2491,13 @@ export class WarehouseRequirementsService {
             totalTransactedCount += actualNo;
           } else {
             // ORIGINAL FORMAT (requirementTypeId = 1): Single column per requirement
-          requirementsObj[reqName] = {
-            actual_no: actualNo,
-            percentage: actualNo > 0 ? 100 : 0, // 100 if has transactions, 0 if none
-            transactedRequirements: reqTransactions,
-          };
+            requirementsObj[reqName] = {
+              actual_no: actualNo,
+              percentage: actualNo > 0 ? 100 : 0, // 100 if has transactions, 0 if none
+              transactedRequirements: reqTransactions,
+            };
 
-          totalTransactedCount += actualNo;
+            totalTransactedCount += actualNo;
           }
         }
 
