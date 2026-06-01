@@ -30,11 +30,16 @@ import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { DebitAdviceService } from "../services/debit-advice.service";
 import { CreateDebitAdviceDto } from "../dto/CreateDebitAdviceDto";
 import { UpdateDebitAdviceDto } from "../dto/UpdateDebitAdviceDto";
+import { OSHJVService } from "../services/jv-creation.service";
+
 
 @Controller("debit-advices")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceController {
-    constructor(private readonly debitAdviceService: DebitAdviceService) { }
+    constructor(
+        private readonly debitAdviceService: DebitAdviceService,
+        private readonly oshjvService: OSHJVService,
+    ) { }
     @Get()
     // @RequirePermissions({ module: "DEBIT_ADVICES", action: "VIEW" })
     async findAll(@Request() req) {
@@ -54,6 +59,15 @@ export class DebitAdviceController {
             search,
             statusId,
         );
+    }
+
+    @Post('create-jv')
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async postToOSHJV(@Body() payload: any) {
+        return this.oshjvService.postToOSHJV(payload);
     }
 
 
@@ -145,4 +159,5 @@ export class DebitAdviceController {
         );
         return result;
     }
+
 }

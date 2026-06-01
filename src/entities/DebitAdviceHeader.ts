@@ -26,6 +26,9 @@ export class DebitAdvice_header {
     @Column({ unique: true })
     document_number: string;
 
+    @Column({ unique: true })
+    jv_no: string;
+
     @Column({ type: "date" })
     transaction_date: Date;
 
