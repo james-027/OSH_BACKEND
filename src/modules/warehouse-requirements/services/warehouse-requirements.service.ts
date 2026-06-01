@@ -1430,6 +1430,34 @@ export class WarehouseRequirementsService {
   }
 
   /**
+   * Calculate average and minimum due ages from collected daysUntilEnd values
+   * Filters and aggregates due age calculations
+   * @param dueAgesArray Array of daysUntilEnd values (days until expiration)
+   * @param excludeExpired If true, skip expired items (daysUntilEnd <= 0)
+   * @returns Object with ave_due_age and min_due_age (null if no valid items)
+   */
+  private calculateDueAges(
+    dueAgesArray: number[],
+    excludeExpired: boolean = false,
+  ): { ave_due_age: number | null; min_due_age: number | null } {
+    // Filter array if needed - only include positive values if excludeExpired is true
+    const filteredAges = excludeExpired
+      ? dueAgesArray.filter((age) => age > 0)
+      : dueAgesArray;
+
+    return {
+      ave_due_age:
+        filteredAges.length > 0
+          ? Math.round(
+              filteredAges.reduce((sum, age) => sum + age, 0) /
+                filteredAges.length,
+            )
+          : null,
+      min_due_age: filteredAges.length > 0 ? Math.min(...filteredAges) : null,
+    };
+  }
+
+  /**
    * Reusable warehouse query builder with common filtering
    * Returns a query builder that can be extended with additional joins/conditions
    * Handles: warehouse_type_id, rem_status_id, warehouse_id, accessKeyId, allowedLocationIds
