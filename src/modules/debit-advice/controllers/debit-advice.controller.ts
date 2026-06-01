@@ -66,8 +66,11 @@ export class DebitAdviceController {
         module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
     })
-    async postToOSHJV(@Body() payload: any) {
-        return this.oshjvService.postToOSHJV(payload);
+    async postToOSHJV(
+        @Request() req,
+        @Body() payload: any) {
+        const userId = req.user.id;
+        return this.oshjvService.postToOSHJV(payload, userId);
     }
 
 
