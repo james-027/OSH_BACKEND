@@ -2567,6 +2567,38 @@ export class WarehouseRequirementsService {
     }
   }
 
+  // A helper function to determine the warehouse requirement status based on due date, cycle end and requirement type
+  public getWarehouseRequirementDueStatus(
+    requirementTypeId: number,
+    dueDate: string,
+    dueEndDate: string,
+    dueStatusId: number,
+  ): string {
+    // Implementation for fetching warehouse requirement due status
+    const today = formatDateToString(new Date());
+    const todayDate = new Date(today);
+    const dueDateVal = new Date(dueDate);
+    const dueEndDateVal = new Date(dueEndDate);
+    let statusName = "UNKNOWN";
+    if (requirementTypeId === 1) {
+      if (dueStatusId === 1) {
+        statusName = "NOT FULFILLED";
+      } else {
+        statusName = "FULFILLED";
+      }
+    } else if (requirementTypeId === 2) {
+      if (dueDateVal > todayDate) {
+        statusName = "ACTIVE";
+      } else if (dueDateVal <= todayDate && dueEndDateVal > todayDate) {
+        statusName = "DUE FOR RENEWAL";
+      } else if (dueEndDateVal <= todayDate) {
+        statusName = "EXPIRED";
+      }
+    }
+
+    return statusName;
+  }
+
   private async activeRequirements(requirementTypeId?: number) {
     let activeRequirementWhere: any = { status_id: 1 };
     if (requirementTypeId) {
