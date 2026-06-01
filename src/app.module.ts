@@ -83,6 +83,7 @@ import { SSEModule } from "./modules/sse/sse.module";
 import { StaffVendorSalariesModule } from "./modules/staff-vendor-salaries/staff-vendor-salaries.module";
 import { StaffBrandsModule } from "./modules/staff-brands/staff-brands.module";
 import { BrandsModule } from "./modules/brands/brands.module";
+import { BrandGroupModule } from "./modules/brands/brand-groups.module";
 import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
 import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
 import cookieParser from "cookie-parser";
@@ -195,6 +196,7 @@ import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module
     StaffBrandsModule,
     StaffCategoryTypesModule,
     BrandsModule,
+    BrandGroupModule,
     StaffWarehousesModule,
     CacheInvalidationModule,
     ProfitcenterModule,

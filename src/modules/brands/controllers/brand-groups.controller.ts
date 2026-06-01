@@ -24,26 +24,26 @@ export class BrandGroupsController {
   constructor(private readonly brandGroupsService: BrandGroupsService) {}
 
   @Get()
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "VIEW" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "VIEW" })
   async findAll() {
     return this.brandGroupsService.findAll();
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "VIEW" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.brandGroupsService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "ADD" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "ADD" })
   async create(@Body() createDto: CreateBrandGroupDto, @Request() req) {
     const userId = req.user.id;
     return this.brandGroupsService.create(createDto, userId);
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "EDIT" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateBrandGroupDto,
@@ -54,13 +54,13 @@ export class BrandGroupsController {
   }
 
   @Delete(":id")
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "CANCEL" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "CANCEL" })
   async remove(@Param("id", ParseIntPipe) id: number) {
     return this.brandGroupsService.remove(id);
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "EDIT" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "EDIT" })
   async activateStatus(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const userId = req.user.id;
     // Force status to 1 (active)
@@ -71,7 +71,7 @@ export class BrandGroupsController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "BRAND_GROUPS", action: "EDIT" })
+  @RequirePermissions({ module: "BRAND GROUPS", action: "EDIT" })
   async deactivateStatus(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
