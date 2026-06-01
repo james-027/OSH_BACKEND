@@ -11,58 +11,66 @@ import {
   UseGuards,
 } from "@nestjs/common";
 
+import { GlAccountsService } from "../services/gl-accounts.service";
+import { CreateGlAccountDto } from "../dto/CreateGlAccountDto";
+import { UpdateGlAccountDto } from "../dto/UpdateGlAccountsDto";
+
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
 
-import { SupplierService } from "../services/supplier.service";
-
-import { CreateSupplierDto } from "../dto/CreateSupplierDto";
-import { UpdateSupplierDto } from "../dto/UpdateSupplierDto";
-
-@Controller("suppliers")
+@Controller("gl-accounts")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-export class SupplierController {
-  constructor(private readonly supplierService: SupplierService) {}
+export class GlAccountsController {
+  constructor(private readonly GlAccountsService: GlAccountsService) {}
 
   @Get()
   @RequirePermissions({
-    module: ["SUPPLIERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
+    module: ["GL ACCOUNTS MASTERDATA"],
     action: "VIEW",
   })
   async findAll(@Request() req) {
-    return this.supplierService.findAll();
+    return this.GlAccountsService.findAll();
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "SUPPLIERS", action: "VIEW" })
+  @RequirePermissions({
+    module: "GL ACCOUNTS MASTERDATA",
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
-    return this.supplierService.findOne(id);
+    return this.GlAccountsService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "SUPPLIERS", action: "ADD" })
-  async create(@Body() createSupplierDto: CreateSupplierDto, @Request() req) {
+  @RequirePermissions({
+    module: "GL ACCOUNTS MASTERDATA",
+    action: "ADD",
+  })
+  async create(@Body() createGlAccountDto: CreateGlAccountDto, @Request() req) {
     const userId = req.user.id;
 
-    return this.supplierService.create(createSupplierDto, userId);
+    return this.GlAccountsService.create(createGlAccountDto, userId);
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "SUPPLIERS", action: "EDIT" })
+  @RequirePermissions({
+    module: "GL ACCOUNTS MASTERDATA",
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
-    @Body() updateSupplierDto: UpdateSupplierDto,
+    @Body() updateGlAccountDto: UpdateGlAccountDto,
     @Request() req,
   ) {
     const userId = req.user.id;
 
-    return this.supplierService.update(id, updateSupplierDto, userId);
+    return this.GlAccountsService.update(id, updateGlAccountDto, userId);
   }
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
-    module: "SUPPLIERS",
+    module: "GL ACCOUNTS MASTERDATA",
     action: "ACTIVATE",
   })
   async toggleStatusActivate(
@@ -71,12 +79,12 @@ export class SupplierController {
   ) {
     const userId = req.user.id;
 
-    return this.supplierService.toggleStatus(id, userId);
+    return this.GlAccountsService.toggleStatus(id, userId);
   }
 
   @Patch(":id/toggle-status-deactivate")
   @RequirePermissions({
-    module: "SUPPLIERS",
+    module: "GL ACCOUNTS MASTERDATA",
     action: "DEACTIVATE",
   })
   async toggleStatusDeactivate(
@@ -85,6 +93,6 @@ export class SupplierController {
   ) {
     const userId = req.user.id;
 
-    return this.supplierService.toggleStatus(id, userId);
+    return this.GlAccountsService.toggleStatus(id, userId);
   }
 }

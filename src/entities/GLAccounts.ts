@@ -9,25 +9,24 @@ import {
 } from "typeorm";
 
 import { Status } from "./Status";
-
-@Entity("suppliers")
-export class Supplier {
+import { User } from "./User";
+@Entity("gl_accounts")
+export class GLAccounts {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({
-    name: "supplier_code",
+    name: "gl_code",
     length: 100,
     unique: true,
   })
-  supplier_code: string;
+  gl_code: string;
 
   @Column({
-    name: "supplier_name",
+    name: "gl_name",
     length: 255,
-    nullable: true,
   })
-  supplier_name: string;
+  gl_name: string;
 
   @Column({
     name: "old_code",
@@ -35,6 +34,25 @@ export class Supplier {
     nullable: true,
   })
   old_code: string;
+
+  @Column({
+    name: "company",
+    length: 255,
+    nullable: true,
+  })
+  company: string;
+
+  @Column({
+    name: "created_by",
+    nullable: true,
+  })
+  created_by: number;
+
+  @Column({
+    name: "updated_by",
+    nullable: true,
+  })
+  updated_by: number;
 
   // Foreign key to Status entity
   @ManyToOne(() => Status)
@@ -44,11 +62,13 @@ export class Supplier {
   @Column({ default: 1 })
   status_id!: number;
 
-  @Column({ nullable: true })
-  created_by: number;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: "created_by" })
+  createdBy: User;
 
-  @Column({ nullable: true })
-  updated_by: number;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: "updated_by" })
+  updatedBy: User;
 
   @CreateDateColumn({
     name: "created_at",

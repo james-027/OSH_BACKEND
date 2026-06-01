@@ -92,6 +92,16 @@ export class CacheInvalidationService {
     await this.invalidatePatterns(patterns);
   }
 
+  async invalidateApprovalStagesList(): Promise<void> {
+  const patterns = [
+    CACHE_PATTERNS.APPROVAL_STAGES_LIST,
+  ];
+
+  await this.invalidatePatterns(
+    patterns,
+  );
+}
+
   /**
    * Clear a specific service's findAll cache
    * @param serviceName - name of the service (e.g., 'staffs', 'vendors')

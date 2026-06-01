@@ -16,32 +16,31 @@ export class DebitAdviceGLAccounts {
   id: number;
 
   @Column({
-    name: "glcode",
+    name: "gl_code",
     length: 100,
-    unique: true,
   })
   gl_code: string;
 
   @Column({
-    name: "categorycode",
+    name: "category_code",
     length: 100,
   })
   category_code: string;
 
   @Column({
-    name: "categoryname",
+    name: "category_name",
     length: 255,
   })
   category_name: string;
 
   @Column({
-    name: "glname",
+    name: "gl_name",
     length: 255,
   })
   gl_name: string;
 
   @Column({
-    name: "oldcode",
+    name: "old_code",
     length: 100,
     nullable: true,
   })

@@ -40,11 +40,13 @@ export class StaffsService {
   ) {}
 
   async findAll(accessKeyId?: number): Promise<any[]> {
+    
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
       const staffs = await this.staffsRepository.find({
         where,
         relations: [

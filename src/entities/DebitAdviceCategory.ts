@@ -14,20 +14,20 @@ export class DebitAdviceCategory {
   id: number;
 
   @Column({
-    name: "categorycode",
+    name: "category_code",
     length: 100,
     unique: true,
   })
   category_code: string;
 
   @Column({
-    name: "categoryname",
+    name: "category_name",
     length: 255,
   })
   category_name: string;
 
   @Column({
-    name: "oldcode",
+    name: "old_code",
     length: 100,
     nullable: true,
   })
