@@ -8,6 +8,10 @@ import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "src/entities/Action";
 import { Location } from "src/entities/Location";
+import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
+import { UserAuditTrail } from "../../entities/UserAuditTrail";
+import { ResponseMapperService } from "../../services/response-mapper.service";
+import { SSEModule } from "../sse/sse.module";
 
 @Module({
   imports: [
@@ -17,11 +21,17 @@ import { Location } from "src/entities/Location";
       AppModule,
       Action,
       Location,
+      UserAuditTrail,
     ]),
     UsersModule,
+    SSEModule,
   ],
   controllers: [SegmentsController],
-  providers: [SegmentsService],
+  providers: [
+    SegmentsService,
+    UserAuditTrailCreateService,
+    ResponseMapperService,
+  ],
   exports: [SegmentsService],
 })
 export class SegmentsModule {}

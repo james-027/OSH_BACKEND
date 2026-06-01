@@ -28,18 +28,20 @@ export class BrandGroupsService {
 
   async findAll(): Promise<any[]> {
     const groups = await this.brandGroupsRepository.find({
-      relations: ["status", "createdBy", "updatedBy"],
+      relations: ["status", "createdBy", "updatedBy","segment"],
     });
     return groups.map((group) => ({
       id: group.id,
       brand_group_name: group.brand_group_name,
       brand_group_abbr: group.brand_group_abbr,
       status_id: group.status_id,
+      segment_id: group.segment_id,
       created_at: group.created_at,
       created_by: group.created_by,
       updated_by: group.updated_by,
       modified_at: group.modified_at,
       status_name: group.status ? group.status.status_name : null,
+      segment_name: group.segment ? group.segment.segment_name : null,
       created_user: group.createdBy
         ? `${group.createdBy.first_name} ${group.createdBy.last_name}`
         : null,
@@ -52,7 +54,7 @@ export class BrandGroupsService {
   async findOne(id: number): Promise<any> {
     const group = await this.brandGroupsRepository.findOne({
       where: { id },
-      relations: ["status", "createdBy", "updatedBy"],
+      relations: ["status", "createdBy", "updatedBy", "segment"],
     });
     if (!group)
       throw new NotFoundException(`BrandGroup with ID ${id} not found`);
@@ -61,11 +63,13 @@ export class BrandGroupsService {
       brand_group_name: group.brand_group_name,
       brand_group_abbr: group.brand_group_abbr,
       status_id: group.status_id,
+      segment_id: group.segment_id,
       created_at: group.created_at,
       created_by: group.created_by,
       updated_by: group.updated_by,
       modified_at: group.modified_at,
       status_name: group.status ? group.status.status_name : null,
+      segment_name: group.segment ? group.segment.segment_name : null,
       created_user: group.createdBy
         ? `${group.createdBy.first_name} ${group.createdBy.last_name}`
         : null,
@@ -98,6 +102,7 @@ export class BrandGroupsService {
       const newBrandGroup = this.brandGroupsRepository.create({
         brand_group_name: createDto.brand_group_name,
         brand_group_abbr: createDto.brand_group_abbr,
+        segment_id: createDto.segment_id,
         status_id: createDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
@@ -110,7 +115,7 @@ export class BrandGroupsService {
         where: {
           id: savedBrandGroup.id,
         },
-        relations: ["status", "createdBy", "updatedBy"],
+        relations: ["status", "createdBy", "updatedBy","segment"],
       });
 
       if (!brandGroupWithRelations) {
@@ -196,7 +201,7 @@ export class BrandGroupsService {
 
       const brandGroupWithRelations = await this.brandGroupsRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy"],
+        relations: ["status", "createdBy", "updatedBy","segment"],
       });
 
       if (!brandGroupWithRelations) {

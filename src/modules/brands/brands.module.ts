@@ -20,7 +20,7 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-     Brand,
+      Brand,
       User,
       Status,
       Role,
@@ -33,9 +33,11 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
     UsersModule,
     SSEModule,
   ],
-  providers: [    BrandsService,
-      UserAuditTrailCreateService,
-      ResponseMapperService,],
+  providers: [
+    BrandsService,
+    UserAuditTrailCreateService,
+    ResponseMapperService,
+  ],
   controllers: [BrandsController],
   exports: [BrandsService],
 })
