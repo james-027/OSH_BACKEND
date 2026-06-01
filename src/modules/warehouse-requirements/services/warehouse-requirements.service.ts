@@ -1084,6 +1084,7 @@ export class WarehouseRequirementsService {
     dateTo?: string,
     countOnly: boolean = false,
     flatten: boolean = false,
+    requirementTypeId: number = 1,
   ): Promise<any> {
     try {
       // Filter active base requirements (status_id = 1)
@@ -1320,6 +1321,7 @@ export class WarehouseRequirementsService {
             "reqTransactionDetails",
             "requirement.renewalType",
             "reqTransactionDues",
+            "reqTransactionDues.warehouseRequirementDue",
             "createdBy",
           ],
           order: { id: "ASC" },
@@ -1381,6 +1383,21 @@ export class WarehouseRequirementsService {
                         .status_id,
                     )
                   : null,
+              warehouse_requirement_due_date:
+                this.commonUtilitiesService.formatDateString(
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_date,
+                ),
+              warehouse_requirement_due_start:
+                this.commonUtilitiesService.formatDateString(
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_start,
+                ),
+              warehouse_requirement_due_end:
+                this.commonUtilitiesService.formatDateString(
+                  header.reqTransactionDues[0].warehouseRequirementDue
+                    .warehouse_requirement_due_end,
+                ),
               trans_details: activeDetails.map((detail) => ({
                 trans_detail_id: detail.id,
                 requirement_file_path: detail.requirement_file_path || null,
@@ -1606,6 +1623,7 @@ export class WarehouseRequirementsService {
               date_to,
               false,
               flatten,
+              requirementTypeId,
             );
 
           // Get transacted requirements
