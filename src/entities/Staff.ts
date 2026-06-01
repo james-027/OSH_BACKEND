@@ -12,6 +12,7 @@ import { User } from "./User";
 import { Location } from "./Location";
 import { Vendor } from "./Vendor";
 import { Position } from "./Position";
+import { AccessKey } from "./AccessKey";
 
 @Entity("staffs")
 export class Staff {
@@ -86,6 +87,9 @@ export class Staff {
 
   @Column({ type: "text", nullable: true })
   store_request: string;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -164,4 +168,8 @@ export class Staff {
   })
   @JoinColumn({ name: "position_id" })
   position: Position;
+
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 }

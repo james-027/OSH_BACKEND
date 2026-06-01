@@ -26,4 +26,9 @@ export class CreateBrandGroupDto {
   @IsInt({ message: "Status ID must be an integer" })
   @Min(1, { message: "Status ID must be a positive integer" })
   status_id?: number;
+
+  @IsOptional()
+  @IsInt({ message: "Segment ID must be an integer" })
+  @Min(1, { message: "Segment ID must be a positive integer" })
+  segment_id?: number;
 }

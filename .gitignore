@@ -2,9 +2,14 @@ dist/*
 node_modules/*
 logs/*
 DB/*
+src/migrations/*
 uploads/req-transactions/*
 uploads/qa-req-transactions/*
 *.log
 .env
 .env.cache.example
 EXT/*
+src/migrations/*
+tsconfig.tsbuildinfo
+package-lock.json
+uploads/staffs/*

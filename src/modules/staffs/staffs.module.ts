@@ -12,6 +12,10 @@ import { StaffsController } from "./controllers/staffs.controller";
 import { StaffsService } from "./services/staffs.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { AccessKey } from "src/entities/AccessKey";
+import { Position } from "src/entities/Position";
+import { Vendor } from "src/entities/Vendor";
+import { Status } from "src/entities/Status";
 
 @Module({
   imports: [
@@ -22,6 +26,10 @@ import { SSEModule } from "../sse/sse.module";
       AppModule,
       Action,
       Location,
+      Position,
+      Vendor,
+      AccessKey,
+      Status,
     ]),
     UsersModule,
     SSEModule,

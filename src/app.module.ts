@@ -82,6 +82,8 @@ import { ReqTransactionDuesModule } from "./modules/req-transaction-dues/req-tra
 import { SSEModule } from "./modules/sse/sse.module";
 import { StaffVendorSalariesModule } from "./modules/staff-vendor-salaries/staff-vendor-salaries.module";
 import { StaffBrandsModule } from "./modules/staff-brands/staff-brands.module";
+import { BrandsModule } from "./modules/brands/brands.module";
+import { BrandGroupModule } from "./modules/brands/brand-groups.module";
 import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
 import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
 import cookieParser from "cookie-parser";
@@ -91,7 +93,21 @@ import { ThrottleTrackerService } from "./services/throttle-tracker.service";
 import { ThrottleTrackingService } from "./guards/throttle-tracking.guard";
 import { TransactionSequence } from "./entities/TransactionSequence";
 import { CacheInvalidationModule } from "./modules/cache/cache.module";
+import { ProfitcenterModule } from "./modules/profitcenters/profitcenter.module";
+import { Profitcenter } from "./entities/Profitcenter";
+import { SupplierModule } from "./modules/suppliers/supplier.module";
+import { Supplier } from "./entities/Supplier";
+import { DebitAdviceModule } from "./modules/debit-advice/debit-advice.module";
 import logger from "./config/logger";
+import { DebitAdviceCategoryModule } from "./modules/debit-advice-category/debit-advice-category.module";
+import { DebitAdviceGlAccountModule } from "./modules/debit-advice-glaccount/debit-advice-glaccount.module";
+import { DebitAdviceApprovalModule } from "./modules/debit-advice-approval/debit-advice-approval.module";
+import { GlAccountsModule } from "./modules/gl-accounts/gl-accounts.module";
+import { DebitAdviceGLAccounts } from "./entities/DebitAdviceGLAccounts";
+import { GLAccounts } from "./entities/GLAccounts";
+import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
+import { ApprovalStagesList } from "./entities/ApprovalStagesList";
+import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module";
 @Module({
   imports: [
     // Configuration
@@ -118,6 +134,12 @@ import logger from "./config/logger";
       Action,
       Location,
       TransactionSequence,
+      Profitcenter,
+      Supplier,
+      DebitAdviceCategory,
+      DebitAdviceGLAccounts,
+      GLAccounts,
+      ApprovalStagesList,
     ]),
     // Authentication
     PassportModule,
@@ -128,6 +150,7 @@ import logger from "./config/logger";
       }),
     }),
     ScheduleModule.forRoot(),
+    DebitAdviceModule,
     UsersModule,
     EmployeesModule,
     RolesModule,
@@ -172,8 +195,17 @@ import logger from "./config/logger";
     StaffVendorSalariesModule,
     StaffBrandsModule,
     StaffCategoryTypesModule,
+    BrandsModule,
+    BrandGroupModule,
     StaffWarehousesModule,
     CacheInvalidationModule,
+    ProfitcenterModule,
+    SupplierModule,
+    DebitAdviceCategoryModule,
+    DebitAdviceGlAccountModule,
+    GlAccountsModule,
+    DebitAdviceApprovalModule,
+    ApprovalLogsModule,
   ],
   providers: [
     EmailService,

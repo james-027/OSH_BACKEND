@@ -194,6 +194,8 @@ export class WarehouseDwhService {
       try {
         this.sseEventEmitter.emitCreateSignal("warehouses", 0);
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        this.sseEventEmitter.emitUpdateSignal("warehouse_employees", 0);
+        await this.cacheInvalidationService.invalidateWarehouseEmployees();
         await this.cacheInvalidationService.invalidateReqTransactions();
         await this.cacheInvalidationService.invalidateWarehouseRequirements();
         await this.cacheInvalidationService.invalidateWarehouses();
@@ -206,6 +208,8 @@ export class WarehouseDwhService {
       try {
         this.sseEventEmitter.emitUpdateSignal("warehouses", 0);
         this.sseEventEmitter.emitUpdateSignal("req_transactions", 0);
+        this.sseEventEmitter.emitUpdateSignal("warehouse_employees", 0);
+        await this.cacheInvalidationService.invalidateWarehouseEmployees();
         await this.cacheInvalidationService.invalidateReqTransactions();
         await this.cacheInvalidationService.invalidateWarehouseRequirements();
         await this.cacheInvalidationService.invalidateWarehouses();
