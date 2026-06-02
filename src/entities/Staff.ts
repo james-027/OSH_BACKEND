@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
@@ -13,6 +14,9 @@ import { Location } from "./Location";
 import { Vendor } from "./Vendor";
 import { Position } from "./Position";
 import { AccessKey } from "./AccessKey";
+import { StaffBrand } from "./StaffBrand";
+import { StaffCategoryType } from "./StaffCategoryType";
+import { StaffVendorSalary } from "./StaffVendorSalary";
 
 @Entity("staffs")
 export class Staff {
@@ -172,4 +176,14 @@ export class Staff {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+
+  @OneToMany(() => StaffBrand, (staffBrand) => staffBrand.staff)
+  staffBrands: StaffBrand[];
+
+  @OneToMany(() => StaffCategoryType, (staffCategoryType) => staffCategoryType.staff)
+  staffCategoryTypes: StaffCategoryType[];
+
+  @OneToMany(() => StaffVendorSalary, (staffVendorSalary) => staffVendorSalary.staff)
+  staffVendorSalaries: StaffVendorSalary[];
 }

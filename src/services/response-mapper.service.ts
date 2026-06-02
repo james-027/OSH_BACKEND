@@ -40,6 +40,9 @@ export class ResponseMapperService {
           "requirementReminders",
           "categoryTypes",
           "accessKey",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -123,6 +126,20 @@ export class ResponseMapperService {
         entity.staff.first_name && entity.staff.last_name
           ? `${entity.staff.first_name} ${entity.staff.last_name}`
           : null;
+    }
+
+    if (entity.staffBrands?.length) {
+      response.brand_id = entity.staffBrands[0].brand_id;
+      response.brand_name = entity.staffBrands[0].brand?.brand_name || null;
+    }
+    if (entity.staffCategoryTypes?.length) {
+      response.category_type_id = entity.staffCategoryTypes[0].category_type_id;
+      response.category_type_name = entity.staffCategoryTypes[0].categoryType?.category_type_name || null;
+    }
+    if (entity.staffVendorSalaries?.length) {
+      response.vendor_id = entity.staffVendorSalaries[0].vendor_id;
+      response.allowance = entity.staffVendorSalaries[0].allowance;
+      response.salary_rate = entity.staffVendorSalaries[0].salary_rate;
     }
 
     // Map brand relation

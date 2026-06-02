@@ -16,6 +16,11 @@ import { AccessKey } from "src/entities/AccessKey";
 import { Position } from "src/entities/Position";
 import { Vendor } from "src/entities/Vendor";
 import { Status } from "src/entities/Status";
+import { StaffBrand } from "src/entities/StaffBrand";
+import { StaffCategoryType } from "src/entities/StaffCategoryType";
+import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { Brand } from "src/entities/Brand";
+import { CategoryType } from "src/entities/CategoryType";
 
 @Module({
   imports: [
@@ -28,6 +33,11 @@ import { Status } from "src/entities/Status";
       Location,
       Position,
       Vendor,
+      StaffBrand,
+      StaffCategoryType,
+      StaffVendorSalary,
+      CategoryType,
+      Brand,
       AccessKey,
       Status,
     ]),
