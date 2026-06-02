@@ -764,6 +764,9 @@ export class StaffsService {
 
         if (existingRecord) {
           existingRecord.contact_number = row["Contact Number"];
+          existingRecord.staff_code = staffCode;
+          existingRecord.first_name = firstName;
+          existingRecord.last_name = lastName;
           existingRecord.middle_name = middleName;
           existingRecord.birthday = parseExcelDate(row["Birthday"]);
           existingRecord.location_id = location.id;
@@ -889,6 +892,7 @@ export class StaffsService {
         } else {
           const newStaff = this.staffsRepository.create({
             first_name: firstName,
+            staff_code: staffCode,
             contact_number: row["Contact Number"],
             last_name: lastName,
             middle_name: middleName,
