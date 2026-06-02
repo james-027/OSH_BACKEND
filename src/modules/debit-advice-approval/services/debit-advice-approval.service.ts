@@ -264,15 +264,31 @@ export class ApprovalStagesListService {
     else if (status_id === 15) newStatusName = "Rejected";
     else if (status_id === 3) newStatusName = "Pending";
 
-    await this.approvalStagesListRepository.update(id, {
-      status_id,
-
-      approval_remarks: approval_remarks || null,
-
-      approval_date: new Date(),
-
-      updated_by: userId,
-    });
+    if (status_id === 15) {
+      await this.approvalStagesListRepository
+        .createQueryBuilder()
+        .update()
+        .set({
+          status_id: 15,
+          approval_remarks: approval_remarks || null,
+          approval_date: new Date(),
+          updated_by: userId,
+        })
+        .where("debit_advice_id = :debitAdviceId", {
+          debitAdviceId: approval.debit_advice_id,
+        })
+        .andWhere("status_id NOT IN (:...statuses)", {
+          statuses: [7, 15],
+        })
+        .execute();
+    } else {
+      await this.approvalStagesListRepository.update(id, {
+        status_id,
+        approval_remarks: approval_remarks || null,
+        approval_date: new Date(),
+        updated_by: userId,
+      });
+    }
 
     // AUDIT TRAIL
     await this.auditTrailService.create(
