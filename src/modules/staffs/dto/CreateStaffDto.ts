@@ -33,11 +33,23 @@ export class CreateStaffDto {
 
   @IsInt()
   @IsNotEmpty()
-  assign_status_id!: number;
+  position_id!: number;
+  
+  @IsInt()
+  @IsNotEmpty()
+  brand_id!: number;
 
   @IsInt()
   @IsNotEmpty()
-  position_id!: number;
+  category_type_id!: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  allowance!: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  salary_rate!: number;
 
   @IsInt()
   @IsNotEmpty()
