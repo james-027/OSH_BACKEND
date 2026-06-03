@@ -318,11 +318,10 @@ export class StaffsService {
 
       return response;
     } catch (error) {
-      return error;
-      // if (error instanceof BadRequestException) {
-      //   throw error;
-      // }
-      // throw new Error("Failed to create staff");
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new Error("Failed to create staff");
     }
   }
 
@@ -731,10 +730,9 @@ export class StaffsService {
         const firstName = row["First Name"].toUpperCase().trim();
         const lastName = row["Last Name"].toUpperCase().trim();
         const middleName = (row["Middle Name"] || "").toUpperCase().trim();
+        const staffCode = row["Staff Code"]?.toString().trim();
 
         let existingRecord = null;
-
-        const staffCode = row["Staff Code"]?.toString().trim();
 
         if (staffCode) {
           existingRecord = await this.staffsRepository.findOne({
@@ -742,6 +740,21 @@ export class StaffsService {
               staff_code: staffCode,
             },
           });
+
+          if (!existingRecord) {
+            const whereCondition: any = {
+              first_name: firstName,
+              last_name: lastName,
+            };
+
+            if (middleName) {
+              whereCondition.middle_name = middleName;
+            }
+
+            existingRecord = await this.staffsRepository.findOne({
+              where: whereCondition,
+            });
+          }
         } else {
           const whereCondition: any = {
             first_name: firstName,
