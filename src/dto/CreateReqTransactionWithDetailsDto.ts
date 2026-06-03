@@ -41,6 +41,14 @@ export class CreateReqTransactionWithDetailsDto {
   @IsString()
   remarks?: string;
 
+  @IsOptional()
+  @IsString()
+  start_date?: string; // format: YYYY-MM-DD, for Type 2 (Rental) single-warehouse upload
+
+  @IsOptional()
+  @IsString()
+  end_date?: string; // format: YYYY-MM-DD, for Type 2 (Rental) single-warehouse upload
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FileWithContent)
