@@ -1353,22 +1353,22 @@ export class ReqTransactionHeadersService {
                 end_date: end_date!,
               });
             } else {
-            const parseResult = this.parseType2Filename(file.filename);
+              const parseResult = this.parseType2Filename(file.filename);
 
-            if (!parseResult.valid) {
-              errors.push({
-                file: file.filename,
-                reason: parseResult.error,
-                field: "filename_parsing",
+              if (!parseResult.valid) {
+                errors.push({
+                  file: file.filename,
+                  reason: parseResult.error,
+                  field: "filename_parsing",
+                });
+                continue;
+              }
+
+              rentalDates.set(file.filename, {
+                start_date: parseResult.start_date,
+                end_date: parseResult.end_date,
               });
-              continue;
             }
-
-            rentalDates.set(file.filename, {
-              start_date: parseResult.start_date,
-              end_date: parseResult.end_date,
-            });
-          }
           }
 
           // Process each warehouse
@@ -1894,6 +1894,12 @@ export class ReqTransactionHeadersService {
           duesResult?: any;
         };
 
+        // Determine if Type 2 single-warehouse mode (payload provides dates)
+        const isSingleWarehouseType2 =
+          requirement.requirement_type_id === 2 &&
+          createDto.start_date &&
+          createDto.end_date;
+
         typeSpecificResult = await this.processRequirement(
           warehouses,
           requirement,
@@ -1904,6 +1910,8 @@ export class ReqTransactionHeadersService {
           location_id,
           createDto.files,
           queryRunner, // Pass outer transaction queryRunner
+          isSingleWarehouseType2 ? createDto.start_date : undefined,
+          isSingleWarehouseType2 ? createDto.end_date : undefined,
         );
 
         // Merge results from type-specific processing
@@ -2036,10 +2044,28 @@ export class ReqTransactionHeadersService {
                 //* STREAMING COMPRESSION: Compress and save directly to disk (NO intermediate buffer)
                 //* Memory benefit: Only N files compressed globally (via global queue, not per-user)
                 //* Process: buffer → sharp/stream → disk write → freed memory → next file
+                //* Determine filename to save as
+                let fileToSave: string;
+                if (isSingleWarehouseType2) {
+                  // Type 2 single-warehouse: use naming convention
+                  fileToSave = FileUploadHandler.generateType2Filename(
+                    warehouseFromFile.warehouse_ifs,
+                    requirement.requirement_abbr_name,
+                    createDto.start_date,
+                    createDto.end_date,
+                    file.filename,
+                  );
+                } else {
+                  // Original behavior: normalize the original filename
+                  fileToSave = FileUploadHandler.normalizeFilenameForSave(
+                    file.filename,
+                  );
+                }
+
                 const savedFileInfo =
                   await FileUploadHandler.compressAndSaveStreamDirect(
                     file.buffer,
-                    FileUploadHandler.normalizeFilenameForSave(file.filename),
+                    fileToSave,
                     correspondingHeader.req_transaction_header_id,
                     "uploads/" +
                       process.env.UPLOAD_REQ_DIR +
