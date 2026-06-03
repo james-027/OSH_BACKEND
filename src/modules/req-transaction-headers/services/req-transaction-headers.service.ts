@@ -1023,6 +1023,8 @@ export class ReqTransactionHeadersService {
     location_id: number,
     files: any[],
     queryRunner: QueryRunner, // Use outer transaction
+    start_date?: string, // Type 2 single-warehouse: dates from payload
+    end_date?: string, // Type 2 single-warehouse: dates from payload
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1335,6 +1337,8 @@ export class ReqTransactionHeadersService {
       case 2:
         // Type 2 (Non Regulatory) processing - use outer transaction (queryRunner parameter)
         try {
+          // Dates from payload (single-warehouse) or fallback to filename parsing
+          const hasPayloadDates = !!(start_date && end_date);
           // Extract rental dates from files (should be same for all files in this batch)
           const rentalDates: Map<
             string,
@@ -1342,6 +1346,13 @@ export class ReqTransactionHeadersService {
           > = new Map();
 
           for (const file of files) {
+            if (hasPayloadDates) {
+              // Single-warehouse: dates provided from frontend, accept any filename
+              rentalDates.set(file.filename, {
+                start_date: start_date!,
+                end_date: end_date!,
+              });
+            } else {
             const parseResult = this.parseType2Filename(file.filename);
 
             if (!parseResult.valid) {
@@ -1357,6 +1368,7 @@ export class ReqTransactionHeadersService {
               start_date: parseResult.start_date,
               end_date: parseResult.end_date,
             });
+          }
           }
 
           // Process each warehouse
