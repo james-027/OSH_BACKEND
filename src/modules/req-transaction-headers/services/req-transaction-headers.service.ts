@@ -162,7 +162,7 @@ export class ReqTransactionHeadersService {
         .addSelect("COUNT(header.id)", "header_count")
         .addSelect("requirement.requirement_name", "requirement_name")
         .addSelect("header.status_id", "status_id")
-        .where("header.status_id = 1");
+        .where("header.status_id IN (1, 18)"); // ADDITIONAL TERMINATED STATUS
 
       if (transNumber) {
         query = query.andWhere("header.trans_number = :transNumber", {
@@ -235,7 +235,7 @@ export class ReqTransactionHeadersService {
       }
 
       const records = await this.reqTransactionHeadersRepository.find({
-        where: { trans_number: transNumber, status_id: 1 },
+        where: { trans_number: transNumber, status_id: In([1, 18]) }, // ADDITIONAL TERMINATED STATUS
         relations: this.getDataRepoRelations(),
       });
 
@@ -258,6 +258,7 @@ export class ReqTransactionHeadersService {
         trans_remarks: record.trans_remarks,
         trans_due_status_id: record.trans_due_status_id,
         status_name: record.status?.status_name,
+        status_id: record.status_id,
         created_by: record.created_by,
         access_key_id: record.access_key_id,
         updated_by: record.updated_by,
@@ -486,6 +487,7 @@ export class ReqTransactionHeadersService {
     userId: number,
     statusId?: number,
     cancellationReason?: string,
+    terminationReason?: string,
   ): Promise<any> {
     try {
       const recordHdr = await this.reqTransactionHeadersRepository.findOne({
@@ -512,6 +514,9 @@ export class ReqTransactionHeadersService {
       recordHdr.updated_by = userId;
       if (cancellationReason) {
         recordHdr.cancellation_reason = cancellationReason;
+      }
+      if (terminationReason) {
+        recordHdr.termination_reason = terminationReason;
       }
       const savedHdr =
         await this.reqTransactionHeadersRepository.save(recordHdr);
@@ -552,6 +557,7 @@ export class ReqTransactionHeadersService {
             recordHdr.requirement?.requirement_type_id,
             due,
             userId,
+            transStatusId,
           );
         }
       }
@@ -682,6 +688,7 @@ export class ReqTransactionHeadersService {
                 header.requirement?.requirement_type_id,
                 due,
                 userId,
+                cancelledStatusId,
               );
             }
           }
@@ -802,6 +809,7 @@ export class ReqTransactionHeadersService {
     requirement_type_id: number,
     due: ReqTransactionDue,
     userId: number,
+    dueStatusId?: number,
   ): Promise<void> {
     switch (requirement_type_id) {
       case 1:
@@ -817,16 +825,17 @@ export class ReqTransactionHeadersService {
       case 2:
         // Cancel warehouse requirement due, warehouse requirement start, warehouse requirement (set to status 5)
         if (due.warehouseRequirementDue) {
-          // Set warehouse requirement due to cancelled status (5)
-          due.warehouseRequirementDue.status_id = 5;
+          // Set warehouse requirement due to specific status
+          due.warehouseRequirementDue.status_id = dueStatusId;
           due.warehouseRequirementDue.updated_by = userId;
           await this.warehouseRequirementDuesRepository.save(
             due.warehouseRequirementDue,
           );
 
-          // Set warehouse requirement to cancelled status (5)
+          // Set warehouse requirement to specific status
           if (due.warehouseRequirementDue.warehouseRequirement) {
-            due.warehouseRequirementDue.warehouseRequirement.status_id = 5;
+            due.warehouseRequirementDue.warehouseRequirement.status_id =
+              dueStatusId;
             due.warehouseRequirementDue.warehouseRequirement.updated_by =
               userId;
             await this.warehouseRequirementsRepository.save(
@@ -845,7 +854,7 @@ export class ReqTransactionHeadersService {
 
             if (starts && starts.length > 0) {
               for (const start of starts) {
-                start.status_id = 5;
+                start.status_id = dueStatusId;
                 start.updated_by = userId;
                 await this.warehouseRequirementStartsRepository.save(start);
               }
@@ -1381,9 +1390,9 @@ export class ReqTransactionHeadersService {
             } else {
               // Multi-warehouse mode: match files by warehouse_ifs prefix in filename
               warehouseFiles = files.filter((f) => {
-              const parts = f.filename.split("-");
-              return parts[0].trim() === warehouse.warehouse_ifs;
-            });
+                const parts = f.filename.split("-");
+                return parts[0].trim() === warehouse.warehouse_ifs;
+              });
             }
 
             if (warehouseFiles.length === 0) {
@@ -1835,26 +1844,26 @@ export class ReqTransactionHeadersService {
       for (const file of createDto.files) {
         // Filename format validation: skip for single-warehouse Type 2 (no naming convention required)
         if (!isSingleWarehouseType2) {
-        const parts = file.filename.split("-");
-        if (parts.length < 2) {
-          fileValidationErrors.push({
-            file: file.filename,
-            reason:
-              "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
-            field: "filename",
-          });
-          continue;
-        }
+          const parts = file.filename.split("-");
+          if (parts.length < 2) {
+            fileValidationErrors.push({
+              file: file.filename,
+              reason:
+                "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
+              field: "filename",
+            });
+            continue;
+          }
 
-        const warehouseIfs = parts[0].trim();
-        if (!warehouseByIfs.has(warehouseIfs)) {
-          fileValidationErrors.push({
-            file: file.filename,
-            reason: "Store IFS not found in provided warehouses",
-            field: "warehouse_ifs",
-            warehouse_ifs: warehouseIfs,
-          });
-          continue;
+          const warehouseIfs = parts[0].trim();
+          if (!warehouseByIfs.has(warehouseIfs)) {
+            fileValidationErrors.push({
+              file: file.filename,
+              reason: "Store IFS not found in provided warehouses",
+              field: "warehouse_ifs",
+              warehouse_ifs: warehouseIfs,
+            });
+            continue;
           }
         }
 
@@ -2037,8 +2046,8 @@ export class ReqTransactionHeadersService {
                   );
                 } else {
                   // Parse warehouse_ifs from filename (standard naming convention)
-                const parts = file.filename.split("-");
-                const warehouseIfs = parts[0].trim();
+                  const parts = file.filename.split("-");
+                  const warehouseIfs = parts[0].trim();
                   warehouseFromFile = warehouseByIfs.get(warehouseIfs);
                 }
 
