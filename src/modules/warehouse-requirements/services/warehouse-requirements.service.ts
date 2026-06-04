@@ -183,8 +183,8 @@ export class WarehouseRequirementsService {
       .where("warehouseRequirement.warehouse_id IN (:...warehouseIds)", {
         warehouseIds,
       })
-      .andWhere("warehouseRequirement.status_id = :status_id", {
-        status_id: 1,
+      .andWhere("warehouseRequirement.status_id IN (:...status_id)", {
+        status_id: [1, 18], // ADDITIONAL TERMINATED STATUS
       });
 
     if (requirementTypeId) {
@@ -1089,7 +1089,7 @@ export class WarehouseRequirementsService {
     try {
       // Filter active base requirements (status_id = 1)
       const baseRequirements = (warehouse.warehouseRequirements || []).filter(
-        (req) => req.status_id === 1,
+        (req) => req.status_id === 1 || req.status_id === 18, // ADDITIONAL TERMINATED STATUS
       );
 
       if (baseRequirements.length === 0) {
@@ -1296,7 +1296,7 @@ export class WarehouseRequirementsService {
       // Build where condition for transaction headers
       let headerWhere: any = {
         warehouse_id: warehouseId,
-        status_id: 1,
+        status_id: In([1, 18]), // ADDITIONAL TERMINATED STATUS
       };
 
       // Apply date filtering if provided
@@ -1344,7 +1344,7 @@ export class WarehouseRequirementsService {
           .map((header) => {
             // Filter active details for this header
             const activeDetails = (header.reqTransactionDetails || []).filter(
-              (detail) => detail.status_id === 1,
+              (detail) => detail.status_id === 1 || detail.status_id === 18, // ADDITIONAL TERMINATED STATUS
             );
 
             totalDetailCount += activeDetails.length;
@@ -1352,6 +1352,7 @@ export class WarehouseRequirementsService {
             return {
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
+              trans_header_status_id: header.status_id,
               created_user: header.createdBy
                 ? `${header.createdBy.first_name} ${header.createdBy.last_name}`
                 : null,
@@ -1414,7 +1415,7 @@ export class WarehouseRequirementsService {
         const flattenedDetails = [];
         transactionHeaders.forEach((header) => {
           const activeDetails = (header.reqTransactionDetails || []).filter(
-            (detail) => detail.status_id === 1,
+            (detail) => detail.status_id === 1 || detail.status_id === 18, // ADDITIONAL TERMINATED STATUS
           );
 
           totalDetailCount += activeDetails.length;
@@ -1740,7 +1741,7 @@ export class WarehouseRequirementsService {
         .andWhere(
           "warehouseRequirement.status_id IN (:...requirementStatusIds)",
           {
-            requirementStatusIds: [1, 2],
+            requirementStatusIds: [1, 2, 18], // ADDITIONAL TERMINATED STATUS
           },
         );
 
@@ -1765,7 +1766,7 @@ export class WarehouseRequirementsService {
         // Fallback: count all requirements with status_id = 1 or 2
         requirementCountsQuery = requirementCountsQuery.andWhere(
           "warehouseRequirement.status_id IN (:...requirementStatusIds)",
-          { requirementStatusIds: [1, 2] },
+          { requirementStatusIds: [1, 2, 18] }, // ADDITIONAL TERMINATED STATUS
         );
       }
 
@@ -1800,16 +1801,16 @@ export class WarehouseRequirementsService {
         .leftJoin(
           "reqTransactionHeader.reqTransactionDetails",
           "reqTransactionDetail",
-          "reqTransactionDetail.status_id = :detail_status_id",
+          "reqTransactionDetail.status_id IN (:...detail_status_id)",
         )
         .leftJoin("reqTransactionHeader.requirement", "requirement")
         .where("reqTransactionHeader.warehouse_id IN (:...warehouseIds)", {
           warehouseIds,
         })
-        .andWhere("reqTransactionHeader.status_id = :header_status_id", {
-          header_status_id: 1,
+        .andWhere("reqTransactionHeader.status_id IN (:...header_status_id)", {
+          header_status_id: [1, 18], // ADDITIONAL TERMINATED STATUS
         })
-        .setParameter("detail_status_id", 1);
+        .setParameter("detail_status_id", [1, 18]); // ADDITIONAL TERMINATED STATUS
 
       // Apply date filtering if provided
       if (date_from && date_to) {
@@ -2631,12 +2632,17 @@ export class WarehouseRequirementsService {
         statusName = "FULFILLED";
       }
     } else if (requirementTypeId === 2) {
-      if (dueDateVal > todayDate) {
-        statusName = "ACTIVE";
-      } else if (dueDateVal <= todayDate && dueEndDateVal > todayDate) {
-        statusName = "DUE FOR RENEWAL";
-      } else if (dueEndDateVal <= todayDate) {
-        statusName = "EXPIRED";
+      if (dueStatusId === 18) {
+        // ADDITIONAL TERMINATED STATUS CHECK
+        statusName = "TERMINATED";
+      } else {
+        if (dueDateVal > todayDate) {
+          statusName = "ACTIVE";
+        } else if (dueDateVal <= todayDate && dueEndDateVal > todayDate) {
+          statusName = "DUE FOR RENEWAL";
+        } else if (dueEndDateVal <= todayDate) {
+          statusName = "EXPIRED";
+        }
       }
     }
 
