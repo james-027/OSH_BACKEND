@@ -1374,10 +1374,17 @@ export class ReqTransactionHeadersService {
           // Process each warehouse
           for (const warehouse of warehouses) {
             // Find files for this warehouse
-            const warehouseFiles = files.filter((f) => {
+            let warehouseFiles: any[];
+            if (hasPayloadDates) {
+              // Single-warehouse mode: ALL files belong to this one warehouse
+              warehouseFiles = files;
+            } else {
+              // Multi-warehouse mode: match files by warehouse_ifs prefix in filename
+              warehouseFiles = files.filter((f) => {
               const parts = f.filename.split("-");
               return parts[0].trim() === warehouse.warehouse_ifs;
             });
+            }
 
             if (warehouseFiles.length === 0) {
               continue; // No files for this warehouse
@@ -1490,7 +1497,6 @@ export class ReqTransactionHeadersService {
             );
             const preDueReminderDateString =
               formatDateToString(preDueReminderDate);
-
             const postDueReminderDate = new Date(start_date);
             postDueReminderDate.setDate(
               postDueReminderDate.getDate() + requirement.requirement_reminder,
@@ -1819,10 +1825,16 @@ export class ReqTransactionHeadersService {
       );
 
       //* Step 3.5: PRE-VALIDATE ALL FILES (fail fast before creating any transactions)
-      //* NOTE: trans_number generation MOVED to just before commit to avoid sequence waste on failed transactions
+      //* NOTE: For single-warehouse Type 2 (dates in payload), file naming convention is NOT required
+      const isSingleWarehouseType2 =
+        requirement.requirement_type_id === 2 &&
+        createDto.start_date &&
+        createDto.end_date;
+
       const fileValidationErrors: any[] = [];
       for (const file of createDto.files) {
-        // Validate filename format
+        // Filename format validation: skip for single-warehouse Type 2 (no naming convention required)
+        if (!isSingleWarehouseType2) {
         const parts = file.filename.split("-");
         if (parts.length < 2) {
           fileValidationErrors.push({
@@ -1843,9 +1855,10 @@ export class ReqTransactionHeadersService {
             warehouse_ifs: warehouseIfs,
           });
           continue;
+          }
         }
 
-        // Validate file integrity
+        // File integrity validation (always runs)
         const validation = FileUploadHandler.validateFile(
           file.filename,
           file.buffer,
@@ -1860,7 +1873,7 @@ export class ReqTransactionHeadersService {
         }
       }
 
-      //* If ANY file fails validation, reject entire batch and return errors
+      //* If ANY file fails validation, reject entire batch
       if (fileValidationErrors.length > 0) {
         return {
           success: {
@@ -1893,12 +1906,6 @@ export class ReqTransactionHeadersService {
           auditTrailsToCreate: any[];
           duesResult?: any;
         };
-
-        // Determine if Type 2 single-warehouse mode (payload provides dates)
-        const isSingleWarehouseType2 =
-          requirement.requirement_type_id === 2 &&
-          createDto.start_date &&
-          createDto.end_date;
 
         typeSpecificResult = await this.processRequirement(
           warehouses,
@@ -2021,10 +2028,19 @@ export class ReqTransactionHeadersService {
               );
 
               try {
-                //* Parse warehouse_ifs from filename (already validated in pre-validation step)
+                //* For single-warehouse Type 2, use the single warehouse directly (no filename parsing needed)
+                let warehouseFromFile;
+                if (isSingleWarehouseType2) {
+                  // Single warehouse mode: take the first (only) warehouse from successResults
+                  warehouseFromFile = warehouseByIfs.get(
+                    warehouses[0].warehouse_ifs,
+                  );
+                } else {
+                  // Parse warehouse_ifs from filename (standard naming convention)
                 const parts = file.filename.split("-");
                 const warehouseIfs = parts[0].trim();
-                const warehouseFromFile = warehouseByIfs.get(warehouseIfs);
+                  warehouseFromFile = warehouseByIfs.get(warehouseIfs);
+                }
 
                 //* Find the corresponding header created for this warehouse
                 const correspondingHeader = successResults.find(
