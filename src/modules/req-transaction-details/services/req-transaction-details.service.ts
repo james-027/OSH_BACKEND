@@ -16,6 +16,9 @@ import { UpdateReqTransactionDetailDto } from "src/modules/req-transaction-detai
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SyncLog } from "src/entities/syncLog";
 import logger from "src/config/logger";
+import { FileUploadHandler } from "src/utils/file-upload.utils";
+import { CacheInvalidationService } from "src/modules/cache/services/cache-invalidation.service";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
 
 @Injectable()
 export class ReqTransactionDetailsService {
@@ -29,6 +32,8 @@ export class ReqTransactionDetailsService {
     private responseMapperService: ResponseMapperService,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
+    private cacheInvalidationService: CacheInvalidationService,
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -165,7 +170,9 @@ export class ReqTransactionDetailsService {
 
     try {
       // Use queryRunner.manager if provided (for transaction context), otherwise use repositories
-      const manager = queryRunner ? queryRunner.manager : this.reqTransactionDetailsRepository.manager;
+      const manager = queryRunner
+        ? queryRunner.manager
+        : this.reqTransactionDetailsRepository.manager;
 
       // Verify all headers exist (batch validation upfront)
       const headerIds = [
@@ -246,6 +253,158 @@ export class ReqTransactionDetailsService {
       );
       // Don't throw - details failure shouldn't block main batch
       return [];
+    }
+  }
+
+  /**
+   * Accept multiple files and insert them as req_transaction_details for a given header.
+   * Files are base64-encoded buffers (same pattern as CreateReqTransactionWithDetailsDto).
+   * Each file is compressed/saved to disk, then a detail record is created in bulk.
+   *
+   * @param headerId - The req_transaction_header.id to associate files with
+   * @param files - Array of { filename, buffer (base64) } objects
+   * @param userId - Authenticated user ID
+   * @returns Bulk create result { records, ids, status }
+   */
+  async uploadMultipleFiles(
+    headerId: number,
+    files: Array<{ filename: string; buffer: string }>,
+    userId: number,
+    warehouse_requirement_due_start?: string,
+    warehouse_requirement_due_end?: string,
+  ): Promise<any> {
+    try {
+      // 1. Validate header exists
+      const header = await this.reqTransactionHeadersRepository.findOne({
+        where: { id: headerId },
+        relations: ["warehouse", "requirement"], // Load existing details for potential duplicate checks (if needed in future enhancements)
+      });
+      if (!header) {
+        throw new BadRequestException(
+          `Req transaction header with ID ${headerId} not found`,
+        );
+      }
+
+      // 2. Validate authenticated user
+      const user = await this.usersService.findUserById(userId);
+      if (!user) {
+        throw new BadRequestException("Authenticated user not found");
+      }
+
+      // 3. Pre-validate all files (fail fast)
+      const batchValidation = FileUploadHandler.validateBatch(
+        files.map((f) => ({
+          filename: f.filename,
+          buffer: f.buffer,
+        })),
+      );
+      if (!batchValidation.valid) {
+        throw new BadRequestException(batchValidation.error);
+      }
+
+      for (const file of files) {
+        const fileValidation = FileUploadHandler.validateFile(
+          file.filename,
+          file.buffer,
+        );
+        if (!fileValidation.valid) {
+          throw new BadRequestException(
+            `File "${file.filename}" validation failed: ${fileValidation.error}`,
+          );
+        }
+      }
+
+      // 4. Use the header's trans_number (if available) or header ID for directory
+      const uploadDir = `uploads/${process.env.UPLOAD_REQ_DIR || "req-transactions"}/${header.trans_number || headerId}`;
+
+      // 5. Compress and save each file, collect detail DTOs
+      const detailsToCreate: CreateReqTransactionDetailDto[] = [];
+      const savedFiles: Array<{ filename: string; path: string }> = [];
+
+      console.log("dates received in service:", {
+        warehouse_requirement_due_start,
+        warehouse_requirement_due_end,
+      });
+
+      let fileToSave: string;
+      for (const file of files) {
+        if (header.requirement.requirement_type_id == 1) {
+          fileToSave = FileUploadHandler.generateType1Filename(
+            header.warehouse?.warehouse_ifs || "WH",
+            header.requirement?.requirement_abbr_name || "REQ",
+            file.filename,
+          );
+        } else if (header.requirement.requirement_type_id == 2) {
+          fileToSave = FileUploadHandler.generateType2Filename(
+            header.warehouse?.warehouse_ifs || "WH",
+            header.requirement?.requirement_abbr_name || "REQ",
+            warehouse_requirement_due_start,
+            warehouse_requirement_due_end,
+            file.filename,
+          );
+        } else {
+          // Fallback: normalize the original filename (works for any requirement type)
+          fileToSave = FileUploadHandler.normalizeFilenameForSave(
+            file.filename,
+          );
+        }
+
+        const savedFileInfo =
+          await FileUploadHandler.compressAndSaveStreamDirect(
+            file.buffer,
+            fileToSave,
+            headerId,
+            uploadDir,
+          );
+
+        savedFiles.push({
+          filename: savedFileInfo.filename,
+          path: savedFileInfo.relativePath,
+        });
+
+        detailsToCreate.push({
+          req_transaction_header_id: headerId,
+          requirement_file_path: savedFileInfo.relativePath,
+          requirement_file_name: savedFileInfo.filename,
+          status_id: 1,
+        });
+      }
+
+      // 6. Bulk create all detail records using existing bulkCreate method
+      //    Pass `false` for skipAuditTrail so it creates its own audit trail entry
+      const result = await this.bulkCreate(
+        detailsToCreate,
+        userId,
+        undefined,
+        false,
+      );
+
+      logger.info(
+        `[UPLOAD MULTIPLE FILES] Created ${savedFiles.length} detail record(s) for header ID ${headerId}`,
+      );
+
+      // Clear req transaction caches (DRY: SSE + cache invalidation)
+      await this.cacheInvalidationService.invalidateReqTransactions();
+      await this.cacheInvalidationService.invalidateWarehouseRequirements();
+      await this.cacheInvalidationService.invalidateRequirements();
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdateSignal("req_transactions", headerId);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(
+        `[UPLOAD MULTIPLE FILES ERROR] Failed for header ID ${headerId}: ${errorMessage}`,
+      );
+      throw new Error("Failed to upload multiple files");
     }
   }
 
