@@ -2046,6 +2046,7 @@ export class WarehouseRequirementsService {
             const activeWarehouses = new Set<number>();
             const dueWarehouses = new Set<number>();
             const expiredWarehouses = new Set<number>();
+            const terminatedWarehouses = new Set<number>();
             const dueAges: number[] = [];
 
             transactionsForReq.forEach((header) => {
@@ -2054,6 +2055,12 @@ export class WarehouseRequirementsService {
               dues.forEach((due: any) => {
                 const wrd = due.warehouseRequirementDue;
                 if (!wrd) return;
+
+                // ✅ NEW: Check for TERMINATED status (status_id = 18)
+                if (wrd.status_id === 18) {
+                  terminatedWarehouses.add(header.warehouse_id);
+                  return; // Skip all date-based categorization for terminated
+                }
 
                 const dueDate = new Date(wrd.warehouse_requirement_due_date);
                 const dueEndDate = new Date(wrd.warehouse_requirement_due_end);
@@ -2084,6 +2091,7 @@ export class WarehouseRequirementsService {
             const activeCount = activeWarehouses.size;
             const dueCount = dueWarehouses.size;
             const expiredCount = expiredWarehouses.size;
+            const terminatedCount = terminatedWarehouses.size;
 
             // Calculate average and minimum due_age using reusable method (excludeExpired=true)
             const dueAgeResult = this.calculateDueAges(dueAges, true);
@@ -2110,6 +2118,13 @@ export class WarehouseRequirementsService {
                 percentage:
                   totalStores > 0
                     ? Math.round((expiredCount / totalStores) * 100)
+                    : 0,
+              },
+              terminated: {
+                actual_no: terminatedCount,
+                percentage:
+                  totalStores > 0
+                    ? Math.round((terminatedCount / totalStores) * 100)
                     : 0,
               },
               ave_due_age: avgDueAge,
@@ -2328,7 +2343,7 @@ export class WarehouseRequirementsService {
 
         // Filter active transaction details
         const activeDetails = (header.reqTransactionDetails || []).filter(
-          (detail) => detail.status_id === 1,
+          (detail) => detail.status_id === 1 || detail.status_id === 18, // ADDITIONAL TERMINATED STATUS CHECK
         );
 
         if (activeDetails.length === 0) {
@@ -2466,6 +2481,7 @@ export class WarehouseRequirementsService {
             const activeTransactions = new Set<number>();
             const dueTransactions = new Set<number>();
             const expiredTransactions = new Set<number>();
+            const terminatedTransactions = new Set<number>();
             const dueAges: number[] = [];
 
             reqTransactions.forEach((transaction) => {
@@ -2480,6 +2496,16 @@ export class WarehouseRequirementsService {
                 : null;
 
               if (!wrd) return;
+
+              // ✅ Check for TERMINATED status (status_id = 18)
+              console.log("Checking transaction for TERMINATED status_id:", {
+                transactionId: transaction.trans_header_id,
+                statusId: transaction.warehouse_requirement_due_status_id,
+              });
+              if (transaction.warehouse_requirement_due_status_id === 18) {
+                terminatedTransactions.add(transaction.trans_header_id);
+                return; // Skip date-based categorization
+              }
 
               const dueDate = new Date(wrd.warehouse_requirement_due_date);
               const dueEndDate = new Date(wrd.warehouse_requirement_due_end);
