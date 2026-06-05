@@ -2509,6 +2509,7 @@ export class WarehouseRequirementsService {
             const activeCount = activeTransactions.size;
             const dueCount = dueTransactions.size;
             const expiredCount = expiredTransactions.size;
+            const terminatedCount = terminatedTransactions.size;
 
             // Calculate average and minimum due_age using reusable method (excludeExpired=true)
             const dueAgeResult = this.calculateDueAges(dueAges, true);
@@ -2527,6 +2528,10 @@ export class WarehouseRequirementsService {
               expired: {
                 actual_no: expiredCount,
                 percentage: expiredCount > 0 ? 100 : 0,
+              },
+              terminated: {
+                actual_no: terminatedCount,
+                percentage: terminatedCount > 0 ? 100 : 0,
               },
               ave_due_age: aveDueAge,
               min_due_age: minDueAge,
