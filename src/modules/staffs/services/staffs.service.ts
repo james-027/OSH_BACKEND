@@ -82,6 +82,7 @@ export class StaffsService {
       });
 
       return this.responseMapperService.mapEntitiesToResponse(staffs);
+      
     } catch (error) {
       console.error("Error fetching staffs:", error);
       throw new Error("Failed to fetch staffs");
@@ -325,7 +326,7 @@ export class StaffsService {
     }
   }
 
-  async update(
+  async update( 
     id: number,
     updateStaffDto: UpdateStaffDto,
     userId: number,
@@ -525,6 +526,9 @@ export class StaffsService {
 
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_brands", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_category_types", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_vendor_salaries", response.id, response);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
