@@ -2450,6 +2450,7 @@ export class WarehouseRequirementsService {
           date_to,
           false,
           flatten,
+          requirementTypeId,
         ),
       );
       const baseRequirementsDataArray = await Promise.all(
