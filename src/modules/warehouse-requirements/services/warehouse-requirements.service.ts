@@ -2498,10 +2498,7 @@ export class WarehouseRequirementsService {
               if (!wrd) return;
 
               // ✅ Check for TERMINATED status (status_id = 18)
-              console.log("Checking transaction for TERMINATED status_id:", {
-                transactionId: transaction.trans_header_id,
-                statusId: transaction.warehouse_requirement_due_status_id,
-              });
+
               if (transaction.warehouse_requirement_due_status_id === 18) {
                 terminatedTransactions.add(transaction.trans_header_id);
                 return; // Skip date-based categorization
