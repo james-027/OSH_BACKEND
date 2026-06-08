@@ -218,7 +218,7 @@ export class SalesTransactionsDwhService {
       }
       await sourceConn.release();
     } catch (err) {
-      logError = err?.message || String(err);
+      logError = err instanceof Error ? err?.message : String(err);
       failed = 1;
     } finally {
       // Build unmatched business centers log message
