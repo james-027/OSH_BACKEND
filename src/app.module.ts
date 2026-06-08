@@ -113,6 +113,7 @@ import { ApprovalMatrix } from "./entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
+import { TrainingsModule } from "./modules/trainings/trainings.module";
 @Module({
   imports: [
     // Configuration
@@ -216,6 +217,7 @@ import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.m
     ApprovalLogsModule,
     ApprovalMatrixModule,
     StaffTrainingModule,
+    TrainingsModule,
   ],
   providers: [
     EmailService,

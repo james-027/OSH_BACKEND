@@ -11,6 +11,9 @@ import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { Staff } from "src/entities/Staff";
+import { Vendor } from "src/entities/Vendor";
+import { Training } from "src/entities/Training";
 
 @Module({
   imports: [
@@ -20,6 +23,9 @@ import { SSEModule } from "../sse/sse.module";
       UserPermissions,
       AppModule,
       Action,
+      Staff,
+      Vendor,
+      Training,
     ]),
     UsersModule,
     SSEModule,
