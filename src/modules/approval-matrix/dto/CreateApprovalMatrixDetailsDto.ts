@@ -21,9 +21,6 @@ export class CreateApprovalMatrixDetailsDto {
   @IsString()
   userid: string;
 
-  @IsString()
-  approval_id: string;
-
   @IsOptional()
   @IsString()
   module?: string;

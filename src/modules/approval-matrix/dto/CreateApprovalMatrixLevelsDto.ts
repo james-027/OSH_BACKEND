@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsNumber } from "class-validator";
-
+import { Type } from "class-transformer";
 export class CreateApprovalMatrixLevelsDto {
   @IsOptional()
   @IsNumber()
@@ -8,13 +8,13 @@ export class CreateApprovalMatrixLevelsDto {
   @IsString()
   userid: string;
 
-  @IsOptional()
-  @IsString()
-  approval_id?: string;
+  @Type(() => Number)
+  @IsNumber()
+  approval_id: number;
 
-  @IsOptional()
-  @IsString()
-  opt_approval_id?: string;
+  @Type(() => Number)
+  @IsNumber()
+  opt_approval_id: number;
 
   @IsOptional()
   @IsString()

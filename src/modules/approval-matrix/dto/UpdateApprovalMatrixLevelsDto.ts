@@ -12,12 +12,12 @@ export class UpdateApprovalMatrixLevelsDto {
   userid: string;
 
   @IsOptional()
-  @IsString()
-  approval_id?: string;
+  @IsNumber()
+  approval_id?: number;
 
   @IsOptional()
-  @IsString()
-  opt_approval_id?: string;
+  @IsNumber()
+  opt_approval_id?: number;
 
   @IsOptional()
   @IsString()

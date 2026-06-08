@@ -24,8 +24,8 @@ export class UpdateApprovalMatrixDetailsDto {
   @IsString()
   userid: string;
 
-  @IsString()
-  approval_id: string;
+  @IsNumber()
+  approval_id: number;
 
   @IsOptional()
   @IsString()

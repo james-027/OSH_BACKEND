@@ -1,5 +1,6 @@
 import {
   Entity,
+  Unique,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -11,11 +12,16 @@ import {
 import { User } from "./User";
 import { Status } from "./Status";
 import { ApprovalMatrixDetails } from "./ApprovalMatrixDetails";
+import { Module } from "./Module";
 
 @Entity({ name: "approval_matrix_levels" })
+@Unique(["line_id", "approval_id"])
 export class ApprovalMatrixLevels {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column()
+  line_id: number;
 
   @Column({ nullable: true })
   module: string;
@@ -25,12 +31,11 @@ export class ApprovalMatrixLevels {
 
   @Column({
     nullable: true,
-    unique: true,
   })
-  approval_id: string;
+  approval_id: number;
 
   @Column({ nullable: true })
-  opt_approval_id: string;
+  opt_approval_id: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -39,7 +44,7 @@ export class ApprovalMatrixLevels {
   userid: string;
 
   @Column()
-  level: string;
+  level: number;
 
   @Column({ nullable: true })
   created_by: number;
@@ -51,7 +56,7 @@ export class ApprovalMatrixLevels {
 
   @ManyToOne(() => ApprovalMatrixDetails, (line) => line.approvalmatrixLevel)
   @JoinColumn({
-    name: "approval_id",
+    name: "line_id",
   })
   approvalmatrixDetail: ApprovalMatrixDetails;
 
@@ -70,6 +75,10 @@ export class ApprovalMatrixLevels {
   @ManyToOne(() => User)
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
+
+  @ManyToOne(() => Module)
+  @JoinColumn({ name: "module" })
+  moduleData: Module;
 
   @UpdateDateColumn({
     type: "timestamp",

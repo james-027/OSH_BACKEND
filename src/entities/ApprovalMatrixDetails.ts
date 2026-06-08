@@ -7,12 +7,15 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Unique,
 } from "typeorm";
 import { User } from "./User";
 import { ApprovalMatrix } from "./ApprovalMatrix";
 import { ApprovalMatrixLevels } from "./ApprovalMatrixLevels";
 import { Module } from "./Module";
+import { Status } from "./Status";
 @Entity({ name: "approval_matrix_details" })
+@Unique(["approval_title"])
 export class ApprovalMatrixDetails {
   @PrimaryGeneratedColumn()
   id: number;
@@ -53,10 +56,13 @@ export class ApprovalMatrixDetails {
   updated_at: Date;
 
   //Relationships
+  @ManyToOne(() => Status)
+  @JoinColumn({ name: "status_id" })
+  status: Status;
 
   @ManyToOne(() => Module)
   @JoinColumn({ name: "module" })
-  ModuleName: Module;
+  moduleData: Module;
 
   @ManyToOne(() => ApprovalMatrix, (header) => header.lines)
   @JoinColumn({ name: "header_id" })

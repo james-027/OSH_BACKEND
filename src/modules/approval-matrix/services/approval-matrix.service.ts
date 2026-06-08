@@ -69,6 +69,8 @@ export class ApprovalMatrixService {
         "createdBy",
         "userMaker",
         "lines",
+        "lines.status",
+        "lines.moduleData",
         "lines.approvalmatrixLevel",
       ],
     });
@@ -97,10 +99,17 @@ export class ApprovalMatrixService {
         where: {
           userid: dto.userid,
         },
+        relations: ["userMaker"],
       });
 
       if (existing) {
-        throw new BadRequestException("Approval Matrix already exists");
+        throw new BadRequestException(
+          `Approval Matrix already exists for ${
+            existing.userMaker
+              ? `${existing.userMaker.first_name} ${existing.userMaker.last_name}`
+              : existing.userid
+          }`,
+        );
       }
 
       const header = this.approvalMatrixRepository.create({
@@ -112,6 +121,17 @@ export class ApprovalMatrixService {
       savedHeader = await this.approvalMatrixRepository.save(header);
 
       for (const detailDto of dto.lines) {
+        // Prevent duplicate approvers within the same row
+        const approverIds = detailDto.approvalmatrixLevel.map(
+          (x) => x.approval_id,
+        );
+
+        if (new Set(approverIds).size !== approverIds.length) {
+          throw new BadRequestException(
+            `Duplicate approver found for "${detailDto.approval_title}"`,
+          );
+        }
+
         const detail = await this.approvalMatrixDetailsRepository.save(
           this.approvalMatrixDetailsRepository.create({
             header: savedHeader,
@@ -123,15 +143,27 @@ export class ApprovalMatrixService {
           }),
         );
 
-        for (const levelDto of detailDto.approvalmatrixLevel) {
+        for (const [
+          index,
+          levelDto,
+        ] of detailDto.approvalmatrixLevel.entries()) {
           await this.approvalMatrixLevelsRepository.save(
             this.approvalMatrixLevelsRepository.create({
-              approval_id: levelDto.approval_id,
+              line_id: detail.id,
+
+              level: index + 1,
+
+              approval_id: Number(levelDto.approval_id),
+              opt_approval_id: levelDto.opt_approval_id
+                ? Number(levelDto.opt_approval_id)
+                : null,
+
               approval_title: levelDto.approval_title,
-              opt_approval_id: levelDto.opt_approval_id,
               module: levelDto.module,
               userid: levelDto.userid,
+
               status_id: levelDto.status_id ?? 1,
+
               createdBy: { id: userId } as any,
             }),
           );
@@ -259,7 +291,8 @@ export class ApprovalMatrixService {
       query
         .leftJoinAndSelect("am.status", "status")
         .leftJoinAndSelect("am.createdBy", "createdBy")
-        .leftJoinAndSelect("am.lines", "lines");
+        .leftJoinAndSelect("am.lines", "lines")
+        .leftJoinAndSelect("lines.moduleData", "moduleData");
 
       if (search) {
         query.andWhere(
@@ -292,6 +325,9 @@ export class ApprovalMatrixService {
           userid: item.userid,
           status_id: item.status_id,
           status_name: item.status?.status_name || null,
+
+          module_name: item.lines?.[0]?.moduleData?.module_name || null,
+
           created_at: item.created_at,
           updated_at: item.updated_at,
           created_user: item.createdBy
