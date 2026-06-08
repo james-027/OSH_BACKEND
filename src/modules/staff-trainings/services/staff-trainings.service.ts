@@ -14,12 +14,18 @@ import { UpdateStaffTrainingDto } from "src/modules/staff-trainings/dto/UpdateSt
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
+import { Staff } from "src/entities/Staff";
+import { Training } from "src/entities/Training";
 
 @Injectable()
 export class StaffTrainingService {
   constructor(
     @InjectRepository(StaffTraining)
     private staffTrainingsRepository: Repository<StaffTraining>,
+    @InjectRepository(Training)
+    private trainingsRepository: Repository<Training>,
+    @InjectRepository(Staff)
+    private staffRepository: Repository<Staff>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
@@ -91,13 +97,13 @@ export class StaffTrainingService {
   async create(
     createStaffTrainingDto: CreateStaffTrainingDto,
     userId: number,
-    accessKeyId?: number,
   ): Promise<any> {
     try {
       const createdByUser = await this.usersService.findUserById(userId);
       if (!createdByUser) {
         throw new BadRequestException("Authenticated user not found");
       }
+
 
       const newStaffTraining = this.staffTrainingsRepository.create({
         staff_id: createStaffTrainingDto.staff_id,
@@ -116,6 +122,55 @@ export class StaffTrainingService {
 
       const savedStaffTraining =
         await this.staffTrainingsRepository.save(newStaffTraining);
+
+const training = await this.trainingsRepository.findOne({
+  where: { id: createStaffTrainingDto.training_id },
+});
+
+if (
+  training &&
+  createStaffTrainingDto.ratings >= training.passing_rate
+) {
+  const staff = await this.staffRepository.findOne({
+    where: { id: createStaffTrainingDto.staff_id },
+    relations: ["vendor", "location"],
+  });
+
+  if (staff) {
+    const serviceProviderCode =
+      staff.vendor?.service_provider_code ?? "";
+
+    const locationCode =
+      staff.location?.location_abbr ?? ""; // adjust field name
+
+    const prefix = `${serviceProviderCode}${locationCode}`;
+
+    const latestStaff = await this.staffRepository
+      .createQueryBuilder("staff")
+      .where("staff.staff_code LIKE :prefix", {
+        prefix: `${prefix}%`,
+      })
+      .orderBy("staff.staff_code", "DESC")
+      .getOne();
+
+    let nextSeries = 1;
+
+    if (latestStaff?.staff_code) {
+      const seriesPart = latestStaff.staff_code.substring(
+        prefix.length,
+      );
+
+      nextSeries = parseInt(seriesPart, 10) + 1;
+    }
+
+    const generatedStaffCode =
+      prefix + String(nextSeries).padStart(4, "0");
+
+    await this.staffRepository.update(staff.id, {
+      staff_code: generatedStaffCode,
+    });
+  }
+}
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -137,11 +192,11 @@ export class StaffTrainingService {
             "createdBy",
             "updatedBy",
             "staff",
-            "vendor",
-            "location",
-            "accessKey",
+            "warehouse",
+            "employee",
           ],
         });
+
 
       if (!staffTrainingWithRelations) {
         throw new Error("Failed to retrieve created staff training");
@@ -154,7 +209,7 @@ export class StaffTrainingService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate(
-          "staff_trainings",
+          "staffs",
           response.id,
           response,
         );
@@ -164,6 +219,9 @@ export class StaffTrainingService {
 
       return response;
     } catch (error) {
+
+      return error;
+
       if (error instanceof BadRequestException) {
         throw error;
       }

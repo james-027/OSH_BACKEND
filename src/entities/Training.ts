@@ -21,7 +21,7 @@ export class Training {
   id: number;
 
   @Column({ type: "varchar", length: 255 })
-  training_Name: string;
+  training_name: string;
 
   @Column({ type: "varchar", length: 15 })
   training_abbr: string;
