@@ -25,7 +25,7 @@ export class StaffTrainingsController {
   ) {}
 
   @Get()
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "VIEW" })
+  @RequirePermissions({ module: "STAFFS", action: "VIEW" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
 
@@ -33,28 +33,26 @@ export class StaffTrainingsController {
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "VIEW" })
+  @RequirePermissions({ module: "STAFFS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.staffTrainingsService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "ADD" })
+  @RequirePermissions({ module: "STAFFS", action: "ADD" })
   async create(
     @Body() createStaffTrainingDto: CreateStaffTrainingDto,
     @Request() req,
   ) {
     const userId = req.user.id;
-    const accessKeyId = req.user.current_access_key;
     return this.staffTrainingsService.create(
       createStaffTrainingDto,
       userId,
-      accessKeyId
     );
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "EDIT" })
+  @RequirePermissions({ module: "STAFFS", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateStaffTrainingDto: UpdateStaffTrainingDto,
@@ -69,7 +67,7 @@ export class StaffTrainingsController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "ACTIVATE" })
+  @RequirePermissions({ module: "STAFFS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -79,7 +77,7 @@ export class StaffTrainingsController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "DEACTIVATE" })
+  @RequirePermissions({ module: "STAFFS", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,

@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsNumber, IsString, IsDate } from "class-validator";
+import { IsInt, IsNotEmpty, IsOptional, IsNumber, IsString, IsDate, IsDateString } from "class-validator";
 
 export class CreateStaffTrainingDto {
   @IsInt()
@@ -29,13 +29,13 @@ export class CreateStaffTrainingDto {
   @IsNotEmpty()
   remarks!: string;
 
-  @IsDate()
-  @IsNotEmpty()
-  training_start_date!: Date;
+  @IsOptional()
+  @IsDateString()
+  training_start_date?: string;
 
-  @IsDate()
-  @IsNotEmpty()
-  training_end_date!: Date;
+  @IsOptional()
+  @IsDateString()
+  training_end_date?: string;
 
   @IsOptional()
   @IsInt()
