@@ -25,9 +25,9 @@ export class UpdateApprovalMatrixDetailsDto {
   @IsNumber()
   userid: number;
 
-  @IsOptional()
-  @IsString()
-  module?: string;
+  @Type(() => Number)
+  @IsNumber()
+  module?: number;
 
   @IsOptional()
   @IsNumber()

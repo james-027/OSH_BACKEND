@@ -25,9 +25,9 @@ export class UpdateApprovalMatrixLevelsDto {
   @IsString()
   approval_title?: string;
 
-  @IsOptional()
-  @IsString()
-  module?: string;
+  @Type(() => Number)
+  @IsNumber()
+  module?: number;
 
   @IsOptional()
   @IsNumber()

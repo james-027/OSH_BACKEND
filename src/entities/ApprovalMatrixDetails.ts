@@ -30,7 +30,7 @@ export class ApprovalMatrixDetails {
   userid: number;
 
   @Column({ nullable: true })
-  module: string;
+  module: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -63,7 +63,7 @@ export class ApprovalMatrixDetails {
   @ManyToOne(() => Module)
   @JoinColumn({
     name: "module",
-    referencedColumnName: "module_alias",
+    referencedColumnName: "id",
   })
   moduleData: Module;
 

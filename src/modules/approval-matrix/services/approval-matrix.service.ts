@@ -137,7 +137,7 @@ export class ApprovalMatrixService {
             header: savedHeader,
             approval_title: detailDto.approval_title,
             userid: detailDto.userid,
-            module: detailDto.module,
+            module: Number(detailDto.module),
             status_id: detailDto.status_id ?? 1,
             createdBy: { id: userId } as any,
           }),
@@ -159,7 +159,7 @@ export class ApprovalMatrixService {
                 : null,
 
               approval_title: levelDto.approval_title,
-              module: levelDto.module,
+              module: Number(levelDto.module),
               userid: levelDto.userid,
 
               status_id: levelDto.status_id ?? 1,
@@ -238,8 +238,9 @@ export class ApprovalMatrixService {
           header,
           approval_title: detailDto.approval_title,
           userid: detailDto.userid,
-          module: detailDto.module,
+          module: Number(detailDto.module),
           status_id: detailDto.status_id ?? 1,
+          created_by: existingDetails[0]?.created_by,
           updatedBy: { id: userId } as any,
         }),
       );
@@ -257,10 +258,11 @@ export class ApprovalMatrixService {
               : null,
 
             approval_title: levelDto.approval_title,
-            module: levelDto.module,
+            module: Number(levelDto.module),
             userid: levelDto.userid,
             status_id: levelDto.status_id ?? 1,
 
+            created_by: existingDetails[0]?.created_by,
             updatedBy: { id: userId } as any,
           }),
         );

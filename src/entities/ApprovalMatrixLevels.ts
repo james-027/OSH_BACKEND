@@ -23,8 +23,8 @@ export class ApprovalMatrixLevels {
   @Column()
   line_id: number;
 
-  @Column({ nullable: true })
-  module: string;
+  @Column()
+  module: number;
 
   @Column({ nullable: true })
   approval_title: string;

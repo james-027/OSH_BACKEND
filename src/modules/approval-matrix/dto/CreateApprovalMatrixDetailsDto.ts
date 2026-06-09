@@ -22,9 +22,9 @@ export class CreateApprovalMatrixDetailsDto {
   @IsNumber()
   userid: number;
 
-  @IsOptional()
-  @IsString()
-  module?: string;
+  @Type(() => Number)
+  @IsNumber()
+  module?: number;
 
   @IsArray()
   @ArrayMinSize(1)
