@@ -47,3 +47,13 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.FOR_APPROVAL]: "For Approval",
   [STATUS_IDS.APPROVED]: "Approved",
 } as const;
+
+// ============= WAREHOUSE REM STATUS =============
+export const WAREHOUSE_REM_STATUS_IDS = {
+  NEEDS_REQUIREMENTS: [8, 9], // Warehouses that need requirement sync
+} as const;
+
+// ============= RENEWAL TYPE IDs =============
+export const RENEWAL_TYPE_IDS = {
+  ONE_TIME: 1,
+} as const;
