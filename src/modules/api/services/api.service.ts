@@ -416,6 +416,7 @@ export class ApiService {
               b.surName AS crew_last_name,
               b.firstName AS crew_first_name,
               b.mi AS crew_middle_initial,
+              "" AS email,
               c.outletIFS AS store_ifs,
               c.outletCode AS store_code,
               c.outletDesc AS store_name,
