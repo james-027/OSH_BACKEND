@@ -221,4 +221,28 @@ export class ReqTransactionHeadersController {
       updateDto.cancellation_reason,
     );
   }
+
+  /**
+   * terminate warehouse requirement due
+   * Terminate requirement transaction hdr and details
+   * PATCH /req-transaction-headers/toggle-status-terminate
+   */
+  @Patch("toggle-status-terminate")
+  @RequirePermissions({
+    module: ["STORE REQUIREMENTS 1", "STORE REQUIREMENTS 2"],
+    action: "CANCEL",
+  })
+  async toggleStatusTerminate(
+    @Body() updateDto: CreateWarehouseRequirementDueAndReqTransDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.reqTransactionHeadersService.toggleStatus(
+      updateDto.trans_header_id,
+      userId,
+      updateDto.status_id,
+      undefined,
+      updateDto.termination_reason,
+    );
+  }
 }

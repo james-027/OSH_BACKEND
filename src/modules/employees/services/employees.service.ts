@@ -61,8 +61,8 @@ export class EmployeesService {
       ? employees.filter((employee) =>
           (employee.employee_locations || []).some(
             (el) =>
-              // (el.status_id === 1 || el.status_id === 2) &&
-              el.status_id === 1 &&
+              (el.status_id === 1 || el.status_id === 2) &&
+              // el.status_id === 1 &&
               allowedLocationIds!.includes(el.location_id),
           ),
         )

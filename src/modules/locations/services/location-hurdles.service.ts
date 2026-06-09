@@ -24,6 +24,14 @@ import { ActionLogsService } from "src/modules/actions/services/action-logs.serv
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+// [CHANGE] Import custom constants to replace all hardcoded values
+import {
+  MODULE_IDS,
+  ACTION_IDS,
+  STATUS_IDS,
+  STATUS_NAMES,
+  TOGGLE_NAMES,
+} from "src/constants/customConstants";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
@@ -100,8 +108,11 @@ export class LocationHurdlesService {
       extension_categories:
         hurdle.locationHurdleCategories
           ?.filter(
+            // [CHANGE] Replaced hardcoded [3, 6, 7] with STATUS_IDS constants
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
+              cat.status_id === STATUS_IDS.PENDING ||
+              cat.status_id === STATUS_IDS.FOR_APPROVAL ||
+              cat.status_id === STATUS_IDS.APPROVED,
           )
           .map((cat) => ({
             id: cat.id,
@@ -150,8 +161,11 @@ export class LocationHurdlesService {
       extension_categories:
         hurdle.locationHurdleCategories
           ?.filter(
+            // [CHANGE] Replaced hardcoded [3, 6, 7] with STATUS_IDS constants
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
+              cat.status_id === STATUS_IDS.PENDING ||
+              cat.status_id === STATUS_IDS.FOR_APPROVAL ||
+              cat.status_id === STATUS_IDS.APPROVED,
           )
           .map((cat) => ({
             id: cat.id,
@@ -195,10 +209,10 @@ export class LocationHurdlesService {
 
       // Action log
       await this.ActionLogsService.logAction({
-        action_id: 1, // add
+        action_id: ACTION_IDS.ADD,
         ref_id: saved.id,
-        module_id: 31, // LOCATION HURDLES
-        description: `Created location hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${saved.status_id === 3 ? "Pending" : "For Approval"}`,
+        module_id: MODULE_IDS.LOCATION_HURDLES,
+        description: `Created location hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${STATUS_NAMES[saved.status_id] || "Unknown"}`,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
       });
@@ -211,7 +225,7 @@ export class LocationHurdlesService {
         method: "create",
         raw_data: JSON.stringify(createDto),
         description: `Created location hurdles for location_ids: [${location_ids}] and item_category_ids: [${item_category_ids}]`,
-        status_id: 1,
+        status_id: STATUS_IDS.ACTIVE,
       },
       userId,
     );
@@ -289,7 +303,7 @@ export class LocationHurdlesService {
           method: "update",
           raw_data: JSON.stringify(updateDto),
           description: `Updated location hurdle ID: ${id}`,
-          status_id: 1,
+          status_id: STATUS_IDS.ACTIVE,
         },
         userId,
       );
@@ -298,16 +312,16 @@ export class LocationHurdlesService {
         old_status_id !== status_id && status_id !== undefined;
       let description = `Updated warehouse hurdle with hurdle qty ${ss_hurdle_qty}`;
       if (status_change) {
-        const newStatusName = status_id === 3 ? "Pending" : "For Approval";
-        const oldStatusName = old_status_id === 3 ? "Pending" : "For Approval";
+        const newStatusName = STATUS_NAMES[status_id] || "Unknown";
+        const oldStatusName = STATUS_NAMES[old_status_id] || "Unknown";
         description = `Updated status from ${oldStatusName} to ${newStatusName} with hurdle qty ${ss_hurdle_qty}`;
       }
 
       // Action log
       await this.ActionLogsService.logAction({
-        action_id: 2, // edit
+        action_id: ACTION_IDS.EDIT,
         ref_id: saved.id,
-        module_id: 31, // LOCATION HURDLES
+        module_id: MODULE_IDS.LOCATION_HURDLES,
         description: description,
         raw_data: JSON.stringify(updateDto),
         created_by: userId,
@@ -351,10 +365,7 @@ export class LocationHurdlesService {
     }
     const newStatusId = status_id;
 
-    let newStatusName = "Pending";
-    if (status_id === 7) newStatusName = "Approved";
-    else if (status_id === 3) newStatusName = "Back to Pending";
-    else if (status_id === 6) newStatusName = "For Approval";
+    const newStatusName = TOGGLE_NAMES[status_id] || "Pending";
 
     await this.locationHurdlesRepository.update(id, {
       status_id: newStatusId,
@@ -374,7 +385,7 @@ export class LocationHurdlesService {
         method: "toggleStatus",
         raw_data: JSON.stringify({ id }),
         description: `Toggled status for location hurdle id: ${id} to ${newStatusName}`,
-        status_id: 1,
+        status_id: STATUS_IDS.ACTIVE,
       },
       userId,
     );
@@ -386,7 +397,7 @@ export class LocationHurdlesService {
     await this.ActionLogsService.logAction({
       action_id: action_id,
       ref_id: id,
-      module_id: 31,
+      module_id: MODULE_IDS.LOCATION_HURDLES,
       description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
@@ -421,10 +432,7 @@ export class LocationHurdlesService {
     const results = [];
 
     for (const hurdle of hurdles) {
-      let newStatusName = "Pending";
-      if (status_id === 7) newStatusName = "Approved";
-      else if (status_id === 3) newStatusName = "Back to Pending";
-      else if (status_id === 6) newStatusName = "For Approval";
+      const newStatusName = TOGGLE_NAMES[status_id] || "Pending";
 
       await this.locationHurdlesRepository.update(hurdle.id, {
         status_id,
@@ -446,7 +454,7 @@ export class LocationHurdlesService {
           method: "toggleBulkStatus",
           raw_data: JSON.stringify({ id: hurdle.id }),
           description: `Toggled status for location hurdle id: ${hurdle.id} to ${newStatusName}`,
-          status_id: 1,
+          status_id: STATUS_IDS.ACTIVE,
         },
         userId,
       );
@@ -457,7 +465,7 @@ export class LocationHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: action_id,
         ref_id: hurdle.id,
-        module_id: 31,
+        module_id: MODULE_IDS.LOCATION_HURDLES,
         description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({
           id: hurdle.id,
@@ -480,7 +488,7 @@ export class LocationHurdlesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = 31;
+    const module_id = MODULE_IDS.LOCATION_HURDLES;
     return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
@@ -596,7 +604,7 @@ export class LocationHurdlesService {
                 hurdle_date: formattedDate,
                 location_rate: record.location_rate || 0,
                 item_category_ids: [itemCategory.id],
-                status_id: 3,
+                status_id: STATUS_IDS.PENDING,
               },
               userId,
             );
@@ -676,7 +684,12 @@ export class LocationHurdlesService {
     role_id?: number;
   }): Promise<any[]> {
     try {
-      const statusIds = filters?.status_ids || [3, 6, 7]; // pending, for-approval, approved
+      // [CHANGE] Replaced hardcoded [3, 6, 7] with STATUS_IDS constants
+      const statusIds = filters?.status_ids || [
+        STATUS_IDS.PENDING,
+        STATUS_IDS.FOR_APPROVAL,
+        STATUS_IDS.APPROVED,
+      ];
       const allowedLocationIds = await this.getAllowedLocationIds(
         filters?.user_id,
         filters?.role_id,

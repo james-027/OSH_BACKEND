@@ -501,4 +501,54 @@ export class FileUploadHandler {
       return false;
     }
   }
+
+  /**
+   * Generate a Type 2 (Rental) filename following the convention:
+   * {warehouse_ifs}-{requirement_abbr}-{start_date}_{end_date}({originalName_truncated}).{ext}
+   *
+   * If original filename exceeds 50 characters, trimmed to 50 chars with "...".
+   */
+  static generateType2Filename(
+    warehouseIfs: string,
+    requirementAbbr: string,
+    startDate: string,
+    endDate: string,
+    originalFilename: string,
+  ): string {
+    const ext = path.extname(originalFilename);
+    const nameWithoutExt = path.basename(originalFilename, ext);
+
+    const MAX_ORIGINAL_LENGTH = 50;
+    let truncatedOriginal = nameWithoutExt;
+    if (truncatedOriginal.length > MAX_ORIGINAL_LENGTH) {
+      truncatedOriginal =
+        truncatedOriginal.substring(0, MAX_ORIGINAL_LENGTH) + "...";
+    }
+
+    return `${warehouseIfs}-${requirementAbbr}-${startDate}_${endDate}(${truncatedOriginal})${ext}`;
+  }
+
+  /**
+   * Generate a Type 1 (Recurring) filename following the convention:
+   * {warehouse_ifs}-{requirement_abbr}({originalName_truncated}).{ext}
+   *
+   * If original filename exceeds 50 characters, trimmed to 50 chars with "...".
+   */
+  static generateType1Filename(
+    warehouseIfs: string,
+    requirementAbbr: string,
+    originalFilename: string,
+  ): string {
+    const ext = path.extname(originalFilename);
+    const nameWithoutExt = path.basename(originalFilename, ext);
+
+    const MAX_ORIGINAL_LENGTH = 50;
+    let truncatedOriginal = nameWithoutExt;
+    if (truncatedOriginal.length > MAX_ORIGINAL_LENGTH) {
+      truncatedOriginal =
+        truncatedOriginal.substring(0, MAX_ORIGINAL_LENGTH) + "...";
+    }
+
+    return `${warehouseIfs}-${requirementAbbr}(${truncatedOriginal})${ext}`;
+  }
 }
