@@ -18,7 +18,7 @@ export class ApprovalMatrix {
   id: number;
 
   @Column({ unique: true })
-  userid: string;
+  userid: number;
 
   @Column({ default: 1 })
   status_id: number;

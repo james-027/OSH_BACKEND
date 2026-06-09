@@ -10,6 +10,7 @@ import {
   Request,
   UseGuards,
   ParseIntPipe,
+  Patch,
 } from "@nestjs/common";
 
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
@@ -98,14 +99,24 @@ export class ApprovalMatrixController {
     );
   }
 
-  @Delete(":id")
+  @Patch(":id/toggle-status-activate")
   @RequirePermissions({
     module: "APPROVAL MATRIX",
-    action: "DELETE",
+    action: "ACTIVATE",
   })
-  async delete(@Param("id", ParseIntPipe) id: number, @Request() req) {
-    const userId = req.user.id;
+  @Patch(":id/toggle-status-activate")
+  async toggleStatusActivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    return this.approvalMatrixService.toggleStatus(id, req.user.id);
+  }
 
-    return this.approvalMatrixService.delete(id, userId);
+  @Patch(":id/toggle-status-deactivate")
+  async toggleStatusDeactivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    return this.approvalMatrixService.toggleStatus(id, req.user.id);
   }
 }

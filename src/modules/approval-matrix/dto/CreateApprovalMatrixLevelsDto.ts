@@ -5,8 +5,9 @@ export class CreateApprovalMatrixLevelsDto {
   @IsNumber()
   id?: number;
 
-  @IsString()
-  userid: string;
+  @Type(() => Number)
+  @IsNumber()
+  userid: number;
 
   @Type(() => Number)
   @IsNumber()

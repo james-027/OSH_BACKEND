@@ -18,8 +18,9 @@ export class CreateApprovalMatrixDetailsDto {
   @IsString()
   approval_title: string;
 
-  @IsString()
-  userid: string;
+  @Type(() => Number)
+  @IsNumber()
+  userid: number;
 
   @IsOptional()
   @IsString()

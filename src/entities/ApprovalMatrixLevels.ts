@@ -41,7 +41,7 @@ export class ApprovalMatrixLevels {
   status_id: number;
 
   @Column()
-  userid: string;
+  userid: number;
 
   @Column()
   level: number;
@@ -63,6 +63,14 @@ export class ApprovalMatrixLevels {
   @ManyToOne(() => User)
   @JoinColumn({ name: "userid" })
   userMaker: User;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: "approval_id" })
+  approver: User;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: "opt_approval_id" })
+  optionalApprover: User;
 
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })

@@ -15,8 +15,9 @@ export class UpdateApprovalMatrixDto {
   @IsNumber()
   status_id?: number;
 
-  @IsString()
-  userid: string;
+  @Type(() => Number)
+  @IsNumber()
+  userid: number;
 
   @IsNumber()
   isdeleted: number; // flag to indicate if the header is marked for deletion

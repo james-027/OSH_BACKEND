@@ -27,7 +27,7 @@ export class ApprovalMatrixDetails {
   approval_title: string;
 
   @Column()
-  userid: string;
+  userid: number;
 
   @Column({ nullable: true })
   module: string;
@@ -61,7 +61,10 @@ export class ApprovalMatrixDetails {
   status: Status;
 
   @ManyToOne(() => Module)
-  @JoinColumn({ name: "module" })
+  @JoinColumn({
+    name: "module",
+    referencedColumnName: "module_alias",
+  })
   moduleData: Module;
 
   @ManyToOne(() => ApprovalMatrix, (header) => header.lines)

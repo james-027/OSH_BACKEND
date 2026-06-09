@@ -15,8 +15,9 @@ export class CreateApprovalMatrixDto {
   @IsNumber()
   id?: number;
 
-  @IsString()
-  userid: string;
+  @Type(() => Number)
+  @IsNumber()
+  userid: number;
 
   @IsArray()
   @ArrayMinSize(1)

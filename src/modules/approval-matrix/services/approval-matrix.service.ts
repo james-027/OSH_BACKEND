@@ -218,9 +218,54 @@ export class ApprovalMatrixService {
 
     await this.approvalMatrixRepository.save(header);
 
-    // Add your detail / level update logic here
-    // Follow same pattern as DebitAdviceService
+    const existingDetails = await this.approvalMatrixDetailsRepository.find({
+      where: { header_id: id },
+    });
 
+    for (const detail of existingDetails) {
+      await this.approvalMatrixLevelsRepository.delete({
+        line_id: detail.id,
+      });
+    }
+
+    await this.approvalMatrixDetailsRepository.delete({
+      header_id: id,
+    });
+
+    for (const detailDto of dto.lines) {
+      const detail = await this.approvalMatrixDetailsRepository.save(
+        this.approvalMatrixDetailsRepository.create({
+          header,
+          approval_title: detailDto.approval_title,
+          userid: detailDto.userid,
+          module: detailDto.module,
+          status_id: detailDto.status_id ?? 1,
+          updatedBy: { id: userId } as any,
+        }),
+      );
+
+      for (const [index, levelDto] of detailDto.approvalmatrixLevel.entries()) {
+        await this.approvalMatrixLevelsRepository.save(
+          this.approvalMatrixLevelsRepository.create({
+            line_id: detail.id,
+            level: index + 1,
+
+            approval_id: Number(levelDto.approval_id),
+
+            opt_approval_id: levelDto.opt_approval_id
+              ? Number(levelDto.opt_approval_id)
+              : null,
+
+            approval_title: levelDto.approval_title,
+            module: levelDto.module,
+            userid: levelDto.userid,
+            status_id: levelDto.status_id ?? 1,
+
+            updatedBy: { id: userId } as any,
+          }),
+        );
+      }
+    }
     try {
       this.sseEventEmitter.emitUpdate("approval-matrix", id);
     } catch (err) {
@@ -243,39 +288,76 @@ export class ApprovalMatrixService {
     return result;
   }
 
-  async delete(id: number, userId: number) {
-    const header = await this.approvalMatrixRepository.findOne({
+  async toggleStatus(id: number, userId: number) {
+    const approvalMatrix = await this.approvalMatrixRepository.findOne({
       where: { id },
+      relations: ["status"],
     });
 
-    if (!header) {
-      throw new NotFoundException(`Approval Matrix ${id} not found`);
+    if (!approvalMatrix) {
+      throw new NotFoundException("Approval Matrix not found.");
     }
 
-    // Save copy before delete
-    const rawData = JSON.stringify(header);
+    const newStatusId = approvalMatrix.status_id === 1 ? 14 : 1;
 
-    await this.approvalMatrixDetailsRepository.delete({
-      header_id: id,
-    });
+    approvalMatrix.status_id = newStatusId;
 
-    await this.approvalMatrixRepository.delete(id);
+    const updatedApprovalMatrix =
+      await this.approvalMatrixRepository.save(approvalMatrix);
 
-    // Audit Trail
+    // Soft delete / restore all details
+    await this.approvalMatrixDetailsRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        status_id: newStatusId,
+        updated_by: userId,
+      })
+      .where("header_id = :id", { id })
+      .execute();
+
+    // Soft delete / restore all levels
+    await this.approvalMatrixLevelsRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        status_id: newStatusId,
+        updated_by: userId,
+      })
+      .where(
+        `line_id IN (
+        SELECT id
+        FROM approval_matrix_details
+        WHERE header_id = :id
+      )`,
+        { id },
+      )
+      .execute();
+
+    const result = await this.findOne(id);
+
     await this.userAuditTrailCreateService.create(
       {
         service: "APPROVAL_MATRIX",
-        method: "DELETE",
-        raw_data: rawData,
-        description: `Deleted Approval Matrix for ${header.userid}`,
-        status_id: header.status_id,
+
+        method: "TOGGLE_STATUS",
+
+        raw_data: JSON.stringify(result),
+
+        description: `Toggled Approval Matrix for ${result.userid}`,
+
+        status_id: result.status_id,
       },
       userId,
     );
 
+    this.sseEventEmitter.emitUpdate("approval-matrix", id);
+
     return {
-      success: true,
-      message: "Approval Matrix deleted successfully",
+      message: `Approval Matrix successfully toggled ${
+        newStatusId === 1 ? "to active" : "to deleted"
+      }.`,
+      approvalMatrix: result,
     };
   }
 
@@ -291,6 +373,7 @@ export class ApprovalMatrixService {
       query
         .leftJoinAndSelect("am.status", "status")
         .leftJoinAndSelect("am.createdBy", "createdBy")
+        .leftJoinAndSelect("am.userMaker", "userMaker")
         .leftJoinAndSelect("am.lines", "lines")
         .leftJoinAndSelect("lines.moduleData", "moduleData");
 
@@ -323,6 +406,10 @@ export class ApprovalMatrixService {
         items: items.map((item) => ({
           id: item.id,
           userid: item.userid,
+
+          user_name: item.userMaker
+            ? `${item.userMaker.first_name} ${item.userMaker.last_name}`
+            : null,
           status_id: item.status_id,
           status_name: item.status?.status_name || null,
 
