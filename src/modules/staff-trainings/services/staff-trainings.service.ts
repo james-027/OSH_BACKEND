@@ -164,7 +164,7 @@ if (
     }
 
     const generatedStaffCode =
-      prefix + String(nextSeries).padStart(4, "0");
+      prefix +"-"+ String(nextSeries).padStart(6, "0");
 
     await this.staffRepository.update(staff.id, {
       staff_code: generatedStaffCode,
