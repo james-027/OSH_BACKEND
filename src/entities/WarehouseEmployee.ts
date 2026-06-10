@@ -79,7 +79,7 @@ export class WarehouseEmployee {
   @Column({ nullable: true })
   updated_by: number;
 
-  @Column({ type: "date" })
+  @Column({ type: "date",nullable: true })
   assignment_date: string;
 
   @ManyToOne(() => Warehouse)
