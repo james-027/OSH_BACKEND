@@ -17,6 +17,9 @@ import { Module as AppModule } from "src/entities/Module";
 import { UsersModule } from "../users/users.module";
 
 import { SSEModule } from "../sse/sse.module";
+import { ApprovalMatrix } from "src/entities/ApprovalMatrix";
+import { ApprovalMatrixDetails } from "src/entities/ApprovalMatrixDetails";
+import { ApprovalMatrixLevels } from "src/entities/ApprovalMatrixLevels";
 
 @Module({
   imports: [
@@ -25,6 +28,9 @@ import { SSEModule } from "../sse/sse.module";
       UserPermissions,
       AppModule,
       Action,
+      ApprovalMatrix,
+      ApprovalMatrixDetails,
+      ApprovalMatrixLevels,
     ]),
 
     UsersModule,

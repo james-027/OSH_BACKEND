@@ -15,7 +15,6 @@ import { ApprovalMatrixLevels } from "./ApprovalMatrixLevels";
 import { Module } from "./Module";
 import { Status } from "./Status";
 @Entity({ name: "approval_matrix_details" })
-@Unique(["approval_title"])
 export class ApprovalMatrixDetails {
   @PrimaryGeneratedColumn()
   id: number;

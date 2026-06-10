@@ -131,7 +131,19 @@ export class ApprovalMatrixService {
             `Duplicate approver found for "${detailDto.approval_title}"`,
           );
         }
+        const existingTitle =
+          await this.approvalMatrixDetailsRepository.findOne({
+            where: {
+              userid: detailDto.userid,
+              approval_title: detailDto.approval_title,
+            },
+          });
 
+        if (existingTitle && existingTitle.status_id !== 14) {
+          throw new BadRequestException(
+            `Approval Title "${detailDto.approval_title}" already exists for this user.`,
+          );
+        }
         const detail = await this.approvalMatrixDetailsRepository.save(
           this.approvalMatrixDetailsRepository.create({
             header: savedHeader,
