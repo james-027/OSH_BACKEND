@@ -17,6 +17,7 @@ import { Module as AppModule } from "../../entities/Module";
 import { ActionLog } from "../../entities/ActionLog";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { ActionLogsService } from "../actions/services/action-logs.service";
+import logger from "src/config/logger";
 
 @Module({
   imports: [
@@ -43,6 +44,6 @@ import { ActionLogsService } from "../actions/services/action-logs.service";
 })
 export class ApprovalMatrixModule {
   constructor() {
-    console.log("✅ ApprovalMatrixModule initialized");
+    logger.info("✅ ApprovalMatrixModule initialized");
   }
 }
