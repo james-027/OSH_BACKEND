@@ -10,7 +10,10 @@ import { UserAuditTrailCreateService } from "../../users/services/user-audit-tra
 
 import { Staff } from "src/entities/Staff";
 import { Location } from "src/entities/Location";
-import { CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
+import {
+  CheckStaffDto,
+  CreateStaffDto,
+} from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
 import { parseExcelDate } from "src/utils/date.utils";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
@@ -54,11 +57,15 @@ export class StaffsService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
+  async findAll(accessKeyId?: number, statusId?: number): Promise<any[]> {
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
+      }
+
+      if (statusId) {
+        where.status_id = statusId;
       }
 
       const staffs = await this.staffsRepository.find({
@@ -82,7 +89,6 @@ export class StaffsService {
       });
 
       return this.responseMapperService.mapEntitiesToResponse(staffs);
-      
     } catch (error) {
       console.error("Error fetching staffs:", error);
       throw new Error("Failed to fetch staffs");
@@ -202,7 +208,7 @@ export class StaffsService {
         contact_number: createStaffDto.contact_number || null,
         overall_remarks: createStaffDto.overall_remarks || null,
         store_request: createStaffDto.store_request || null,
-        status_id: createStaffDto.status_id || 1,
+        status_id: 20,
         created_by: userId,
         updated_by: userId,
       });
@@ -213,7 +219,7 @@ export class StaffsService {
         staff_id: savedStaff.id,
         brand_id: createStaffDto.brand_id,
         access_key_id: accessKeyId,
-        status_id: createStaffDto.status_id || 1,
+        status_id: 1,
         created_by: userId,
         updated_by: userId,
       });
@@ -222,7 +228,7 @@ export class StaffsService {
         staff_id: savedStaff.id,
         category_type_id: createStaffDto.category_type_id,
         access_key_id: accessKeyId,
-        status_id: createStaffDto.status_id || 1,
+        status_id: 1,
         created_by: userId,
         updated_by: userId,
       });
@@ -234,7 +240,7 @@ export class StaffsService {
         access_key_id: accessKeyId,
         allowance: createStaffDto.allowance,
         salary_rate: createStaffDto.salary_rate,
-        status_id: createStaffDto.status_id || 1,
+        status_id: 1,
         created_by: userId,
         updated_by: userId,
       });
@@ -326,7 +332,7 @@ export class StaffsService {
     }
   }
 
-  async update( 
+  async update(
     id: number,
     updateStaffDto: UpdateStaffDto,
     userId: number,
@@ -384,6 +390,7 @@ export class StaffsService {
       };
 
       const updateData: any = { ...updateStaffDto };
+      delete updateData.status_id;
 
       updateData.hired_date = safeDate(updateData.hired_date);
       updateData.to_hr_date = safeDate(updateData.to_hr_date);
@@ -527,8 +534,16 @@ export class StaffsService {
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
         this.sseEventEmitter.emitUpdate("staff_brands", response.id, response);
-        this.sseEventEmitter.emitUpdate("staff_category_types", response.id, response);
-        this.sseEventEmitter.emitUpdate("staff_vendor_salaries", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_category_types",
+          response.id,
+          response,
+        );
+        this.sseEventEmitter.emitUpdate(
+          "staff_vendor_salaries",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -934,7 +949,7 @@ export class StaffsService {
               row["Actual Deployment Date"],
             ),
             overall_remarks: row["Overall Remarks"],
-            status_id: 1,
+            status_id: 20,
             created_by: userId,
             updated_by: userId,
           });
@@ -1071,6 +1086,30 @@ export class StaffsService {
 
       success,
       errors,
+    };
+  }
+
+  async checkExistingStaff(dto: CheckStaffDto) {
+    const firstName = dto.first_name.toUpperCase().trim();
+    const lastName = dto.last_name.trim();
+    const middleName = (dto.middle_name || "").toUpperCase().trim();
+
+    const whereCondition: any = {
+      first_name: firstName,
+      last_name: lastName,
+    };
+
+    if (middleName) {
+      whereCondition.middle_name = middleName;
+    }
+
+    const existingRecord = await this.staffsRepository.findOne({
+      where: whereCondition,
+    });
+
+    return {
+      exists: !!existingRecord,
+      staff: existingRecord,
     };
   }
 }

@@ -35,8 +35,8 @@ export class TransactionSequence {
   @Column({ type: "int" })
   location_id: number;
   /**
-   * Location ID - used as part of sequence scope
-   * Allows each location to have independent sequences
+   * Vendor ID - used as part of sequence scope
+   * Allows each vendor to have independent sequences
    */
   @Column({ type: "int",nullable: true })
   vendor_id: number;

@@ -24,13 +24,15 @@ export class StaffTrainingsController {
     private readonly staffTrainingsService: StaffTrainingService,
   ) {}
 
-  @Get()
-  @RequirePermissions({ module: "STAFFS", action: "VIEW" })
-  async findAll(@Request() req) {
-    const accessKeyId = req.user.current_access_key;
+@Get()
+@RequirePermissions({ module: "STAFFS", action: "VIEW" })
+async findAll(
+  @Request() req,
+) {
+  const accessKeyId = req.user.current_access_key;
 
-    return this.staffTrainingsService.findAll(accessKeyId);
-  }
+  return this.staffTrainingsService.findAll(accessKeyId);
+}
 
   @Get(":id")
   @RequirePermissions({ module: "STAFFS", action: "VIEW" })
@@ -45,9 +47,11 @@ export class StaffTrainingsController {
     @Request() req,
   ) {
     const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
     return this.staffTrainingsService.create(
       createStaffTrainingDto,
       userId,
+      accessKeyId
     );
   }
 

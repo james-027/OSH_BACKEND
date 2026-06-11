@@ -119,3 +119,15 @@ export class CreateStaffDto {
   @IsInt()
   status_id?: number;
 }
+
+export class CheckStaffDto {
+  @IsString()
+  first_name: string;
+
+  @IsOptional()
+  @IsString()
+  middle_name?: string;
+
+  @IsString()
+  last_name: string;
+}
