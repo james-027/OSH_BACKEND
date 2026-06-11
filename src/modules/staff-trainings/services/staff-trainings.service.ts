@@ -16,7 +16,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import logger from "../../../config/logger";
 import { Staff } from "src/entities/Staff";
 import { Training } from "src/entities/Training";
-
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 @Injectable()
 export class StaffTrainingService {
   constructor(
@@ -28,39 +28,42 @@ export class StaffTrainingService {
     private staffRepository: Repository<Staff>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
+     private commonUtilitiesService: CommonUtilitiesService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
-    try {
-      const where: any = {};
-      if (accessKeyId !== undefined) {
-        where.access_key_id = accessKeyId;
-      }
-      const staffTrainings = await this.staffTrainingsRepository.find(
-        {
-          where,
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-            "location",
-            "accessKey",
-          ],
-        },
-      );
+async findAll(accessKeyId?: number, statusId?: number): Promise<any[]> {
+  try {
+    const where: any = {};
 
-      return this.responseMapperService.mapEntitiesToResponse(
-        staffTrainings,
-      );
-    } catch (error) {
-      console.error("Error fetching staff trainings:", error);
-      throw new Error("Failed to fetch staff trainings");
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
     }
+
+    if (statusId !== undefined) {
+      where.status_id = statusId;
+    }
+
+    const staffTrainings = await this.staffTrainingsRepository.find({
+      where,
+      relations: [
+        "status",
+        "createdBy",
+        "updatedBy",
+        "staff",
+        "vendor",
+        "location",
+        "accessKey",
+      ],
+    });
+
+    return this.responseMapperService.mapEntitiesToResponse(staffTrainings);
+  } catch (error) {
+    console.error("Error fetching staff trainings:", error);
+    throw new Error("Failed to fetch staff trainings");
   }
+}
 
   async findOne(id: number): Promise<any> {
     try {
@@ -94,140 +97,169 @@ export class StaffTrainingService {
     }
   }
 
-  async create(
-    createStaffTrainingDto: CreateStaffTrainingDto,
-    userId: number,
-  ): Promise<any> {
-    try {
-      const createdByUser = await this.usersService.findUserById(userId);
-      if (!createdByUser) {
-        throw new BadRequestException("Authenticated user not found");
-      }
+async create(
+  createStaffTrainingDto: CreateStaffTrainingDto,
+  userId: number,
+  accessKeyId?: number,
+): Promise<any> {
+  try {
+    const createdByUser = await this.usersService.findUserById(userId);
+    if (!createdByUser) {
+      throw new BadRequestException("Authenticated user not found");
+    }
+
+    const savedTrainings = [];
+
+    let staffCodeGenerated = false;
+    let statusId: number;
+    let trans_number = "";
+
+    const staff = await this.staffRepository.findOne({
+      where: { id: createStaffTrainingDto.staff_id },
+      relations: ["vendor", "location"],
+    });
 
 
+
+    for (const item of createStaffTrainingDto.trainings) {
       const newStaffTraining = this.staffTrainingsRepository.create({
         staff_id: createStaffTrainingDto.staff_id,
-        training_id: createStaffTrainingDto.training_id,
-        employee_id: createStaffTrainingDto.employee_id,
-        sub_status_id: createStaffTrainingDto.sub_status_id,
-        warehouse_id: createStaffTrainingDto.warehouse_id,
-        training_start_date: createStaffTrainingDto.training_start_date,
-        training_end_date: createStaffTrainingDto.training_end_date,
-        ratings: createStaffTrainingDto.ratings,
-        remarks: createStaffTrainingDto.remarks,
+        training_id: item.training_id,
+        employee_id: item.employee_id,
+        sub_status_id: item.sub_status_id,
+        warehouse_id: item.warehouse_id || null,
+        training_start_date: item.training_start_date,
+        training_end_date: item.training_end_date,
+        ratings: item.ratings,
+        remarks: item.remarks,
         status_id: createStaffTrainingDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
       });
 
-      const savedStaffTraining =
-        await this.staffTrainingsRepository.save(newStaffTraining);
-
-const training = await this.trainingsRepository.findOne({
-  where: { id: createStaffTrainingDto.training_id },
-});
-
-if (
-  training &&
-  createStaffTrainingDto.ratings >= training.passing_rate
-) {
-  const staff = await this.staffRepository.findOne({
-    where: { id: createStaffTrainingDto.staff_id },
-    relations: ["vendor", "location"],
-  });
-
-  if (staff) {
-    const serviceProviderCode =
-      staff.vendor?.service_provider_code ?? "";
-
-    const locationCode =
-      staff.location?.location_abbr ?? ""; // adjust field name
-
-    const prefix = `${serviceProviderCode}${locationCode}`;
-
-    const latestStaff = await this.staffRepository
-      .createQueryBuilder("staff")
-      .where("staff.staff_code LIKE :prefix", {
-        prefix: `${prefix}%`,
-      })
-      .orderBy("staff.staff_code", "DESC")
-      .getOne();
-
-    let nextSeries = 1;
-
-    if (latestStaff?.staff_code) {
-      const seriesPart = latestStaff.staff_code.substring(
-        prefix.length,
-      );
-
-      nextSeries = parseInt(seriesPart, 10) + 1;
-    }
-
-    const generatedStaffCode =
-      prefix +"-"+ String(nextSeries).padStart(6, "0");
-
-    await this.staffRepository.update(staff.id, {
-      staff_code: generatedStaffCode,
-    });
-  }
-}
-
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "StaffTrainingsService",
-          method: "create",
-          raw_data: JSON.stringify(savedStaffTraining),
-          description: `Created staff training ${savedStaffTraining.id}`,
-          status_id: 1,
-        },
-        userId,
-      );
-
-      const staffTrainingWithRelations =
-        await this.staffTrainingsRepository.findOne({
-          where: { id: savedStaffTraining.id },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "warehouse",
-            "employee",
-          ],
-        });
-
-
-      if (!staffTrainingWithRelations) {
-        throw new Error("Failed to retrieve created staff training");
+      if (item.sub_status_id === 19) {
+        statusId = 1; // Active / Passed
+      } else {
+        statusId = item.sub_status_id;
       }
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        staffTrainingWithRelations,
-      );
+      const saved = await this.staffTrainingsRepository.save(newStaffTraining);
+      savedTrainings.push(saved);
+      await this.staffRepository.update(staff.id, {
+  status_id: statusId,
+});
+      const training = await this.trainingsRepository.findOne({
+        where: { id: item.training_id },
+      });
 
-      // SSE Events
+      if (
+        training &&
+        item.ratings >= training.passing_rate &&
+        staff &&
+        !staffCodeGenerated
+      ) {
+        const serviceProviderCode =
+          staff.vendor?.service_provider_code ?? "";
+
+        const locationCode =
+          staff.location?.location_abbr ?? "";
+
+        const prefix = `${serviceProviderCode}${locationCode}`;
+
+        const latestStaff = await this.staffRepository
+          .createQueryBuilder("staff")
+          .where("staff.staff_code LIKE :prefix", {
+            prefix: `${prefix}%`,
+          })
+          .orderBy("staff.staff_code", "DESC")
+          .getOne();
+
+        let nextSeries = 1;
+
+        if (latestStaff?.staff_code) {
+          const seriesPart = latestStaff.staff_code.substring(
+            prefix.length,
+          );
+
+          nextSeries = parseInt(seriesPart, 10) + 1;
+        }
+
+        trans_number =
+        await this.commonUtilitiesService.generateTransactionNumber({
+          transaction_type: "STAFF TRAINING",
+          vendor_id: staff.vendor_id,
+          location_id: staff.location_id,
+          access_key_id: accessKeyId,
+          format: "D{abbr}{key}{year}-{seq:6}",
+          reset_per_year: true,
+          currentDate: new Date(),
+          abbr: staff.vendor?.service_provider_code ?? "",
+        });
+
+        const series = trans_number.match(/\d+$/)?.[0];
+
+        const generatedStaffCode =
+          prefix + "-" + series;
+        
+        await this.staffRepository.update(staff.id, {
+          staff_code: generatedStaffCode,
+        });
+
+        staffCodeGenerated = true;
+      }
+
       try {
         this.sseEventEmitter.emitCreate(
           "staffs",
-          response.id,
-          response,
+          saved.id,
+          saved,
         );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
-
-      return response;
-    } catch (error) {
-
-      return error;
-
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new Error("Failed to create staff training");
     }
+
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "StaffTrainingsService",
+        method: "create",
+        raw_data: JSON.stringify(savedTrainings),
+        description: `Created ${savedTrainings.length} staff trainings`,
+        status_id: 1,
+      },
+      userId,
+    );
+
+    const response = savedTrainings[0];
+
+    const staffTrainingWithRelations =
+      await this.staffTrainingsRepository.findOne({
+        where: { id: response.id },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "staff",
+          "warehouse",
+          "employee",
+        ],
+      });
+
+    if (!staffTrainingWithRelations) {
+      throw new Error("Failed to retrieve created staff training");
+    }
+
+    return this.responseMapperService.mapEntityToResponse(
+      staffTrainingWithRelations,
+    );
+  } catch (error) {
+    return error;
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
+    throw new Error("Failed to create staff training");
   }
+}
 
   async update(
     id: number,
