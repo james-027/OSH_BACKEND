@@ -11,13 +11,28 @@ import { UpdateSalesTransactionDto } from "../dto/UpdateSalesTransactionDto";
 import { Status } from "../../../entities/Status";
 import { AccessKey } from "../../../entities/AccessKey";
 import { UserLocationsService } from "../../users/services/user-locations.service";
-import { access } from "fs";
+// import { access } from "fs";
+import {
+  ExcelValidationConfig,
+  validateAndFormatExcelRow,
+} from "src/utils/excel-validation";
+import { Item } from "src/entities/Item";
+import { Location } from "../../../entities/Location";
+import logger from "src/config/logger";
+import { DwhLog } from "src/entities/dwhLog";
+import { getMonthNumber, parseToFirstDayOfMonth } from "src/utils/date.utils";
 
 @Injectable()
 export class SalesTransactionsService {
   constructor(
     @InjectRepository(SalesTransaction)
     private salesTransactionsRepository: Repository<SalesTransaction>,
+    @InjectRepository(DwhLog)
+    private dwhLogRepository: Repository<DwhLog>,
+    @InjectRepository(Location)
+    private locationsRepository: Repository<Location>,
+    @InjectRepository(Item)
+    private itemRepository: Repository<Item>,
     private userLocationsService: UserLocationsService,
   ) {}
 
@@ -235,5 +250,361 @@ export class SalesTransactionsService {
       total_sales_qty: Number(row.total_sales_qty),
       total_base_sales_qty: Number(row.total_base_sales_qty),
     }));
+  }
+
+  /**
+   * Process uploaded Excel file with sales transactions
+   *
+   * FLOW:
+   * 1. Read Excel file using XLSX
+   * 2. For each row:
+   *    a. Validate using validateAndFormatExcelRow()
+   *    b. Lookup location by BUSINESS CENTER name → get bc_code
+   *    c. Lookup items by ITEMCODE → get cat01, cat02, salesconv, salesuniteq, itemgroup, uom
+   *    d. Build row for insertion
+   * 3. Batch processing (1000 rows at a time):
+   *    a. Mark existing records as status_id=2 (inactive - same as DWH logic)
+   *    b. Insert new records in transaction
+   * 4. Create DWH log entry with summary
+   *
+   * @param filePath - Path to uploaded Excel file
+   * @param userId - User ID who uploaded
+   * @param accessKeyId - Current access key of user
+   * @returns { success: number, failed: number }
+   */
+  async processUploadedSalesTransactions(
+    filePath: string,
+    userId: number,
+    accessKeyId: number,
+  ): Promise<{ success: number; failed: number }> {
+    const XLSX = require("xlsx");
+    const fs = require("fs");
+
+    let success = 0;
+    let failed = 0;
+    let logMessage = "";
+    let logError = null;
+    const errors: { row: number; error: string }[] = [];
+    const unmatchedLocations = new Map<string, number>(); // Track unmatched locations
+    const unmatchedItems = new Map<string, number>(); // Track unmatched items
+    const toInsert: any[] = [];
+
+    try {
+      // Step 1: Read Excel file
+      const workbook = XLSX.read(fs.readFileSync(filePath), {
+        type: "buffer",
+      });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+      logMessage = `Processing Excel file with ${rows.length} rows`;
+
+      if (rows.length === 0) {
+        throw new Error("Excel file is empty");
+      }
+
+      // Step 2: Define validation configuration for sales transactions
+      // These columns are from the Excel template provided
+      const excelValidationConfig: ExcelValidationConfig = {
+        requiredFields: {
+          "SALES MONTH": { format: "trim" }, // e.g., "10/1/2025"
+          "BUSINESS CENTER": { format: "uppercase-trim" }, // e.g., "SOUTHERN TAGALOG"
+          U_DIVISION: { format: "uppercase-trim" },
+          CODE: { format: "uppercase-trim" }, // Warehouse code
+          STORE: { format: "uppercase-trim" }, // Store name
+          U_DCHANNEL: { format: "uppercase-trim" }, // Distribution channel
+          ITEMCODE: { format: "uppercase-trim" }, // Item code to lookup
+          ITEM: { format: "uppercase-trim" }, // Item description
+          VATCODE: { format: "uppercase-trim" },
+          GROSSSALES: { format: "none" },
+          NETSALES: { format: "none" },
+          QUANTITY: { format: "none" },
+          "LINE TOTAL": { format: "none" },
+          UNITPRICE: { format: "none" },
+          VATAMOUNT: { format: "none" },
+          LINECOST: { format: "none" },
+          ITEMCOST: { format: "none" },
+          DISCAMOUNT: { format: "none" },
+          VATRATE: { format: "none" },
+        },
+        optionalFields: {},
+      };
+
+      // Step 3: Pre-load lookups for O(1) access (optimization for large files)
+      // Fetch all active locations: location_name (uppercase) → { id, code }
+      const allLocations = await this.locationsRepository.find({
+        where: { status_id: 1 },
+        select: ["id", "location_code", "location_name"],
+      });
+      const locationMap = new Map<string, { id: number; code: string }>();
+      allLocations.forEach((loc) => {
+        locationMap.set(loc.location_name.toUpperCase(), {
+          id: loc.id,
+          code: loc.location_code,
+        });
+      });
+
+      // Fetch all active warehouses: whs_code (uppercase) → { id }
+      // Adjust select/relations based on actual Warehouse entity
+      const allWarehouses = await this.salesTransactionsRepository.manager
+        .getRepository("Warehouse") // Adjust entity name if different
+        .find({
+          where: { status_id: 1 },
+          select: ["id", "warehouse_ifs"], // warehouse_ifs is the code column
+        });
+      const warehouseMap = new Map<string, number>();
+      allWarehouses.forEach((whs) => {
+        warehouseMap.set(whs.warehouse_ifs.toUpperCase(), whs.id);
+      });
+
+      // Fetch all items: ITEMCODE (uppercase) → { id, cat01, cat02, salesconv, salesuniteq, itemgroup, uom }
+      const allItems = await this.itemRepository.find({
+        where: { status_id: 1 },
+        select: [
+          "id", // ✅ ADD id for item_id
+          "item_code",
+          "sales_conv",
+          "sales_unit_eq",
+          "item_group",
+          "uom",
+        ],
+        relations: ["category1", "category2"],
+      });
+      const itemMap = new Map<
+        string,
+        {
+          id: number;
+          cat01: string;
+          cat02: string;
+          salesconv: number;
+          salesuniteq: number;
+          itemgroup: string;
+          uom: string;
+        }
+      >();
+      allItems.forEach((item) => {
+        itemMap.set(item.item_code.toUpperCase(), {
+          id: item.id,
+          cat01: item.category1?.name || null,
+          cat02: item.category2?.name || null,
+          salesconv: item.sales_conv,
+          salesuniteq: item.sales_unit_eq,
+          itemgroup: item.item_group,
+          uom: item.uom,
+        });
+      });
+
+      // Step 4: Process rows and build batch for insertion
+      const batchSize = 1000;
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 2; // Excel row number (header is row 1)
+
+        try {
+          // Step 4a: Validate and format row data
+          const formattedRow = validateAndFormatExcelRow(
+            row,
+            excelValidationConfig,
+          );
+
+          // Step 4b: Lookup location by BUSINESS CENTER
+          const bcUpperCase = String(
+            formattedRow["BUSINESS CENTER"],
+          ).toUpperCase();
+          if (!locationMap.has(bcUpperCase)) {
+            // Location not found - track and skip this row
+            unmatchedLocations.set(
+              bcUpperCase,
+              (unmatchedLocations.get(bcUpperCase) || 0) + 1,
+            );
+            errors.push({
+              row: rowNum,
+              error: `Location not found: ${bcUpperCase}`,
+            });
+            continue;
+          }
+          const locationInfo = locationMap.get(bcUpperCase);
+          const bcCode = locationInfo.code; // ✅ Extract code
+          const locationId = locationInfo.id; // ✅ Extract id
+
+          // ✅ NEW: Lookup warehouse by CODE
+          const whsCodeUpperCase = String(formattedRow["CODE"]).toUpperCase();
+          if (!warehouseMap.has(whsCodeUpperCase)) {
+            // Warehouse not found - track and skip this row
+            errors.push({
+              row: rowNum,
+              error: `Warehouse not found: ${whsCodeUpperCase}`,
+            });
+            continue;
+          }
+          const warehouseId = warehouseMap.get(whsCodeUpperCase); // ✅ Extract warehouse_id
+
+          // Step 4c: Lookup items by ITEMCODE to get cat01, cat02, etc.
+          const itemCodeUpperCase = String(
+            formattedRow["ITEMCODE"],
+          ).toUpperCase();
+          const itemLookup = itemMap.get(itemCodeUpperCase);
+
+          if (!itemLookup) {
+            // Item not found - track and skip this row
+            unmatchedItems.set(
+              itemCodeUpperCase,
+              (unmatchedItems.get(itemCodeUpperCase) || 0) + 1,
+            );
+            errors.push({
+              row: rowNum,
+              error: `Item not found: ${itemCodeUpperCase}`,
+            });
+            continue;
+          }
+          const itemId = itemLookup.id;
+
+          // Step 4d: Build insertion object with all fields
+          toInsert.push({
+            doc_date: parseToFirstDayOfMonth(formattedRow["SALES MONTH"]),
+            doc_date_month: getMonthNumber(formattedRow["SALES MONTH"]),
+            bc_code: bcCode,
+            division: formattedRow["U_DIVISION"],
+            whs_code: formattedRow["CODE"],
+            whs_name: formattedRow["STORE"],
+            dchannel: formattedRow["U_DCHANNEL"],
+            item_code: itemCodeUpperCase,
+            item_desc: formattedRow["ITEM"],
+            vat_code: formattedRow["VATCODE"],
+            gross_sales: Number(formattedRow["GROSSSALES"]) || 0,
+            net_sales: Number(formattedRow["NETSALES"]) || 0,
+            quantity: Number(formattedRow["QUANTITY"]) || 0,
+            converted_quantity: Number(formattedRow["QUANTITY"]) || 0,
+            line_total: Number(formattedRow["LINE TOTAL"]) || 0,
+            unit_price: Number(formattedRow["UNITPRICE"]) || 0,
+            vat_amount: Number(formattedRow["VATAMOUNT"]) || 0,
+            line_cost: Number(formattedRow["LINECOST"]) || 0,
+            item_cost: Number(formattedRow["ITEMCOST"]) || 0,
+            disc_amount: Number(formattedRow["DISCAMOUNT"]) || 0,
+            vat_rate: Number(formattedRow["VATRATE"]) || 0,
+            // ← These are fetched from items lookup
+            cat01: itemLookup.cat01,
+            cat02: itemLookup.cat02,
+            sales_conv: itemLookup.salesconv,
+            sales_unit_eq: itemLookup.salesuniteq,
+            item_group: itemLookup.itemgroup,
+            uom: itemLookup.uom,
+            // ✅ NEW: Foreign key references
+            location_id: locationId, // ← From location lookup
+            warehouse_id: warehouseId, // ← From warehouse lookup
+            item_id: itemId, // ← From item lookup
+            created_by: userId, // ← From method parameter
+            // ← Metadata
+            access_key_id: accessKeyId,
+            status_id: 1,
+          });
+        } catch (rowError) {
+          // Validation or lookup error - log and continue
+          errors.push({
+            row: rowNum,
+            error:
+              rowError instanceof Error ? rowError.message : String(rowError),
+          });
+        }
+      }
+
+      // Step 5: Batch insertion (same pattern as pullAndInsertFromDwh)
+      const total = toInsert.length;
+      for (let i = 0; i < total; i += batchSize) {
+        const batch = toInsert.slice(i, i + batchSize);
+
+        // Step 5a: Build unique keys for this batch
+        const keys = batch.map((row) => ({
+          item_code: row.item_code,
+          whs_code: row.whs_code,
+          doc_date_month: row.doc_date_month,
+        }));
+
+        // Step 5b: Mark existing records as inactive (status_id = 2)
+        if (keys.length > 0) {
+          await this.salesTransactionsRepository
+            .createQueryBuilder()
+            .update(SalesTransaction)
+            .set({ status_id: 2 })
+            .where(
+              keys
+                .map(
+                  (k, idx) =>
+                    `(item_code = :item_code${idx} AND whs_code = :whs_code${idx} AND doc_date_month = :doc_date_month${idx})`,
+                )
+                .join(" OR "),
+              Object.assign(
+                {},
+                ...keys.map((k, idx) => ({
+                  [`item_code${idx}`]: k.item_code,
+                  [`whs_code${idx}`]: k.whs_code,
+                  [`doc_date_month${idx}`]: k.doc_date_month,
+                })),
+              ),
+            )
+            .execute();
+        }
+
+        // Step 5c: Bulk insert new records in transaction
+        if (batch.length > 0) {
+          await this.salesTransactionsRepository.manager.transaction(
+            async (manager) => {
+              await manager.getRepository(SalesTransaction).insert(batch);
+            },
+          );
+          success += batch.length;
+        }
+      }
+
+      // Step 6: Build log message
+      logMessage += `\nProcessed: ${total} rows`;
+      logMessage += `\nInserted: ${success} records`;
+      if (errors.length > 0) {
+        logMessage += `\nErrors: ${errors.length} rows`;
+        logMessage += `\nError details: ${JSON.stringify(errors.slice(0, 10))}`; // First 10 errors
+      }
+      if (unmatchedLocations.size > 0) {
+        logMessage += `\nUnmatched Locations: ${Array.from(
+          unmatchedLocations.entries(),
+        )
+          .map(([loc, count]) => `${loc} (${count} rows)`)
+          .join(", ")}`;
+      }
+      if (unmatchedItems.size > 0) {
+        logMessage += `\nUnmatched Items: ${Array.from(unmatchedItems.entries())
+          .map(([item, count]) => `${item} (${count} rows)`)
+          .join(", ")}`;
+      }
+    } catch (err) {
+      logError = err instanceof Error ? err.message : String(err);
+      failed = 1;
+      logger.error("Error uploading sales transactions:", err);
+    } finally {
+      // Step 7: Create DWH log entry (same as pullAndInsertFromDwh)
+      await this.dwhLogRepository.insert({
+        type: "sales transactions upload",
+        message: logError ? `ERROR: ${logError}` : logMessage,
+        row_data: JSON.stringify({
+          userId,
+          accessKeyId,
+          success,
+          totalProcessed: toInsert.length,
+          errors: errors.slice(0, 10), // Log first 10 errors
+          unmatchedLocations: Object.fromEntries(unmatchedLocations),
+          unmatchedItems: Object.fromEntries(unmatchedItems),
+        }),
+      });
+
+      // Step 8: Clean up - remove uploaded file after processing
+      try {
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        logger.warn("Could not delete uploaded file:", err);
+      }
+    }
+
+    return { success, failed };
   }
 }
