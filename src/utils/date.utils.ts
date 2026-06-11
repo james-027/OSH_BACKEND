@@ -19,7 +19,6 @@ export function parseExcelDate(value: any): Date | null {
   return isNaN(date.getTime()) ? null : date;
 }
 
-
 /**
  * Get current timestamp in local timezone (ISO-8601 format with timezone offset)
  * Fixes issue where toISOString() returns UTC, causing timezone mismatch
@@ -372,4 +371,27 @@ export function formatDateToMonthYear(dateString: string): string {
   } catch (error) {
     return "Invalid date";
   }
+}
+
+/**
+ * Extract month number from a Date object or Excel date value
+ * Returns month number from 1-12 (January=1, December=12)
+ *
+ * @param excelDate Date object, date string, or Excel serial number
+ * @returns Month number (1-12)
+ * @example
+ * getMonthNumber(new Date('10/1/2025')) // 10
+ * getMonthNumber('1/15/2025')           // 1
+ * 45565                                  // 12 (Excel serial for Dec 2024)
+ */
+export function getMonthNumber(excelDate: any): number {
+  const date = parseExcelDate(excelDate);
+
+  if (!date) {
+    // Fallback: try creating date directly
+    const fallbackDate = new Date(excelDate);
+    return isNaN(fallbackDate.getTime()) ? 0 : fallbackDate.getMonth() + 1;
+  }
+
+  return date.getMonth() + 1; // getMonth() returns 0-11, add 1 for 1-12
 }
