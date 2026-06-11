@@ -26,8 +26,8 @@ export class StaffTraining {
   @Column()
   training_id: number;
 
-  @Column()
-  warehouse_id: number;
+  @Column({ nullable: true })
+  warehouse_id?: number | null;
 
   @Column()
   employee_id: number;

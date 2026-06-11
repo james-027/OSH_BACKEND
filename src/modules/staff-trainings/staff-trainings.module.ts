@@ -14,6 +14,8 @@ import { SSEModule } from "../sse/sse.module";
 import { Staff } from "src/entities/Staff";
 import { Vendor } from "src/entities/Vendor";
 import { Training } from "src/entities/Training";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -26,6 +28,7 @@ import { Training } from "src/entities/Training";
       Staff,
       Vendor,
       Training,
+      TransactionSequence,
     ]),
     UsersModule,
     SSEModule,
@@ -35,6 +38,7 @@ import { Training } from "src/entities/Training";
     StaffTrainingService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+     CommonUtilitiesService,
   ],
   exports: [StaffTrainingService],
 })

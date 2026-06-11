@@ -41,6 +41,12 @@ export class Training {
   @Column({ nullable: true })
   updated_by: number;
 
+  @Column({ type: 'boolean', nullable: true })
+  with_warehouse: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  training_order: number;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",
