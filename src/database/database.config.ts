@@ -170,14 +170,6 @@ export const entities = [
   ApprovalMatrix,
   ApprovalMatrixDetails,
   ApprovalMatrixLevels,
-  // Category,
-  // CategoryType,
-  // Vendor,
-  // Staff,
-  // StaffVendorSalary,
-  // StaffBrand,
-  // StaffCategoryType,
-  // StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
