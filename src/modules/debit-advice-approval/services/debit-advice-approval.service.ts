@@ -68,7 +68,10 @@ export class ApprovalStagesListService {
       .andWhere(
         `
           (
+          (
             approval.status_id IN (7,15)
+            AND approval.updated_by = :userId
+          )
 
             OR
 

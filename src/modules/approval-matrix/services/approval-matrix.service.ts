@@ -134,7 +134,7 @@ export class ApprovalMatrixService {
         const existingTitle =
           await this.approvalMatrixDetailsRepository.findOne({
             where: {
-              userid: detailDto.userid,
+              userid: dto.userid,
               approval_title: detailDto.approval_title,
             },
           });
@@ -148,7 +148,7 @@ export class ApprovalMatrixService {
           this.approvalMatrixDetailsRepository.create({
             header: savedHeader,
             approval_title: detailDto.approval_title,
-            userid: detailDto.userid,
+            userid: dto.userid,
             module: Number(detailDto.module),
             status_id: detailDto.status_id ?? 1,
             createdBy: { id: userId } as any,
@@ -172,7 +172,7 @@ export class ApprovalMatrixService {
 
               approval_title: levelDto.approval_title,
               module: Number(levelDto.module),
-              userid: levelDto.userid,
+              userid: dto.userid,
 
               status_id: levelDto.status_id ?? 1,
 
@@ -249,7 +249,7 @@ export class ApprovalMatrixService {
         this.approvalMatrixDetailsRepository.create({
           header,
           approval_title: detailDto.approval_title,
-          userid: detailDto.userid,
+          userid: dto.userid,
           module: Number(detailDto.module),
           status_id: detailDto.status_id ?? 1,
           created_by: existingDetails[0]?.created_by,
@@ -268,10 +268,10 @@ export class ApprovalMatrixService {
             opt_approval_id: levelDto.opt_approval_id
               ? Number(levelDto.opt_approval_id)
               : null,
-
+            
             approval_title: levelDto.approval_title,
             module: Number(levelDto.module),
-            userid: levelDto.userid,
+            userid: dto.userid,
             status_id: levelDto.status_id ?? 1,
 
             created_by: existingDetails[0]?.created_by,
