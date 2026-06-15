@@ -16,6 +16,8 @@ import { Vendor } from "src/entities/Vendor";
 import { Training } from "src/entities/Training";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
+import { ActionsModule } from "../actions/actions.module";
+
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
     ]),
     UsersModule,
     SSEModule,
+    ActionsModule
   ],
   controllers: [StaffTrainingsController],
   providers: [

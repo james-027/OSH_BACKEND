@@ -21,6 +21,8 @@ import { StaffCategoryType } from "src/entities/StaffCategoryType";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
+import { ActionsModule } from "../actions/actions.module";
+import { StaffHistory } from "src/entities/StaffHistory";
 
 @Module({
   imports: [
@@ -40,9 +42,11 @@ import { CategoryType } from "src/entities/CategoryType";
       Brand,
       AccessKey,
       Status,
+      StaffHistory
     ]),
     UsersModule,
     SSEModule,
+    ActionsModule
   ],
   controllers: [StaffsController],
   providers: [

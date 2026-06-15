@@ -27,11 +27,9 @@ export class StaffTrainingsController {
 @Get()
 @RequirePermissions({ module: "STAFFS", action: "VIEW" })
 async findAll(
-  @Request() req,
 ) {
-  const accessKeyId = req.user.current_access_key;
 
-  return this.staffTrainingsService.findAll(accessKeyId);
+  return this.staffTrainingsService.findAll();
 }
 
   @Get(":id")
@@ -89,4 +87,6 @@ async findAll(
     const userId = req.user.id;
     return this.staffTrainingsService.toggleStatus(id, userId);
   }
+
+  
 }

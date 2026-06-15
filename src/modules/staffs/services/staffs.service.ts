@@ -25,9 +25,16 @@ import { Status } from "src/entities/Status";
 import { StaffBrand } from "src/entities/StaffBrand";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { StaffCategoryType } from "src/entities/StaffCategoryType";
+import { StaffHistory } from "src/entities/StaffHistory";
 import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
-
+import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import {
+  MODULE_IDS,
+  ACTION_IDS,
+  STATUS_IDS,
+  STATUS_NAMES,
+} from "src/constants/customConstants";
 @Injectable()
 export class StaffsService {
   constructor(
@@ -51,6 +58,9 @@ export class StaffsService {
     private brandRepository: Repository<Brand>,
     @InjectRepository(CategoryType)
     private categoryTypeRepository: Repository<CategoryType>,
+    @InjectRepository(StaffHistory)
+    private readonly staffHistoriesRepository: Repository<StaffHistory>,
+    private actionLogsService: ActionLogsService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
@@ -214,6 +224,15 @@ export class StaffsService {
       });
 
       const savedStaff = await this.staffsRepository.save(newStaff);
+      const staffHistory = this.staffHistoriesRepository.create({
+        ...savedStaff,
+        id: undefined, 
+        staff_id: savedStaff.id,
+      });
+
+      const savedStaffHistory =
+        await this.staffHistoriesRepository.save(staffHistory);
+      
 
       const newStaffBrand = this.staffBrandsRepository.create({
         staff_id: savedStaff.id,
@@ -311,6 +330,21 @@ export class StaffsService {
 
       if (!staffWithRelations) {
         throw new Error("Failed to retrieve created staff");
+      }
+
+      // Action Log
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          ref_id: savedStaff.id,
+          action_id: ACTION_IDS.ADD,
+          description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
+          raw_data: JSON.stringify(createStaffDto),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for create:", err);
+        // Don't throw - action log failure shouldn't block creation
       }
 
       const response =
@@ -423,7 +457,18 @@ export class StaffsService {
         updated_by: userId,
       });
 
-      await this.staffsRepository.save(staff);
+
+        const savedStaff = await this.staffsRepository.save(staff);
+
+      const staffHistory = this.staffHistoriesRepository.create({
+        ...savedStaff,
+        id: undefined, 
+        staff_id: savedStaff.id,
+      });
+
+      const savedStaffHistory =
+        await this.staffHistoriesRepository.save(staffHistory);
+
       let staffBrand = await this.staffBrandsRepository.findOne({
         where: { staff_id: staff.id },
       });
@@ -528,6 +573,23 @@ export class StaffsService {
         throw new Error("Failed to retrieve updated staff");
       }
 
+
+            try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          ref_id: savedStaff.id,
+          action_id: ACTION_IDS.ADD,
+          description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
+          raw_data: JSON.stringify(updateStaffDto),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for create:", err);
+        // Don't throw - action log failure shouldn't block creation
+      }
+
+
+
       const response =
         this.responseMapperService.mapEntityToResponse(staffWithRelations);
 
@@ -574,8 +636,8 @@ export class StaffsService {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
 
-      const newStatusId = staff.status_id === 1 ? 2 : 1;
-      const newStatusName = newStatusId === 1 ? "ACTIVE" : "INACTIVE";
+      const newStatusId = 20
+      const newStatusName = "Revert"
 
       await this.staffsRepository.update(id, {
         status_id: newStatusId,
@@ -609,6 +671,28 @@ export class StaffsService {
         },
         userId,
       );
+
+        try {
+          await this.actionLogsService.logAction({
+            module_id: MODULE_IDS.STAFFS,
+            ref_id: updatedStaff.id,
+            action_id: ACTION_IDS.REVERT, // or ACTION_IDS.TOGGLE if you have it
+            description: `Toggled staff status to ${newStatusName}  ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${
+              staff.vendor?.service_provider_name ?? "N/A"
+            } | Location: ${
+              staff.location?.location_name ?? "N/A"
+            }`,
+            raw_data: JSON.stringify({
+              id: updatedStaff.id,
+              old_status: staff.status_id,
+              new_status: newStatusId,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error("Action log failed for toggleStatus:", err);
+        }
+
 
       const response =
         this.responseMapperService.mapEntityToResponse(updatedStaff);
@@ -956,6 +1040,20 @@ export class StaffsService {
 
           savedStaff = await this.staffsRepository.save(newStaff);
 
+          if (savedStaff) {
+            try {
+              await this.staffHistoriesRepository.save(
+                this.staffHistoriesRepository.create({
+                  ...savedStaff,
+                  id: undefined,
+                  staff_id: savedStaff.id,
+                }),
+              );
+            } catch (err) {
+              logger.error("Failed to create staff history:", err);
+            }
+          }
+
           savedStaffBrand = await this.staffBrandsRepository.save(
             this.staffBrandsRepository.create({
               staff_id: savedStaff.id,
@@ -1059,6 +1157,31 @@ export class StaffsService {
           ],
         });
 
+        if (staffWithRelations) {
+          try {
+            const vendorName =
+              staffWithRelations.vendor?.service_provider_name ?? "N/A";
+
+            const locationName =
+              staffWithRelations.location?.location_name ?? "N/A";
+
+            await this.actionLogsService.logAction({
+              module_id: MODULE_IDS.STAFFS,
+              ref_id: savedStaff.id,
+              action_id: existingRecord
+                ? ACTION_IDS.EDIT
+                : ACTION_IDS.ADD,
+              description: existingRecord
+                ? `Updated staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${vendorName} | Location: ${locationName}`
+                : `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${vendorName} | Location: ${locationName}`,
+              raw_data: JSON.stringify(row),
+              created_by: userId,
+            });
+          } catch (err) {
+            logger.error("Action log failed for upload:", err);
+          }
+        }
+
         success.push({
           row: i + 2,
           action: existingRecord ? "updated" : "inserted",
@@ -1111,5 +1234,9 @@ export class StaffsService {
       exists: !!existingRecord,
       staff: existingRecord,
     };
+  }
+  async findOneHistory(ref_id: number) {
+    const module_id = MODULE_IDS.STAFFS;
+    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 }
