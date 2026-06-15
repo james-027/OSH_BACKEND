@@ -438,11 +438,52 @@ export class ApiService {
               ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const [rows] = await sourceConn.execute(
+          const [rows] = (await sourceConn.execute(
             storeCrewAssignmentQuery,
             sqlParams,
-          );
-          return rows;
+          )) as any;
+
+          // Group rows by crew_code to nest store_details per crew
+          const crewMap = new Map<string, any>();
+
+          rows.forEach((row: any) => {
+            if (!crewMap.has(row.crew_code)) {
+              // First time seeing this crew - create crew object
+              crewMap.set(row.crew_code, {
+                crew_code: row.crew_code,
+                crew_last_name: row.crew_last_name,
+                crew_first_name: row.crew_first_name,
+                crew_middle_initial: row.crew_middle_initial,
+                email: row.email,
+                store_details: [], // hold all store assignments for this crew
+                crew_ts_created: row.crew_ts_created,
+                crew_ts_modified: row.crew_ts_modified,
+                crew_status: row.crew_status,
+              });
+            }
+
+            // Add store details to this crew's store_details array
+            const crew = crewMap.get(row.crew_code);
+            crew.store_details.push({
+              store_ifs: row.store_ifs,
+              store_code: row.store_code,
+              store_name: row.store_name,
+              assignment_effectivity_date: row.assignment_effectivity_date,
+              assignment_end_date: row.assignment_end_date,
+              assignment_status: row.assignment_status,
+              assignment_status_flag: row.assignment_status_flag,
+              ts_created: row.ts_created,
+              ts_modified: row.ts_modified,
+            });
+
+            // Optional: Update ts_modified to the latest (most recent timestamp)
+            // if (row.ts_modified > crew.ts_modified) {
+            //   crew.ts_modified = row.ts_modified;
+            // }
+          });
+
+          // Convert Map to array and return
+          return Array.from(crewMap.values());
 
         case "stores":
           const store_modified_date = queryParams.modified_date ?? "";
