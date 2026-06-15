@@ -20,12 +20,19 @@ export class OSHJVService {
         @InjectRepository(DocumentPostingLog)
         private documentPostingLogRepository: Repository<DocumentPostingLog>,
     ) { }
-    async postToOSHJV(payload: any[], userId: number,) {
+    async postToOSHJV(payload: any, userId: number,) {
         try {
             let NewlogSave: any;
+            const requestBody = {
+                userid: process.env.BOS_USER,
+                jwt: process.env.BOS_JWT,
+                company: "CTGI",
+                branch: "HO",
+                data: payload
+            };
             const response = await axios.post(
                 "http://10.2.0.156:81/ctgi/udp.php?objectcode=u_OSHJV",
-                payload,
+                requestBody,
                 {
                     headers: {
                         "Content-Type": "application/json",
@@ -33,9 +40,10 @@ export class OSHJVService {
                 },
             );
 
+
             if (response.data.error) {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
-                    where: { ref_docno: payload[0].Sequence },
+                    where: { ref_docno: payload.Sequence },
                 });
                 if (updateDatalogs) {
                     updateDatalogs.jv_docno = "Not Created - JV Creation Failed";
@@ -64,7 +72,9 @@ export class OSHJVService {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
                     where: { ref_docno: docno },
                 });
+
                 if (!updateDatalogs) {
+                    console.log(debitAdvice.document_number);
                     const postingLog = this.documentPostingLogRepository.create({
                         module_name: "DEBIT ADVICE",
                         ref_docno: debitAdvice.document_number,
@@ -142,11 +152,11 @@ export class OSHJVService {
                 }
             }
 
-            if (!debitAdvice) {
-                throw new NotFoundException(
-                    `Debit advice with document number ${docno} not found`,
-                );
-            }
+            // if (!debitAdvice) {
+            //     throw new NotFoundException(
+            //         `Debit advice with document number ${docno} not found`,
+            //     );
+            // }
 
             // SSE Events
             try {
@@ -186,7 +196,8 @@ export class OSHJVService {
         }));
     }
 
-    async createDocumentPostingLog(payload: any[], userId: number,) {
+    async createDocumentPostingLog(payload: any, userId: number,) {
+
         const postingLog = this.documentPostingLogRepository.create({
             module_name: "DEBIT ADVICE",
             ref_docno: payload[0].Sequence,

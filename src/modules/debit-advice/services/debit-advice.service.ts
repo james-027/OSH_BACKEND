@@ -17,9 +17,11 @@ import { CommonUtilitiesService } from "../../../services/common-utilities.servi
 import { formatDateToString } from "src/utils/date.utils";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { TransactionAttachment } from "src/entities/TransactionAttachment";
 import { Inject } from "@nestjs/common";
-import { stat } from "fs";
+import * as fs from "fs";
 import { Brackets } from "typeorm";
+import * as path from "path";
 
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
 // create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary
@@ -41,6 +43,8 @@ export class DebitAdviceService {
         private sseEventEmitter: SSEEventEmitterHelper,
         @Inject(ActionLogsService)
         private ActionLogsService: ActionLogsService,
+        @InjectRepository(TransactionAttachment)
+        private readonly attachmentRepository: Repository<TransactionAttachment>,
     ) { }
     // Get all debit advices
     async findAll(): Promise<any[]> {
@@ -300,6 +304,7 @@ export class DebitAdviceService {
                                             } else {
                                                 Object.assign(glItem, glItemDto, {
                                                     updated_by: userId,
+                                                    ref_docno: docno,
                                                 });
                                                 await this.debitAdviceGLItemsRepository.save(glItem);
                                             }
@@ -310,7 +315,7 @@ export class DebitAdviceService {
                                             ...glItemDto,
                                             debitAdviceLine: lineItem,
                                             createdBy: { id: userId } as any,
-                                            ref_docno: debitAdvice.document_number,
+                                            ref_docno: docno,
                                         });
                                         await this.debitAdviceGLItemsRepository.save(glItem);
                                     }
@@ -333,10 +338,10 @@ export class DebitAdviceService {
 
             // SSE Events
             try {
-                console.log("working");
+
                 this.sseEventEmitter.emitUpdate("debit-advices", updatedDebitAdvice.id);
             } catch (err) {
-                console.log("not working");
+
                 logger.error("SSE event failed:", err);
             }
 
@@ -482,7 +487,6 @@ export class DebitAdviceService {
         accessKeyId?: number,
     ) {
         const XLSX = require("xlsx");
-        const fs = require("fs");
         const workbook = XLSX.read(fs.readFileSync(filePath), {
             type: "buffer",
         });
@@ -677,6 +681,100 @@ export class DebitAdviceService {
             logger.error("Error fetching debit advices:", error);
             throw new Error("Failed to fetch debit advices");
         }
+    }
+
+
+    async saveAttachment(
+        module: string,
+        referenceId: number,
+        documentNumber: string,
+        file: Express.Multer.File,
+        userId: number,
+    ) {
+        const attachment = this.attachmentRepository.create({
+            module,
+            reference_id: referenceId,
+            document_number: documentNumber,
+            file_name: file.filename,
+            original_name: file.originalname,
+            file_path: path
+                .relative(
+                    path.join(process.cwd(), "uploads"),
+                    file.path,
+                )
+                .replace(/\\/g, "/"),
+            mime_type: file.mimetype,
+            file_size: file.size,
+            createdBy: { id: userId } as any,
+            isdeleted: 0,
+            deleted_by: 0,
+        });
+
+        // SSE Events
+        try {
+            this.sseEventEmitter.emitCreate("debit-advices", attachment.id);
+        } catch (err) {
+
+            logger.error("SSE event failed:", err);
+        }
+
+
+        return await this.attachmentRepository.save(
+            attachment,
+        );
+    }
+
+    async findAttachment(docno: string) {
+        const attachment = await this.attachmentRepository.find({
+            where: { document_number: docno, isdeleted: 0 },
+        });
+
+        // if (!attachment || attachment.length === 0) {
+        //     throw new NotFoundException(
+        //         "Attachment not found",
+        //     );
+        // }
+
+        return attachment;
+    }
+
+    async deleteAttachment(id: string, userId: number,) {
+        const attachment = await this.attachmentRepository.findOneBy({
+            id: Number(id),
+        });
+
+        if (!attachment) {
+            throw new NotFoundException('Attachment not found');
+        }
+
+        const filePath = attachment.file_path;
+
+        attachment.isdeleted = 1;
+        attachment.deleted_by = userId;
+
+        const result = await this.attachmentRepository.save(attachment);
+
+        if (filePath) {
+            try {
+                const fullPath = path.join(
+                    process.cwd(),
+                    'uploads',
+                    filePath,
+                );
+
+                await fs.promises.unlink(fullPath);
+            } catch (error) {
+                logger.error('Failed to delete physical file:', error);
+            }
+        }
+
+        try {
+            this.sseEventEmitter.emitCreate('debit-advices', Number(id));
+        } catch (err) {
+            logger.error('SSE event failed:', err);
+        }
+
+        return result;
     }
 }
 

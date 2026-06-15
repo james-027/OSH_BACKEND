@@ -85,6 +85,7 @@ import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
 import { GLAccounts } from "../entities/GLAccounts";
 import { DocumentPostingLog } from "../entities/DocumentPostingLog";
+import { TransactionAttachment } from "../entities/TransactionAttachment";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -173,6 +174,7 @@ export const entities = [
   ApprovalMatrixDetails,
   ApprovalMatrixLevels,
   DocumentPostingLog,
+  TransactionAttachment,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
