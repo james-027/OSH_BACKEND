@@ -79,6 +79,10 @@ import { StaffVendorSalary } from "../entities/StaffVendorSalary";
 import { StaffBrand } from "../entities/StaffBrand";
 import { StaffCategoryType } from "../entities/StaffCategoryType";
 import { StaffWarehouse } from "../entities/StaffWarehouse";
+import { ApprovalStagesList } from "../entities/ApprovalStagesList";
+import { ApprovalMatrix } from "../entities/ApprovalMatrix";
+import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
+import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -161,6 +165,19 @@ export const entities = [
   DebitAdvice_header,
   DebitAdviceLine,
   DebitAdviceGLItems,
+  ApprovalStagesList,
+  GLAccounts,
+  ApprovalMatrix,
+  ApprovalMatrixDetails,
+  ApprovalMatrixLevels,
+  // Category,
+  // CategoryType,
+  // Vendor,
+  // Staff,
+  // StaffVendorSalary,
+  // StaffBrand,
+  // StaffCategoryType,
+  // StaffWarehouse,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
