@@ -83,7 +83,7 @@ import { ApprovalStagesList } from "../entities/ApprovalStagesList";
 import { ApprovalMatrix } from "../entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
-
+import { GLAccounts } from "src/entities/GLAccounts";
 // All entities in one place for easy maintenance
 export const entities = [
   User,
