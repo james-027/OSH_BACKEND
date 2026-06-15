@@ -8,6 +8,7 @@ export const MODULE_IDS = {
   STORE_HURDLES: 16,
   LOCATION_HURDLES: 31,
   STORE_EMPLOYEES: 14,
+  STAFFS: 40,
 } as const;
 
 // ============= ACTION IDs =============
@@ -19,6 +20,7 @@ export const ACTION_IDS = {
   ACTIVATE: 5,
   DEACTIVATE: 6,
   APPROVE: 7,
+  REVERT: 10,
 } as const;
 
 // ============= STATUS IDs =============
