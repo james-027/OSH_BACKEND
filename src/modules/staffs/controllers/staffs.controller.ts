@@ -111,4 +111,9 @@ export class StaffsController {
   async checkExisting(@Body() dto: CheckStaffDto) {
     return this.staffsService.checkExistingStaff(dto);
   }
+    @Get("history/:id")
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.staffsService.findOneHistory(id);
+  }
 }
