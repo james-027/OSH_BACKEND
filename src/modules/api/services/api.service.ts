@@ -399,10 +399,7 @@ export class ApiService {
         case "store-crew-assignments":
           const modified_date = queryParams.modified_date ?? "";
 
-          const whereClauses = [
-            "a.asgnStatID = 1",
-            "(a.endDate IS NULL or a.endDate > CURDATE())",
-          ];
+          const whereClauses = ["a.asgnStatID IN (1, 4)"];
 
           const sqlParams: any[] = [];
           if (modified_date) {
@@ -423,14 +420,22 @@ export class ApiService {
               DATE_FORMAT(a.effectivityDate, '%Y-%m-%d') AS assignment_effectivity_date,
               DATE_FORMAT(a.endDate, '%Y-%m-%d') AS assignment_end_date,
               DATE_FORMAT(a.tsCreated, '%Y-%m-%d %H:%i:%s') AS ts_created,
-              DATE_FORMAT(a.tsModified, '%Y-%m-%d %H:%i:%s') AS ts_modified
+              DATE_FORMAT(a.tsModified, '%Y-%m-%d %H:%i:%s') AS ts_modified,
+              DATE_FORMAT(b.tsCreated, '%Y-%m-%d %H:%i:%s') AS crew_ts_created,
+              DATE_FORMAT(b.tsModified, '%Y-%m-%d %H:%i:%s') AS crew_ts_modified,
+              d.status AS assignment_status,
+              e.asgnStat AS assignment_status_flag,
+              f.status AS crew_status
             FROM
               crew_outlet a
               INNER JOIN crew b ON a.crewID = b.crewID
               INNER JOIN outlets c ON a.outletID = c.outletID 
+              INNER JOIN status d ON a.statusID = d.statusID
+              INNER JOIN asgnstatus e ON a.asgnStatID = e.asgnStatID
+              INNER JOIN status f ON b.statusID = f.statusID
             WHERE
               ${whereClauses.join(" AND ")}
-              ORDER BY a.tsCreated
+              ORDER BY a.crewCode, a.tsCreated
           `;
 
           const [rows] = await sourceConn.execute(
