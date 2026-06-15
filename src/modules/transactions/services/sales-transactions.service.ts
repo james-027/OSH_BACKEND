@@ -276,18 +276,22 @@ export class SalesTransactionsService {
     filePath: string,
     userId: number,
     accessKeyId: number,
-  ): Promise<{ success: number; failed: number }> {
+  ): Promise<any> {
     const XLSX = require("xlsx");
     const fs = require("fs");
 
-    let success = 0;
+    let inserted_count = 0;
     let failed = 0;
     let logMessage = "";
     let logError = null;
     const errors: { row: number; error: string }[] = [];
+    const inserted_row_numbers: number[] = []; // ✅ Track row numbers of successful inserts
     const unmatchedLocations = new Map<string, number>(); // Track unmatched locations
     const unmatchedItems = new Map<string, number>(); // Track unmatched items
     const toInsert: any[] = [];
+    const toInsertRowNumbers: number[] = []; // ✅ Track original row numbers for toInsert
+    let rows: any[] = []; // ✅ Declare outside try block
+    let total = 0; // ✅ Declare outside try block
 
     try {
       // Step 1: Read Excel file
@@ -296,7 +300,7 @@ export class SalesTransactionsService {
       });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
       logMessage = `Processing Excel file with ${rows.length} rows`;
 
@@ -500,6 +504,7 @@ export class SalesTransactionsService {
             access_key_id: accessKeyId,
             status_id: 1,
           });
+          toInsertRowNumbers.push(rowNum); // ✅ Track row number
         } catch (rowError) {
           // Validation or lookup error - log and continue
           errors.push({
@@ -511,9 +516,11 @@ export class SalesTransactionsService {
       }
 
       // Step 5: Batch insertion (same pattern as pullAndInsertFromDwh)
-      const total = toInsert.length;
-      for (let i = 0; i < total; i += batchSize) {
+      const total_items = toInsert.length;
+      total = total_items;
+      for (let i = 0; i < total_items; i += batchSize) {
         const batch = toInsert.slice(i, i + batchSize);
+        const batchRowNumbers = toInsertRowNumbers.slice(i, i + batchSize); // ✅ Get corresponding row numbers
 
         // Step 5a: Build unique keys for this batch
         const keys = batch.map((row) => ({
@@ -554,16 +561,17 @@ export class SalesTransactionsService {
               await manager.getRepository(SalesTransaction).insert(batch);
             },
           );
-          success += batch.length;
+          inserted_count += batch.length; // ✅ Update count
+          inserted_row_numbers.push(...batchRowNumbers); // ✅ Track successful row numbers
         }
       }
 
       // Step 6: Build log message
-      logMessage += `\nProcessed: ${total} rows`;
-      logMessage += `\nInserted: ${success} records`;
+      logMessage += `\nProcessed: ${rows.length} rows (${total} passed validation)`;
+      logMessage += `\nInserted: ${inserted_count} records`;
       if (errors.length > 0) {
         logMessage += `\nErrors: ${errors.length} rows`;
-        logMessage += `\nError details: ${JSON.stringify(errors.slice(0, 10))}`; // First 10 errors
+        logMessage += `\nError details (first 20): ${JSON.stringify(errors.slice(0, 20))}`; // Show first 20 errors
       }
       if (unmatchedLocations.size > 0) {
         logMessage += `\nUnmatched Locations: ${Array.from(
@@ -589,9 +597,10 @@ export class SalesTransactionsService {
         row_data: JSON.stringify({
           userId,
           accessKeyId,
-          success,
+          inserted_count,
           totalProcessed: toInsert.length,
-          errors: errors.slice(0, 10), // Log first 10 errors
+          totalRead: rows.length,
+          errors: errors.slice(0, 20), // Log first 20 errors
           unmatchedLocations: Object.fromEntries(unmatchedLocations),
           unmatchedItems: Object.fromEntries(unmatchedItems),
         }),
@@ -605,6 +614,14 @@ export class SalesTransactionsService {
       }
     }
 
-    return { success, failed };
+    return {
+      inserted_count, // Total inserted
+      inserted_row_numbers, // Which rows were inserted (for user reference)
+      total_rows_processed: total, // How many rows passed validation
+      total_rows_read: rows.length, // Total rows in file
+      errors, // All errors for user to fix
+      error_count: errors.length, // Count of errors
+      message: logMessage, // Summary for logging/display
+    };
   }
 }
