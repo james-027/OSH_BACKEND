@@ -19,10 +19,13 @@ export class ApprovalStagesList {
 
   // FK -> debit_advice.id
   @Column()
-  debit_advice_id: number;
+  transaction_id: number;
+
+  @Column()
+  module: number;
 
   @ManyToOne(() => DebitAdvice_header)
-  @JoinColumn({ name: "debit_advice_id" })
+  @JoinColumn({ name: "transaction_id" })
   debitAdvice: DebitAdvice_header;
 
   // document reference
@@ -36,6 +39,11 @@ export class ApprovalStagesList {
   @Column()
   series: number;
 
+  @Column({
+    type: "int",
+    default: 1,
+  })
+  approval_cycle: number;
   // approval date
   @Column({
     type: "timestamp",
@@ -43,14 +51,14 @@ export class ApprovalStagesList {
   })
   approval_date: Date;
 
-   //  approver
+  //  approver
   @Column({
     type: "text",
     nullable: true,
   })
   approverid: string;
 
-     //  approver
+  //  approver
   @Column({
     type: "text",
     nullable: true,
@@ -68,14 +76,12 @@ export class ApprovalStagesList {
   @Column({ default: 1 })
   status_id: number;
 
-
   // audit columns
   @Column({ nullable: true })
   created_by: number;
 
-
   @Column({ nullable: true })
-  updated_by: number
+  updated_by: number;
 
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })
@@ -96,7 +102,6 @@ export class ApprovalStagesList {
   @ManyToOne(() => User)
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
-
 
   @CreateDateColumn({
     type: "timestamp",

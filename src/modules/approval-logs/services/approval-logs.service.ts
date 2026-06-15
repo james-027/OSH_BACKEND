@@ -2,25 +2,30 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 
 import { InjectRepository } from "@nestjs/typeorm";
 
-import { Repository } from "typeorm";
+import { Not, Repository } from "typeorm";
 
 import { ApprovalStagesList } from "src/entities/ApprovalStagesList";
 
 import logger from "../../../config/logger";
-
+import { ApprovalMatrix } from "src/entities/ApprovalMatrix";
+import { CreateApprovalStagesDto } from "../dto/CreateApprovalStagesDto";
+import { BadRequestException } from "@nestjs/common";
 @Injectable()
 export class ApprovalLogsService {
   constructor(
     @InjectRepository(ApprovalStagesList)
     private approvalStagesListRepository: Repository<ApprovalStagesList>,
+
+    @InjectRepository(ApprovalMatrix)
+    private approvalMatrixRepository: Repository<ApprovalMatrix>,
   ) {}
 
   // Fetch approval logs by debit advice header ID
-  async findByHeaderId(debit_advice_id: number): Promise<any[]> {
+  async findByHeaderId(transaction_id: number): Promise<any[]> {
     try {
       const approvalLogs = await this.approvalStagesListRepository.find({
         where: {
-          debit_advice_id,
+          transaction_id,
         },
 
         relations: [
@@ -38,14 +43,14 @@ export class ApprovalLogsService {
 
       if (!approvalLogs.length) {
         throw new NotFoundException(
-          `No approval logs found for Debit Advice ID ${debit_advice_id}`,
+          `No approval logs found for Debit Advice ID ${transaction_id}`,
         );
       }
 
       return approvalLogs.map((item) => ({
         id: item.id,
-
-        debit_advice_id: item.debit_advice_id,
+        approval_cycle: item.approval_cycle,
+        transaction_id: item.transaction_id,
 
         document_number: item.document_number,
 
@@ -94,5 +99,100 @@ export class ApprovalLogsService {
 
       throw error;
     }
+  }
+
+  async initialize(dto: CreateApprovalStagesDto, userId: number) {
+    const latestStage = await this.approvalStagesListRepository.findOne({
+      where: {
+        transaction_id: dto.transaction_id,
+        module: dto.module_id,
+      },
+      order: {
+        approval_cycle: "DESC",
+      },
+    });
+
+    const nextCycle = latestStage ? latestStage.approval_cycle + 1 : 1;
+    const matrix = await this.approvalMatrixRepository.findOne({
+      where: {
+        userid: userId,
+        status_id: 1,
+      },
+
+      relations: ["lines", "lines.approvalmatrixLevel"],
+    });
+
+    if (!matrix) {
+      throw new BadRequestException(
+        "User is not assigned to an active Approval Matrix.",
+      );
+    }
+
+    const moduleLine = matrix.lines.find(
+      (x) =>
+        Number(x.module) === Number(dto.module_id) && Number(x.status_id) === 1,
+    );
+
+    if (!moduleLine) {
+      throw new BadRequestException(
+        "No active Approval Matrix setup found for this module.",
+      );
+    }
+
+    const existing = await this.approvalStagesListRepository.count({
+      where: {
+        transaction_id: dto.transaction_id,
+        module: dto.module_id,
+      },
+    });
+
+    const latestCycleStage = await this.approvalStagesListRepository.findOne({
+      where: {
+        transaction_id: dto.transaction_id,
+        module: dto.module_id,
+      },
+      order: {
+        approval_cycle: "DESC",
+        id: "DESC",
+      },
+    });
+
+    if (
+      latestCycleStage &&
+      latestCycleStage.status_id !== 15 // Rejected
+    ) {
+      throw new BadRequestException(
+        "Approval stages already exist and are still active.",
+      );
+    }
+
+    const levels = [...moduleLine.approvalmatrixLevel].sort(
+      (a, b) => a.level - b.level,
+    );
+
+    for (const level of levels) {
+      await this.approvalStagesListRepository.save({
+        transaction_id: dto.transaction_id,
+        module: dto.module_id,
+        document_number: dto.document_number,
+        transaction_date: dto.transaction_date,
+
+        approval_cycle: nextCycle,
+
+        series: level.level,
+        approverid: String(level.approval_id),
+        approverid_opt: level.opt_approval_id
+          ? String(level.opt_approval_id)
+          : null,
+
+        status_id: 3,
+        created_by: userId,
+      });
+    }
+
+    return {
+      success: true,
+      stages_created: levels.length,
+    };
   }
 }

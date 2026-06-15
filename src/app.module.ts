@@ -108,6 +108,10 @@ import { GLAccounts } from "./entities/GLAccounts";
 import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import { ApprovalStagesList } from "./entities/ApprovalStagesList";
 import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module";
+import { ApprovalMatrixModule } from "./modules/approval-matrix/approval-matrix.module";
+import { ApprovalMatrix } from "./entities/ApprovalMatrix";
+import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
+import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 @Module({
   imports: [
     // Configuration
@@ -140,6 +144,9 @@ import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module
       DebitAdviceGLAccounts,
       GLAccounts,
       ApprovalStagesList,
+      ApprovalMatrix,
+      ApprovalMatrixDetails,
+      ApprovalMatrixLevels,
     ]),
     // Authentication
     PassportModule,
@@ -206,6 +213,7 @@ import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module
     GlAccountsModule,
     DebitAdviceApprovalModule,
     ApprovalLogsModule,
+    ApprovalMatrixModule,
   ],
   providers: [
     EmailService,

@@ -26,7 +26,12 @@ export class GlAccountsController {
 
   @Get()
   @RequirePermissions({
-    module: ["GL ACCOUNTS MASTERDATA"],
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "VIEW",
   })
   async findAll(@Request() req) {
@@ -35,7 +40,12 @@ export class GlAccountsController {
 
   @Get(":id")
   @RequirePermissions({
-    module: "GL ACCOUNTS MASTERDATA",
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "VIEW",
   })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
@@ -44,7 +54,12 @@ export class GlAccountsController {
 
   @Post()
   @RequirePermissions({
-    module: "GL ACCOUNTS MASTERDATA",
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "ADD",
   })
   async create(@Body() createGlAccountDto: CreateGlAccountDto, @Request() req) {
@@ -55,7 +70,12 @@ export class GlAccountsController {
 
   @Put(":id")
   @RequirePermissions({
-    module: "GL ACCOUNTS MASTERDATA",
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "EDIT",
   })
   async update(
@@ -70,7 +90,12 @@ export class GlAccountsController {
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({
-    module: "GL ACCOUNTS MASTERDATA",
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "ACTIVATE",
   })
   async toggleStatusActivate(
@@ -84,7 +109,12 @@ export class GlAccountsController {
 
   @Patch(":id/toggle-status-deactivate")
   @RequirePermissions({
-    module: "GL ACCOUNTS MASTERDATA",
+    module: [
+      "GL ACCOUNTS MASTERDATA",
+      "DEBIT ADVICE MASTERDATA",
+      "DEBIT ADVICE",
+      "FINANCE CONFIRMATION",
+    ],
     action: "DEACTIVATE",
   })
   async toggleStatusDeactivate(
