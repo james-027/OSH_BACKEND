@@ -15,4 +15,7 @@ export class CreateApprovalStagesDto {
 
   @IsDateString()
   transaction_date: Date;
+
+  @IsNumber()
+  approval_id: number;
 }

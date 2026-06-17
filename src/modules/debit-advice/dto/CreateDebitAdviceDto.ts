@@ -25,6 +25,12 @@ export class CreateDebitAdviceDto {
     @IsNumber()
     quarter: number;
 
+    @IsString()
+    remarks: string;
+
+    @IsNumber()
+    approval: number;
+
     @IsArray()
     @ArrayMinSize(1)
     @ValidateNested({ each: true })
@@ -32,5 +38,6 @@ export class CreateDebitAdviceDto {
     line!: DebitAdviceLineItemDto[];
     access_key_id?: number;
     status_id?: number;
+
 }
 

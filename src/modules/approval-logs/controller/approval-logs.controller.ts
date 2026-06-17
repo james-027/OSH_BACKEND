@@ -21,7 +21,7 @@ import { CreateApprovalStagesDto } from "../dto/CreateApprovalStagesDto";
 @Controller("approval-logs")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ApprovalLogsController {
-  constructor(private readonly approvalLogsService: ApprovalLogsService) {}
+  constructor(private readonly approvalLogsService: ApprovalLogsService) { }
 
   @Get(":id")
   @RequirePermissions({

@@ -42,6 +42,12 @@ export class DebitAdvice_header {
     @Column({ nullable: true })
     updated_by: number;
 
+    @Column({ nullable: true })
+    remarks: string;
+
+    @Column({ nullable: true })
+    approval: number;
+
 
     @CreateDateColumn({
         type: "timestamp",

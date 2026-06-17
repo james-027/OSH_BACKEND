@@ -40,10 +40,9 @@ export class OSHJVService {
                 },
             );
 
-
             if (response.data.error) {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
-                    where: { ref_docno: payload.Sequence },
+                    where: { ref_docno: payload[0].Sequence },
                 });
                 if (updateDatalogs) {
                     updateDatalogs.jv_docno = "Not Created - JV Creation Failed";
@@ -67,14 +66,14 @@ export class OSHJVService {
                 where: { document_number: docno },
             });
 
-
+            console.log("Here:", debitAdvice.document_number);
             if (!debitAdvice) {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
                     where: { ref_docno: docno },
                 });
 
                 if (!updateDatalogs) {
-                    console.log(debitAdvice.document_number);
+
                     const postingLog = this.documentPostingLogRepository.create({
                         module_name: "DEBIT ADVICE",
                         ref_docno: debitAdvice.document_number,
@@ -178,6 +177,29 @@ export class OSHJVService {
 
     async ShowDocumentPostingLogs() {
         const result = await this.documentPostingLogRepository.find({
+            order: {
+                created_at: "DESC",
+            },
+            relations: ["status", "createdBy"],
+        });
+
+        return result.map(log => ({
+            id: log.id,
+            module_name: log.module_name,
+            ref_docno: log.ref_docno,
+            payload: log.payload,
+            created_user: `${log.createdBy.first_name} ${log.createdBy.last_name}`,
+            jv_docno: log.jv_docno,
+            remarks: log.remarks,
+            status: log.status.status_name,
+        }));
+    }
+
+    async SyncingPosting() {
+        const result = await this.documentPostingLogRepository.find({
+            where: {
+                status: { id: 3 }, // Replace with the desired status ID
+            },
             order: {
                 created_at: "DESC",
             },

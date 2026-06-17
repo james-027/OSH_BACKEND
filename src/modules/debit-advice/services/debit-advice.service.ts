@@ -68,6 +68,8 @@ export class DebitAdviceService {
                 created_at: item.created_at,
                 updated_at: item.updated_at,
                 jv_no: item.jv_no,
+                remarks: item.remarks,
+                approval: item.approval,
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
@@ -107,6 +109,8 @@ export class DebitAdviceService {
                 created_at: debitAdvice.created_at,
                 updated_at: debitAdvice.updated_at,
                 jv_no: debitAdvice.jv_no,
+                remarks: debitAdvice.remarks,
+                approval: debitAdvice.approval,
                 created_user: debitAdvice.createdBy
                     ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
                     : null,
@@ -170,6 +174,8 @@ export class DebitAdviceService {
                 document_number: trans_number,
                 transaction_date: createDebitAdviceDto.transaction_date,
                 status_id: createDebitAdviceDto.status_id ?? 17,
+                remarks: createDebitAdviceDto.remarks,
+                approval: createDebitAdviceDto.approval,
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
                     createdBy: { id: userId } as any,
@@ -185,10 +191,8 @@ export class DebitAdviceService {
 
             // SSE Events
             try {
-                console.log("working");
                 this.sseEventEmitter.emitCreate("debit-advices", savedDebitAdvice.id);
             } catch (err) {
-                console.log("not working create");
                 logger.error("SSE event failed:", err);
             }
 
@@ -352,8 +356,7 @@ export class DebitAdviceService {
 
             let action_id = 1;
             let description = ``;
-            // console.log("Current status ID:", current_status_id);
-            // console.log("New status ID:", reloadedDebitAdvice.status_id);
+
             if (reloadedDebitAdvice.status_id === current_status_id) {
                 action_id = 2; // EDIT
                 switch (reloadedDebitAdvice.status_id) {
@@ -415,6 +418,8 @@ export class DebitAdviceService {
                 document_number: reloadedDebitAdvice.document_number,
                 transaction_date: reloadedDebitAdvice.transaction_date,
                 jv_no: reloadedDebitAdvice.jv_no,
+                remarks: reloadedDebitAdvice.remarks,
+                approval: reloadedDebitAdvice.approval,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
                     : null,

@@ -25,7 +25,11 @@ export class UpdateDebitAdviceDto {
     @IsNumber()
     isdeleted: number; // flag to indicate if the item is marked for deletion
 
+    @IsString()
+    remarks: string;
 
+    @IsNumber()
+    approval: number;
 
     @IsArray()
     @ArrayMinSize(1)
@@ -33,6 +37,7 @@ export class UpdateDebitAdviceDto {
     @Type(() => UpdateDebitAdviceLineItemDto)
     line!: UpdateDebitAdviceLineItemDto[];
     access_key_id?: number;
+
 
     @IsOptional()
     createdBy?: number;

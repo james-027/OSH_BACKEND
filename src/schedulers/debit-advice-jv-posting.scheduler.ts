@@ -13,11 +13,12 @@ export class OSHJVPostingScheduler {
     async handleOSHJVPosting() {
         try {
             const logs =
-                await this.documentPostingLogService.ShowDocumentPostingLogs();
+                await this.documentPostingLogService.SyncingPosting();
 
             const failedLogs = logs.filter(
                 (log) => log.status === "PENDING",
             );
+
 
             if (!failedLogs.length) {
                 logger.info("No pending OSHJV posting logs found.");
