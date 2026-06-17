@@ -283,6 +283,7 @@ export class SalesTransactionsService {
     let inserted_count = 0;
     let failed = 0;
     let logMessage = "";
+    let displayMessage = "";
     let logError = null;
     const errors: { row: number; error: string }[] = [];
     const inserted_row_numbers: number[] = []; // ✅ Track row numbers of successful inserts
@@ -566,12 +567,31 @@ export class SalesTransactionsService {
         }
       }
 
-      // Step 6: Build log message
+      // Step 6: Build messages
+      //   - displayMessage: concise summary for UI response (no raw JSON)
+      //   - logMessage: detailed log for dwh_log table (includes error details)
+      displayMessage += `Processed ${rows.length} rows (${total} passed validation).`;
+      displayMessage += ` Inserted ${inserted_count} records.`;
+      if (errors.length > 0) {
+        displayMessage += ` ${errors.length} row(s) had errors.`;
+      }
+      if (unmatchedLocations.size > 0) {
+        displayMessage += ` ${Array.from(unmatchedLocations.entries())
+          .map(([loc, count]) => `${loc} (${count})`)
+          .join(", ")} location(s) not matched.`;
+      }
+      if (unmatchedItems.size > 0) {
+        displayMessage += ` ${Array.from(unmatchedItems.entries())
+          .map(([item, count]) => `${item} (${count})`)
+          .join(", ")} item(s) not matched.`;
+      }
+
+      // Detailed log for dwh_log (includes raw error data)
       logMessage += `\nProcessed: ${rows.length} rows (${total} passed validation)`;
       logMessage += `\nInserted: ${inserted_count} records`;
       if (errors.length > 0) {
         logMessage += `\nErrors: ${errors.length} rows`;
-        logMessage += `\nError details (first 20): ${JSON.stringify(errors.slice(0, 20))}`; // Show first 20 errors
+        logMessage += `\nError details (first 20): ${JSON.stringify(errors.slice(0, 20))}`;
       }
       if (unmatchedLocations.size > 0) {
         logMessage += `\nUnmatched Locations: ${Array.from(
@@ -621,7 +641,7 @@ export class SalesTransactionsService {
       total_rows_read: rows.length, // Total rows in file
       errors, // All errors for user to fix
       error_count: errors.length, // Count of errors
-      message: logMessage, // Summary for logging/display
+      message: displayMessage, // Summary for logging/display
     };
   }
 }
