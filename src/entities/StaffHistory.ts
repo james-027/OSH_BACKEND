@@ -18,6 +18,7 @@ import { StaffBrand } from "./StaffBrand";
 import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
 import { Staff } from "./Staff";
+import { Warehouse } from "./Warehouse";
 
 @Entity("staff_histories")
 export class StaffHistory {
@@ -44,6 +45,9 @@ export class StaffHistory {
 
   @Column()
   vendor_id: number;
+
+  @Column({nullable:true})
+  warehouse_id: number;
 
   @Column()
   assign_status_id: number;
@@ -95,6 +99,9 @@ export class StaffHistory {
 
   @Column({ type: "text", nullable: true })
   store_request: string;
+
+  @Column({ type: "date", nullable: true })
+  effectivity_date: Date;
 
   @Column({ nullable: true })
   access_key_id: number;
@@ -168,6 +175,15 @@ export class StaffHistory {
   })
   @JoinColumn({ name: "vendor_id" })
   vendor: Vendor;
+
+
+  @ManyToOne(() => Warehouse, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse: Warehouse;
 
   @ManyToOne(() => Position, {
     eager: false,

@@ -23,6 +23,11 @@ import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
 import { ActionsModule } from "../actions/actions.module";
 import { StaffHistory } from "src/entities/StaffHistory";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
+import { StaffWarehouse } from "src/entities/StaffWarehouse";
+import { StaffSalary } from "src/entities/StaffSalary";
+
 
 @Module({
   imports: [
@@ -42,7 +47,10 @@ import { StaffHistory } from "src/entities/StaffHistory";
       Brand,
       AccessKey,
       Status,
-      StaffHistory
+      StaffHistory,
+      TransactionSequence,
+      StaffWarehouse,
+      StaffSalary
     ]),
     UsersModule,
     SSEModule,
@@ -53,6 +61,7 @@ import { StaffHistory } from "src/entities/StaffHistory";
     StaffsService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+    CommonUtilitiesService
   ],
   exports: [StaffsService],
 })

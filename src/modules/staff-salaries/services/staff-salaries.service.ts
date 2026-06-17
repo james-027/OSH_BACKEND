@@ -8,18 +8,18 @@ import { Repository } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
-import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
-import { CreateStaffVendorSalaryDto } from "src/modules/staff-vendor-salaries/dto/CreateStaffVendorSalaryDto";
-import { UpdateStaffVendorSalaryDto } from "src/modules/staff-vendor-salaries/dto/UpdateStaffVendorSalaryDto";
+import { StaffSalary } from "src/entities/StaffSalary";
+import { CreateStaffSalaryDto } from "src/modules/staff-salaries/dto/CreateStaffSalaryDto";
+import { UpdateStaffSalaryDto } from "src/modules/staff-salaries/dto/UpdateStaffSalaryDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 
 @Injectable()
-export class StaffVendorSalariesService {
+export class StaffSalariesService {
   constructor(
-    @InjectRepository(StaffVendorSalary)
-    private staffVendorSalariesRepository: Repository<StaffVendorSalary>,
+    @InjectRepository(StaffSalary)
+    private staffSalariesRepository: Repository<StaffSalary>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
@@ -32,7 +32,7 @@ export class StaffVendorSalariesService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
-      const staffVendorSalaries = await this.staffVendorSalariesRepository.find(
+      const staffVendorSalaries = await this.staffSalariesRepository.find(
         {
           where,
           relations: [
@@ -41,7 +41,6 @@ export class StaffVendorSalariesService {
             "updatedBy",
             "staff",
             "vendor",
-            "location",
             "accessKey",
           ],
         },
@@ -58,8 +57,8 @@ export class StaffVendorSalariesService {
 
   async findOne(id: number): Promise<any> {
     try {
-      const staffVendorSalary =
-        await this.staffVendorSalariesRepository.findOne({
+      const staffSalary =
+        await this.staffSalariesRepository.findOne({
           where: { id },
           relations: [
             "status",
@@ -67,29 +66,28 @@ export class StaffVendorSalariesService {
             "updatedBy",
             "staff",
             "vendor",
-            "location",
             "accessKey",
           ],
         });
 
-      if (!staffVendorSalary) {
+      if (!staffSalary) {
         throw new NotFoundException(
-          `Staff Vendor Salary with ID ${id} not found`,
+          `Staff Salary with ID ${id} not found`,
         );
       }
 
-      return this.responseMapperService.mapEntityToResponse(staffVendorSalary);
+      return this.responseMapperService.mapEntityToResponse(staffSalary);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      console.error("Error fetching staff vendor salaries:", error);
-      throw new Error("Failed to fetch staff vendor salaries");
+      console.error("Error fetching staff salaries:", error);
+      throw new Error("Failed to fetch staff salaries");
     }
   }
 
   async create(
-    createStaffVendorSalaryDto: CreateStaffVendorSalaryDto,
+    createStaffSalaryDto: CreateStaffSalaryDto,
     userId: number,
     accessKeyId?: number,
   ): Promise<any> {
@@ -99,57 +97,55 @@ export class StaffVendorSalariesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      const newStaffVendorSalary = this.staffVendorSalariesRepository.create({
-        staff_id: createStaffVendorSalaryDto.staff_id,
-        vendor_id: createStaffVendorSalaryDto.vendor_id,
-        location_id: createStaffVendorSalaryDto.location_id,
+      const newStaffSalary = this.staffSalariesRepository.create({
+        staff_id: createStaffSalaryDto.staff_id,
+        staff_vendor_id: createStaffSalaryDto.staff_vendor_id,
         access_key_id: accessKeyId,
-        status_id: createStaffVendorSalaryDto.status_id || 1,
+        status_id: createStaffSalaryDto.status_id || 1,
         created_by: userId,
         updated_by: userId,
       });
 
-      const savedStaffVendorSalary =
-        await this.staffVendorSalariesRepository.save(newStaffVendorSalary);
+      const savedStaffSalary =
+        await this.staffSalariesRepository.save(newStaffSalary);
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
-          service: "StaffVendorSalariesService",
+          service: "StaffSalariesService",
           method: "create",
-          raw_data: JSON.stringify(savedStaffVendorSalary),
-          description: `Created staff vendor salary ${savedStaffVendorSalary.id}`,
+          raw_data: JSON.stringify(savedStaffSalary),
+          description: `Created staff vendor salary ${savedStaffSalary.id}`,
           status_id: 1,
         },
         userId,
       );
 
-      const staffVendorSalaryWithRelations =
-        await this.staffVendorSalariesRepository.findOne({
-          where: { id: savedStaffVendorSalary.id },
+      const staffSalaryWithRelations =
+        await this.staffSalariesRepository.findOne({
+          where: { id: savedStaffSalary.id },
           relations: [
             "status",
             "createdBy",
             "updatedBy",
             "staff",
             "vendor",
-            "location",
             "accessKey",
           ],
         });
 
-      if (!staffVendorSalaryWithRelations) {
-        throw new Error("Failed to retrieve created staff vendor salary");
+      if (!staffSalaryWithRelations) {
+        throw new Error("Failed to retrieve created staff salary");
       }
 
       const response = this.responseMapperService.mapEntityToResponse(
-        staffVendorSalaryWithRelations,
+        staffSalaryWithRelations,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate(
-          "staff_vendor_salaries",
+          "staff_salaries",
           response.id,
           response,
         );
@@ -168,19 +164,19 @@ export class StaffVendorSalariesService {
 
   async update(
     id: number,
-    updateStaffVendorSalaryDto: UpdateStaffVendorSalaryDto,
+    updateStaffSalaryDto: UpdateStaffSalaryDto,
     userId: number,
   ): Promise<any> {
     try {
-      const staffVendorSalary =
-        await this.staffVendorSalariesRepository.findOne({
+      const staffSalary =
+        await this.staffSalariesRepository.findOne({
           where: { id },
           relations: ["createdBy"],
         });
 
-      if (!staffVendorSalary) {
+      if (!staffSalary) {
         throw new NotFoundException(
-          `Staff Vendor Salary with ID ${id} not found`,
+          `Staff Salary with ID ${id} not found`,
         );
       }
 
@@ -189,34 +185,33 @@ export class StaffVendorSalariesService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      Object.assign(staffVendorSalary, updateStaffVendorSalaryDto, {
+      Object.assign(staffSalary, updateStaffSalaryDto, {
         updated_by: userId,
       });
 
-      await this.staffVendorSalariesRepository.save(staffVendorSalary);
+      await this.staffSalariesRepository.save(staffSalary);
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
           service: "StaffVendorSalariesService",
           method: "update",
-          raw_data: JSON.stringify(staffVendorSalary),
-          description: `Updated staff vendor salary ${staffVendorSalary.id}`,
+          raw_data: JSON.stringify(staffSalary),
+          description: `Updated staff vendor salary ${staffSalary.id}`,
           status_id: 1,
         },
         userId,
       );
 
       const staffVendorSalaryWithRelations =
-        await this.staffVendorSalariesRepository.findOne({
-          where: { id: staffVendorSalary.id },
+        await this.staffSalariesRepository.findOne({
+          where: { id: staffSalary.id },
           relations: [
             "status",
             "createdBy",
             "updatedBy",
             "staff",
             "vendor",
-            "location",
             "accessKey",
           ],
         });
@@ -254,8 +249,8 @@ export class StaffVendorSalariesService {
 
   async toggleStatus(id: number, userId: number): Promise<any> {
     try {
-      const staffVendorSalary =
-        await this.staffVendorSalariesRepository.findOne({
+      const staffSalary =
+        await this.staffSalariesRepository.findOne({
           where: { id },
           relations: [
             "status",
@@ -267,21 +262,21 @@ export class StaffVendorSalariesService {
           ],
         });
 
-      if (!staffVendorSalary) {
+      if (!staffSalary) {
         throw new NotFoundException(
-          `Staff Vendor Salary with ID ${id} not found`,
+          `Staff Salary with ID ${id} not found`,
         );
       }
 
-      const newStatusId = staffVendorSalary.status_id === 1 ? 2 : 1;
+      const newStatusId = staffSalary.status_id === 1 ? 2 : 1;
       const newStatusName = newStatusId === 1 ? "ACTIVE" : "INACTIVE";
 
-      await this.staffVendorSalariesRepository.update(id, {
+      await this.staffSalariesRepository.update(id, {
         status_id: newStatusId,
       });
 
-      const updatedStaffVendorSalary =
-        await this.staffVendorSalariesRepository.findOne({
+      const updatedStaffSalary =
+        await this.staffSalariesRepository.findOne({
           where: { id },
           relations: [
             "status",
@@ -289,12 +284,11 @@ export class StaffVendorSalariesService {
             "updatedBy",
             "staff",
             "vendor",
-            "location",
           ],
         });
 
-      if (!updatedStaffVendorSalary) {
-        throw new Error("Failed to retrieve updated staff vendor salary");
+      if (!updatedStaffSalary) {
+        throw new Error("Failed to retrieve updated staff salary");
       }
 
       // Audit trail
@@ -302,21 +296,21 @@ export class StaffVendorSalariesService {
         {
           service: "StaffVendorSalariesService",
           method: "toggleStatus",
-          raw_data: JSON.stringify(updatedStaffVendorSalary),
-          description: `Toggled status for staff vendor salary ${id} to ${newStatusName}`,
+          raw_data: JSON.stringify(updatedStaffSalary),
+          description: `Toggled status for staff salary ${id} to ${newStatusName}`,
           status_id: 1,
         },
         userId,
       );
 
       const response = this.responseMapperService.mapEntityToResponse(
-        updatedStaffVendorSalary,
+        updatedStaffSalary,
       );
 
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate(
-          "staff_vendor_salaries",
+          "staff_salaries",
           response.id,
           response,
         );

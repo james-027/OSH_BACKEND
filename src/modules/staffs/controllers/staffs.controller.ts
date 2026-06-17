@@ -29,6 +29,8 @@ import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffsService } from "src/modules/staffs/services/staffs.service";
 import { CheckStaffDto, CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
+import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
+import { UpdateStaffDeployDto } from "src/modules/staffs/dto/UpdateStaffDeployDto";
 import { Query } from "@nestjs/common";
 
 @Controller("staffs")
@@ -36,12 +38,19 @@ import { Query } from "@nestjs/common";
 export class StaffsController {
   constructor(private readonly staffsService: StaffsService) {}
 
-  @Get()
-  @RequirePermissions({ module: "STAFFS", action: "VIEW" })
-  async findAll(@Request() req, @Query("status_id") statusId?: number) {
-    const accessKeyId = req.user.current_access_key;
-    return this.staffsService.findAll(accessKeyId, statusId);
-  }
+@Get()
+async findAll(
+  @Request() req,
+  @Query("status_id") statusId?: string,
+) {
+  const accessKeyId = req.user.current_access_key;
+
+  const parsedStatusId = statusId
+    ? statusId.split(",").map(Number)
+    : undefined;
+
+  return this.staffsService.findAll(accessKeyId, parsedStatusId);
+}
 
   @Get(":id")
   @RequirePermissions({ module: "STAFFS", action: "VIEW" })
@@ -115,5 +124,30 @@ export class StaffsController {
   @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
     return this.staffsService.findOneHistory(id);
+  }
+
+
+  
+  @Patch(":id/transfer")
+  @RequirePermissions({ module: "STAFFS", action: "TRANSFER" })
+  async updateStaffTransfer(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateStaffTransferDto: UpdateStaffTransferDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.staffsService.staffTransfer(id, updateStaffTransferDto, userId);
+  }
+
+  @Post(":id/deploy")
+  @RequirePermissions({ module: "STAFFS", action: "DEPLOY" })
+  async updateStaffDeploy(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateStaffDeployDto: UpdateStaffDeployDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
+    return this.staffsService.staffDeploy(id, updateStaffDeployDto, userId,accessKeyId);
   }
 }

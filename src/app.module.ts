@@ -114,6 +114,7 @@ import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
+import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.module";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -219,6 +220,7 @@ import { TrainingsModule } from "./modules/trainings/trainings.module";
     ApprovalMatrixModule,
     StaffTrainingModule,
     TrainingsModule,
+    StaffSalariesModule,
   ],
   providers: [
     EmailService,
