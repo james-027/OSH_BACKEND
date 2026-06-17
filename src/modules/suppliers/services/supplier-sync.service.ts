@@ -21,12 +21,16 @@ export class SupplierSyncService {
     };
 
     try {
-      const url = "http://10.2.0.156:81/ctgi/syncsuppliertoOSH.php";
+      const url = process.env.BOS_URL;
+      const jwt = process.env.BOS_JWT;
+      const user = process.env.BOS_USER;
 
-      // -----------------------------------------
-      // STEP 1: Fetch supplier data
-      // -----------------------------------------
-      const { data } = await axios.get(url);
+      const { data } = await axios.get(url!, {
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "X-User": user, // Remove this if your API doesn't require it
+        },
+      });
 
       if (!Array.isArray(data) || data.length === 0) {
         logger.warn("No supplier records returned.");
@@ -40,8 +44,15 @@ export class SupplierSyncService {
       // -----------------------------------------
       const existingSuppliers = await this.supplierRepository.find();
 
+      // Create maps
       const supplierMap = new Map(
         existingSuppliers.map((item) => [item.supplier_code, item]),
+      );
+
+      const oldCodeMap = new Map(
+        existingSuppliers
+          .filter((item) => item.old_code)
+          .map((item) => [item.old_code, item]),
       );
 
       // -----------------------------------------
@@ -52,27 +63,65 @@ export class SupplierSyncService {
 
       for (const row of data) {
         try {
-          const supplierCode = row.SUPPNO?.trim();
-          const supplierName = row.SUPPNAME?.trim();
-          const oldCode = row.U_OLD_EBT_CODE ?? null;
+          const supplierCode = row.suppno?.trim();
+          const supplierName = row.suppname?.trim();
+          const groupCode = row.suppgroup?.trim();
+          const groupName = row.groupname?.trim();
+          const taxId = row.taxid?.trim();
+          const company = row.u_company?.trim();
 
           if (!supplierCode) {
             result.skipped++;
             continue;
           }
 
-          const existing = supplierMap.get(supplierCode);
+          let existing = supplierMap.get(supplierCode);
 
+          // If not found by supplier_code, try old_code
+          if (!existing) {
+            existing = oldCodeMap.get(supplierCode);
+          }
+
+          // If still not found, try matching by supplier name
+          if (!existing) {
+            existing = existingSuppliers.find(
+              (s) => s.supplier_name?.trim() === supplierName,
+            );
+          }
           if (existing) {
             let hasChanges = false;
 
+            // Supplier code changed
+            if (existing.supplier_code !== supplierCode) {
+              console.log(existing.supplier_code);
+              existing.old_code = existing.supplier_code;
+              existing.supplier_code = supplierCode;
+              hasChanges = true;
+            }
+
+            // Supplier name changed
             if (existing.supplier_name !== supplierName) {
               existing.supplier_name = supplierName;
               hasChanges = true;
             }
 
-            if (existing.old_code !== oldCode) {
-              existing.old_code = oldCode;
+            if (existing.group_code !== groupCode) {
+              existing.group_code = groupCode;
+              hasChanges = true;
+            }
+
+            if (existing.group_name !== groupName) {
+              existing.group_name = groupName;
+              hasChanges = true;
+            }
+
+            if (existing.taxid !== taxId) {
+              existing.taxid = taxId;
+              hasChanges = true;
+            }
+
+            if (existing.company !== company) {
+              existing.company = company;
               hasChanges = true;
             }
 
@@ -83,22 +132,44 @@ export class SupplierSyncService {
               result.skipped++;
             }
           } else {
-            inserts.push(
-              this.supplierRepository.create({
-                supplier_code: supplierCode,
-                supplier_name: supplierName,
-                old_code: oldCode,
-                status_id: 1,
-              }),
-            );
+            // If not found, check whether the new SUPPNO matches an existing old_code
+            existing = oldCodeMap.get(supplierCode);
 
-            result.inserted++;
+            if (existing) {
+              // Preserve the previous supplier_code as old_code
+              existing.old_code = existing.supplier_code;
+              existing.supplier_code = supplierCode;
+              existing.supplier_name = supplierName;
+              existing.group_code = groupCode;
+              existing.group_name = groupName;
+              existing.taxid = taxId;
+              existing.company = company;
+
+              updates.push(existing);
+              result.updated++;
+            } else {
+              // Completely new supplier
+              inserts.push(
+                this.supplierRepository.create({
+                  supplier_code: supplierCode,
+                  supplier_name: supplierName,
+                  old_code: supplierCode,
+                  group_code: groupCode,
+                  group_name: groupName,
+                  taxid: taxId,
+                  company: company,
+                  status_id: 1,
+                }),
+              );
+
+              result.inserted++;
+            }
           }
         } catch (err) {
           result.errors++;
 
           logger.error(
-            `Failed processing supplier ${row?.SUPPNO}: ${
+            `Failed processing supplier ${row?.suppno}: ${
               err instanceof Error ? err.message : String(err)
             }`,
           );

@@ -9,6 +9,7 @@ import {
 } from "typeorm";
 
 import { Status } from "./Status";
+import { Company } from "./Company";
 
 @Entity("suppliers")
 export class Supplier {
@@ -36,11 +37,39 @@ export class Supplier {
   })
   old_code: string;
 
+  @Column({
+    name: "group_name",
+  })
+  group_name: string;
+
+  @Column({
+    name: "group_code",
+    unique: true,
+  })
+  group_code: string;
+
+  @Column({
+    name: "taxid",
+  })
+  taxid: string;
+
+  @Column({
+    name: "company",
+  })
+  company: string;
+
   // Foreign key to Status entity
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })
   status!: Status;
 
+  // Foreign key to Company entity
+  @ManyToOne(() => Company)
+  @JoinColumn({
+    name: "company",
+    referencedColumnName: "company_abbr",
+  })
+  companyCode!: Company;
   @Column({ default: 1 })
   status_id!: number;
 
