@@ -320,6 +320,22 @@ export function parseToFirstDayOfMonth(dateInput: any): string | null {
     }
   }
 
+  // FIX: Handle string that looks like a numeric Excel serial (e.g., "45770")
+  if (typeof dateInput === "string" && /^\d+$/.test(dateInput.trim())) {
+    try {
+      const XLSX = require("xlsx");
+      const parsed = XLSX.SSF.parse_date_code(Number(dateInput.trim()));
+      if (parsed) {
+        const year = parsed.y;
+        const month = String(parsed.m).padStart(2, "0");
+        return `${year}-${month}-01`;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   // Handle string date
   const timezoneName = getTimeZoneName();
   if (typeof dateInput === "string") {
