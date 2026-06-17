@@ -401,13 +401,15 @@ export function formatDateToMonthYear(dateString: string): string {
  * 45565                                  // 12 (Excel serial for Dec 2024)
  */
 export function getMonthNumber(excelDate: any): number {
-  const date = parseExcelDate(excelDate);
-
-  if (!date) {
-    // Fallback: try creating date directly
-    const fallbackDate = new Date(excelDate);
-    return isNaN(fallbackDate.getTime()) ? 0 : fallbackDate.getMonth() + 1;
+  // Reuse parseToFirstDayOfMonth which correctly handles:
+  // - Excel serial numbers (numbers like 45770 and strings like "45770")
+  // - Date strings like "5/1/2026"
+  // - Date objects
+  const firstDayStr = parseToFirstDayOfMonth(excelDate);
+  if (firstDayStr) {
+    // Extract month from "YYYY-MM-01"
+    const parts = firstDayStr.split("-");
+    return parseInt(parts[1], 10);
   }
-
-  return date.getMonth() + 1; // getMonth() returns 0-11, add 1 for 1-12
+  return 0;
 }
