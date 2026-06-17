@@ -114,6 +114,7 @@ import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
@@ -156,7 +157,6 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),
-    ScheduleModule.forRoot(),
     DebitAdviceModule,
     UsersModule,
     EmployeesModule,
