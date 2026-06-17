@@ -12,6 +12,8 @@ import { AccessKey } from "./AccessKey";
 import { Status } from "./Status";
 import { Location } from "./Location";
 import { User } from "./User";
+import { Item } from "./Item";
+import { Warehouse } from "./Warehouse";
 
 @Entity("sales_transactions")
 @Index("idx_sales_transactions_item_code", ["item_code"])
@@ -156,7 +158,7 @@ export class SalesTransaction {
   @Column({ nullable: true })
   updated_by: number;
 
-  @ManyToOne(() => Status, {
+  @ManyToOne(() => Location, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
@@ -164,23 +166,23 @@ export class SalesTransaction {
   @JoinColumn({ name: "location_id" })
   location: Location;
 
-  @ManyToOne(() => Status, {
+  @ManyToOne(() => Warehouse, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "warehouse_id" })
-  warehouse: Location;
+  warehouse: Warehouse;
 
-  @ManyToOne(() => Status, {
+  @ManyToOne(() => Item, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "item_id" })
-  item: Location;
+  item: Item;
 
-  @ManyToOne(() => Status, {
+  @ManyToOne(() => User, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
@@ -188,7 +190,7 @@ export class SalesTransaction {
   @JoinColumn({ name: "created_by" })
   createdBy: User;
 
-  @ManyToOne(() => Status, {
+  @ManyToOne(() => User, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
