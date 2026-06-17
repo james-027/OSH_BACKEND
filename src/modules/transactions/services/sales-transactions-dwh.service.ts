@@ -178,7 +178,7 @@ export class SalesTransactionsDwhService {
         const keys = toInsert.map((row) => ({
           item_code: row.item_code,
           whs_code: row.whs_code,
-          doc_date_month: row.doc_date_month,
+          doc_date: row.doc_date,
         }));
 
         // 2. Update all existing records for this batch to status_id = 2
@@ -191,7 +191,7 @@ export class SalesTransactionsDwhService {
               keys
                 .map(
                   (k, idx) =>
-                    `(item_code = :item_code${idx} AND whs_code = :whs_code${idx} AND doc_date_month = :doc_date_month${idx})`,
+                    `(item_code = :item_code${idx} AND whs_code = :whs_code${idx} AND doc_date = :doc_date${idx})`,
                 )
                 .join(" OR "),
               Object.assign(
@@ -199,7 +199,7 @@ export class SalesTransactionsDwhService {
                 ...keys.map((k, idx) => ({
                   [`item_code${idx}`]: k.item_code,
                   [`whs_code${idx}`]: k.whs_code,
-                  [`doc_date_month${idx}`]: k.doc_date_month,
+                  [`doc_date${idx}`]: k.doc_date,
                 })),
               ),
             )
