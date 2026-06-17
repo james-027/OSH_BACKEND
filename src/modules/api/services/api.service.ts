@@ -399,7 +399,7 @@ export class ApiService {
         case "store-crew-assignments":
           const modified_date = queryParams.modified_date ?? "";
 
-          const whereClauses = ["a.asgnStatID IN (1, 4)"];
+          const whereClauses = ["a.asgnStatID IN (1, 4, 6)"];
 
           const sqlParams: any[] = [];
           if (modified_date) {
