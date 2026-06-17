@@ -18,7 +18,7 @@ export class ApprovalLogsService {
 
     @InjectRepository(ApprovalMatrix)
     private approvalMatrixRepository: Repository<ApprovalMatrix>,
-  ) {}
+  ) { }
 
   // Fetch approval logs by debit advice header ID
   async findByHeaderId(transaction_id: number): Promise<any[]> {
@@ -130,7 +130,7 @@ export class ApprovalLogsService {
 
     const moduleLine = matrix.lines.find(
       (x) =>
-        Number(x.module) === Number(dto.module_id) && Number(x.status_id) === 1,
+        Number(x.module) === Number(dto.module_id) && Number(x.id) === Number(dto.approval_id),
     );
 
     if (!moduleLine) {

@@ -12,6 +12,8 @@ import {
     UploadedFile,
     UseInterceptors,
     BadRequestException,
+    Res,
+    NotFoundException,
     Query,
 } from "@nestjs/common";
 import {
@@ -24,17 +26,28 @@ import {
     FILE_SIZE_LIMITS,
     generateTimestampFilename,
 } from "src/utils/file-upload.utils";
+import * as fs from "fs";
+import * as path from "path";
+
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { DebitAdviceService } from "../services/debit-advice.service";
 import { CreateDebitAdviceDto } from "../dto/CreateDebitAdviceDto";
 import { UpdateDebitAdviceDto } from "../dto/UpdateDebitAdviceDto";
+import { OSHJVService } from "../services/jv-creation.service";
+import { attachmentFileFilter } from "./attachment/file-filters";
+import multer from "multer";
+import { join } from 'path';
+import { Response } from 'express';
 
 @Controller("debit-advices")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceController {
-    constructor(private readonly debitAdviceService: DebitAdviceService) { }
+    constructor(
+        private readonly debitAdviceService: DebitAdviceService,
+        private readonly oshjvService: OSHJVService,
+    ) { }
     @Get()
     // @RequirePermissions({ module: "DEBIT_ADVICES", action: "VIEW" })
     async findAll(@Request() req) {
@@ -56,12 +69,18 @@ export class DebitAdviceController {
         );
     }
 
-
-    @Get('test')
-    test() {
-        console.log('✅ DebitAdviceController hit');
-        return 'working';
+    @Post('create-jv')
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async postToOSHJV(
+        @Request() req,
+        @Body() payload: any) {
+        const userId = req.user.id;
+        return this.oshjvService.postToOSHJV(payload, userId);
     }
+
     @Get(":id")
     @RequirePermissions({
         module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
@@ -145,4 +164,114 @@ export class DebitAdviceController {
         );
         return result;
     }
+
+    @Get("document-posting-logs")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async document_posting_log(@Request() req) {
+        return this.oshjvService.ShowDocumentPostingLogs();
+    }
+
+    @Post("document-posting-logs/create")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async createDocumentPostingLog(@Body() payload: any[], @Request() req) {
+        const userId = req.user.id;
+        return this.oshjvService.createDocumentPostingLog(payload, userId);
+    }
+
+
+
+    @Post(":docno/upload-attachment")
+    @UseInterceptors(
+        FileInterceptor("file", {
+            storage: diskStorage({
+                destination: (req, file, cb) => {
+                    console.log("STORAGE HIT");
+
+                    const docno = req.params.docno;
+
+                    const uploadPath = path.join(
+                        process.cwd(),
+                        "uploads",
+                        "attachment",
+                        "debit-advices",
+                        docno,
+                    );
+
+                    console.log(uploadPath);
+
+                    if (!fs.existsSync(uploadPath)) {
+                        fs.mkdirSync(uploadPath, {
+                            recursive: true,
+                        });
+                    }
+
+                    cb(null, uploadPath);
+                },
+
+                filename: (req, file, cb) => {
+                    cb(
+                        null,
+                        `${Date.now()}-${file.originalname}`,
+                    );
+                },
+            }),
+            fileFilter: attachmentFileFilter,
+            limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
+        }),
+    )
+    @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+    async uploadAttachment(@UploadedFile() file: Express.Multer.File, @Request() req) {
+        if (!file) {
+            throw new BadRequestException(
+                "No file uploaded or invalid file type.",
+            );
+        }
+
+        const docno = req.params.docno;
+        const userId = req.user.id;
+
+        return this.debitAdviceService.saveAttachment(
+            "DEBIT ADVICE",
+            0,
+            docno,
+            file,
+            userId,
+        );
+    }
+
+
+
+    @Get('attachment/:docno/view')
+    async viewAttachment(
+        @Param('docno') docno: string,
+        @Request() req,
+    ) {
+        const attachments =
+            await this.debitAdviceService.findAttachment(docno);
+
+
+        return attachments;
+    }
+
+
+    @Delete('attachment/:id')
+    async deleteAttachment(
+        @Param('id') id: string,
+        @Request() req,
+    ) {
+        const userId = req.user.id;
+        const result = await this.debitAdviceService.deleteAttachment(id, userId);
+
+        return {
+            message: 'Attachment deleted successfully',
+            data: result,
+        };
+    }
+
 }

@@ -10,44 +10,44 @@ import {
 } from "typeorm";
 import { User } from "./User";
 import { Status } from "./Status";
-import { DebitAdviceLine } from "./DebitAdviceItems";
 
 // creating main entity for debit advice and line items as supporting entity. This will allow us to have multiple line items for a single debit advice, 
 // which is a common scenario in financial transactions. The main entity will represent the overall debit advice, while the line 
 // items will capture the details of each individual transaction entry.
 
 
-
-@Entity({ name: "debit_advice" })
-export class DebitAdvice_header {
+@Entity({ name: "document_posting_log" })
+export class DocumentPostingLog {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @Column({ unique: true })
-    document_number: string;
+    @Column({ type: "text" })
+    module_name: string;
 
     @Column({ nullable: true })
-    jv_no: string;
-
-    @Column({ type: "date" })
-    transaction_date: Date;
+    ref_docno: string;
 
 
-    @Column({ default: 1 })
-    status_id: number;
+    @Column({ nullable: true })
+    jv_docno: string;
+
+    @Column({ type: "mediumtext", nullable: true })
+    payload: string;
+
+    @Column({ type: "mediumtext", nullable: true })
+    remarks: string;
+
+
+    @ManyToOne(() => Status)
+    @JoinColumn({ name: "status_id" })
+    status: Status;
+
 
     @Column({ nullable: true })
     created_by: number;
 
     @Column({ nullable: true })
     updated_by: number;
-
-    @Column({ nullable: true })
-    remarks: string;
-
-    @Column({ nullable: true })
-    approval: number;
-
 
     @CreateDateColumn({
         type: "timestamp",
@@ -56,6 +56,11 @@ export class DebitAdvice_header {
     })
     created_at: Date;
 
+
+    @ManyToOne(() => User)
+    @JoinColumn({ name: "created_by" })
+    createdBy: User;
+
     @UpdateDateColumn({
         type: "timestamp",
         precision: 6,
@@ -63,21 +68,8 @@ export class DebitAdvice_header {
     })
     updated_at: Date;
 
-
-    @ManyToOne(() => Status)
-    @JoinColumn({ name: "status_id" })
-    status: Status;
-
-    @ManyToOne(() => User)
-    @JoinColumn({ name: "created_by" })
-    createdBy: User;
-
     @ManyToOne(() => User)
     @JoinColumn({ name: "updated_by" })
     updatedBy: User;
 
-    // Relationship to Line Items
-    @OneToMany(() => DebitAdviceLine, (line) => line.header, { cascade: true })
-    lines: DebitAdviceLine[];
 }
-

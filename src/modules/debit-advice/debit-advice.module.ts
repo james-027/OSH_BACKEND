@@ -4,18 +4,21 @@ import { DebitAdvice_header } from "../../entities/DebitAdviceHeader";
 import { DebitAdviceLine } from "../../entities/DebitAdviceItems";
 import { DebitAdviceController } from "./controllers/debit-advice.controller";
 import { DebitAdviceService } from "./services/debit-advice.service";
+import { OSHJVService } from "./services/jv-creation.service";
 import { UsersModule } from "../users/users.module";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { SSEModule } from "../sse/sse.module";
 import { Action } from "../../entities/Action";
 import { Module as AppModule } from "../../entities/Module";
-import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
+// import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { CommonUtilitiesService } from "../../services/common-utilities.service";
 import { TransactionSequence } from "../../entities/TransactionSequence";
 import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { ActionLog } from "src/entities/ActionLog";
+import { DocumentPostingLog } from "src/entities/DocumentPostingLog";
+import { TransactionAttachment } from "src/entities/TransactionAttachment";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
     imports: [TypeOrmModule.forFeature([
@@ -27,6 +30,8 @@ import { ActionLog } from "src/entities/ActionLog";
         Action,
         TransactionSequence,
         ActionLog,
+        DocumentPostingLog,
+        TransactionAttachment,
     ]),
         UsersModule,
         SSEModule],
@@ -37,11 +42,8 @@ import { ActionLog } from "src/entities/ActionLog";
         CommonUtilitiesService,
         ResponseMapperService,
         ActionLogsService,
+        OSHJVService,
     ],
-    exports: [DebitAdviceService],
+    exports: [DebitAdviceService, OSHJVService],
 })
-export class DebitAdviceModule {
-    constructor() {
-        console.log("✅ DebitAdviceModule initialized");
-    }
-}
+export class DebitAdviceModule { }
