@@ -21,6 +21,8 @@ export const ACTION_IDS = {
   DEACTIVATE: 6,
   APPROVE: 7,
   REVERT: 10,
+  TRANSFER:11,
+  DEPLOY:12,
 } as const;
 
 // ============= STATUS IDs (Store Hurdles) =============

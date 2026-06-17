@@ -17,6 +17,7 @@ import { AccessKey } from "./AccessKey";
 import { StaffBrand } from "./StaffBrand";
 import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
+import { Warehouse } from "./Warehouse";
 
 @Entity("staffs")
 export class Staff {
@@ -40,6 +41,9 @@ export class Staff {
 
   @Column()
   vendor_id: number;
+
+  @Column({nullable:true})
+  warehouse_id: number;
 
   @Column()
   assign_status_id: number;
@@ -189,4 +193,13 @@ export class Staff {
 
   @OneToMany(() => StaffVendorSalary, (staffVendorSalary) => staffVendorSalary.staff)
   staffVendorSalaries: StaffVendorSalary[];
+
+
+    @ManyToOne(() => Warehouse, {
+      eager: false,
+      onDelete: "RESTRICT",
+      onUpdate: "CASCADE",
+    })
+    @JoinColumn({ name: "warehouse_id" })
+    warehouse: Warehouse;
 }
