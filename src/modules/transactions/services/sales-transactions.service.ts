@@ -477,7 +477,7 @@ export class SalesTransactionsService {
             dchannel: formattedRow["U_DCHANNEL"],
             item_code: itemCodeUpperCase,
             item_desc: formattedRow["ITEM"],
-            vat_code: formattedRow["VATCODE"],
+            vat_cdoe: formattedRow["VATCODE"],
             gross_sales: Number(formattedRow["GROSSSALES"]) || 0,
             net_sales: Number(formattedRow["NETSALES"]) || 0,
             quantity: Number(formattedRow["QUANTITY"]) || 0,
@@ -490,12 +490,12 @@ export class SalesTransactionsService {
             disc_amount: Number(formattedRow["DISCAMOUNT"]) || 0,
             vat_rate: Number(formattedRow["VATRATE"]) || 0,
             // ← These are fetched from items lookup
-            cat01: itemLookup.cat01,
-            cat02: itemLookup.cat02,
-            sales_conv: itemLookup.salesconv,
-            sales_unit_eq: itemLookup.salesuniteq,
-            item_group: itemLookup.itemgroup,
-            uom: itemLookup.uom,
+            cat01: itemLookup.cat01 || "",
+            cat02: itemLookup.cat02 || "",
+            sales_conv: itemLookup.salesconv || "",
+            sales_unit_eq: itemLookup.salesuniteq || "",
+            item_group: itemLookup.itemgroup || "",
+            uom: itemLookup.uom || "",
             // ✅ NEW: Foreign key references
             location_id: locationId, // ← From location lookup
             warehouse_id: warehouseId, // ← From warehouse lookup
