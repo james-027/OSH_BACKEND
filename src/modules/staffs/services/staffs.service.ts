@@ -4,14 +4,19 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, In } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
 import { Staff } from "src/entities/Staff";
 import { Location } from "src/entities/Location";
-import { CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
+import {
+  CheckStaffDto,
+  CreateStaffDto,
+} from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
+import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
+import { UpdateStaffDeployDto } from "src/modules/staffs/dto/UpdateStaffDeployDto";
 import { parseExcelDate } from "src/utils/date.utils";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
@@ -19,12 +24,35 @@ import logger from "../../../config/logger";
 import { Position } from "src/entities/Position";
 import { Vendor } from "src/entities/Vendor";
 import { Status } from "src/entities/Status";
-
+import { StaffBrand } from "src/entities/StaffBrand";
+import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { StaffCategoryType } from "src/entities/StaffCategoryType";
+import { StaffSalary } from "src/entities/StaffSalary";
+import { StaffHistory } from "src/entities/StaffHistory";
+import { Brand } from "src/entities/Brand";
+import { CategoryType } from "src/entities/CategoryType";
+import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import {
+  MODULE_IDS,
+  ACTION_IDS,
+  STATUS_IDS,
+  STATUS_NAMES,
+} from "src/constants/customConstants";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { StaffWarehouse } from "src/entities/StaffWarehouse";
 @Injectable()
 export class StaffsService {
   constructor(
     @InjectRepository(Staff)
     private staffsRepository: Repository<Staff>,
+    @InjectRepository(StaffBrand)
+    private staffBrandsRepository: Repository<StaffBrand>,
+    @InjectRepository(StaffVendorSalary)
+    private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
+    @InjectRepository(StaffSalary)
+    private staffSalaryRepository: Repository<StaffSalary>,
+    @InjectRepository(StaffCategoryType)
+    private staffCategoryTypesRepository: Repository<StaffCategoryType>,
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
     @InjectRepository(Position)
@@ -33,19 +61,32 @@ export class StaffsService {
     private vendorRepository: Repository<Vendor>,
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
+    @InjectRepository(Brand)
+    private brandRepository: Repository<Brand>,
+    @InjectRepository(CategoryType)
+    private categoryTypeRepository: Repository<CategoryType>,
+    @InjectRepository(StaffHistory)
+    private readonly staffHistoriesRepository: Repository<StaffHistory>,
+    @InjectRepository(StaffWarehouse)
+    private readonly staffWarehouseRepository: Repository<StaffWarehouse>,
+    private actionLogsService: ActionLogsService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
-    
+  async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+     if (statusId && statusId.length > 0) {
+      where.status_id = In(statusId);
+    }
 
       const staffs = await this.staffsRepository.find({
         where,
@@ -58,7 +99,13 @@ export class StaffsService {
           "vendor",
           "position",
           "accessKey",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
         ],
+        order: {
+          modified_at: "DESC", // latest modified first
+        },
       });
 
       return this.responseMapperService.mapEntitiesToResponse(staffs);
@@ -80,6 +127,9 @@ export class StaffsService {
           "location",
           "vendor",
           "position",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
         ],
       });
 
@@ -144,7 +194,7 @@ export class StaffsService {
           : null,
         location_id: createStaffDto.location_id,
         vendor_id: createStaffDto.vendor_id,
-        assign_status_id: createStaffDto.assign_status_id,
+        assign_status_id: 13,
         position_id: createStaffDto.position_id,
         access_key_id: accessKeyId,
         sss_number: createStaffDto.sss_number || null,
@@ -178,12 +228,70 @@ export class StaffsService {
         contact_number: createStaffDto.contact_number || null,
         overall_remarks: createStaffDto.overall_remarks || null,
         store_request: createStaffDto.store_request || null,
-        status_id: createStaffDto.status_id || 1,
+        status_id: 20,
         created_by: userId,
         updated_by: userId,
       });
 
       const savedStaff = await this.staffsRepository.save(newStaff);
+      const staffHistory = this.staffHistoriesRepository.create({
+        ...savedStaff,
+        staff_id: savedStaff.id,
+      });
+
+      const savedStaffHistory =
+        await this.staffHistoriesRepository.save(staffHistory);
+
+      const newStaffBrand = this.staffBrandsRepository.create({
+        staff_id: savedStaff.id,
+        brand_id: createStaffDto.brand_id,
+        access_key_id: accessKeyId,
+        status_id: 1,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      const newStaffCategoryType = this.staffCategoryTypesRepository.create({
+        staff_id: savedStaff.id,
+        category_type_id: createStaffDto.category_type_id,
+        access_key_id: accessKeyId,
+        status_id: 1,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      const newStaffVendorSalary = this.staffVendorSalaryRepository.create({
+        staff_id: savedStaff.id,
+        vendor_id: createStaffDto.vendor_id,
+        location_id: createStaffDto.location_id,
+        access_key_id: accessKeyId,
+        status_id: 1,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      const savedStaffBrand =
+        await this.staffBrandsRepository.save(newStaffBrand);
+      const savedStaffCategoryType =
+        await this.staffCategoryTypesRepository.save(newStaffCategoryType);
+      const savedStaffVendorSalary =
+        await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
+
+        
+      const newStaffSalary = this.staffSalaryRepository.create({
+        staff_id: savedStaff.id,
+        staff_vendor_id: newStaffVendorSalary.id,
+        allowance: createStaffDto.allowance,
+        salary_rate: createStaffDto.salary_rate,
+        access_key_id: accessKeyId,
+        status_id: 1,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+
+      const savedStaffSalary =
+        await this.staffSalaryRepository.save(newStaffSalary);
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -192,6 +300,46 @@ export class StaffsService {
           method: "create",
           raw_data: JSON.stringify(savedStaff),
           description: `Created staff ${savedStaff.id} - ${savedStaff.first_name} ${savedStaff.last_name}`,
+          status_id: 1,
+        },
+        userId,
+      );
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "create",
+          raw_data: JSON.stringify(savedStaffBrand),
+          description: `Created staff Brand ${savedStaffBrand.id}`,
+          status_id: 1,
+        },
+        userId,
+      );
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "create",
+          raw_data: JSON.stringify(savedStaffCategoryType),
+          description: `Created staff category ${savedStaffCategoryType.id}`,
+          status_id: 1,
+        },
+        userId,
+      );
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "create",
+          raw_data: JSON.stringify(savedStaffVendorSalary),
+          description: `Created staff vendor${savedStaffVendorSalary.id} `,
+          status_id: 1,
+        },
+        userId,
+      );
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "create",
+          raw_data: JSON.stringify(savedStaffSalary),
+          description: `Created staff salary${savedStaffSalary.id} `,
           status_id: 1,
         },
         userId,
@@ -207,11 +355,29 @@ export class StaffsService {
           "location",
           "vendor",
           "position",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
         ],
       });
 
       if (!staffWithRelations) {
         throw new Error("Failed to retrieve created staff");
+      }
+
+      // Action Log
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          ref_id: savedStaff.id,
+          action_id: ACTION_IDS.ADD,
+          description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
+          raw_data: JSON.stringify(createStaffDto),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for create:", err);
+        // Don't throw - action log failure shouldn't block creation
       }
 
       const response =
@@ -290,8 +456,9 @@ export class StaffsService {
         return date;
       };
 
-      // Convert date strings to Date objects
       const updateData: any = { ...updateStaffDto };
+      delete updateData.status_id;
+
       updateData.hired_date = safeDate(updateData.hired_date);
       updateData.to_hr_date = safeDate(updateData.to_hr_date);
       updateData.to_sts_date = safeDate(updateData.to_sts_date);
@@ -303,27 +470,105 @@ export class StaffsService {
       updateData.separated_date = safeDate(updateData.separated_date);
       updateData.birthday = safeDate(updateData.birthday);
 
-      // Uppercase name fields if provided
       if (updateData.last_name) {
         updateData.last_name = updateData.last_name.toUpperCase();
       }
+
       if (updateData.first_name) {
         updateData.first_name = updateData.first_name.toUpperCase();
       }
+
       if (updateData.middle_name) {
         updateData.middle_name = updateData.middle_name.toUpperCase();
       }
+
       if (updateData.staff_code) {
-        updateData.staff_code = updateData.staff_code
-          ? updateData.staff_code.toUpperCase()
-          : "";
+        updateData.staff_code = updateData.staff_code.toUpperCase();
       }
 
       Object.assign(staff, updateData, {
         updated_by: userId,
       });
 
-      await this.staffsRepository.save(staff);
+      const savedStaff = await this.staffsRepository.save(staff);
+
+      const staffHistory = this.staffHistoriesRepository.create({
+        ...savedStaff,
+        staff_id: savedStaff.id,
+      });
+
+      const savedStaffHistory =
+        await this.staffHistoriesRepository.save(staffHistory);
+
+      let staffBrand = await this.staffBrandsRepository.findOne({
+        where: { staff_id: staff.id },
+      });
+
+      if (staffBrand) {
+        staffBrand.brand_id = updateStaffDto.brand_id;
+        staffBrand.updated_by = userId;
+
+        await this.staffBrandsRepository.save(staffBrand);
+      } else {
+        staffBrand = this.staffBrandsRepository.create({
+          staff_id: staff.id,
+          brand_id: updateStaffDto.brand_id,
+          access_key_id: staff.access_key_id,
+          status_id: updateStaffDto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        await this.staffBrandsRepository.save(staffBrand);
+      }
+
+      let staffCategoryType = await this.staffCategoryTypesRepository.findOne({
+        where: { staff_id: staff.id },
+      });
+
+      if (staffCategoryType) {
+        staffCategoryType.category_type_id = updateStaffDto.category_type_id;
+        staffCategoryType.updated_by = userId;
+
+        await this.staffCategoryTypesRepository.save(staffCategoryType);
+      } else {
+        staffCategoryType = this.staffCategoryTypesRepository.create({
+          staff_id: staff.id,
+          category_type_id: updateStaffDto.category_type_id,
+          access_key_id: staff.access_key_id,
+          status_id: updateStaffDto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        await this.staffCategoryTypesRepository.save(staffCategoryType);
+      }
+
+      let staffVendorSalary = await this.staffVendorSalaryRepository.findOne({
+        where: { staff_id: staff.id },
+      });
+
+      if (staffVendorSalary) {
+        staffVendorSalary.vendor_id = updateStaffDto.vendor_id;
+        staffVendorSalary.location_id = updateStaffDto.location_id;
+        staffVendorSalary.updated_by = userId;
+
+        await this.staffVendorSalaryRepository.save(staffVendorSalary);
+      } else {
+        staffVendorSalary = this.staffVendorSalaryRepository.create({
+          staff_id: staff.id,
+          vendor_id: updateStaffDto.vendor_id,
+          location_id: updateStaffDto.location_id,
+          access_key_id: staff.access_key_id,
+          status_id: updateStaffDto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        await this.staffVendorSalaryRepository.save(staffVendorSalary);
+      }
+
+      
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -347,6 +592,9 @@ export class StaffsService {
           "location",
           "vendor",
           "position",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
         ],
       });
 
@@ -354,12 +602,36 @@ export class StaffsService {
         throw new Error("Failed to retrieve updated staff");
       }
 
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          ref_id: savedStaff.id,
+          action_id: ACTION_IDS.EDIT,
+          description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
+          raw_data: JSON.stringify(updateStaffDto),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for create:", err);
+        // Don't throw - action log failure shouldn't block creation
+      }
+
       const response =
         this.responseMapperService.mapEntityToResponse(staffWithRelations);
 
-      // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_brands", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_category_types",
+          response.id,
+          response,
+        );
+        this.sseEventEmitter.emitUpdate(
+          "staff_vendor_salaries",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -368,14 +640,6 @@ export class StaffsService {
     } catch (error) {
       console.error("UPDATE STAFF ERROR:", error);
       throw error;
-
-      // if (
-      //   error instanceof NotFoundException ||
-      //   error instanceof BadRequestException
-      // ) {
-      //   throw error;
-      // }
-      // throw new Error("Failed to update staff");
     }
   }
 
@@ -398,8 +662,8 @@ export class StaffsService {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
 
-      const newStatusId = staff.status_id === 1 ? 2 : 1;
-      const newStatusName = newStatusId === 1 ? "ACTIVE" : "INACTIVE";
+      const newStatusId = 20;
+      const newStatusName = "Revert";
 
       await this.staffsRepository.update(id, {
         status_id: newStatusId,
@@ -422,6 +686,46 @@ export class StaffsService {
         throw new Error("Failed to retrieve updated staff");
       }
 
+      const staffHistory = this.staffHistoriesRepository.save({
+        staff_id: updatedStaff.id,
+
+        staff_code: updatedStaff.staff_code,
+        last_name: updatedStaff.last_name,
+        first_name: updatedStaff.first_name,
+        middle_name: updatedStaff.middle_name,
+
+        location_id: updatedStaff.location_id,
+        vendor_id: updatedStaff.vendor_id,
+        assign_status_id: updatedStaff.assign_status_id,
+        position_id: updatedStaff.position_id,
+
+        access_key_id: updatedStaff.access_key_id,
+
+        sss_number: updatedStaff.sss_number,
+        pagibig_number: updatedStaff.pagibig_number,
+        tin: updatedStaff.tin,
+
+        remarks: updatedStaff.remarks,
+        overall_remarks: updatedStaff.overall_remarks,
+        store_request: updatedStaff.store_request,
+
+        hired_date: updatedStaff.hired_date,
+        to_hr_date: updatedStaff.to_hr_date,
+        to_sts_date: updatedStaff.to_sts_date,
+        approved_eprf_date: updatedStaff.approved_eprf_date,
+        req_completion_date: updatedStaff.req_completion_date,
+        actual_deployment_date: updatedStaff.actual_deployment_date,
+        separated_date: updatedStaff.separated_date,
+        birthday: updatedStaff.birthday,
+
+        contact_number: updatedStaff.contact_number,
+
+        status_id: updatedStaff.status_id,
+
+        created_by: userId,
+        updated_by: userId,
+      });
+
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -433,6 +737,25 @@ export class StaffsService {
         },
         userId,
       );
+
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS,
+          ref_id: updatedStaff.id,
+          action_id: ACTION_IDS.REVERT, 
+          description: `Toggled staff status to ${newStatusName}  ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${
+            staff.vendor?.service_provider_name ?? "N/A"
+          } | Location: ${staff.location?.location_name ?? "N/A"}`,
+          raw_data: JSON.stringify({
+            id: updatedStaff.id,
+            old_status: staff.status_id,
+            new_status: newStatusId,
+          }),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for toggleStatus:", err);
+      }
 
       const response =
         this.responseMapperService.mapEntityToResponse(updatedStaff);
@@ -453,6 +776,303 @@ export class StaffsService {
         throw error;
       }
       throw new Error("Failed to toggle status for staff");
+    }
+  }
+
+  async staffTransfer(
+    id: number,
+    updateStaffTransferDto: UpdateStaffTransferDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const staff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+        ],
+      });
+
+      if (!staff) {
+        throw new NotFoundException(`Staff with ID ${id} not found`);
+      }
+
+      const newVendorId = updateStaffTransferDto.vendor_id;
+      const newLocationId = updateStaffTransferDto.location_id;
+
+      const isVendorChanged = staff.vendor_id !== newVendorId;
+      const isLocationChanged = staff.location_id !== newLocationId;
+
+      if (!isVendorChanged && !isLocationChanged) {
+        return this.responseMapperService.mapEntityToResponse(staff);
+      }
+
+      const oldLocation = staff.location?.location_name ?? "N/A";
+      const oldVendor = staff.vendor?.service_provider_name ?? "N/A";
+
+      await this.staffsRepository.update(id, {
+        location_id: newLocationId,
+        vendor_id: newVendorId,
+      });
+
+      const updatedStaff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+        ],
+      });
+
+      if (!updatedStaff) {
+        throw new Error("Failed to retrieve updated staff");
+      }
+
+    
+      let generatedStaffCode: string | null = null;
+
+      if (isVendorChanged || isLocationChanged) {
+        const serviceProviderCode =
+          updatedStaff.vendor?.service_provider_code ?? "";
+
+        const locationCode =
+          updatedStaff.location?.location_code ?? "";
+
+        const prefix = `${serviceProviderCode}${locationCode}`;
+
+        const latestStaff = await this.staffsRepository
+          .createQueryBuilder("staff")
+          .where("staff.staff_code LIKE :prefix", {
+            prefix: `${prefix}%`,
+          })
+          .orderBy("staff.staff_code", "DESC")
+          .getOne();
+
+        let nextSeries = 1;
+
+        if (latestStaff?.staff_code) {
+          const seriesPart =
+            latestStaff.staff_code.substring(prefix.length);
+          nextSeries = parseInt(seriesPart, 10) + 1;
+        }
+
+        const trans_number =
+          await this.commonUtilitiesService.generateTransactionNumber({
+            transaction_type: `STAFF CODE ${locationCode}`,
+            vendor_id: updatedStaff.vendor_id,
+            location_id: updatedStaff.location_id,
+            access_key_id: updatedStaff.access_key_id,
+            format: "D{abbr}{key}{year}-{seq:6}",
+            reset_per_year: false,
+            currentDate: new Date(),
+            abbr: updatedStaff.vendor?.service_provider_code ?? "",
+          });
+
+        const series = trans_number.match(/\d+$/)?.[0];
+
+        generatedStaffCode = `${prefix}-${series}`;
+
+        await this.staffsRepository.update(updatedStaff.id, {
+          staff_code: generatedStaffCode,
+        });
+
+        updatedStaff.staff_code = generatedStaffCode;
+      }
+
+      await this.staffHistoriesRepository.save({
+        staff_id: updatedStaff.id,
+        staff_code: updatedStaff.staff_code,
+        last_name: updatedStaff.last_name,
+        first_name: updatedStaff.first_name,
+        middle_name: updatedStaff.middle_name,
+        location_id: updatedStaff.location_id,
+        vendor_id: updatedStaff.vendor_id,
+        assign_status_id: updatedStaff.assign_status_id,
+        position_id: updatedStaff.position_id,
+        access_key_id: updatedStaff.access_key_id,
+        sss_number: updatedStaff.sss_number,
+        pagibig_number: updatedStaff.pagibig_number,
+        tin: updatedStaff.tin,
+        remarks: updatedStaff.remarks,
+        overall_remarks: updatedStaff.overall_remarks,
+        store_request: updatedStaff.store_request,
+        hired_date: updatedStaff.hired_date,
+        to_hr_date: updatedStaff.to_hr_date,
+        to_sts_date: updatedStaff.to_sts_date,
+        approved_eprf_date: updatedStaff.approved_eprf_date,
+        req_completion_date: updatedStaff.req_completion_date,
+        actual_deployment_date: updatedStaff.actual_deployment_date,
+        separated_date: updatedStaff.separated_date,
+        birthday: updatedStaff.birthday,
+        contact_number: updatedStaff.contact_number,
+        status_id: updatedStaff.status_id,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "staffTransfer",
+          raw_data: JSON.stringify(updatedStaff),
+          description: `Staff transfer executed for ${id} - ${staff.first_name} ${staff.last_name} from Vendor: ${oldVendor} / Location: ${oldLocation}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS,
+          ref_id: updatedStaff.id,
+          action_id: ACTION_IDS.TRANSFER,
+          description: `Staff transferred ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${oldVendor} → ${
+            updatedStaff.vendor?.service_provider_name ?? "N/A"
+          } | Location: ${oldLocation} → ${
+            updatedStaff.location?.location_name ?? "N/A"
+          }`,
+          raw_data: JSON.stringify({
+            id: updatedStaff.id,
+            old_vendor: staff.vendor_id,
+            new_vendor: updatedStaff.vendor_id,
+            old_location: staff.location_id,
+            new_location: updatedStaff.location_id,
+            new_staff_code: generatedStaffCode,
+          }),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for staffTransfer:", err);
+      }
+
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedStaff);
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to process staff transfer");
+    }
+  }
+
+  async staffDeploy(
+    id: number,
+    updateStaffDeployDto: UpdateStaffDeployDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
+    try {
+      const staff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+        ],
+      });
+
+
+      if (!staff) {
+        throw new NotFoundException(`Staff with ID ${id} not found`);
+      }
+
+      const newWarehouseId = updateStaffDeployDto.warehouse_id;
+
+      const staffWarehouse = await this.staffWarehouseRepository.save({
+        staff_id: staff.id,
+        warehouse_id: newWarehouseId,
+        staff_code: staff.staff_code,
+        location_id: staff.location_id,
+        vendor_id: staff.vendor_id,
+        effectivity_date: updateStaffDeployDto.effectivity_date,
+        end_date: updateStaffDeployDto.end_date,
+        remarks: updateStaffDeployDto.remarks,
+        created_by: userId,
+        updated_by:userId,
+        access_key_id:accessKeyId
+      });
+
+
+    
+      const staffWarehouseDetails = await this.staffWarehouseRepository.findOne({
+        where: { id: staffWarehouse.id },
+        relations: ["warehouse"],
+      });
+
+
+      if(staffWarehouse){
+      await this.staffsRepository.update(id, {
+        assign_status_id: 21,
+      });
+      }
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "staffTransfer",
+          raw_data: JSON.stringify(staffWarehouse),
+          description: `Staff Deploy executed for ${id} - ${staff.first_name} ${staff.last_name} to Warehouse: ${staffWarehouseDetails.warehouse.warehouse_name} `,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      try {
+        await this.actionLogsService.logAction({
+          module_id: MODULE_IDS.STAFFS,
+          ref_id: staffWarehouse.id,
+          action_id: ACTION_IDS.DEPLOY,
+          description: `Staff ${staff.first_name} ${staff.last_name} Deployed to Warehouse: ${staffWarehouseDetails.warehouse.warehouse_name}`,
+          raw_data: JSON.stringify({
+              staffWarehouse
+          }),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for staffTransfer:", err);
+      }
+
+      const response =
+        this.responseMapperService.mapEntityToResponse(staffWarehouse);
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to process staff transfer");
     }
   }
 
@@ -492,7 +1112,8 @@ export class StaffsService {
           "Location",
           "Position",
           "Vendor",
-          "Assign Status",
+          "Brand",
+          "Category Type",
         ];
 
         const missingFields = requiredFields.filter(
@@ -523,8 +1144,11 @@ export class StaffsService {
           where: { service_provider_name: row["Vendor"] },
         });
 
-        const status = await this.statusRepository.findOne({
-          where: { status_name: row["Assign Status"] },
+        const brand = await this.brandRepository.findOne({
+          where: { brand_name: row["Brand"] },
+        });
+        const categoryType = await this.categoryTypeRepository.findOne({
+          where: { category_type_name: row["Category Type"] },
         });
 
         if (!location) {
@@ -551,10 +1175,17 @@ export class StaffsService {
           continue;
         }
 
-        if (!status) {
+        if (!brand) {
           errors.push({
             row: i + 2,
-            error: `Assign Status '${row["Assign Status"]}' not found`,
+            error: `Brand '${row["Brand"]}' not found`,
+          });
+          continue;
+        }
+        if (!categoryType) {
+          errors.push({
+            row: i + 2,
+            error: `Category Type '${row["Category Type"]}' not found`,
           });
           continue;
         }
@@ -562,84 +1193,262 @@ export class StaffsService {
         const firstName = row["First Name"].toUpperCase().trim();
         const lastName = row["Last Name"].toUpperCase().trim();
         const middleName = (row["Middle Name"] || "").toUpperCase().trim();
+        const staffCode = row["Staff Code"]?.toString().trim();
 
-        const whereCondition: any = {
-          first_name: firstName,
-          last_name: lastName,
-        };
+        let existingRecord = null;
 
-        if (middleName) {
-          whereCondition.middle_name = middleName;
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+
+          if (!existingRecord) {
+            const whereCondition: any = {
+              first_name: firstName,
+              last_name: lastName,
+            };
+
+            if (middleName) {
+              whereCondition.middle_name = middleName;
+            }
+
+            existingRecord = await this.staffsRepository.findOne({
+              where: whereCondition,
+            });
+          }
+        } else {
+          const whereCondition: any = {
+            first_name: firstName,
+            last_name: lastName,
+          };
+
+          if (middleName) {
+            whereCondition.middle_name = middleName;
+          }
+
+          existingRecord = await this.staffsRepository.findOne({
+            where: whereCondition,
+          });
         }
 
-        const existingRecord = await this.staffsRepository.findOne({
-          where: whereCondition,
-        });
-
         let savedStaff;
+        let savedStaffBrand;
+        let savedStaffCategoryType;
+        let savedStaffVendorSalary;
 
-      if (existingRecord) {
-        // UPDATE EXISTING
-        existingRecord.contact_number = row["Contact Number"];
-        existingRecord.middle_name = middleName;
-        existingRecord.birthday = parseExcelDate(row["Birthday"]);
-        existingRecord.location_id = location.id;
-        existingRecord.vendor_id = vendor.id;
-        existingRecord.position_id = position.id;
-        existingRecord.access_key_id = accessKeyId;
-        existingRecord.assign_status_id = status.id;
-        existingRecord.store_request = row["Store Request"];
-        existingRecord.sss_number = row["SSS Number"];
-        existingRecord.tin = row["TIN"];
-        existingRecord.pagibig_number = row["PAGIBIG Number"];
-        existingRecord.remarks = row["Remarks"];
-        existingRecord.hired_date = parseExcelDate(row["Hired Date"]);
-        existingRecord.to_hr_date = parseExcelDate(row["To HR Date"]);
-        existingRecord.separated_date = parseExcelDate(row["Seperated Date"]);
-        existingRecord.to_sts_date = parseExcelDate(row["To STS Date"]);
-        existingRecord.approved_eprf_date = parseExcelDate(row["Approved EPRF Date"]);
-        existingRecord.req_completion_date = parseExcelDate(row["Req Completion Date"]);
-        existingRecord.actual_deployment_date = parseExcelDate(row["Actual Deployment Date"]);
-        existingRecord.overall_remarks = row["Overall Remarks"];
-        existingRecord.updated_by = userId;
+        if (existingRecord) {
+          existingRecord.contact_number = row["Contact Number"];
+          existingRecord.staff_code = staffCode;
+          existingRecord.first_name = firstName;
+          existingRecord.last_name = lastName;
+          existingRecord.middle_name = middleName;
+          existingRecord.birthday = parseExcelDate(row["Birthday"]);
+          existingRecord.location_id = location.id;
+          existingRecord.vendor_id = vendor.id;
+          existingRecord.position_id = position.id;
+          existingRecord.access_key_id = accessKeyId;
+          existingRecord.assign_status_id = 13;
+          existingRecord.store_request = row["Store Request"];
+          existingRecord.sss_number = row["SSS Number"];
+          existingRecord.tin = row["TIN"];
+          existingRecord.pagibig_number = row["PAGIBIG Number"];
+          existingRecord.remarks = row["Remarks"];
+          existingRecord.hired_date = parseExcelDate(row["Hired Date"]);
+          existingRecord.to_hr_date = parseExcelDate(row["To HR Date"]);
+          existingRecord.separated_date = parseExcelDate(row["Seperated Date"]);
+          existingRecord.to_sts_date = parseExcelDate(row["To STS Date"]);
+          existingRecord.approved_eprf_date = parseExcelDate(
+            row["Approved EPRF Date"],
+          );
+          existingRecord.req_completion_date = parseExcelDate(
+            row["Req Completion Date"],
+          );
+          existingRecord.actual_deployment_date = parseExcelDate(
+            row["Actual Deployment Date"],
+          );
+          existingRecord.overall_remarks = row["Overall Remarks"];
+          existingRecord.updated_by = userId;
 
-        savedStaff = await this.staffsRepository.save(existingRecord);
+          savedStaff = await this.staffsRepository.save(existingRecord);
 
-      } else {
-        // CREATE NEW
-        const newStaff = this.staffsRepository.create({
-          first_name: firstName,
-          contact_number: row["Contact Number"],
-          last_name: lastName,
-          middle_name: middleName,
-          birthday: parseExcelDate(row["Birthday"]),
-          location_id: location.id,
-          vendor_id: vendor.id,
-          position_id: position.id,
-          access_key_id: accessKeyId,
-          assign_status_id: status.id,
-          store_request: row["Store Request"],
-          sss_number: row["SSS Number"],
-          tin: row["TIN"],
-          pagibig_number: row["PAGIBIG Number"],
-          remarks: row["Remarks"],
-          hired_date: parseExcelDate(row["Hired Date"]),
-          to_hr_date: parseExcelDate(row["To HR Date"]),
-          separated_date: parseExcelDate(row["Seperated Date"]),
-          to_sts_date: parseExcelDate(row["To STS Date"]),
-          approved_eprf_date: parseExcelDate(row["Approved EPRF Date"]),
-          req_completion_date: parseExcelDate(row["Req Completion Date"]),
-          actual_deployment_date: parseExcelDate(row["Actual Deployment Date"]),
-          overall_remarks: row["Overall Remarks"],
-          status_id: 1,
-          created_by: userId,
-          updated_by: userId,
-        });
+          let existingStaffBrand = await this.staffBrandsRepository.findOne({
+            where: {
+              staff_id: savedStaff.id,
+              access_key_id: accessKeyId,
+            },
+          });
 
-        savedStaff = await this.staffsRepository.save(newStaff);
-      }
+          if (existingStaffBrand) {
+            existingStaffBrand.brand_id = brand.id;
+            existingStaffBrand.status_id = 1;
+            existingStaffBrand.updated_by = userId;
 
-     
+            savedStaffBrand =
+              await this.staffBrandsRepository.save(existingStaffBrand);
+          } else {
+            savedStaffBrand = await this.staffBrandsRepository.save(
+              this.staffBrandsRepository.create({
+                staff_id: savedStaff.id,
+                brand_id: brand.id,
+                access_key_id: accessKeyId,
+                status_id: 1,
+                created_by: userId,
+                updated_by: userId,
+              }),
+            );
+          }
+
+          let existingCategoryType =
+            await this.staffCategoryTypesRepository.findOne({
+              where: {
+                staff_id: savedStaff.id,
+                access_key_id: accessKeyId,
+              },
+            });
+
+          if (existingCategoryType) {
+            existingCategoryType.category_type_id = categoryType.id;
+            existingCategoryType.status_id = 1;
+            existingCategoryType.updated_by = userId;
+
+            savedStaffCategoryType =
+              await this.staffCategoryTypesRepository.save(
+                existingCategoryType,
+              );
+          } else {
+            savedStaffCategoryType =
+              await this.staffCategoryTypesRepository.save(
+                this.staffCategoryTypesRepository.create({
+                  staff_id: savedStaff.id,
+                  category_type_id: categoryType.id,
+                  access_key_id: accessKeyId,
+                  status_id: 1,
+                  created_by: userId,
+                  updated_by: userId,
+                }),
+              );
+          }
+
+          let existingVendorSalary =
+            await this.staffVendorSalaryRepository.findOne({
+              where: {
+                staff_id: savedStaff.id,
+                access_key_id: accessKeyId,
+              },
+            });
+
+          if (existingVendorSalary) {
+            existingVendorSalary.vendor_id = vendor.id;
+            existingVendorSalary.location_id = location.id;
+            // existingVendorSalary.allowance = row["Allowance"] || null;
+            // existingVendorSalary.salary_rate = row["Salary Rate"] || null;
+            existingVendorSalary.status_id = 1;
+            existingVendorSalary.updated_by = userId;
+
+            savedStaffVendorSalary =
+              await this.staffVendorSalaryRepository.save(existingVendorSalary);
+          } else {
+            savedStaffVendorSalary =
+              await this.staffVendorSalaryRepository.save(
+                this.staffVendorSalaryRepository.create({
+                  staff_id: savedStaff.id,
+                  vendor_id: vendor.id,
+                  location_id: location.id,
+                  access_key_id: accessKeyId,
+                  // allowance: row["Allowance"] || null,
+                  // salary_rate: row["Salary Rate"] || null,
+                  status_id: 1,
+                  created_by: userId,
+                  updated_by: userId,
+                }),
+              );
+          }
+        } else {
+          const newStaff = this.staffsRepository.create({
+            first_name: firstName,
+            staff_code: staffCode,
+            contact_number: row["Contact Number"],
+            last_name: lastName,
+            middle_name: middleName,
+            birthday: parseExcelDate(row["Birthday"]),
+            location_id: location.id,
+            vendor_id: vendor.id,
+            position_id: position.id,
+            access_key_id: accessKeyId,
+            assign_status_id: 13,
+            store_request: row["Store Request"],
+            sss_number: row["SSS Number"],
+            tin: row["TIN"],
+            pagibig_number: row["PAGIBIG Number"],
+            remarks: row["Remarks"],
+            hired_date: parseExcelDate(row["Hired Date"]),
+            to_hr_date: parseExcelDate(row["To HR Date"]),
+            separated_date: parseExcelDate(row["Seperated Date"]),
+            to_sts_date: parseExcelDate(row["To STS Date"]),
+            approved_eprf_date: parseExcelDate(row["Approved EPRF Date"]),
+            req_completion_date: parseExcelDate(row["Req Completion Date"]),
+            actual_deployment_date: parseExcelDate(
+              row["Actual Deployment Date"],
+            ),
+            overall_remarks: row["Overall Remarks"],
+            status_id: 20,
+            created_by: userId,
+            updated_by: userId,
+          });
+
+          savedStaff = await this.staffsRepository.save(newStaff);
+
+          if (savedStaff) {
+            try {
+              await this.staffHistoriesRepository.save(
+                this.staffHistoriesRepository.create({
+                  ...savedStaff,
+                  staff_id: savedStaff.id,
+                }),
+              );
+            } catch (err) {
+              logger.error("Failed to create staff history:", err);
+            }
+          }
+
+          savedStaffBrand = await this.staffBrandsRepository.save(
+            this.staffBrandsRepository.create({
+              staff_id: savedStaff.id,
+              brand_id: brand.id,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: userId,
+              updated_by: userId,
+            }),
+          );
+
+          savedStaffCategoryType = await this.staffCategoryTypesRepository.save(
+            this.staffCategoryTypesRepository.create({
+              staff_id: savedStaff.id,
+              category_type_id: categoryType.id,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: userId,
+              updated_by: userId,
+            }),
+          );
+
+          savedStaffVendorSalary = await this.staffVendorSalaryRepository.save(
+            this.staffVendorSalaryRepository.create({
+              staff_id: savedStaff.id,
+              vendor_id: vendor.id,
+              location_id: location.id,
+              access_key_id: accessKeyId,
+              // allowance: row["Allowance"] || null,
+              // salary_rate: row["Salary Rate"] || null,
+              status_id: 1,
+              created_by: userId,
+              updated_by: userId,
+            }),
+          );
+        }
 
         await this.userAuditTrailCreateService.create(
           {
@@ -652,6 +1461,45 @@ export class StaffsService {
           userId,
         );
 
+        if (savedStaffBrand) {
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "StaffsService",
+              method: "create",
+              raw_data: JSON.stringify(savedStaffBrand),
+              description: `Staff Brand ${savedStaffBrand.id}`,
+              status_id: 1,
+            },
+            userId,
+          );
+        }
+
+        if (savedStaffCategoryType) {
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "StaffsService",
+              method: "create",
+              raw_data: JSON.stringify(savedStaffCategoryType),
+              description: `Staff Category Type ${savedStaffCategoryType.id}`,
+              status_id: 1,
+            },
+            userId,
+          );
+        }
+
+        if (savedStaffVendorSalary) {
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "StaffsService",
+              method: "create",
+              raw_data: JSON.stringify(savedStaffVendorSalary),
+              description: `Staff Vendor Salary ${savedStaffVendorSalary.id}`,
+              status_id: 1,
+            },
+            userId,
+          );
+        }
+
         const staffWithRelations = await this.staffsRepository.findOne({
           where: { id: savedStaff.id },
           relations: [
@@ -662,8 +1510,34 @@ export class StaffsService {
             "location",
             "vendor",
             "position",
+            "staffBrands.brand",
+            "staffCategoryTypes.categoryType",
+            "staffVendorSalaries",
           ],
         });
+
+        if (staffWithRelations) {
+          try {
+            const vendorName =
+              staffWithRelations.vendor?.service_provider_name ?? "N/A";
+
+            const locationName =
+              staffWithRelations.location?.location_name ?? "N/A";
+
+            await this.actionLogsService.logAction({
+              module_id: MODULE_IDS.STAFFS,
+              ref_id: savedStaff.id,
+              action_id: existingRecord ? ACTION_IDS.EDIT : ACTION_IDS.ADD,
+              description: existingRecord
+                ? `Updated staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${vendorName} | Location: ${locationName}`
+                : `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${vendorName} | Location: ${locationName}`,
+              raw_data: JSON.stringify(row),
+              created_by: userId,
+            });
+          } catch (err) {
+            logger.error("Action log failed for upload:", err);
+          }
+        }
 
         success.push({
           row: i + 2,
@@ -679,19 +1553,47 @@ export class StaffsService {
     }
 
     return {
-      inserted_count: success.filter(s => s.action === "inserted").length,
-      updated_count: success.filter(s => s.action === "updated").length,
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
 
       inserted_row_numbers: success
-        .filter(s => s.action === "inserted")
-        .map(s => s.row),
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
 
       updated_row_numbers: success
-        .filter(s => s.action === "updated")
-        .map(s => s.row),
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
 
       success,
       errors,
     };
+  }
+
+  async checkExistingStaff(dto: CheckStaffDto) {
+    const firstName = dto.first_name.toUpperCase().trim();
+    const lastName = dto.last_name.trim();
+    const middleName = (dto.middle_name || "").toUpperCase().trim();
+
+    const whereCondition: any = {
+      first_name: firstName,
+      last_name: lastName,
+    };
+
+    if (middleName) {
+      whereCondition.middle_name = middleName;
+    }
+
+    const existingRecord = await this.staffsRepository.findOne({
+      where: whereCondition,
+    });
+
+    return {
+      exists: !!existingRecord,
+      staff: existingRecord,
+    };
+  }
+  async findOneHistory(ref_id: number) {
+    const module_id = MODULE_IDS.STAFFS;
+    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 }

@@ -13,4 +13,7 @@ export class CreateWarehouseRequirementDueAndReqTransDto {
 
   @IsOptional()
   cancellation_reason?: string;
+
+  @IsOptional()
+  termination_reason?: string;
 }

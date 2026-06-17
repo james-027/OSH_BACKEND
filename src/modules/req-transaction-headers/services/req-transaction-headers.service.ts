@@ -37,6 +37,7 @@ import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { GlobalFileProcessingQueueService } from "../../../services/global-file-processing-queue.service";
 import { UploadProgressLoggerService } from "../../../services/upload-progress-logger.service";
+import { WarehouseRequirementsService } from "src/modules/warehouse-requirements/services/warehouse-requirements.service";
 
 @Injectable()
 export class ReqTransactionHeadersService {
@@ -75,6 +76,7 @@ export class ReqTransactionHeadersService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
     private uploadProgressLogger: UploadProgressLoggerService,
+    private warehouseRequirementsService: WarehouseRequirementsService,
   ) {}
 
   private getDataRepoRelations(): string[] {
@@ -90,6 +92,7 @@ export class ReqTransactionHeadersService {
       "transDueStatus",
       "reqTransactionDetails",
       "reqTransactionDues",
+      "reqTransactionDues.warehouseRequirementDue",
       "location",
     ];
   }
@@ -159,7 +162,7 @@ export class ReqTransactionHeadersService {
         .addSelect("COUNT(header.id)", "header_count")
         .addSelect("requirement.requirement_name", "requirement_name")
         .addSelect("header.status_id", "status_id")
-        .where("header.status_id = 1");
+        .where("header.status_id IN (1, 18)"); // ADDITIONAL TERMINATED STATUS
 
       if (transNumber) {
         query = query.andWhere("header.trans_number = :transNumber", {
@@ -232,7 +235,7 @@ export class ReqTransactionHeadersService {
       }
 
       const records = await this.reqTransactionHeadersRepository.find({
-        where: { trans_number: transNumber, status_id: 1 },
+        where: { trans_number: transNumber, status_id: In([1, 18]) }, // ADDITIONAL TERMINATED STATUS
         relations: this.getDataRepoRelations(),
       });
 
@@ -255,6 +258,7 @@ export class ReqTransactionHeadersService {
         trans_remarks: record.trans_remarks,
         trans_due_status_id: record.trans_due_status_id,
         status_name: record.status?.status_name,
+        status_id: record.status_id,
         created_by: record.created_by,
         access_key_id: record.access_key_id,
         updated_by: record.updated_by,
@@ -272,6 +276,24 @@ export class ReqTransactionHeadersService {
           }),
         ),
         reqTransactionDues: record.reqTransactionDues || [],
+        warehouse_requirement_due_date:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_date || null,
+        warehouse_requirement_due_start:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_start || null,
+        warehouse_requirement_due_end:
+          record.reqTransactionDues?.[0]?.warehouseRequirementDue
+            ?.warehouse_requirement_due_end || null,
+        warehouse_requirement_due_status_name:
+          this.warehouseRequirementsService.getWarehouseRequirementDueStatus(
+            record.requirement?.requirement_type_id,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue
+              ?.warehouse_requirement_due_date,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue
+              ?.warehouse_requirement_due_end,
+            record.reqTransactionDues?.[0]?.warehouseRequirementDue?.status_id,
+          ) || null,
       }));
       // return this.responseMapperService.mapEntitiesToResponse(records);
     } catch (error) {
@@ -465,6 +487,7 @@ export class ReqTransactionHeadersService {
     userId: number,
     statusId?: number,
     cancellationReason?: string,
+    terminationReason?: string,
   ): Promise<any> {
     try {
       const recordHdr = await this.reqTransactionHeadersRepository.findOne({
@@ -491,6 +514,9 @@ export class ReqTransactionHeadersService {
       recordHdr.updated_by = userId;
       if (cancellationReason) {
         recordHdr.cancellation_reason = cancellationReason;
+      }
+      if (terminationReason) {
+        recordHdr.termination_reason = terminationReason;
       }
       const savedHdr =
         await this.reqTransactionHeadersRepository.save(recordHdr);
@@ -531,6 +557,7 @@ export class ReqTransactionHeadersService {
             recordHdr.requirement?.requirement_type_id,
             due,
             userId,
+            transStatusId,
           );
         }
       }
@@ -661,6 +688,7 @@ export class ReqTransactionHeadersService {
                 header.requirement?.requirement_type_id,
                 due,
                 userId,
+                cancelledStatusId,
               );
             }
           }
@@ -781,6 +809,7 @@ export class ReqTransactionHeadersService {
     requirement_type_id: number,
     due: ReqTransactionDue,
     userId: number,
+    dueStatusId?: number,
   ): Promise<void> {
     switch (requirement_type_id) {
       case 1:
@@ -796,16 +825,17 @@ export class ReqTransactionHeadersService {
       case 2:
         // Cancel warehouse requirement due, warehouse requirement start, warehouse requirement (set to status 5)
         if (due.warehouseRequirementDue) {
-          // Set warehouse requirement due to cancelled status (5)
-          due.warehouseRequirementDue.status_id = 5;
+          // Set warehouse requirement due to specific status
+          due.warehouseRequirementDue.status_id = dueStatusId;
           due.warehouseRequirementDue.updated_by = userId;
           await this.warehouseRequirementDuesRepository.save(
             due.warehouseRequirementDue,
           );
 
-          // Set warehouse requirement to cancelled status (5)
+          // Set warehouse requirement to specific status
           if (due.warehouseRequirementDue.warehouseRequirement) {
-            due.warehouseRequirementDue.warehouseRequirement.status_id = 5;
+            due.warehouseRequirementDue.warehouseRequirement.status_id =
+              dueStatusId;
             due.warehouseRequirementDue.warehouseRequirement.updated_by =
               userId;
             await this.warehouseRequirementsRepository.save(
@@ -824,7 +854,7 @@ export class ReqTransactionHeadersService {
 
             if (starts && starts.length > 0) {
               for (const start of starts) {
-                start.status_id = 5;
+                start.status_id = dueStatusId;
                 start.updated_by = userId;
                 await this.warehouseRequirementStartsRepository.save(start);
               }
@@ -1002,6 +1032,8 @@ export class ReqTransactionHeadersService {
     location_id: number,
     files: any[],
     queryRunner: QueryRunner, // Use outer transaction
+    start_date?: string, // Type 2 single-warehouse: dates from payload
+    end_date?: string, // Type 2 single-warehouse: dates from payload
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1314,6 +1346,8 @@ export class ReqTransactionHeadersService {
       case 2:
         // Type 2 (Non Regulatory) processing - use outer transaction (queryRunner parameter)
         try {
+          // Dates from payload (single-warehouse) or fallback to filename parsing
+          const hasPayloadDates = !!(start_date && end_date);
           // Extract rental dates from files (should be same for all files in this batch)
           const rentalDates: Map<
             string,
@@ -1321,30 +1355,45 @@ export class ReqTransactionHeadersService {
           > = new Map();
 
           for (const file of files) {
-            const parseResult = this.parseType2Filename(file.filename);
-
-            if (!parseResult.valid) {
-              errors.push({
-                file: file.filename,
-                reason: parseResult.error,
-                field: "filename_parsing",
+            if (hasPayloadDates) {
+              // Single-warehouse: dates provided from frontend, accept any filename
+              rentalDates.set(file.filename, {
+                start_date: start_date!,
+                end_date: end_date!,
               });
-              continue;
-            }
+            } else {
+              const parseResult = this.parseType2Filename(file.filename);
 
-            rentalDates.set(file.filename, {
-              start_date: parseResult.start_date,
-              end_date: parseResult.end_date,
-            });
+              if (!parseResult.valid) {
+                errors.push({
+                  file: file.filename,
+                  reason: parseResult.error,
+                  field: "filename_parsing",
+                });
+                continue;
+              }
+
+              rentalDates.set(file.filename, {
+                start_date: parseResult.start_date,
+                end_date: parseResult.end_date,
+              });
+            }
           }
 
           // Process each warehouse
           for (const warehouse of warehouses) {
             // Find files for this warehouse
-            const warehouseFiles = files.filter((f) => {
-              const parts = f.filename.split("-");
-              return parts[0].trim() === warehouse.warehouse_ifs;
-            });
+            let warehouseFiles: any[];
+            if (hasPayloadDates) {
+              // Single-warehouse mode: ALL files belong to this one warehouse
+              warehouseFiles = files;
+            } else {
+              // Multi-warehouse mode: match files by warehouse_ifs prefix in filename
+              warehouseFiles = files.filter((f) => {
+                const parts = f.filename.split("-");
+                return parts[0].trim() === warehouse.warehouse_ifs;
+              });
+            }
 
             if (warehouseFiles.length === 0) {
               continue; // No files for this warehouse
@@ -1463,6 +1512,13 @@ export class ReqTransactionHeadersService {
             );
             const postDueReminderDateString =
               formatDateToString(postDueReminderDate);
+
+            // minus # of days from end_date to get due date for renewal reminder in type 2 reminder (store rental lease contract)
+            const actualDueDate = new Date(end_date);
+            actualDueDate.setDate(
+              actualDueDate.getDate() - requirement.requirement_due_days,
+            );
+            const actualDueDateString = formatDateToString(actualDueDate);
             const dueRecord = queryRunner.manager.create(
               WarehouseRequirementDue,
               {
@@ -1473,7 +1529,7 @@ export class ReqTransactionHeadersService {
                   preDueReminderDateString,
                 warehouse_requirement_due_post_reminder_date:
                   postDueReminderDateString,
-                warehouse_requirement_due_date: end_date, // Expiration date
+                warehouse_requirement_due_date: actualDueDateString, // due for renewal date
                 status_id: 2,
                 created_by: userId,
               },
@@ -1561,16 +1617,16 @@ export class ReqTransactionHeadersService {
     }
 
     // Bulk create transaction dues
-        let duesResult: any = { records: [], ids: [], status: 1 };
-        if (transactionDuesToCreate.length > 0) {
-          try {
-            duesResult = await this.reqTransactionDuesService.bulkCreate(
-              transactionDuesToCreate,
-              userId,
-              queryRunner, // ✅ Pass queryRunner to use same transaction context
-              true, // ✅ Skip individual audit trail, consolidate into batch summary
-            );
-            const createdDues = duesResult.records;
+    let duesResult: any = { records: [], ids: [], status: 1 };
+    if (transactionDuesToCreate.length > 0) {
+      try {
+        duesResult = await this.reqTransactionDuesService.bulkCreate(
+          transactionDuesToCreate,
+          userId,
+          queryRunner, // ✅ Pass queryRunner to use same transaction context
+          true, // ✅ Skip individual audit trail, consolidate into batch summary
+        );
+        const createdDues = duesResult.records;
         createdDues.forEach((due) => {
           const result = successResults.find(
             (r) =>
@@ -1778,33 +1834,40 @@ export class ReqTransactionHeadersService {
       );
 
       //* Step 3.5: PRE-VALIDATE ALL FILES (fail fast before creating any transactions)
-      //* NOTE: trans_number generation MOVED to just before commit to avoid sequence waste on failed transactions
+      //* NOTE: For single-warehouse Type 2 (dates in payload), file naming convention is NOT required
+      const isSingleWarehouseType2 =
+        requirement.requirement_type_id === 2 &&
+        createDto.start_date &&
+        createDto.end_date;
+
       const fileValidationErrors: any[] = [];
       for (const file of createDto.files) {
-        // Validate filename format
-        const parts = file.filename.split("-");
-        if (parts.length < 2) {
-          fileValidationErrors.push({
-            file: file.filename,
-            reason:
-              "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
-            field: "filename",
-          });
-          continue;
+        // Filename format validation: skip for single-warehouse Type 2 (no naming convention required)
+        if (!isSingleWarehouseType2) {
+          const parts = file.filename.split("-");
+          if (parts.length < 2) {
+            fileValidationErrors.push({
+              file: file.filename,
+              reason:
+                "Invalid filename format. Expected format: 'store-ifs - requirement-abbr.ext'",
+              field: "filename",
+            });
+            continue;
+          }
+
+          const warehouseIfs = parts[0].trim();
+          if (!warehouseByIfs.has(warehouseIfs)) {
+            fileValidationErrors.push({
+              file: file.filename,
+              reason: "Store IFS not found in provided warehouses",
+              field: "warehouse_ifs",
+              warehouse_ifs: warehouseIfs,
+            });
+            continue;
+          }
         }
 
-        const warehouseIfs = parts[0].trim();
-        if (!warehouseByIfs.has(warehouseIfs)) {
-          fileValidationErrors.push({
-            file: file.filename,
-            reason: "Store IFS not found in provided warehouses",
-            field: "warehouse_ifs",
-            warehouse_ifs: warehouseIfs,
-          });
-          continue;
-        }
-
-        // Validate file integrity
+        // File integrity validation (always runs)
         const validation = FileUploadHandler.validateFile(
           file.filename,
           file.buffer,
@@ -1819,7 +1882,7 @@ export class ReqTransactionHeadersService {
         }
       }
 
-      //* If ANY file fails validation, reject entire batch and return errors
+      //* If ANY file fails validation, reject entire batch
       if (fileValidationErrors.length > 0) {
         return {
           success: {
@@ -1863,6 +1926,8 @@ export class ReqTransactionHeadersService {
           location_id,
           createDto.files,
           queryRunner, // Pass outer transaction queryRunner
+          isSingleWarehouseType2 ? createDto.start_date : undefined,
+          isSingleWarehouseType2 ? createDto.end_date : undefined,
         );
 
         // Merge results from type-specific processing
@@ -1972,10 +2037,19 @@ export class ReqTransactionHeadersService {
               );
 
               try {
-                //* Parse warehouse_ifs from filename (already validated in pre-validation step)
-                const parts = file.filename.split("-");
-                const warehouseIfs = parts[0].trim();
-                const warehouseFromFile = warehouseByIfs.get(warehouseIfs);
+                //* For single-warehouse Type 2, use the single warehouse directly (no filename parsing needed)
+                let warehouseFromFile;
+                if (isSingleWarehouseType2) {
+                  // Single warehouse mode: take the first (only) warehouse from successResults
+                  warehouseFromFile = warehouseByIfs.get(
+                    warehouses[0].warehouse_ifs,
+                  );
+                } else {
+                  // Parse warehouse_ifs from filename (standard naming convention)
+                  const parts = file.filename.split("-");
+                  const warehouseIfs = parts[0].trim();
+                  warehouseFromFile = warehouseByIfs.get(warehouseIfs);
+                }
 
                 //* Find the corresponding header created for this warehouse
                 const correspondingHeader = successResults.find(
@@ -1995,10 +2069,28 @@ export class ReqTransactionHeadersService {
                 //* STREAMING COMPRESSION: Compress and save directly to disk (NO intermediate buffer)
                 //* Memory benefit: Only N files compressed globally (via global queue, not per-user)
                 //* Process: buffer → sharp/stream → disk write → freed memory → next file
+                //* Determine filename to save as
+                let fileToSave: string;
+                if (isSingleWarehouseType2) {
+                  // Type 2 single-warehouse: use naming convention
+                  fileToSave = FileUploadHandler.generateType2Filename(
+                    warehouseFromFile.warehouse_ifs,
+                    requirement.requirement_abbr_name,
+                    createDto.start_date,
+                    createDto.end_date,
+                    file.filename,
+                  );
+                } else {
+                  // Original behavior: normalize the original filename
+                  fileToSave = FileUploadHandler.normalizeFilenameForSave(
+                    file.filename,
+                  );
+                }
+
                 const savedFileInfo =
                   await FileUploadHandler.compressAndSaveStreamDirect(
                     file.buffer,
-                    FileUploadHandler.normalizeFilenameForSave(file.filename),
+                    fileToSave,
                     correspondingHeader.req_transaction_header_id,
                     "uploads/" +
                       process.env.UPLOAD_REQ_DIR +
@@ -2188,7 +2280,8 @@ export class ReqTransactionHeadersService {
             req_transaction_detail_ids: detailsResult.ids,
             req_transaction_detail_status: detailsResult.status,
             req_transaction_due_ids: typeSpecificResult.duesResult?.ids || [],
-            req_transaction_due_status: typeSpecificResult.duesResult?.status || 1,
+            req_transaction_due_status:
+              typeSpecificResult.duesResult?.status || 1,
           }),
           description: `Batch transaction created - trans_number: ${trans_number} | Files: ${filesProcessed}/${totalFiles} successful | Stores: ${successResults.length} | Headers: ${successResults.length} | Details: ${detailsResult.ids.length} | Dues: ${typeSpecificResult.duesResult?.ids?.length || 0} | Heap peak: ${heapDiffTotal}MB | RSS peak: ${rssDiffTotal}MB`,
           status_id: 1,

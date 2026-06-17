@@ -17,14 +17,6 @@ export class CreateStaffVendorSalaryDto {
   @IsNotEmpty()
   access_key_id!: number;
 
-  @IsNumber()
-  @IsNotEmpty()
-  allowance!: number;
-
-  @IsNumber()
-  @IsNotEmpty()
-  salary_rate!: number;
-
   @IsOptional()
   @IsInt()
   status_id?: number;

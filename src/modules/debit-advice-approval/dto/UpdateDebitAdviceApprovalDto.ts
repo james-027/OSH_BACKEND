@@ -16,7 +16,7 @@ export class UpdateApprovalStagesListDto {
     message:
       "Debit Advice ID must be a positive integer",
   })
-  debit_advice_id?: number;
+  transaction_id?: number;
 
   @IsOptional()
   @IsString({

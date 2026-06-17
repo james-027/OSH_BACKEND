@@ -20,6 +20,12 @@ import {
   parseToFirstDayOfMonth,
   formatDateToMonthYear,
 } from "../../../utils/date.utils";
+import {
+  MODULE_IDS,
+  ACTION_IDS,
+  STATUS_IDS,
+  STATUS_NAMES,
+} from "src/constants/customConstants";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 
@@ -274,7 +280,7 @@ export class WarehouseEmployeesService {
       ])
       .distinct(true)
       .where("w.location_id IN (:...locationIds)", { locationIds })
-      .andWhere("w.status_id = :statusId", { statusId: 1 })
+      .andWhere("w.status_id = :statusId", { statusId: STATUS_IDS.ACTIVE })
       .andWhere(
         `w.id NOT IN (
           SELECT warehouse_id FROM warehouse_employees 
@@ -348,7 +354,7 @@ export class WarehouseEmployeesService {
             method: "create",
             raw_data: JSON.stringify({ ...createDto }),
             description: `Created warehouse employee for warehouse ID: ${saved.warehouse_id} - ${saved.warehouse ? saved.warehouse.warehouse_name : ""}`,
-            status_id: 1,
+            status_id: STATUS_IDS.ACTIVE,
           },
           userId,
         );
@@ -390,9 +396,9 @@ export class WarehouseEmployeesService {
             savedWithRelations,
           );
           await this.actionLogsService.logAction({
-            module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+            module_id: MODULE_IDS.STORE_EMPLOYEES,
             ref_id: saved.id,
-            action_id: 1, // ADD
+            action_id: ACTION_IDS.ADD,
             description,
             raw_data: JSON.stringify(createDto),
             created_by: userId,
@@ -493,7 +499,7 @@ export class WarehouseEmployeesService {
             method: "update",
             raw_data: JSON.stringify({ ...updateDto }),
             description: `Updated warehouse employee ID: ${id} - ${rec.warehouse_name || ""}`,
-            status_id: 1,
+            status_id: STATUS_IDS.ACTIVE,
           },
           userId,
         );
@@ -537,9 +543,9 @@ export class WarehouseEmployeesService {
               updatedRecRaw,
             );
             await this.actionLogsService.logAction({
-              module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+              module_id: MODULE_IDS.STORE_EMPLOYEES,
               ref_id: id,
-              action_id: 2, // EDIT
+              action_id: ACTION_IDS.EDIT,
               description,
               raw_data: JSON.stringify(updateDto),
               created_by: userId,
@@ -588,8 +594,11 @@ export class WarehouseEmployeesService {
         `Warehouse employee record with ID ${id} not found`,
       );
     }
-    const newStatusId = rec.status_id === 1 ? 2 : 1;
-    const newStatusName = newStatusId === 1 ? "Active" : "Inactive";
+    const newStatusId =
+      rec.status_id === STATUS_IDS.ACTIVE
+        ? STATUS_IDS.INACTIVE
+        : STATUS_IDS.ACTIVE;
+    const newStatusName = STATUS_NAMES[newStatusId] || "Unknown";
     const updatedByUser = await this.usersService.findUserById(userId);
     if (!updatedByUser) {
       throw new BadRequestException("Authenticated user not found");
@@ -609,7 +618,7 @@ export class WarehouseEmployeesService {
           new_status_id: newStatusId,
         }),
         description: `Toggled status to ${newStatusName} for warehouse employee ID: ${id} - ${rec.warehouse ? rec.warehouse.warehouse_name : ""}`,
-        status_id: newStatusId,
+        status_id: STATUS_IDS.ACTIVE,
       },
       userId,
     );
@@ -628,7 +637,10 @@ export class WarehouseEmployeesService {
       const assignmentDateFormatted = formatDateToMonthYear(
         rec.assignment_date,
       );
-      const actionId = newStatusId === 1 ? 5 : 6; // 5=ACTIVATE, 6=DEACTIVATE
+      const actionId =
+        newStatusId === STATUS_IDS.ACTIVE
+          ? ACTION_IDS.ACTIVATE
+          : ACTION_IDS.DEACTIVATE;
 
       // Build detailed personnel list for description
       const personnelDetails = [
@@ -657,7 +669,7 @@ export class WarehouseEmployeesService {
       const description = `${newStatusName} personnel assignment for ${warehouse?.warehouse_name || "Unknown"} (${warehouse?.warehouse_code || "N/A"}) - ${assignmentDateFormatted}${personnelDetails ? ": " + personnelDetails : ""}`;
 
       await this.actionLogsService.logAction({
-        module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+        module_id: MODULE_IDS.STORE_EMPLOYEES,
         ref_id: id,
         action_id: actionId,
         description,
@@ -678,7 +690,7 @@ export class WarehouseEmployeesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = 14;
+    const module_id = MODULE_IDS.STORE_EMPLOYEES;
     return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
@@ -810,7 +822,7 @@ export class WarehouseEmployeesService {
             const assignmentDateFormatted = formatDateToMonthYear(
               fullRec.assignment_date,
             );
-            const actionId = isInsert ? 1 : 2; // 1=ADD, 2=EDIT
+            const actionId = isInsert ? ACTION_IDS.ADD : ACTION_IDS.EDIT;
             const description = this.buildPersonnelChangeDescription(
               warehouse || { warehouse_name: "Unknown", warehouse_ifs: "N/A" },
               assignmentDateFormatted,
@@ -819,7 +831,7 @@ export class WarehouseEmployeesService {
               true, // Indicate this is from bulk upload for description formatting
             );
             actionLogs.push({
-              module_id: 14, // STORE EMPLOYEES ASSIGNMENT
+              module_id: MODULE_IDS.STORE_EMPLOYEES,
               ref_id: fullRec.id,
               action_id: actionId,
               description,
@@ -1105,7 +1117,7 @@ export class WarehouseEmployeesService {
           role_order: roleOrder,
           personnel,
           assignment_status_id: row.assignment_status_id,
-          has_assignment: row.assignment_status_id === 1,
+          has_assignment: row.assignment_status_id === STATUS_IDS.ACTIVE,
         };
       });
 

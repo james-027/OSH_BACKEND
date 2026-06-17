@@ -9,8 +9,8 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
-    UploadedFile,
-   UseInterceptors,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
 import {
   FileInterceptor,
@@ -27,21 +27,30 @@ import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffsService } from "src/modules/staffs/services/staffs.service";
-import { CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
+import { CheckStaffDto, CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
-
+import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
+import { UpdateStaffDeployDto } from "src/modules/staffs/dto/UpdateStaffDeployDto";
+import { Query } from "@nestjs/common";
 
 @Controller("staffs")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StaffsController {
   constructor(private readonly staffsService: StaffsService) {}
 
-  @Get()
-  @RequirePermissions({ module: "STAFFS", action: "VIEW" })
-  async findAll(@Request() req) {
-    const accessKeyId = req.user.current_access_key;
-    return this.staffsService.findAll(accessKeyId);
-  }
+@Get()
+async findAll(
+  @Request() req,
+  @Query("status_id") statusId?: string,
+) {
+  const accessKeyId = req.user.current_access_key;
+
+  const parsedStatusId = statusId
+    ? statusId.split(",").map(Number)
+    : undefined;
+
+  return this.staffsService.findAll(accessKeyId, parsedStatusId);
+}
 
   @Get(":id")
   @RequirePermissions({ module: "STAFFS", action: "VIEW" })
@@ -52,9 +61,9 @@ export class StaffsController {
   @Post()
   @RequirePermissions({ module: "STAFFS", action: "ADD" })
   async create(@Body() createStaffDto: CreateStaffDto, @Request() req) {
-     const userId = req.user.id;
+    const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
-    return this.staffsService.create(createStaffDto, userId,accessKeyId);
+    return this.staffsService.create(createStaffDto, userId, accessKeyId);
   }
 
   @Put(":id")
@@ -88,28 +97,57 @@ export class StaffsController {
     return this.staffsService.toggleStatus(id, userId);
   }
 
-@Post("upload-excel")
-@UseInterceptors(
-  FileInterceptor("file", {
-    storage: diskStorage({
-      destination: "./uploads/staffs",
-      filename: generateTimestampFilename,
+  @Post("upload-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/staffs",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     }),
-    fileFilter: excelFileFilter,
-    limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
-  }),
-)
-async uploadExcel(
-  @UploadedFile() file: Express.Multer.File,
-  @Request() req,
-) {
-  return this.staffsService.uploadExcel(
-    file,
-    req.user.id,
-    req.user.current_access_key
-  );
+  )
+  async uploadExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    return this.staffsService.uploadExcel(
+      file,
+      req.user.id,
+      req.user.current_access_key,
+    );
+  }
+
+  @Post("check-existing")
+  async checkExisting(@Body() dto: CheckStaffDto) {
+    return this.staffsService.checkExistingStaff(dto);
+  }
+    @Get("history/:id")
+  @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.staffsService.findOneHistory(id);
+  }
+
+
+  
+  @Patch(":id/transfer")
+  @RequirePermissions({ module: "STAFFS", action: "TRANSFER" })
+  async updateStaffTransfer(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateStaffTransferDto: UpdateStaffTransferDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.staffsService.staffTransfer(id, updateStaffTransferDto, userId);
+  }
+
+  @Post(":id/deploy")
+  @RequirePermissions({ module: "STAFFS", action: "DEPLOY" })
+  async updateStaffDeploy(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateStaffDeployDto: UpdateStaffDeployDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
+    return this.staffsService.staffDeploy(id, updateStaffDeployDto, userId,accessKeyId);
+  }
 }
-
-}
-
-

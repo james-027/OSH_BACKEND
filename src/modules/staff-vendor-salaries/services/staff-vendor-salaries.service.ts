@@ -104,8 +104,6 @@ export class StaffVendorSalariesService {
         vendor_id: createStaffVendorSalaryDto.vendor_id,
         location_id: createStaffVendorSalaryDto.location_id,
         access_key_id: accessKeyId,
-        allowance: createStaffVendorSalaryDto.allowance,
-        salary_rate: createStaffVendorSalaryDto.salary_rate,
         status_id: createStaffVendorSalaryDto.status_id || 1,
         created_by: userId,
         updated_by: userId,

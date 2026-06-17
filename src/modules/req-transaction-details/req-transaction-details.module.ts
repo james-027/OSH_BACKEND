@@ -11,6 +11,8 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
 import { UserPermissions } from "src/entities/UserPermissions";
+import { SSEModule } from "../sse/sse.module";
+import { CacheInvalidationModule } from "../cache/cache.module";
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { UserPermissions } from "src/entities/UserPermissions";
     ]),
     UsersModule,
     UserAuditTrailModule,
+    SSEModule,
+    CacheInvalidationModule,
   ],
   controllers: [ReqTransactionDetailsController],
   providers: [ReqTransactionDetailsService, ResponseMapperService],

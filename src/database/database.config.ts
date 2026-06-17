@@ -65,7 +65,6 @@ import { SystemDocumentation } from "../entities/SystemDocumentation";
 import { Profitcenter } from "../entities/Profitcenter";
 import { Supplier } from "../entities/Supplier";
 import { DebitAdviceGLAccounts } from "../entities/DebitAdviceGLAccounts";
-import { GLAccounts } from "../entities/GLAccounts";
 import { DebitAdviceCategory } from "../entities/DebitAdviceCategory";
 import { DebitAdvice_header } from "../entities/DebitAdviceHeader";
 import { DebitAdviceLine } from "../entities/DebitAdviceItems";
@@ -81,6 +80,14 @@ import { StaffBrand } from "../entities/StaffBrand";
 import { StaffCategoryType } from "../entities/StaffCategoryType";
 import { StaffWarehouse } from "../entities/StaffWarehouse";
 import { ApprovalStagesList } from "../entities/ApprovalStagesList";
+import { ApprovalMatrix } from "../entities/ApprovalMatrix";
+import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
+import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
+import { GLAccounts } from "../entities/GLAccounts";
+import { StaffHistory } from "../entities/StaffHistory";
+import { StaffTraining } from "../entities/StaffTrainings";
+import { Training } from "../entities/Training";
+import { StaffSalary } from "../entities/StaffSalary";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -165,14 +172,13 @@ export const entities = [
   DebitAdviceGLItems,
   ApprovalStagesList,
   GLAccounts,
-  // Category,
-  // CategoryType,
-  // Vendor,
-  // Staff,
-  // StaffVendorSalary,
-  // StaffBrand,
-  // StaffCategoryType,
-  // StaffWarehouse,
+  ApprovalMatrix,
+  ApprovalMatrixDetails,
+  ApprovalMatrixLevels,
+  StaffTraining,
+  Training,
+  StaffHistory,
+  StaffSalary
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

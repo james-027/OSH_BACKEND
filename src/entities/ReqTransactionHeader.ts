@@ -72,6 +72,9 @@ export class ReqTransactionHeader {
   @Column({ type: "text", nullable: true })
   cancellation_reason: string;
 
+  @Column({ type: "text", nullable: true })
+  termination_reason: string;
+
   @ManyToOne(() => AccessKey, {
     eager: false,
     onDelete: "RESTRICT",
@@ -128,7 +131,7 @@ export class ReqTransactionHeader {
       eager: false,
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
-    }
+    },
   )
   @JoinColumn({ name: "requirement_id" })
   requirement!: Requirement;
@@ -144,13 +147,13 @@ export class ReqTransactionHeader {
   // Reference to entity relations
   @OneToMany(
     () => ReqTransactionDetail,
-    (reqTransactionDetail) => reqTransactionDetail.reqTransactionHeader
+    (reqTransactionDetail) => reqTransactionDetail.reqTransactionHeader,
   )
   reqTransactionDetails!: ReqTransactionDetail[];
 
   @OneToMany(
     () => ReqTransactionDue,
-    (reqTransactionDue) => reqTransactionDue.reqTransactionHeader
+    (reqTransactionDue) => reqTransactionDue.reqTransactionHeader,
   )
   reqTransactionDues!: ReqTransactionDue[];
 }

@@ -55,11 +55,23 @@ export class ApprovalStagesListService {
         "(approval.approverid = :userId OR approval.approverid_opt = :userId)",
         { userId },
       )
+      .andWhere(
+        `
+        approval.approval_cycle = (
+          SELECT MAX(sub.approval_cycle)
+          FROM approval_stageslist sub
+          WHERE sub.transaction_id = approval.transaction_id
+        )
+      `,
+      )
 
       .andWhere(
         `
           (
+          (
             approval.status_id IN (7,15)
+            AND approval.updated_by = :userId
+          )
 
             OR
 
@@ -68,7 +80,7 @@ export class ApprovalStagesListService {
               AND approval.series = (
                 SELECT MIN(sub.series)
                 FROM approval_stageslist sub
-                WHERE sub.debit_advice_id = approval.debit_advice_id
+                WHERE sub.transaction_id = approval.transaction_id
                 AND sub.status_id = 3
               )
             )
@@ -83,7 +95,7 @@ export class ApprovalStagesListService {
     return approvals.map((approval) => ({
       id: approval.id,
 
-      debit_advice_id: approval.debit_advice_id,
+      transaction_id: approval.transaction_id,
 
       document_number: approval.document_number,
 
@@ -159,10 +171,10 @@ export class ApprovalStagesListService {
       throw new NotFoundException("Approval stage not found");
     }
 
-    if (updateDto.series && updateDto.debit_advice_id) {
+    if (updateDto.series && updateDto.transaction_id) {
       const exists = await this.approvalStagesListRepository.findOne({
         where: {
-          debit_advice_id: updateDto.debit_advice_id,
+          transaction_id: updateDto.transaction_id,
 
           series: updateDto.series,
 
@@ -264,15 +276,34 @@ export class ApprovalStagesListService {
     else if (status_id === 15) newStatusName = "Rejected";
     else if (status_id === 3) newStatusName = "Pending";
 
-    await this.approvalStagesListRepository.update(id, {
-      status_id,
-
-      approval_remarks: approval_remarks || null,
-
-      approval_date: new Date(),
-
-      updated_by: userId,
-    });
+    if (status_id === 15) {
+      await this.approvalStagesListRepository
+        .createQueryBuilder()
+        .update()
+        .set({
+          status_id: 15,
+          approval_remarks: approval_remarks || null,
+          approval_date: new Date(),
+          updated_by: userId,
+        })
+        .where("transaction_id = :debitAdviceId", {
+          debitAdviceId: approval.transaction_id,
+        })
+        .andWhere("approval_cycle = :cycle", {
+          cycle: approval.approval_cycle,
+        })
+        .andWhere("status_id NOT IN (:...statuses)", {
+          statuses: [7, 15],
+        })
+        .execute();
+    } else {
+      await this.approvalStagesListRepository.update(id, {
+        status_id,
+        approval_remarks: approval_remarks || null,
+        approval_date: new Date(),
+        updated_by: userId,
+      });
+    }
 
     // AUDIT TRAIL
     await this.auditTrailService.create(

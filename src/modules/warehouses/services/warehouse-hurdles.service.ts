@@ -24,6 +24,13 @@ import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+import {
+  MODULE_IDS,
+  ACTION_IDS,
+  STATUS_IDS,
+  STATUS_NAMES,
+  TOGGLE_NAMES,
+} from "src/constants/customConstants";
 
 dayjs.extend(utc);
 
@@ -113,7 +120,9 @@ export class WarehouseHurdlesService {
         hurdle.warehouseHurdleCategories
           ?.filter(
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
+              cat.status_id === STATUS_IDS.PENDING ||
+              cat.status_id === STATUS_IDS.FOR_APPROVAL ||
+              cat.status_id === STATUS_IDS.APPROVED,
           )
           .map((cat) => ({
             id: cat.id,
@@ -162,7 +171,9 @@ export class WarehouseHurdlesService {
         hurdle.warehouseHurdleCategories
           ?.filter(
             (cat) =>
-              cat.status_id === 3 || cat.status_id === 6 || cat.status_id === 7,
+              cat.status_id === STATUS_IDS.PENDING ||
+              cat.status_id === STATUS_IDS.FOR_APPROVAL ||
+              cat.status_id === STATUS_IDS.APPROVED,
           )
           .map((cat) => ({
             id: cat.id,
@@ -208,12 +219,13 @@ export class WarehouseHurdlesService {
           userId,
         );
       }
+      const description = `Created warehouse hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${STATUS_NAMES[saved.status_id] || "Unknown"}`;
       // Action log
       await this.ActionLogsService.logAction({
-        action_id: 1, // add
+        action_id: ACTION_IDS.ADD, // ✅ Clear intent
         ref_id: saved.id,
-        module_id: 16, // STORE HURDLES
-        description: `Created warehouse hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${saved.status_id === 3 ? "Pending" : "For Approval"}`,
+        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
+        description: description,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
       });
@@ -229,7 +241,7 @@ export class WarehouseHurdlesService {
           method: "create",
           raw_data: JSON.stringify(createDto),
           description: `Created warehouse hurdles for warehouse_ids: [${warehouse_ids}] and item_category_ids: [${item_category_ids}]`,
-          status_id: 1,
+          status_id: STATUS_IDS.ACTIVE,
         },
         userId,
       );
@@ -306,7 +318,7 @@ export class WarehouseHurdlesService {
             method: "update",
             raw_data: JSON.stringify(updateDto),
             description: `Updated warehouse hurdle id: ${id}`,
-            status_id: 1,
+            status_id: STATUS_IDS.ACTIVE,
           },
           userId,
         );
@@ -316,15 +328,15 @@ export class WarehouseHurdlesService {
         old_status_id !== status_id && status_id !== undefined;
       let description = `Updated warehouse hurdle with hurdle qty ${ss_hurdle_qty}`;
       if (status_change) {
-        const newStatusName = status_id === 3 ? "Pending" : "For Approval";
-        const oldStatusName = old_status_id === 3 ? "Pending" : "For Approval";
+        const newStatusName = STATUS_NAMES[status_id] ?? "Pending";
+        const oldStatusName = STATUS_NAMES[old_status_id] ?? "Pending";
         description = `Updated status from ${oldStatusName} to ${newStatusName} with hurdle qty ${ss_hurdle_qty}`;
       }
       // Action log
       await this.ActionLogsService.logAction({
-        action_id: 2, // edit
+        action_id: ACTION_IDS.EDIT, // edit
         ref_id: saved.id,
-        module_id: 16, // STORE HURDLES
+        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
         description: description,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
@@ -366,10 +378,7 @@ export class WarehouseHurdlesService {
     }
     const newStatusId = status_id;
 
-    let newStatusName = "Pending";
-    if (status_id === 7) newStatusName = "Approved";
-    else if (status_id === 3) newStatusName = "Back to Pending";
-    else if (status_id === 6) newStatusName = "For Approval";
+    const newStatusName = TOGGLE_NAMES[status_id] ?? "Pending";
 
     await this.warehouseHurdlesRepository.update(id, {
       status_id: newStatusId,
@@ -389,7 +398,7 @@ export class WarehouseHurdlesService {
         method: "toggleStatus",
         raw_data: JSON.stringify({ id }),
         description: `Toggled status for warehouse hurdle id: ${id} to ${newStatusName}`,
-        status_id: 1,
+        status_id: STATUS_IDS.ACTIVE,
       },
       userId,
     );
@@ -401,7 +410,7 @@ export class WarehouseHurdlesService {
     await this.ActionLogsService.logAction({
       action_id: action_id, // dynamic
       ref_id: id,
-      module_id: 16, // STORE HURDLES
+      module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
       description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
@@ -446,14 +455,7 @@ export class WarehouseHurdlesService {
     );
 
     // Action log for each hurdle
-    const newStatusName =
-      status_id === 7
-        ? "Approved"
-        : status_id === 3
-          ? "Back to Pending"
-          : status_id === 6
-            ? "For Approval"
-            : "Pending";
+    const newStatusName = TOGGLE_NAMES[status_id] ?? "Pending";
 
     // Get action ID from status
     const action_id =
@@ -463,7 +465,7 @@ export class WarehouseHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: action_id,
         ref_id: id,
-        module_id: 16, // STORE HURDLES
+        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
         description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({ id, status_id }),
         created_by: userId,
@@ -477,7 +479,7 @@ export class WarehouseHurdlesService {
         method: "toggleBulkStatus",
         raw_data: JSON.stringify({ ids, status_id, undo_reason }),
         description: `Bulk toggled status for warehouse hurdle ids: [${ids.join(", ")}] to status_id: ${status_id}`,
-        status_id: 1,
+        status_id: STATUS_IDS.ACTIVE,
       },
       userId,
     );
@@ -494,7 +496,7 @@ export class WarehouseHurdlesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = 16;
+    const module_id = MODULE_IDS.STORE_HURDLES;
     return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
   }
 
@@ -562,7 +564,9 @@ export class WarehouseHurdlesService {
       }
       try {
         // Parse hurdle date to first day of month (YYYY-MM-01)
-        const formattedDate = row.hurdle_date ? parseToFirstDayOfMonth(row.hurdle_date) : null;
+        const formattedDate = row.hurdle_date
+          ? parseToFirstDayOfMonth(row.hurdle_date)
+          : null;
         try {
           // CALL CREATE SERVICE
           await this.create(
@@ -571,7 +575,7 @@ export class WarehouseHurdlesService {
               hurdle_date: formattedDate,
               warehouse_ids: [warehouse.id],
               item_category_ids: [itemCategory.id],
-              status_id: 3, // pending status
+              status_id: STATUS_IDS.PENDING, // pending status
             },
             userId,
             false, // skip audit trail for bulk upload
@@ -608,7 +612,7 @@ export class WarehouseHurdlesService {
                     hurdle_date: formattedDate,
                     warehouse_ids: [warehouse.id],
                     item_category_ids: [itemCategory.id],
-                    status_id: 3, // pending status
+                    status_id: STATUS_IDS.PENDING, // pending status
                   },
                   userId,
                   false, // skip audit trail for bulk upload
@@ -659,7 +663,7 @@ export class WarehouseHurdlesService {
           method: "bulkUploadFromExcel",
           raw_data: JSON.stringify(records).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
           description: `Bulk upload warehouse hurdles from Excel. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
-          status_id: 1,
+          status_id: STATUS_IDS.ACTIVE,
         },
         userId,
       );
@@ -671,7 +675,7 @@ export class WarehouseHurdlesService {
           method: "bulkUploadFromExcel",
           raw_data: JSON.stringify(errors).slice(0, 65535), // TEXT max length in MySQL is 65,535 bytes
           description: `Bulk upload warehouse hurdles from Excel with errors. File: ${filename || "N/A"}. Inserted count: ${inserted_count}, Updated count: ${updated_count}. Inserted rows: [${inserted_row_numbers.join(", ")}], Updated rows: [${updated_row_numbers.join(", ")}]`,
-          status_id: 1,
+          status_id: STATUS_IDS.ACTIVE,
         },
         userId,
       );

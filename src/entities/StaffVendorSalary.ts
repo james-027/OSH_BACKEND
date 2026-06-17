@@ -14,7 +14,7 @@ import { Vendor } from "./Vendor";
 import { Location } from "./Location";
 import { AccessKey } from "./AccessKey";
 
-@Entity("staff_vendor_salaries")
+@Entity("staff_vendors")
 export class StaffVendorSalary {
   @PrimaryGeneratedColumn()
   id: number;
@@ -27,12 +27,6 @@ export class StaffVendorSalary {
 
   @Column()
   location_id: number;
-
-  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
-  allowance: number;
-
-  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
-  salary_rate: number;
 
   @Column({ default: 1 })
   status_id: number;
