@@ -10,7 +10,8 @@ export interface FieldFormatConfig {
     | "uppercase-trim"
     | "lowercase-trim"
     | "trim"
-    | "none";
+    | "none"
+    | "number-trim"; // NEW: Accepts 0, rejects blank/null/non-numeric
   nullable?: boolean;
 }
 
@@ -22,14 +23,17 @@ export interface ExcelValidationConfig {
 }
 
 /**
- * Trims whitespace from a string value
+ * Trims whitespace from a string value.
+ * FIXED: Properly handles numeric 0 (previously 0 || "" returned "" because 0 is falsy)
  */
 function trimValue(value: any): string {
-  return String(value || "").trim();
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
 }
 
 /**
  * Apply formatting rules to a field value
+ * NEW: "number-trim" format — accepts 0, rejects blank/null/non-numeric strings
  */
 function formatValue(value: any, format?: string): any {
   if (value === null || value === undefined) {
@@ -54,6 +58,11 @@ function formatValue(value: any, format?: string): any {
       return trimmed.toLowerCase();
     case "trim":
       return trimmed;
+    case "number-trim":
+      // Convert trimmed string to number — accepts 0, rejects NaN
+      const num = Number(trimmed);
+      if (isNaN(num)) return null; // "abc", "12px", etc. → null → rejected
+      return num; // 0, "10", "-5.5" → 0, 10, -5.5
     case "none":
     default:
       return value;
@@ -62,7 +71,6 @@ function formatValue(value: any, format?: string): any {
 
 /**
  * Validates and formats an Excel row based on provided configuration
- *
  * @param row - Raw Excel row data
  * @param config - Validation and formatting configuration
  * @returns Formatted and validated row data
@@ -81,6 +89,7 @@ export function validateAndFormatExcelRow(
     const value = row[fieldName];
 
     // Check if field exists and is not empty
+    // FIXED: trimValue now correctly handles numeric 0 ("0" !== "")
     if (value === null || value === undefined || trimValue(value) === "") {
       throw new Error(`Missing required field: ${fieldName}`);
     }
@@ -90,6 +99,7 @@ export function validateAndFormatExcelRow(
     const formatted_value = formatValue(value, format);
 
     // For required fields, if value becomes null after formatting, it's an error
+    // This catches "number-trim" fields with non-numeric strings like "abc"
     if (formatted_value === null && !fieldConfig.nullable) {
       throw new Error(
         `Field ${fieldName} cannot be empty after formatting (not nullable)`,
