@@ -117,7 +117,7 @@ export class SalesTransactionsController {
    *
    * Returns: { success: number, failed: number, message: string }
    */
-  @Post("upload")
+  @Post("upload-excel")
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
