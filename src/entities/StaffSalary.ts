@@ -10,12 +10,11 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { Staff } from "./Staff";
-import { Vendor } from "./Vendor";
-import { Location } from "./Location";
+import { StaffVendorSalary } from "./StaffVendorSalary";
 import { AccessKey } from "./AccessKey";
 
-@Entity("staff_vendors")
-export class StaffVendorSalary {
+@Entity("staff_salaries")
+export class StaffSalary {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -23,10 +22,16 @@ export class StaffVendorSalary {
   staff_id: number;
 
   @Column()
-  vendor_id: number;
+  staff_vendor_id: number;
 
   @Column()
-  location_id: number;
+  access_key_id: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  allowance: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  salary_rate: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -36,9 +41,6 @@ export class StaffVendorSalary {
 
   @Column({ nullable: true })
   updated_by: number;
-
-  @Column({ nullable: true })
-  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -85,21 +87,14 @@ export class StaffVendorSalary {
   @JoinColumn({ name: "staff_id" })
   staff: Staff;
 
-  @ManyToOne(() => Vendor, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "vendor_id" })
-  vendor: Vendor;
 
-  @ManyToOne(() => Location, {
+  @ManyToOne(() => StaffVendorSalary, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
-  @JoinColumn({ name: "location_id" })
-  location: Location;
+  @JoinColumn({ name: "staff_vendor_id" })
+  location: StaffVendorSalary;
 
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })

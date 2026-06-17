@@ -1,17 +1,21 @@
 import { IsInt, IsNotEmpty, IsOptional, IsNumber } from "class-validator";
 
-export class CreateStaffVendorSalaryDto {
+export class CreateStaffSalaryDto {
   @IsInt()
   @IsNotEmpty()
   staff_id!: number;
-
+  
   @IsInt()
   @IsNotEmpty()
-  vendor_id!: number;
+  staff_vendor_id!: number;
 
-  @IsInt()
+  @IsNumber()
   @IsNotEmpty()
-  location_id!: number;
+  allowance!: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  salary_rate!: number;
 
   @IsInt()
   @IsNotEmpty()
