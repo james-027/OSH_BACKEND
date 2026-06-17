@@ -13,7 +13,8 @@ import { ProfitcenterService } from "./services/profitcenter.service";
 
 import { UsersModule } from "../users/users.module";
 import { SSEModule } from "../sse/sse.module";
-
+import { ProfitcenterSyncService } from "./services/profitcenter-sync.service";
+import { ProfitcenterScheduler } from "src/schedulers/profitcenter.scheduler";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 
 @Module({
@@ -35,6 +36,8 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
   providers: [
     ProfitcenterService,
     ResponseMapperService,
+    ProfitcenterSyncService,
+    ProfitcenterScheduler,
   ],
 
   exports: [ProfitcenterService],

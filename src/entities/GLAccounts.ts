@@ -10,6 +10,7 @@ import {
 
 import { Status } from "./Status";
 import { User } from "./User";
+import { Company } from "./Company";
 @Entity("gl_accounts")
 export class GLAccounts {
   @PrimaryGeneratedColumn()
@@ -54,6 +55,13 @@ export class GLAccounts {
   })
   updated_by: number;
 
+  // Foreign key to Company entity
+  @ManyToOne(() => Company)
+  @JoinColumn({
+    name: "company",
+    referencedColumnName: "company_abbr",
+  })
+  companyCode!: Company;
   // Foreign key to Status entity
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })

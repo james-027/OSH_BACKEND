@@ -70,6 +70,7 @@ export class Supplier {
     referencedColumnName: "company_abbr",
   })
   companyCode!: Company;
+  
   @Column({ default: 1 })
   status_id!: number;
 

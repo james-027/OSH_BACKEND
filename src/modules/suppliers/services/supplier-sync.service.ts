@@ -21,7 +21,7 @@ export class SupplierSyncService {
     };
 
     try {
-      const url = process.env.BOS_URL;
+      const url = process.env.BOS_SUPPLIER_API;
       const jwt = process.env.BOS_JWT;
       const user = process.env.BOS_USER;
 

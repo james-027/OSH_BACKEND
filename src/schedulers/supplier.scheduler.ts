@@ -8,7 +8,8 @@ import logger from "src/config/logger";
 export class SupplierScheduler {
   constructor(private readonly supplierSyncService: SupplierSyncService) {}
 
-  @Cron("*/5 * * * * *") // 5 secs
+  // @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron("*/5 * * * * *")
   async handleCron() {
     const batchSize = 1000; // Default batch size
 
