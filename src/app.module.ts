@@ -112,6 +112,7 @@ import { ApprovalMatrixModule } from "./modules/approval-matrix/approval-matrix.
 import { ApprovalMatrix } from "./entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
+import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
 @Module({
   imports: [
     // Configuration
@@ -214,6 +215,7 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
     DebitAdviceApprovalModule,
     ApprovalLogsModule,
     ApprovalMatrixModule,
+    StaffTrainingModule,
   ],
   providers: [
     EmailService,

@@ -84,6 +84,10 @@ import { ApprovalMatrix } from "../entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
 import { GLAccounts } from "../entities/GLAccounts";
+import { StaffHistory } from "../entities/StaffHistory";
+import { StaffTraining } from "../entities/StaffTrainings";
+import { Training } from "../entities/Training";
+
 // All entities in one place for easy maintenance
 export const entities = [
   User,
@@ -170,6 +174,9 @@ export const entities = [
   ApprovalMatrix,
   ApprovalMatrixDetails,
   ApprovalMatrixLevels,
+  StaffTraining,
+  Training,
+  StaffHistory,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
