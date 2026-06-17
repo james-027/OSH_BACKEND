@@ -13,3 +13,5 @@ src/migrations/*
 tsconfig.tsbuildinfo
 package-lock.json
 uploads/staffs/*
+uploads/*
+!uploads/UPLOAD-TEMPLATE/
