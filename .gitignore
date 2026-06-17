@@ -15,3 +15,4 @@ package-lock.json
 uploads/staffs/*
 uploads/*
 !uploads/UPLOAD-TEMPLATE/
+!uploads/UPLOAD-TEMPLATE/*
