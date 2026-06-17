@@ -63,6 +63,7 @@ export class DebitAdviceService {
                 status_name: item.status ? item.status.status_name : null,
                 created_at: item.created_at,
                 updated_at: item.updated_at,
+                jv_no: item.jv_no,
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
@@ -101,6 +102,7 @@ export class DebitAdviceService {
                 status_name: debitAdvice.status ? debitAdvice.status.status_name : null,
                 created_at: debitAdvice.created_at,
                 updated_at: debitAdvice.updated_at,
+                jv_no: debitAdvice.jv_no,
                 created_user: debitAdvice.createdBy
                     ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
                     : null,
@@ -163,7 +165,7 @@ export class DebitAdviceService {
                 createdBy: { id: userId } as any,
                 document_number: trans_number,
                 transaction_date: createDebitAdviceDto.transaction_date,
-                status_id: createDebitAdviceDto.status_id ?? 13,
+                status_id: createDebitAdviceDto.status_id ?? 17,
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
                     createdBy: { id: userId } as any,
@@ -350,13 +352,13 @@ export class DebitAdviceService {
             if (reloadedDebitAdvice.status_id === current_status_id) {
                 action_id = 2; // EDIT
                 switch (reloadedDebitAdvice.status_id) {
-                    case 13:
+                    case 17:
                         description = `Edit Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || "Unknown"}`;
                         break;
                 }
             } else if (
                 reloadedDebitAdvice.status_id === 3 ||
-                (reloadedDebitAdvice.status_id === 13 && current_status_id !== 7)
+                (reloadedDebitAdvice.status_id === 17 && current_status_id !== 7)
             ) {
                 action_id = 1; // ADD
                 description = `Add New Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || "Unknown"}`;
@@ -370,7 +372,7 @@ export class DebitAdviceService {
                 action_id = 6; // Deactivate
                 description = `Deactivate Debit Advice Document ${reloadedDebitAdvice.document_number} and status ${reloadedDebitAdvice.status?.status_name || "Unknown"}`;
             } else if (
-                reloadedDebitAdvice.status_id === 13 &&
+                reloadedDebitAdvice.status_id === 17 &&
                 current_status_id === 7
             ) {
                 action_id = 2;
@@ -407,6 +409,7 @@ export class DebitAdviceService {
                 updated_at: reloadedDebitAdvice.updated_at,
                 document_number: reloadedDebitAdvice.document_number,
                 transaction_date: reloadedDebitAdvice.transaction_date,
+                jv_no: reloadedDebitAdvice.jv_no,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
                     : null,
@@ -660,6 +663,7 @@ export class DebitAdviceService {
                     status_name: item.status ? item.status.status_name : null,
                     created_at: item.created_at,
                     updated_at: item.updated_at,
+                    jv_no: item.jv_no,
                     created_user: item.createdBy
                         ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                         : null,

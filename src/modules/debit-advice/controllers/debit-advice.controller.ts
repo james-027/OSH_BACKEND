@@ -73,12 +73,6 @@ export class DebitAdviceController {
         return this.oshjvService.postToOSHJV(payload, userId);
     }
 
-
-    @Get('test')
-    test() {
-        console.log('✅ DebitAdviceController hit');
-        return 'working';
-    }
     @Get(":id")
     @RequirePermissions({
         module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
@@ -163,4 +157,22 @@ export class DebitAdviceController {
         return result;
     }
 
+    @Get("document-posting-logs")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async document_posting_log(@Request() req) {
+        return this.oshjvService.ShowDocumentPostingLogs();
+    }
+
+    @Post("document-posting-logs/create")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
+    async createDocumentPostingLog(@Body() payload: any[], @Request() req) {
+        const userId = req.user.id;
+        return this.oshjvService.createDocumentPostingLog(payload, userId);
+    }
 }

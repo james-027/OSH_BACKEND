@@ -22,7 +22,7 @@ import { RequirePermissions } from "../../../decorators/permissions.decorator";
 @Controller("gl-accounts")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class GlAccountsController {
-  constructor(private readonly GlAccountsService: GlAccountsService) {}
+  constructor(private readonly GlAccountsService: GlAccountsService) { }
 
   @Get()
   @RequirePermissions({

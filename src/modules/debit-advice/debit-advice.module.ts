@@ -17,6 +17,7 @@ import { TransactionSequence } from "../../entities/TransactionSequence";
 import { DebitAdviceGLItems } from "src/entities/DebitAdviceGLItems";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { ActionLog } from "src/entities/ActionLog";
+import { DocumentPostingLog } from "src/entities/DocumentPostingLog";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
     imports: [TypeOrmModule.forFeature([
@@ -28,6 +29,7 @@ import { ActionLog } from "src/entities/ActionLog";
         Action,
         TransactionSequence,
         ActionLog,
+        DocumentPostingLog,
     ]),
         UsersModule,
         SSEModule],
@@ -40,10 +42,6 @@ import { ActionLog } from "src/entities/ActionLog";
         ActionLogsService,
         OSHJVService,
     ],
-    exports: [DebitAdviceService],
+    exports: [DebitAdviceService, OSHJVService],
 })
-export class DebitAdviceModule {
-    constructor() {
-        console.log("✅ DebitAdviceModule initialized");
-    }
-}
+export class DebitAdviceModule { }
