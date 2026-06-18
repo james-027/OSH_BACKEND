@@ -121,6 +121,15 @@ export class ItemsService {
     } catch (auditErr) {
       logger.warn("Audit trail creation failed:", (auditErr as Error).message);
     }
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitCreateSignal("items", 0);
+    } catch (err) {
+      logger.warn("SSE event failed:", (err as Error).message);
+    }
+
+    return savedItem;
   }
 
   async update(
@@ -130,6 +139,7 @@ export class ItemsService {
   ): Promise<Item> {
     const item = await this.itemsRepository.findOne({ where: { id } });
     if (!item) throw new NotFoundException("Item not found");
+
     Object.assign(item, updateDto, {
       sales_conv:
         updateDto.sales_conv !== undefined
@@ -159,6 +169,15 @@ export class ItemsService {
     } catch (auditErr) {
       logger.warn("Audit trail creation failed:", (auditErr as Error).message);
     }
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("items", id);
+    } catch (err) {
+      logger.warn("SSE event failed:", (err as Error).message);
+    }
+
+    return savedItem;
   }
 
   async remove(id: number): Promise<void> {
@@ -197,5 +216,13 @@ export class ItemsService {
       logger.warn("Audit trail creation failed:", (auditErr as Error).message);
     }
 
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("items", id);
+    } catch (err) {
+      logger.warn("SSE event failed:", (err as Error).message);
+    }
+
+    return savedItem;
   }
 }
