@@ -32,9 +32,6 @@ export class Training {
   @Column({ nullable: true })
   access_key_id: number;
 
-  @Column({ type: "text", nullable: true })
-  remarks: string;
-
   @Column({ default: 1 })
   status_id: number;
 

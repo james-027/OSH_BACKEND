@@ -19,7 +19,7 @@ import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
 import { Staff } from "./Staff";
 
-@Entity("staff_history")
+@Entity("staff_histories")
 export class StaffHistory {
   @PrimaryGeneratedColumn()
   id: number;
