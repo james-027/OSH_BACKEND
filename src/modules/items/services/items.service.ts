@@ -9,6 +9,10 @@ import { Item } from "src/entities/Item";
 import { CreateItemDto } from "../dto/CreateItemDto";
 import { UpdateItemDto } from "../dto/UpdateItemDto";
 import { UsersService } from "src/modules/users/services/users.service";
+import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
+import logger from "src/config/logger";
+import { STATUS_IDS, STATUS_NAMES } from "src/constants/customConstants";
 
 @Injectable()
 export class ItemsService {
@@ -16,6 +20,8 @@ export class ItemsService {
     @InjectRepository(Item)
     private itemsRepository: Repository<Item>,
     private usersService: UsersService,
+    private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -97,7 +103,24 @@ export class ItemsService {
       created_by: userId,
       updated_by: userId,
     });
-    return this.itemsRepository.save(item);
+
+    const savedItem = await this.itemsRepository.save(item);
+
+    // Audit trail
+    try {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ItemsService",
+          method: "create",
+          raw_data: JSON.stringify(createDto),
+          description: `Created item ID: ${savedItem.id} (${savedItem.item_code})`,
+          status_id: STATUS_IDS.ACTIVE,
+        },
+        userId,
+      );
+    } catch (auditErr) {
+      logger.warn("Audit trail creation failed:", (auditErr as Error).message);
+    }
   }
 
   async update(
@@ -118,7 +141,24 @@ export class ItemsService {
           : item.sales_unit_eq,
       updated_by: userId,
     });
-    return this.itemsRepository.save(item);
+
+    const savedItem = await this.itemsRepository.save(item);
+
+    // Audit trail
+    try {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ItemsService",
+          method: "update",
+          raw_data: JSON.stringify(updateDto),
+          description: `Updated item ID: ${id} (${savedItem.item_code})`,
+          status_id: STATUS_IDS.ACTIVE,
+        },
+        userId,
+      );
+    } catch (auditErr) {
+      logger.warn("Audit trail creation failed:", (auditErr as Error).message);
+    }
   }
 
   async remove(id: number): Promise<void> {
@@ -130,8 +170,32 @@ export class ItemsService {
   async toggleStatus(id: number, userId: number): Promise<Item> {
     const item = await this.itemsRepository.findOne({ where: { id } });
     if (!item) throw new NotFoundException("Item not found");
-    item.status_id = item.status_id === 1 ? 2 : 1;
+
+    const newStatusId =
+      item.status_id === STATUS_IDS.ACTIVE
+        ? STATUS_IDS.INACTIVE
+        : STATUS_IDS.ACTIVE;
+    const newStatusName = STATUS_NAMES[newStatusId];
+    item.status_id = newStatusId;
     item.updated_by = userId;
-    return this.itemsRepository.save(item);
+
+    const savedItem = await this.itemsRepository.save(item);
+
+    // Audit trail
+    try {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "ItemsService",
+          method: "toggleStatus",
+          raw_data: JSON.stringify({ id, newStatusId }),
+          description: `Toggled status for item ID: ${id} (${savedItem.item_code}) to status: ${newStatusName}`,
+          status_id: STATUS_IDS.ACTIVE,
+        },
+        userId,
+      );
+    } catch (auditErr) {
+      logger.warn("Audit trail creation failed:", (auditErr as Error).message);
+    }
+
   }
 }
