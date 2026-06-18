@@ -94,7 +94,7 @@ export class StaffSalary {
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "staff_vendor_id" })
-  location: StaffVendorSalary;
+  staffVendor: StaffVendorSalary;
 
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })

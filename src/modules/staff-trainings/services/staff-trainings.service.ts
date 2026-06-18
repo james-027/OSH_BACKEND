@@ -142,7 +142,7 @@ export class StaffTrainingService {
         ) {
           const serviceProviderCode = staff.vendor?.service_provider_code ?? "";
 
-          const locationCode = staff.location?.location_abbr ?? "";
+          const locationCode = staff.location?.location_code ?? "";
 
           const prefix = `${serviceProviderCode}${locationCode}`;
 
@@ -164,7 +164,7 @@ export class StaffTrainingService {
 
           trans_number =
             await this.commonUtilitiesService.generateTransactionNumber({
-              transaction_type: "STAFF TRAINING",
+              transaction_type: `STAFF CODE ${locationCode}`,
               vendor_id: staff.vendor_id,
               location_id: staff.location_id,
               access_key_id: accessKeyId,

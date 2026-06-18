@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -13,6 +14,7 @@ import { Staff } from "./Staff";
 import { Vendor } from "./Vendor";
 import { Location } from "./Location";
 import { AccessKey } from "./AccessKey";
+import { StaffSalary } from "./StaffSalary";
 
 @Entity("staff_vendors")
 export class StaffVendorSalary {
@@ -104,4 +106,10 @@ export class StaffVendorSalary {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+  @OneToMany(
+  () => StaffSalary,
+  (staffSalary) => staffSalary.staffVendor,
+)
+staffSalaries: StaffSalary[];
 }

@@ -43,6 +43,7 @@ export class StaffVendorSalariesService {
             "vendor",
             "location",
             "accessKey",
+            "staffSalaries",
           ],
         },
       );
@@ -69,6 +70,7 @@ export class StaffVendorSalariesService {
             "vendor",
             "location",
             "accessKey",
+            "staffSalaries",
           ],
         });
 
