@@ -5,11 +5,13 @@ import axios from "axios";
 
 import { Supplier } from "src/entities/Supplier";
 import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
 @Injectable()
 export class SupplierSyncService {
   constructor(
     @InjectRepository(Supplier)
     private readonly supplierRepository: Repository<Supplier>,
+    private readonly sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async syncSuppliers(batchSize) {
@@ -176,18 +178,23 @@ export class SupplierSyncService {
         }
       }
 
-      // STEP 4: Batch insert
       if (inserts.length > 0) {
-        await this.supplierRepository.save(inserts, {
+        const savedInserts = await this.supplierRepository.save(inserts, {
           chunk: batchSize,
         });
-      }
 
-      // STEP 5: Batch update
+        for (const supplier of savedInserts) {
+          this.sseEventEmitter.emitCreateSignal("suppliers", supplier.id);
+        }
+      }
       if (updates.length > 0) {
-        await this.supplierRepository.save(updates, {
+        const savedUpdates = await this.supplierRepository.save(updates, {
           chunk: batchSize,
         });
+
+        for (const supplier of savedUpdates) {
+          this.sseEventEmitter.emitUpdateSignal("suppliers", supplier.id);
+        }
       }
 
       return result;

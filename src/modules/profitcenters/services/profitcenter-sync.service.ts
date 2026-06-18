@@ -5,12 +5,14 @@ import axios from "axios";
 
 import { Profitcenter } from "src/entities/Profitcenter";
 import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
 
 @Injectable()
 export class ProfitcenterSyncService {
   constructor(
     @InjectRepository(Profitcenter)
     private readonly profitcenterRepository: Repository<Profitcenter>,
+    private readonly sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async syncProfitcenters(batchSize = 1000) {
@@ -153,16 +155,23 @@ export class ProfitcenterSyncService {
 
       // Batch insert
       if (inserts.length > 0) {
-        await this.profitcenterRepository.save(inserts, {
+        const savedInserts = await this.profitcenterRepository.save(inserts, {
           chunk: batchSize,
         });
-      }
 
+        for (const item of savedInserts) {
+          this.sseEventEmitter.emitCreateSignal("profitcenters", item.id);
+        }
+      }
       // Batch update
       if (updates.length > 0) {
-        await this.profitcenterRepository.save(updates, {
+        const savedUpdates = await this.profitcenterRepository.save(updates, {
           chunk: batchSize,
         });
+
+        for (const item of savedUpdates) {
+          this.sseEventEmitter.emitUpdateSignal("profitcenters", item.id);
+        }
       }
 
       return result;

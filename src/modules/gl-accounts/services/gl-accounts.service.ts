@@ -101,12 +101,11 @@ export class GlAccountsService {
     const { status_id } = createGlAccountDto;
 
     try {
-      const existingGlAccount =
-        await this.GlAccountsRepository.findOne({
-          where: {
-            gl_code: createGlAccountDto.gl_code,
-          },
-        });
+      const existingGlAccount = await this.GlAccountsRepository.findOne({
+        where: {
+          gl_code: createGlAccountDto.gl_code,
+        },
+      });
 
       if (existingGlAccount) {
         throw new BadRequestException(" GL code already exists");
@@ -139,8 +138,7 @@ export class GlAccountsService {
         created_by: userId,
       });
 
-      const savedGlAccount =
-        await this.GlAccountsRepository.save(newGlAccount);
+      const savedGlAccount = await this.GlAccountsRepository.save(newGlAccount);
 
       await this.userAuditTrailCreateService.create(
         {
@@ -153,10 +151,7 @@ export class GlAccountsService {
         userId,
       );
 
-      this.sseEventEmitter.emitCreateSignal(
-        "-gl-account",
-        savedGlAccount.id,
-      );
+      this.sseEventEmitter.emitCreateSignal("gl-accounts", savedGlAccount.id);
 
       return this.mapResponse(savedGlAccount);
     } catch (error) {
@@ -210,11 +205,10 @@ export class GlAccountsService {
 
       await this.GlAccountsRepository.save(GlAccount);
 
-      const updatedGlAccount =
-        await this.GlAccountsRepository.findOne({
-          where: { id },
-          relations: ["status"],
-        });
+      const updatedGlAccount = await this.GlAccountsRepository.findOne({
+        where: { id },
+        relations: ["status"],
+      });
 
       await this.userAuditTrailCreateService.create(
         {
@@ -227,10 +221,7 @@ export class GlAccountsService {
         userId,
       );
 
-      this.sseEventEmitter.emitUpdateSignal(
-        "-gl-account",
-        updatedGlAccount.id,
-      );
+      this.sseEventEmitter.emitUpdateSignal("gl-accounts", updatedGlAccount.id);
 
       return this.mapResponse(updatedGlAccount);
     } catch (error) {
@@ -266,7 +257,7 @@ export class GlAccountsService {
         userId,
       );
 
-      this.sseEventEmitter.emitDeleteSignal("-gl-account", id);
+      this.sseEventEmitter.emitDeleteSignal("gl-accounts", id);
     } catch (error) {
       logger.error("Error deleting  GL account:", error);
 
@@ -300,8 +291,7 @@ export class GlAccountsService {
 
     GlAccount.updated_by = userId;
 
-    const updatedGlAccount =
-      await this.GlAccountsRepository.save(GlAccount);
+    const updatedGlAccount = await this.GlAccountsRepository.save(GlAccount);
 
     await this.userAuditTrailCreateService.create(
       {
@@ -314,10 +304,7 @@ export class GlAccountsService {
       userId,
     );
 
-    this.sseEventEmitter.emitUpdateSignal(
-      "-gl-account",
-      updatedGlAccount.id,
-    );
+    this.sseEventEmitter.emitUpdateSignal("gl-accounts", updatedGlAccount.id);
 
     return {
       message: ` GL account ${updatedGlAccount.gl_code} successfully toggled ${

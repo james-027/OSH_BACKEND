@@ -5,12 +5,14 @@ import axios from "axios";
 
 import { GLAccounts } from "src/entities/GLAccounts";
 import logger from "src/config/logger";
+import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
 
 @Injectable()
 export class GLAccountSyncService {
   constructor(
     @InjectRepository(GLAccounts)
     private readonly glAccountRepository: Repository<GLAccounts>,
+    private readonly sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
   async syncGLAccounts(batchSize = 1000) {
@@ -42,6 +44,12 @@ export class GLAccountSyncService {
         existingAccounts.map((item) => [item.gl_code, item]),
       );
 
+      const oldCodeMap = new Map(
+        existingAccounts
+          .filter((item) => item.old_code)
+          .map((item) => [item.old_code, item]),
+      );
+
       const inserts: GLAccounts[] = [];
       const updates: GLAccounts[] = [];
 
@@ -49,27 +57,43 @@ export class GLAccountSyncService {
         try {
           const accountCode = row.ACCTCODE?.trim();
           const accountName = row.ACCTNAME?.trim();
-
+          const company = row.U_COMPANY?.trim() ?? "";
           if (!accountCode) {
             result.skipped++;
             continue;
           }
 
-          const existing = accountMap.get(accountCode);
+          let existing = accountMap.get(accountCode);
+
+          // Try matching by old_code
+          if (!existing) {
+            existing = oldCodeMap.get(accountCode);
+          }
+
+          // Fallback to matching by name
+          if (!existing) {
+            existing = existingAccounts.find(
+              (g) => g.gl_name?.trim() === accountName,
+            );
+          }
 
           if (existing) {
             let hasChanges = false;
+
+            // Code changed
+            if (existing.gl_code !== accountCode) {
+              existing.old_code = existing.gl_code;
+              existing.gl_code = accountCode;
+              hasChanges = true;
+            }
 
             if (existing.gl_name !== accountName) {
               existing.gl_name = accountName;
               hasChanges = true;
             }
-            // Include only if your entity has a company field
-            if (
-              "company" in existing &&
-              existing.company !== (row.u_company?.trim() ?? "")
-            ) {
-              existing.company = row.u_company?.trim() ?? "";
+
+            if (existing.company !== company) {
+              existing.company = company;
               hasChanges = true;
             }
 
@@ -80,16 +104,30 @@ export class GLAccountSyncService {
               result.skipped++;
             }
           } else {
-            inserts.push(
-              this.glAccountRepository.create({
-                gl_code: accountCode,
-                gl_name: accountName,
-                old_code: accountCode, // same pattern as your supplier sync
-                status_id: 1,
-              }),
-            );
+            // Extra check by old_code (same approach as Profitcenter)
+            existing = oldCodeMap.get(accountCode);
 
-            result.inserted++;
+            if (existing) {
+              existing.old_code = existing.gl_code;
+              existing.gl_code = accountCode;
+              existing.gl_name = accountName;
+              existing.company = company;
+
+              updates.push(existing);
+              result.updated++;
+            } else {
+              inserts.push(
+                this.glAccountRepository.create({
+                  gl_code: accountCode,
+                  gl_name: accountName,
+                  old_code: accountCode,
+                  company,
+                  status_id: 1,
+                }),
+              );
+
+              result.inserted++;
+            }
           }
         } catch (err) {
           result.errors++;
@@ -103,15 +141,22 @@ export class GLAccountSyncService {
       }
 
       if (inserts.length > 0) {
-        await this.glAccountRepository.save(inserts, {
+        const savedInserts = await this.glAccountRepository.save(inserts, {
           chunk: batchSize,
         });
-      }
 
+        for (const item of savedInserts) {
+          this.sseEventEmitter.emitCreateSignal("gl-accounts", item.id);
+        }
+      }
       if (updates.length > 0) {
-        await this.glAccountRepository.save(updates, {
+        const savedUpdates = await this.glAccountRepository.save(updates, {
           chunk: batchSize,
         });
+
+        for (const item of savedUpdates) {
+          this.sseEventEmitter.emitUpdateSignal("gl-accounts", item.id);
+        }
       }
 
       return result;
