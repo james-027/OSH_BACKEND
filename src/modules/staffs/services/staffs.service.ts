@@ -84,9 +84,9 @@ export class StaffsService {
         where.access_key_id = accessKeyId;
       }
 
-     if (statusId && statusId.length > 0) {
-      where.status_id = In(statusId);
-    }
+      if (statusId && statusId.length > 0) {
+        where.status_id = In(statusId);
+      }
 
       const staffs = await this.staffsRepository.find({
         where,
@@ -102,6 +102,7 @@ export class StaffsService {
           "staffBrands",
           "staffCategoryTypes",
           "staffVendorSalaries",
+          "staffSalaries",
         ],
         order: {
           modified_at: "DESC", // latest modified first
@@ -130,6 +131,7 @@ export class StaffsService {
           "staffBrands",
           "staffCategoryTypes",
           "staffVendorSalaries",
+          "staffSalaries",
         ],
       });
 
@@ -277,7 +279,6 @@ export class StaffsService {
       const savedStaffVendorSalary =
         await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
 
-        
       const newStaffSalary = this.staffSalaryRepository.create({
         staff_id: savedStaff.id,
         staff_vendor_id: newStaffVendorSalary.id,
@@ -288,7 +289,6 @@ export class StaffsService {
         created_by: userId,
         updated_by: userId,
       });
-
 
       const savedStaffSalary =
         await this.staffSalaryRepository.save(newStaffSalary);
@@ -502,15 +502,11 @@ export class StaffsService {
 
       let staffBrand = await this.staffBrandsRepository.findOne({
         where: { staff_id: staff.id },
+        order: { id: "DESC" },
       });
 
-      if (staffBrand) {
-        staffBrand.brand_id = updateStaffDto.brand_id;
-        staffBrand.updated_by = userId;
-
-        await this.staffBrandsRepository.save(staffBrand);
-      } else {
-        staffBrand = this.staffBrandsRepository.create({
+      if (!staffBrand || staffBrand.brand_id !== updateStaffDto.brand_id) {
+        const newRecord = this.staffBrandsRepository.create({
           staff_id: staff.id,
           brand_id: updateStaffDto.brand_id,
           access_key_id: staff.access_key_id,
@@ -519,43 +515,51 @@ export class StaffsService {
           updated_by: userId,
         });
 
-        await this.staffBrandsRepository.save(staffBrand);
+        await this.staffBrandsRepository.save(newRecord);
       }
 
       let staffCategoryType = await this.staffCategoryTypesRepository.findOne({
         where: { staff_id: staff.id },
+        order: { id: "DESC" },
       });
 
-      if (staffCategoryType) {
-        staffCategoryType.category_type_id = updateStaffDto.category_type_id;
-        staffCategoryType.updated_by = userId;
-
-        await this.staffCategoryTypesRepository.save(staffCategoryType);
-      } else {
-        staffCategoryType = this.staffCategoryTypesRepository.create({
+      if (
+        !staffCategoryType ||
+        staffCategoryType.category_type_id !== updateStaffDto.category_type_id
+      ) {
+        const newRecord = this.staffCategoryTypesRepository.create({
           staff_id: staff.id,
           category_type_id: updateStaffDto.category_type_id,
           access_key_id: staff.access_key_id,
-          status_id: updateStaffDto.status_id || 1,
+          status_id: 1,
           created_by: userId,
           updated_by: userId,
         });
 
-        await this.staffCategoryTypesRepository.save(staffCategoryType);
+        await this.staffCategoryTypesRepository.save(newRecord);
       }
 
       let staffVendorSalary = await this.staffVendorSalaryRepository.findOne({
         where: { staff_id: staff.id },
+        order: { id: "DESC" },
       });
 
-      if (staffVendorSalary) {
-        staffVendorSalary.vendor_id = updateStaffDto.vendor_id;
-        staffVendorSalary.location_id = updateStaffDto.location_id;
-        staffVendorSalary.updated_by = userId;
+      let staffSalary = await this.staffSalaryRepository.findOne({
+        where: { staff_id: staff.id },
+        order: { id: "DESC" },
+      });
 
-        await this.staffVendorSalaryRepository.save(staffVendorSalary);
-      } else {
-        staffVendorSalary = this.staffVendorSalaryRepository.create({
+      const isChanged =
+        !staffVendorSalary ||
+        staffVendorSalary.vendor_id !== updateStaffDto.vendor_id ||
+        staffVendorSalary.location_id !== updateStaffDto.location_id ||
+        Number(staffSalary?.salary_rate ?? 0) !==
+          Number(updateStaffDto.salary_rate) ||
+        Number(staffSalary?.allowance ?? 0) !==
+          Number(updateStaffDto.allowance);
+
+      if (isChanged) {
+        const newstaffVendor = this.staffVendorSalaryRepository.create({
           staff_id: staff.id,
           vendor_id: updateStaffDto.vendor_id,
           location_id: updateStaffDto.location_id,
@@ -565,10 +569,22 @@ export class StaffsService {
           updated_by: userId,
         });
 
-        await this.staffVendorSalaryRepository.save(staffVendorSalary);
-      }
+        staffVendorSalary =
+          await this.staffVendorSalaryRepository.save(newstaffVendor);
 
-      
+        const newRecord = this.staffSalaryRepository.create({
+          staff_id: staff.id,
+          staff_vendor_id: staffVendorSalary.id,
+          allowance: updateStaffDto.allowance,
+          salary_rate: updateStaffDto.salary_rate,
+          access_key_id: staff.access_key_id,
+          status_id: updateStaffDto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        await this.staffSalaryRepository.save(newRecord);
+      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -742,7 +758,7 @@ export class StaffsService {
         await this.actionLogsService.logAction({
           module_id: MODULE_IDS.STAFFS,
           ref_id: updatedStaff.id,
-          action_id: ACTION_IDS.REVERT, 
+          action_id: ACTION_IDS.REVERT,
           description: `Toggled staff status to ${newStatusName}  ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${
             staff.vendor?.service_provider_name ?? "N/A"
           } | Location: ${staff.location?.location_name ?? "N/A"}`,
@@ -837,15 +853,13 @@ export class StaffsService {
         throw new Error("Failed to retrieve updated staff");
       }
 
-    
       let generatedStaffCode: string | null = null;
 
       if (isVendorChanged || isLocationChanged) {
         const serviceProviderCode =
           updatedStaff.vendor?.service_provider_code ?? "";
 
-        const locationCode =
-          updatedStaff.location?.location_code ?? "";
+        const locationCode = updatedStaff.location?.location_code ?? "";
 
         const prefix = `${serviceProviderCode}${locationCode}`;
 
@@ -860,8 +874,7 @@ export class StaffsService {
         let nextSeries = 1;
 
         if (latestStaff?.staff_code) {
-          const seriesPart =
-            latestStaff.staff_code.substring(prefix.length);
+          const seriesPart = latestStaff.staff_code.substring(prefix.length);
           nextSeries = parseInt(seriesPart, 10) + 1;
         }
 
@@ -918,7 +931,6 @@ export class StaffsService {
         created_by: userId,
         updated_by: userId,
       });
-
 
       await this.userAuditTrailCreateService.create(
         {
@@ -995,7 +1007,6 @@ export class StaffsService {
         ],
       });
 
-
       if (!staff) {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
@@ -1012,22 +1023,21 @@ export class StaffsService {
         end_date: updateStaffDeployDto.end_date,
         remarks: updateStaffDeployDto.remarks,
         created_by: userId,
-        updated_by:userId,
-        access_key_id:accessKeyId
+        updated_by: userId,
+        access_key_id: accessKeyId,
       });
 
+      const staffWarehouseDetails = await this.staffWarehouseRepository.findOne(
+        {
+          where: { id: staffWarehouse.id },
+          relations: ["warehouse"],
+        },
+      );
 
-    
-      const staffWarehouseDetails = await this.staffWarehouseRepository.findOne({
-        where: { id: staffWarehouse.id },
-        relations: ["warehouse"],
-      });
-
-
-      if(staffWarehouse){
-      await this.staffsRepository.update(id, {
-        assign_status_id: 21,
-      });
+      if (staffWarehouse) {
+        await this.staffsRepository.update(id, {
+          assign_status_id: 21,
+        });
       }
 
       await this.userAuditTrailCreateService.create(
@@ -1048,7 +1058,7 @@ export class StaffsService {
           action_id: ACTION_IDS.DEPLOY,
           description: `Staff ${staff.first_name} ${staff.last_name} Deployed to Warehouse: ${staffWarehouseDetails.warehouse.warehouse_name}`,
           raw_data: JSON.stringify({
-              staffWarehouse
+            staffWarehouse,
           }),
           created_by: userId,
         });

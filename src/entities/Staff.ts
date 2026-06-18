@@ -18,6 +18,7 @@ import { StaffBrand } from "./StaffBrand";
 import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
 import { Warehouse } from "./Warehouse";
+import { StaffSalary } from "./StaffSalary";
 
 @Entity("staffs")
 export class Staff {
@@ -202,4 +203,12 @@ export class Staff {
     })
     @JoinColumn({ name: "warehouse_id" })
     warehouse: Warehouse;
+
+
+      @OneToMany(
+      () => StaffSalary,
+      (staffSalary) => staffSalary.staff,
+    )
+    staffSalaries: StaffSalary[];
+
 }
