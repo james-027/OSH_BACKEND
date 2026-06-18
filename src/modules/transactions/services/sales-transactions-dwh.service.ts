@@ -144,7 +144,7 @@ export class SalesTransactionsDwhService {
               dchannel: row.U_DCHANNEL,
               item_code: row.ITEMCODE,
               item_desc: row.ITEMDESC,
-              vat_cdoe: row.VATCODE,
+              vat_code: row.VATCODE,
               gross_sales: row.GROSSSALES,
               net_sales: row.NETSALES,
               quantity: row.QUANTITY,

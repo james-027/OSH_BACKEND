@@ -55,7 +55,7 @@ export class SalesTransaction {
   item_desc: string;
 
   @Column()
-  vat_cdoe: string;
+  vat_code: string;
 
   @Column("decimal", { precision: 18, scale: 6 })
   gross_sales: number;

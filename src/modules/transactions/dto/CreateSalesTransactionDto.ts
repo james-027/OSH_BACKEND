@@ -42,7 +42,7 @@ export class CreateSalesTransactionDto {
   item_desc: string;
 
   @IsString()
-  vat_cdoe: string;
+  vat_code: string;
 
   @IsNumber({ maxDecimalPlaces: 6 })
   gross_sales: number;

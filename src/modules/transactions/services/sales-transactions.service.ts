@@ -477,7 +477,7 @@ export class SalesTransactionsService {
             dchannel: formattedRow["U_DCHANNEL"],
             item_code: itemCodeUpperCase,
             item_desc: formattedRow["ITEM"],
-            vat_cdoe: formattedRow["VATCODE"],
+            vat_code: formattedRow["VATCODE"],
             gross_sales: Number(formattedRow["GROSSSALES"]) || 0,
             net_sales: Number(formattedRow["NETSALES"]) || 0,
             quantity: Number(formattedRow["QUANTITY"]) || 0,
