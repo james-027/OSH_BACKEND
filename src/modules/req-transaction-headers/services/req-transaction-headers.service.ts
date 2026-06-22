@@ -1799,6 +1799,26 @@ export class ReqTransactionHeadersService {
         );
       }
 
+      //* Step 1.5: Validate conditional fields for requirement_type_id = 2 (Rental)
+      if (requirement.requirement_type_id === 2) {
+        if (
+          createDto.supplier_id === undefined ||
+          createDto.supplier_id === null
+        ) {
+          throw new BadRequestException(
+            "supplier_id is required for requirement type 2 (Store Rental)",
+          );
+        }
+        if (
+          createDto.contract_amount === undefined ||
+          createDto.contract_amount === null
+        ) {
+          throw new BadRequestException(
+            "contract_amount is required for requirement type 2 (Store Rental)",
+          );
+        }
+      }
+
       //* Step 2: Get all warehouses from warehouse_ids
       const warehouses = await this.warehousesRepository.find({
         where: { id: In(createDto.warehouse_ids) },
@@ -1932,6 +1952,8 @@ export class ReqTransactionHeadersService {
           queryRunner, // Pass outer transaction queryRunner
           isSingleWarehouseType2 ? createDto.start_date : undefined,
           isSingleWarehouseType2 ? createDto.end_date : undefined,
+          createDto.supplier_id,
+          createDto.contract_amount,
         );
 
         // Merge results from type-specific processing
