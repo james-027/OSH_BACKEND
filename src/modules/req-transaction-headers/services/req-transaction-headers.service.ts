@@ -1034,6 +1034,8 @@ export class ReqTransactionHeadersService {
     queryRunner: QueryRunner, // Use outer transaction
     start_date?: string, // Type 2 single-warehouse: dates from payload
     end_date?: string, // Type 2 single-warehouse: dates from payload
+    supplier_id?: number, // Type 2 (Rental): supplier ID
+    contract_amount?: number, // Type 2 (Rental): contract amount
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1550,6 +1552,8 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               trans_number,
               location_id,
+              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
+              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
             };
 
             const headerRecord = queryRunner.manager.create(
