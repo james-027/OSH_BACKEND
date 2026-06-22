@@ -119,20 +119,7 @@ export class DebitAdviceGlAccountService {
     const { status_id } = createDebitAdviceGlAccountDto;
 
     try {
-      const existingDebitAdviceGlAccount =
-        await this.debitAdviceGlAccountRepository.findOne({
-          where: {
-            gl_code:
-              createDebitAdviceGlAccountDto.gl_code,
-          },
-        });
-
-      if (existingDebitAdviceGlAccount) {
-        throw new BadRequestException(
-          "Debit advice GL code already exists",
-        );
-      }
-
+   
       const resolvedStatusId = status_id || 1;
 
       const statusEntity =
@@ -239,25 +226,7 @@ export class DebitAdviceGlAccountService {
         );
       }
 
-      if (
-        updateDebitAdviceGlAccountDto.gl_code &&
-        updateDebitAdviceGlAccountDto.gl_code !==
-          debitAdviceGlAccount.gl_code
-      ) {
-        const existing =
-          await this.debitAdviceGlAccountRepository.findOne({
-            where: {
-              gl_code:
-                updateDebitAdviceGlAccountDto.gl_code,
-            },
-          });
-
-        if (existing) {
-          throw new BadRequestException(
-            "Debit advice GL code already exists",
-          );
-        }
-      }
+      
 
       Object.assign(debitAdviceGlAccount, {
         gl_code:
