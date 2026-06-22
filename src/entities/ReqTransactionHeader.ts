@@ -17,6 +17,7 @@ import { ReqTransactionDetail } from "./ReqTransactionDetail";
 import { ReqTransactionDue } from "./ReqTransactionDue";
 import { AccessKey } from "./AccessKey";
 import { Location } from "./Location";
+import { Supplier } from "./Supplier";
 
 @Entity("req_transaction_headers")
 export class ReqTransactionHeader {
@@ -74,6 +75,12 @@ export class ReqTransactionHeader {
 
   @Column({ type: "text", nullable: true })
   termination_reason: string;
+
+  @Column({ nullable: true })
+  supplier_id: number;
+
+  @Column("decimal", { precision: 14, scale: 2, nullable: true })
+  contract_amount: number;
 
   @ManyToOne(() => AccessKey, {
     eager: false,
@@ -156,4 +163,12 @@ export class ReqTransactionHeader {
     (reqTransactionDue) => reqTransactionDue.reqTransactionHeader,
   )
   reqTransactionDues!: ReqTransactionDue[];
+
+  @ManyToOne(() => Supplier, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "supplier_id" })
+  supplier: Supplier;
 }
