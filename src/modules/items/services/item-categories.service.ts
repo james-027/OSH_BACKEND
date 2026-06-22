@@ -24,8 +24,8 @@ export class ItemCategoriesService {
     });
     return categories.map((cat) => ({
       id: cat.id,
-      code: cat.code,
-      name: cat.name,
+      category_code: cat.code,
+      category_name: cat.name,
       level: cat.level,
       status_id: cat.status_id,
       status_name: cat.status ? cat.status.status_name : null,
