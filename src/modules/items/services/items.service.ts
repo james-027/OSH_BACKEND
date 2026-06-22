@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { Item } from "src/entities/Item";
 import { CreateItemDto } from "../dto/CreateItemDto";
 import { UpdateItemDto } from "../dto/UpdateItemDto";
@@ -27,6 +27,8 @@ export class ItemsService {
   async findAll(): Promise<any[]> {
     const items = await this.itemsRepository.find({
       relations: ["category1", "category2", "status", "createdBy", "updatedBy"],
+      where: { category2_id: In([6]) },
+      order: { modified_at: "DESC" },
     });
     return items.map((item) => ({
       id: item.id,
