@@ -17,9 +17,11 @@ import { formatDateToMonthYear } from "../../../utils/date.utils";
 import { filter } from "rxjs";
 import logger from "src/config/logger";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS } from "src/constants/customConstants";
 
 // Role IDs to notify when personnel assignment is missing (dynamic config)
-const PERSONNEL_NOTIFICATION_ROLE_IDS = [3, 4]; // Adjust based on roles that should be notified
+const PERSONNEL_NOTIFICATION_ROLE_IDS =
+  SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS;
 
 @Injectable()
 export class TransactionsService {
