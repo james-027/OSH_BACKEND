@@ -1487,6 +1487,8 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               access_key_id: accessKeyId,
               created_by: userId,
+              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
+              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
             });
 
             const savedRental = await queryRunner.manager.save(newRental);
