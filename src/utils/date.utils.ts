@@ -19,7 +19,6 @@ export function parseExcelDate(value: any): Date | null {
   return isNaN(date.getTime()) ? null : date;
 }
 
-
 /**
  * Get current timestamp in local timezone (ISO-8601 format with timezone offset)
  * Fixes issue where toISOString() returns UTC, causing timezone mismatch
@@ -321,6 +320,22 @@ export function parseToFirstDayOfMonth(dateInput: any): string | null {
     }
   }
 
+  // FIX: Handle string that looks like a numeric Excel serial (e.g., "45770")
+  if (typeof dateInput === "string" && /^\d+$/.test(dateInput.trim())) {
+    try {
+      const XLSX = require("xlsx");
+      const parsed = XLSX.SSF.parse_date_code(Number(dateInput.trim()));
+      if (parsed) {
+        const year = parsed.y;
+        const month = String(parsed.m).padStart(2, "0");
+        return `${year}-${month}-01`;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   // Handle string date
   const timezoneName = getTimeZoneName();
   if (typeof dateInput === "string") {
@@ -372,4 +387,29 @@ export function formatDateToMonthYear(dateString: string): string {
   } catch (error) {
     return "Invalid date";
   }
+}
+
+/**
+ * Extract month number from a Date object or Excel date value
+ * Returns month number from 1-12 (January=1, December=12)
+ *
+ * @param excelDate Date object, date string, or Excel serial number
+ * @returns Month number (1-12)
+ * @example
+ * getMonthNumber(new Date('10/1/2025')) // 10
+ * getMonthNumber('1/15/2025')           // 1
+ * 45565                                  // 12 (Excel serial for Dec 2024)
+ */
+export function getMonthNumber(excelDate: any): number {
+  // Reuse parseToFirstDayOfMonth which correctly handles:
+  // - Excel serial numbers (numbers like 45770 and strings like "45770")
+  // - Date strings like "5/1/2026"
+  // - Date objects
+  const firstDayStr = parseToFirstDayOfMonth(excelDate);
+  if (firstDayStr) {
+    // Extract month from "YYYY-MM-01"
+    const parts = firstDayStr.split("-");
+    return parseInt(parts[1], 10);
+  }
+  return 0;
 }

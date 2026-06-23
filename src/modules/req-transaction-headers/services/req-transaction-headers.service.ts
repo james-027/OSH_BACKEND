@@ -94,6 +94,7 @@ export class ReqTransactionHeadersService {
       "reqTransactionDues",
       "reqTransactionDues.warehouseRequirementDue",
       "location",
+      "supplier",
     ];
   }
 
@@ -263,6 +264,8 @@ export class ReqTransactionHeadersService {
         access_key_id: record.access_key_id,
         updated_by: record.updated_by,
         created_at: record.created_at,
+        supplier_name: record.supplier?.supplier_name || null,
+        contract_amount: record.contract_amount || null,
         created_user: record.createdBy
           ? `${record.createdBy.first_name} ${record.createdBy.last_name}`
           : null,
@@ -1034,6 +1037,8 @@ export class ReqTransactionHeadersService {
     queryRunner: QueryRunner, // Use outer transaction
     start_date?: string, // Type 2 single-warehouse: dates from payload
     end_date?: string, // Type 2 single-warehouse: dates from payload
+    supplier_id?: number, // Type 2 (Rental): supplier ID
+    contract_amount?: number, // Type 2 (Rental): contract amount
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1482,6 +1487,8 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               access_key_id: accessKeyId,
               created_by: userId,
+              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
+              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
             });
 
             const savedRental = await queryRunner.manager.save(newRental);
@@ -1550,6 +1557,8 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               trans_number,
               location_id,
+              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
+              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
             };
 
             const headerRecord = queryRunner.manager.create(
@@ -1795,6 +1804,26 @@ export class ReqTransactionHeadersService {
         );
       }
 
+      //* Step 1.5: Validate conditional fields for requirement_type_id = 2 (Rental)
+      if (requirement.requirement_type_id === 2) {
+        if (
+          createDto.supplier_id === undefined ||
+          createDto.supplier_id === null
+        ) {
+          throw new BadRequestException(
+            "supplier_id is required for requirement type 2 (Store Rental)",
+          );
+        }
+        if (
+          createDto.contract_amount === undefined ||
+          createDto.contract_amount === null
+        ) {
+          throw new BadRequestException(
+            "contract_amount is required for requirement type 2 (Store Rental)",
+          );
+        }
+      }
+
       //* Step 2: Get all warehouses from warehouse_ids
       const warehouses = await this.warehousesRepository.find({
         where: { id: In(createDto.warehouse_ids) },
@@ -1928,6 +1957,8 @@ export class ReqTransactionHeadersService {
           queryRunner, // Pass outer transaction queryRunner
           isSingleWarehouseType2 ? createDto.start_date : undefined,
           isSingleWarehouseType2 ? createDto.end_date : undefined,
+          createDto.supplier_id,
+          createDto.contract_amount,
         );
 
         // Merge results from type-specific processing

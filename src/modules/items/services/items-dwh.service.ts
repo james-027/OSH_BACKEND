@@ -4,7 +4,7 @@ import { Repository } from "typeorm";
 import { Item } from "src/entities/Item";
 import { ItemCategory } from "src/entities/ItemCategory";
 import { DwhLog } from "src/entities/dwhLog";
-import { getCtgiItemsConnection } from "src/utils/dwh-datasources";
+import { getCtgiBosDwhConnection } from "src/utils/dwh-datasources";
 
 @Injectable()
 export class ItemsDwhService {
@@ -20,13 +20,31 @@ export class ItemsDwhService {
   async pullAndInsertFromDwh(
     batchSize = 1000,
   ): Promise<{ success: number; failed: number }> {
-    const sourceConn = await getCtgiItemsConnection();
-    const [rows] = await sourceConn.execute(
-      `select i.ITEMCODE, i.ITEMDESC, i.ITEMGROUP, i.UOM, i.UOMSA, i.U_CAT01, i.U_CAT02, i.U_SALESCONV, i.U_SALESUNITEQ
-        from items i
-        where i.ITEMGROUP IN ('FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT')
-        and i.ISVALID = 1`,
-    );
+    // const sourceConn = await getCtgiItemsConnection();
+    // const oldSql = `select i.ITEMCODE, i.ITEMDESC, i.ITEMGROUP, i.UOM, i.UOMSA, i.U_CAT01, i.U_CAT02, i.U_SALESCONV, i.U_SALESUNITEQ
+    //     from items i
+    //     where i.ITEMGROUP IN ('FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT')
+    //     and i.ISVALID = 1`;
+    const sourceConn = await getCtgiBosDwhConnection();
+    const sql = `SELECT
+                  i.ITEMCODE,
+                  i.ITEMDESC,
+                  i.ITEMGROUP,
+                  i.UOM,
+                  i.UOMSA,
+                  s.U_VARIANT AS U_CAT01,
+                  s.U_PRDCLASS AS U_CAT02,
+                  s.U_QUANTITY AS U_SALESCONV,
+                  0 AS U_SALESUNITEQ 
+                FROM
+                  items i
+                  INNER JOIN u_salesunitequivalents s ON i.ITEMCODE = s.CODE 
+                  AND s.COMPANY = 'CTGI' 
+                  AND s.BRANCH = 'HO' 
+                WHERE
+                  i.ITEMGROUP IN ( 'FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT' ) 
+                  AND i.ISVALID = 1`;
+    const [rows] = await sourceConn.execute(sql);
     let success = 0;
     let failed = 0;
     const total = (rows as any[]).length;

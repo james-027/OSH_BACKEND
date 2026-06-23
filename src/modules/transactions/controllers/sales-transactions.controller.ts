@@ -10,6 +10,10 @@ import {
   Req,
   UseGuards,
   Query,
+  Request,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from "@nestjs/common";
 import { SalesTransactionsService } from "../services/sales-transactions.service";
 import { CreateSalesTransactionDto } from "../dto/CreateSalesTransactionDto";
@@ -19,6 +23,12 @@ import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { DateFilterQueryDto } from "src/dto/query-params/DateFilterQueryDto";
 import { validateDateParam } from "src/utils/query-validators";
+import {
+  excelFileFilter,
+  FILE_SIZE_LIMITS,
+  generateTimestampFilename,
+} from "src/utils/file-upload.utils";
+import { diskStorage, FileInterceptor } from "src/adapters";
 
 @Controller("sales-transactions")
 @UseGuards(JwtAuthGuard)
@@ -94,5 +104,51 @@ export class SalesTransactionsController {
   @Delete(":id")
   async remove(@Param("id", ParseIntPipe) id: number) {
     return this.salesTransactionsService.remove(id);
+  }
+
+  /**
+   * Upload Excel file with sales transactions
+   * Expected columns: SALES MONTH, BUSINESS CENTER, U_DIVISION, CODE, STORE, U_DCHANNEL,
+   *                   ITEMCODE, ITEM, VATCODE, GROSSSALES, NETSALES, QUANTITY, LINE TOTAL,
+   *                   UNITPRICE, VATAMOUNT, LINECOST, ITEMCOST, DISCAMOUNT, VATRATE
+   *
+   * FILE_LOCATION: ./uploads/sales-transactions/
+   * NAMING: {timestamp}-{randomId}.{ext}
+   *
+   * Returns: { success: number, failed: number, message: string }
+   */
+  @Post("upload-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/sales-transactions",
+        filename: generateTimestampFilename, // ← Uses timestamp + random ID
+      }),
+      fileFilter: excelFileFilter, // ← Only allows .xlsx, .xls, .csv
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // ← Max 8MB
+    }),
+  )
+  async uploadSalesTransactions(
+    @UploadedFile() file: any,
+    @Request() req: any,
+  ) {
+    // Step 1: Validate file upload
+    if (!file) {
+      throw new BadRequestException("No file uploaded or invalid file type.");
+    }
+
+    const userId = req.user?.id;
+    const accessKeyId = req.user?.current_access_key;
+
+    if (!userId || !accessKeyId) {
+      throw new BadRequestException("User authentication data missing");
+    }
+
+    // Step 2: Process uploaded file
+    return this.salesTransactionsService.processUploadedSalesTransactions(
+      file.path, // ← Full file path saved by multer
+      userId,
+      accessKeyId,
+    );
   }
 }

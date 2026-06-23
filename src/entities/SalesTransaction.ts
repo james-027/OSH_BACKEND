@@ -10,6 +10,10 @@ import {
 } from "typeorm";
 import { AccessKey } from "./AccessKey";
 import { Status } from "./Status";
+import { Location } from "./Location";
+import { User } from "./User";
+import { Item } from "./Item";
+import { Warehouse } from "./Warehouse";
 
 @Entity("sales_transactions")
 @Index("idx_sales_transactions_item_code", ["item_code"])
@@ -51,7 +55,7 @@ export class SalesTransaction {
   item_desc: string;
 
   @Column()
-  vat_cdoe: string;
+  vat_code: string;
 
   @Column("decimal", { precision: 18, scale: 6 })
   gross_sales: number;
@@ -138,4 +142,59 @@ export class SalesTransaction {
 
   @Column({ type: "text", nullable: true })
   undo_reason?: string;
+
+  @Column({ nullable: true })
+  location_id: number;
+
+  @Column({ nullable: true })
+  warehouse_id: number;
+
+  @Column({ nullable: true })
+  item_id: number;
+
+  @Column({ nullable: true })
+  created_by: number;
+
+  @Column({ nullable: true })
+  updated_by: number;
+
+  @ManyToOne(() => Location, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "location_id" })
+  location: Location;
+
+  @ManyToOne(() => Warehouse, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse: Warehouse;
+
+  @ManyToOne(() => Item, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "item_id" })
+  item: Item;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "created_by" })
+  createdBy: User;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "updated_by" })
+  updatedBy: User;
 }

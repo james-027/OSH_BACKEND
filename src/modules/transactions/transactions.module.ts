@@ -27,6 +27,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { Location } from "src/entities/Location";
 import { EmailService } from "src/services/email.service";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
+import { Item } from "src/entities/Item";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { FrontendUrlUtil } from "src/utils/frontend-url.util";
       AppModule,
       Action,
       Location,
+      Item,
     ]),
     UsersModule,
     LocationsModule,

@@ -14,3 +14,4 @@ tsconfig.tsbuildinfo
 package-lock.json
 uploads/*
 !uploads/UPLOAD-TEMPLATE/
+!uploads/profile_pics/default_profile.jpg

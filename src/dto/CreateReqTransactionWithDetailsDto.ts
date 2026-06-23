@@ -49,6 +49,14 @@ export class CreateReqTransactionWithDetailsDto {
   @IsString()
   end_date?: string; // format: YYYY-MM-DD, for Type 2 (Rental) single-warehouse upload
 
+  @IsOptional()
+  @IsInt()
+  supplier_id?: number; // Required when requirement_type_id = 2 (Rental)
+
+  @IsOptional()
+  @IsNumber()
+  contract_amount?: number; // Required when requirement_type_id = 2 (Rental)
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FileWithContent)

@@ -21,7 +21,7 @@ export const ACTION_IDS = {
   APPROVE: 7,
 } as const;
 
-// ============= STATUS IDs (Store Hurdles) =============
+// ============= STATUS IDs =============
 export const STATUS_IDS = {
   ACTIVE: 1,
   INACTIVE: 2,
@@ -57,3 +57,17 @@ export const WAREHOUSE_REM_STATUS_IDS = {
 export const RENEWAL_TYPE_IDS = {
   ONE_TIME: 1,
 } as const;
+
+export const ROLE_IDS = {
+  SPA_NATIONWIDE_ADMIN: 3,
+  SPA_ADMIN: 4,
+  SPA_OSS_ADMIN: 0,
+  SPA_OSA_ADMIN: 0,
+} as const;
+
+export const SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS = [
+  ROLE_IDS.SPA_ADMIN,
+  ROLE_IDS.SPA_NATIONWIDE_ADMIN,
+  ROLE_IDS.SPA_OSS_ADMIN,
+  ROLE_IDS.SPA_OSA_ADMIN,
+] as const;

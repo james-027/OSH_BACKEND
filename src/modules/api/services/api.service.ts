@@ -399,10 +399,7 @@ export class ApiService {
         case "store-crew-assignments":
           const modified_date = queryParams.modified_date ?? "";
 
-          const whereClauses = [
-            "a.asgnStatID = 1",
-            "(a.endDate IS NULL or a.endDate > CURDATE())",
-          ];
+          const whereClauses = ["a.asgnStatID IN (1, 4, 6)"];
 
           const sqlParams: any[] = [];
           if (modified_date) {
@@ -416,27 +413,77 @@ export class ApiService {
               b.surName AS crew_last_name,
               b.firstName AS crew_first_name,
               b.mi AS crew_middle_initial,
+              "" AS email,
               c.outletIFS AS store_ifs,
               c.outletCode AS store_code,
               c.outletDesc AS store_name,
               DATE_FORMAT(a.effectivityDate, '%Y-%m-%d') AS assignment_effectivity_date,
               DATE_FORMAT(a.endDate, '%Y-%m-%d') AS assignment_end_date,
               DATE_FORMAT(a.tsCreated, '%Y-%m-%d %H:%i:%s') AS ts_created,
-              DATE_FORMAT(a.tsModified, '%Y-%m-%d %H:%i:%s') AS ts_modified
+              DATE_FORMAT(a.tsModified, '%Y-%m-%d %H:%i:%s') AS ts_modified,
+              DATE_FORMAT(b.tsCreated, '%Y-%m-%d %H:%i:%s') AS crew_ts_created,
+              DATE_FORMAT(b.tsModified, '%Y-%m-%d %H:%i:%s') AS crew_ts_modified,
+              d.status AS assignment_status,
+              e.asgnStat AS assignment_status_flag,
+              f.status AS crew_status
             FROM
               crew_outlet a
               INNER JOIN crew b ON a.crewID = b.crewID
               INNER JOIN outlets c ON a.outletID = c.outletID 
+              INNER JOIN status d ON a.statusID = d.statusID
+              INNER JOIN asgnstatus e ON a.asgnStatID = e.asgnStatID
+              INNER JOIN status f ON b.statusID = f.statusID
             WHERE
               ${whereClauses.join(" AND ")}
-              ORDER BY a.tsCreated
+              ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const [rows] = await sourceConn.execute(
+          const [rows] = (await sourceConn.execute(
             storeCrewAssignmentQuery,
             sqlParams,
-          );
-          return rows;
+          )) as any;
+
+          // Group rows by crew_code to nest store_details per crew
+          const crewMap = new Map<string, any>();
+
+          rows.forEach((row: any) => {
+            if (!crewMap.has(row.crew_code)) {
+              // First time seeing this crew - create crew object
+              crewMap.set(row.crew_code, {
+                crew_code: row.crew_code,
+                crew_last_name: row.crew_last_name,
+                crew_first_name: row.crew_first_name,
+                crew_middle_initial: row.crew_middle_initial,
+                email: row.email,
+                store_details: [], // hold all store assignments for this crew
+                crew_ts_created: row.crew_ts_created,
+                crew_ts_modified: row.crew_ts_modified,
+                crew_status: row.crew_status,
+              });
+            }
+
+            // Add store details to this crew's store_details array
+            const crew = crewMap.get(row.crew_code);
+            crew.store_details.push({
+              store_ifs: row.store_ifs,
+              store_code: row.store_code,
+              store_name: row.store_name,
+              assignment_effectivity_date: row.assignment_effectivity_date,
+              assignment_end_date: row.assignment_end_date,
+              assignment_status: row.assignment_status,
+              assignment_status_flag: row.assignment_status_flag,
+              ts_created: row.ts_created,
+              ts_modified: row.ts_modified,
+            });
+
+            // Optional: Update ts_modified to the latest (most recent timestamp)
+            // if (row.ts_modified > crew.ts_modified) {
+            //   crew.ts_modified = row.ts_modified;
+            // }
+          });
+
+          // Convert Map to array and return
+          return Array.from(crewMap.values());
 
         case "stores":
           const store_modified_date = queryParams.modified_date ?? "";

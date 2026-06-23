@@ -153,7 +153,13 @@ export class SystemsService {
       // Fetch the complete system with relations
       const systemWithRelations = await this.systemRepository.findOne({
         where: { id: savedSystem.id },
-        relations: ["status", "createdBy", "updatedBy", "system_access_keys"],
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "system_access_keys",
+          "system_access_keys.accessKey",
+        ],
       });
 
       if (!systemWithRelations) {
@@ -411,12 +417,16 @@ export class SystemsService {
         );
       }
 
-      // Update system status
-      system.status_id = newStatusId;
-      system.updated_by = userId;
-      system.updatedBy = updatedByUser;
-
-      const updatedSystem = await queryRunner.manager.save(System, system);
+      // ✅ FIX: Use .update() instead of .save() - matches SystemAccessKey pattern
+      await queryRunner.manager.update(
+        System,
+        { id },
+        {
+          status_id: newStatusId,
+          updated_by: userId,
+          modified_at: new Date(),
+        },
+      );
 
       // Update all associated system access keys to same status
       await queryRunner.manager.update(
@@ -433,8 +443,14 @@ export class SystemsService {
 
       // Fetch the complete system with relations
       const systemWithRelations = await this.systemRepository.findOne({
-        where: { id: updatedSystem.id },
-        relations: ["status", "createdBy", "updatedBy", "system_access_keys"],
+        where: { id },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "system_access_keys",
+          "system_access_keys.accessKey",
+        ],
       });
 
       if (!systemWithRelations) {
@@ -448,7 +464,7 @@ export class SystemsService {
         {
           service: "SystemsService",
           method: "toggleStatus",
-          raw_data: JSON.stringify(updatedSystem),
+          raw_data: JSON.stringify({ id, status_id: newStatusId }),
           description: `Toggled status to ${newStatusEntity.status_name} for system ${id}`,
           status_id: 1,
         },
@@ -503,10 +519,10 @@ export class SystemsService {
   // Create flattened response
   private async createFlattenedResponse(system: System): Promise<any> {
     const accessKeyIds = (system.system_access_keys || [])
-      .filter((sak) => sak.status_id === 1)
+      .filter((sak) => sak.status_id === 1 || sak.status_id === 2)
       .map((sak) => sak.access_key_id);
     const accessKeyNames = (system.system_access_keys || [])
-      .filter((sak) => sak.status_id === 1)
+      .filter((sak) => sak.status_id === 1 || sak.status_id === 2)
       .map((sak) => sak.accessKey.access_key_name);
 
     return {
