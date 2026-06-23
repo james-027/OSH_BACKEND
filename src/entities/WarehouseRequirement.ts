@@ -17,6 +17,7 @@ import { Warehouse } from "./Warehouse";
 import { WarehouseRequirementDue } from "./WarehouseRequirementDue";
 import { WarehouseRequirementStart } from "./WarehouseRequirementStart";
 import { AccessKey } from "./AccessKey";
+import { Supplier } from "./Supplier";
 
 @Entity("warehouse_requirements")
 @Index("IDX_wr_warehouse_id", ["warehouse_id"])
@@ -60,6 +61,12 @@ export class WarehouseRequirement {
 
   @Column({ nullable: true })
   access_key_id: number;
+
+  @Column({ nullable: true })
+  supplier_id: number;
+
+  @Column("decimal", { precision: 14, scale: 2, nullable: true })
+  contract_amount: number;
 
   @ManyToOne(() => AccessKey, {
     eager: false,
@@ -126,4 +133,12 @@ export class WarehouseRequirement {
       warehouseRequirementStart.warehouseRequirement,
   )
   warehouseRequirementStarts!: WarehouseRequirementStart[];
+
+  @ManyToOne(() => Supplier, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "supplier_id" })
+  supplier: Supplier;
 }
