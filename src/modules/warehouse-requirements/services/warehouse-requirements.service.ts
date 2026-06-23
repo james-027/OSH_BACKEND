@@ -180,6 +180,7 @@ export class WarehouseRequirementsService {
     let requirementsQuery = this.warehouseRequirementsRepository
       .createQueryBuilder("warehouseRequirement")
       .leftJoinAndSelect("warehouseRequirement.requirement", "requirement")
+      .leftJoinAndSelect("warehouseRequirement.supplier", "supplier")
       .leftJoinAndSelect("requirement.renewalType", "renewalType")
       .leftJoinAndSelect("warehouseRequirement.status", "requirementStatus")
       .leftJoinAndSelect(
@@ -1184,6 +1185,8 @@ export class WarehouseRequirementsService {
               renewal_type_name:
                 baseReq.requirement?.renewalType?.renewal_type_name || null,
               warehouse_requirement_id: baseReq.id,
+              supplier_name: baseReq.supplier?.supplier_name || null,
+              contract_amount: baseReq.contract_amount || null,
               warehouse_requirement_start: requirementStart
                 ? this.commonUtilitiesService.formatDateString(
                     requirementStart.warehouse_requirement_start,
@@ -1249,6 +1252,8 @@ export class WarehouseRequirementsService {
                   : "-",
               warehouse_requirement_due_reminder_days_diff:
                 reminderStatus?.daysDiff || null,
+              supplier_name: baseReq.supplier?.supplier_name || null,
+              contract_amount: baseReq.contract_amount || null,
             });
           }
         }
@@ -1336,6 +1341,7 @@ export class WarehouseRequirementsService {
             "reqTransactionDues",
             "reqTransactionDues.warehouseRequirementDue",
             "createdBy",
+            "supplier",
           ],
           order: { id: "ASC" },
         },
@@ -1373,6 +1379,8 @@ export class WarehouseRequirementsService {
                 : null,
               created_at: header.created_at,
               trans_remarks: header.trans_remarks || null,
+              supplier_name: header.supplier?.supplier_name || null,
+              contract_amount: header.contract_amount || null,
               trans_due_status_name:
                 header.trans_due_status_id === STATUS_IDS.ACTIVE
                   ? "ON TIME"
@@ -1443,6 +1451,8 @@ export class WarehouseRequirementsService {
             flattenedDetails.push({
               requirement_name: header.requirement?.requirement_name || null,
               trans_header_id: header.id,
+              supplier_name: header.supplier?.supplier_name || null,
+              contract_amount: header.contract_amount || null,
               trans_date: this.commonUtilitiesService.formatDateString(
                 header.trans_date,
               ),
@@ -2332,6 +2342,7 @@ export class WarehouseRequirementsService {
         .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
         .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
         .leftJoinAndSelect("rth.createdBy", "createdBy")
+        .leftJoinAndSelect("rth.supplier", "supplier")
         .leftJoinAndSelect(
           "rtd_dues.warehouseRequirementDue",
           "warehouseRequirementDue",
@@ -2397,6 +2408,8 @@ export class WarehouseRequirementsService {
         // Build transaction object with dues and details
         const transaction = {
           trans_header_id: header.id,
+          supplier_name: header.supplier?.supplier_name || null,
+          contract_amount: header.contract_amount || null,
           created_user: header.createdBy
             ? `${header.createdBy.first_name} ${header.createdBy.last_name}`
             : null,
