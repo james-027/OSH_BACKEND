@@ -94,6 +94,7 @@ export class ReqTransactionHeadersService {
       "reqTransactionDues",
       "reqTransactionDues.warehouseRequirementDue",
       "location",
+      "supplier",
     ];
   }
 
@@ -263,6 +264,8 @@ export class ReqTransactionHeadersService {
         access_key_id: record.access_key_id,
         updated_by: record.updated_by,
         created_at: record.created_at,
+        supplier_name: record.supplier?.supplier_name || null,
+        contract_amount: record.contract_amount || null,
         created_user: record.createdBy
           ? `${record.createdBy.first_name} ${record.createdBy.last_name}`
           : null,
