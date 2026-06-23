@@ -496,12 +496,11 @@ export class SalesTransactionsService {
             sales_unit_eq: itemLookup.salesuniteq || "",
             item_group: itemLookup.itemgroup || "",
             uom: itemLookup.uom || "",
-            // ✅ NEW: Foreign key references
+            // Foreign key references
             location_id: locationId, // ← From location lookup
             warehouse_id: warehouseId, // ← From warehouse lookup
             item_id: itemId, // ← From item lookup
-            created_by: userId, // ← From method parameter
-            // ← Metadata
+            created_by: userId,
             access_key_id: accessKeyId,
             status_id: 1,
           });
