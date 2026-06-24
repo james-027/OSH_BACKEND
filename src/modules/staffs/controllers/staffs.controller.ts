@@ -27,7 +27,7 @@ import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffsService } from "src/modules/staffs/services/staffs.service";
-import { CheckStaffDto, CreateStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
+import { CheckStaffDto, CreateStaffDto,RevertStaffDto } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
 import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
 import { UpdateStaffDeployDto } from "src/modules/staffs/dto/UpdateStaffDeployDto";
@@ -77,25 +77,18 @@ async findAll(
     return this.staffsService.update(id, updateStaffDto, userId);
   }
 
-  @Patch(":id/toggle-status-activate")
+  @Patch(":id/revert-staff")
   @RequirePermissions({ module: "STAFFS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
+    @Body() revertStaffDto: RevertStaffDto,
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffsService.toggleStatus(id, userId);
+    return this.staffsService.toggleStatus(id,revertStaffDto,userId,);
   }
 
-  @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STAFFS", action: "DEACTIVATE" })
-  async toggleStatusDeactivate(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req,
-  ) {
-    const userId = req.user.id;
-    return this.staffsService.toggleStatus(id, userId);
-  }
+
 
   @Post("upload-excel")
   @UseInterceptors(

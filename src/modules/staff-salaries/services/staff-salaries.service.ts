@@ -32,7 +32,7 @@ export class StaffSalariesService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
-      const staffVendorSalaries = await this.staffSalariesRepository.find(
+      const staffSalaries = await this.staffSalariesRepository.find(
         {
           where,
           relations: [
@@ -47,11 +47,11 @@ export class StaffSalariesService {
       );
 
       return this.responseMapperService.mapEntitiesToResponse(
-        staffVendorSalaries,
+        staffSalaries,
       );
     } catch (error) {
-      console.error("Error fetching staff vendor salaries:", error);
-      throw new Error("Failed to fetch staff vendor salaries");
+      console.error("Error fetching staff salaries:", error);
+      throw new Error("Failed to fetch staff salaries");
     }
   }
 

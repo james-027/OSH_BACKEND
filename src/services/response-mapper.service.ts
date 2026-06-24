@@ -44,6 +44,8 @@ export class ResponseMapperService {
           "staffCategoryTypes",
           "staffVendorSalaries",
           "staffSalaries",
+          "training",
+          "subStatus",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -185,6 +187,15 @@ export class ResponseMapperService {
     // Map position relation
     if (entity.position && typeof entity.position === "object") {
       response.position_name = entity.position.position_name || null;
+    }
+    // Map training relation
+    if (entity.training && typeof entity.training === "object") {
+      response.training_name = entity.training.training_name || null;
+      response.passing_rate = entity.training.passing_rate || null;
+    }
+    // Map sub status relation
+    if (entity.subStatus && typeof entity.subStatus === "object") {
+      response.sub_status_name = entity.subStatus.status_name || null;
     }
 
     // Map accessKey relation

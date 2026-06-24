@@ -12,11 +12,13 @@ import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
 import { Staff } from "src/entities/Staff";
+import { StaffHistory } from "src/entities/StaffHistory";
 import { Vendor } from "src/entities/Vendor";
 import { Training } from "src/entities/Training";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
+import { Status } from "src/entities/Status";
 
 
 @Module({
@@ -31,6 +33,8 @@ import { ActionsModule } from "../actions/actions.module";
       Vendor,
       Training,
       TransactionSequence,
+      StaffHistory,
+      Status
     ]),
     UsersModule,
     SSEModule,

@@ -27,6 +27,8 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffSalary } from "src/entities/StaffSalary";
+import { StaffTraining } from "src/entities/StaffTrainings";
+import { Training } from "src/entities/Training";
 
 
 @Module({
@@ -50,7 +52,9 @@ import { StaffSalary } from "src/entities/StaffSalary";
       StaffHistory,
       TransactionSequence,
       StaffWarehouse,
-      StaffSalary
+      StaffSalary,
+      StaffTraining,
+      Training
     ]),
     UsersModule,
     SSEModule,

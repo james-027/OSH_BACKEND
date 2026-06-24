@@ -13,6 +13,7 @@ import { Location } from "src/entities/Location";
 import {
   CheckStaffDto,
   CreateStaffDto,
+  RevertStaffDto,
 } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
 import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
@@ -40,6 +41,8 @@ import {
 } from "src/constants/customConstants";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
+import { StaffTraining } from "src/entities/StaffTrainings";
+import { Training } from "src/entities/Training";
 @Injectable()
 export class StaffsService {
   constructor(
@@ -69,6 +72,10 @@ export class StaffsService {
     private readonly staffHistoriesRepository: Repository<StaffHistory>,
     @InjectRepository(StaffWarehouse)
     private readonly staffWarehouseRepository: Repository<StaffWarehouse>,
+    @InjectRepository(StaffTraining)
+    private readonly staffTrainingsRepository: Repository<StaffTraining>,
+    @InjectRepository(Training)
+    private readonly trainingsRepository: Repository<Training>,
     private actionLogsService: ActionLogsService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
@@ -77,44 +84,123 @@ export class StaffsService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
-    try {
-      const where: any = {};
-      if (accessKeyId !== undefined) {
-        where.access_key_id = accessKeyId;
-      }
+async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
+  try {
+    const where: any = {};
 
-      if (statusId && statusId.length > 0) {
-        where.status_id = In(statusId);
-      }
-
-      const staffs = await this.staffsRepository.find({
-        where,
-        relations: [
-          "status",
-          "assignmentStatus",
-          "createdBy",
-          "updatedBy",
-          "location",
-          "vendor",
-          "position",
-          "accessKey",
-          "staffBrands",
-          "staffCategoryTypes",
-          "staffVendorSalaries",
-          "staffSalaries",
-        ],
-        order: {
-          modified_at: "DESC", // latest modified first
-        },
-      });
-
-      return this.responseMapperService.mapEntitiesToResponse(staffs);
-    } catch (error) {
-      console.error("Error fetching staffs:", error);
-      throw new Error("Failed to fetch staffs");
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
     }
+
+    if (statusId && statusId.length > 0) {
+      where.status_id = In(statusId);
+    }
+
+    const staffs = await this.staffsRepository.find({
+      where,
+      relations: [
+        "status",
+        "assignmentStatus",
+        "createdBy",
+        "updatedBy",
+        "location",
+        "vendor",
+        "position",
+        "accessKey",
+        "staffBrands",
+        "staffCategoryTypes",
+        "staffVendorSalaries",
+        "staffSalaries",
+      ],
+      order: {
+        modified_at: "DESC",
+      },
+    });
+
+    const allTrainings = await this.trainingsRepository.find({
+      where: { status_id: 1 },
+      order: { training_order: "ASC" },
+    });
+
+    const staffTrainings = await this.staffTrainingsRepository.find({
+      relations: ["training"],
+    });
+
+    const trainingMap = new Map<number, any[]>();
+
+    for (const t of staffTrainings) {
+      const key = t.staff_id;
+      if (!trainingMap.has(key)) trainingMap.set(key, []);
+      trainingMap.get(key)!.push(t);
+    }
+
+const result = staffs.map((staff) => {
+  const trainings = trainingMap.get(staff.id) || [];
+
+  const totalActiveTrainings = allTrainings.length;
+
+  const hasTraining = trainings.length > 0;
+
+  const passedTrainings = trainings.filter((t) => {
+    const trainingMeta = allTrainings.find(
+      (at) => Number(at.id) === Number(t.training_id),
+    );
+
+    const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+    return (
+      t.ratings !== "" &&
+      Number(t.ratings) >= passingRate
+    );
+  });
+
+  const failedTrainings = trainings.filter((t) => {
+    const trainingMeta = allTrainings.find(
+      (at) => Number(at.id) === Number(t.training_id),
+    );
+
+    const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+    return (
+      t.ratings !== "" &&
+      Number(t.ratings) < passingRate
+    );
+  });
+
+  const isSingleTraining = totalActiveTrainings === 1;
+
+    const allPassed =
+    hasTraining &&
+    passedTrainings.length === totalActiveTrainings &&
+    totalActiveTrainings > 0;
+
+
+  let canPost = false;
+
+  if (!hasTraining) {
+    canPost = false;
+  } 
+  else if (isSingleTraining) {
+    canPost = failedTrainings.length > 0;
+  } else if(allPassed){
+    canPost = true;
   }
+  else {
+    canPost = failedTrainings.length > 0;
+  }
+
+  return {
+    ...this.responseMapperService.mapEntityToResponse(staff),
+    canPost,
+  };
+});
+
+    return result;
+  } catch (error) {
+    console.error("Error fetching staffs:", error);
+    throw new Error("Failed to fetch staffs");
+  }
+}
 
   async findOne(id: number): Promise<any> {
     try {
@@ -195,6 +281,7 @@ export class StaffsService {
           ? createStaffDto.middle_name.toUpperCase()
           : null,
         location_id: createStaffDto.location_id,
+        email: createStaffDto.email,
         vendor_id: createStaffDto.vendor_id,
         assign_status_id: 13,
         position_id: createStaffDto.position_id,
@@ -236,13 +323,37 @@ export class StaffsService {
       });
 
       const savedStaff = await this.staffsRepository.save(newStaff);
-      const staffHistory = this.staffHistoriesRepository.create({
-        ...savedStaff,
+   await this.staffHistoriesRepository.save({
         staff_id: savedStaff.id,
+        staff_code: savedStaff.staff_code,
+        last_name: savedStaff.last_name,
+        first_name: savedStaff.first_name,
+        email: savedStaff.email,
+        middle_name: savedStaff.middle_name,
+        location_id: savedStaff.location_id,
+        vendor_id: savedStaff.vendor_id,
+        assign_status_id: savedStaff.assign_status_id,
+        position_id: savedStaff.position_id,
+        access_key_id: savedStaff.access_key_id,
+        sss_number: savedStaff.sss_number,
+        pagibig_number: savedStaff.pagibig_number,
+        tin: savedStaff.tin,
+        remarks: savedStaff.remarks,
+        overall_remarks: savedStaff.overall_remarks,
+        store_request: savedStaff.store_request,
+        hired_date: savedStaff.hired_date,
+        to_hr_date: savedStaff.to_hr_date,
+        to_sts_date: savedStaff.to_sts_date,
+        approved_eprf_date: savedStaff.approved_eprf_date,
+        req_completion_date: savedStaff.req_completion_date,
+        actual_deployment_date: savedStaff.actual_deployment_date,
+        separated_date: savedStaff.separated_date,
+        birthday: savedStaff.birthday,
+        contact_number: savedStaff.contact_number,
+        status_id: savedStaff.status_id,
+        created_by: userId,
+        updated_by: userId,
       });
-
-      const savedStaffHistory =
-        await this.staffHistoriesRepository.save(staffHistory);
 
       const newStaffBrand = this.staffBrandsRepository.create({
         staff_id: savedStaff.id,
@@ -386,6 +497,7 @@ export class StaffsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("staffs", response.id, response);
+
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -492,13 +604,37 @@ export class StaffsService {
 
       const savedStaff = await this.staffsRepository.save(staff);
 
-      const staffHistory = this.staffHistoriesRepository.create({
-        ...savedStaff,
-        staff_id: savedStaff.id,
+   await this.staffHistoriesRepository.save({
+        staff_id: staff.id,
+        staff_code: staff.staff_code,
+        last_name: staff.last_name,
+        first_name: staff.first_name,
+        email: staff.email,
+        middle_name: staff.middle_name,
+        location_id: staff.location_id,
+        vendor_id: staff.vendor_id,
+        assign_status_id: staff.assign_status_id,
+        position_id: staff.position_id,
+        access_key_id: staff.access_key_id,
+        sss_number: staff.sss_number,
+        pagibig_number: staff.pagibig_number,
+        tin: staff.tin,
+        remarks: staff.remarks,
+        overall_remarks: staff.overall_remarks,
+        store_request: staff.store_request,
+        hired_date: staff.hired_date,
+        to_hr_date: staff.to_hr_date,
+        to_sts_date: staff.to_sts_date,
+        approved_eprf_date: staff.approved_eprf_date,
+        req_completion_date: staff.req_completion_date,
+        actual_deployment_date: staff.actual_deployment_date,
+        separated_date: staff.separated_date,
+        birthday: staff.birthday,
+        contact_number: staff.contact_number,
+        status_id: staff.status_id,
+        created_by: userId,
+        updated_by: userId,
       });
-
-      const savedStaffHistory =
-        await this.staffHistoriesRepository.save(staffHistory);
 
       let staffBrand = await this.staffBrandsRepository.findOne({
         where: { staff_id: staff.id },
@@ -638,6 +774,7 @@ export class StaffsService {
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
         this.sseEventEmitter.emitUpdate("staff_brands", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_trainings", response.id, response);
         this.sseEventEmitter.emitUpdate(
           "staff_category_types",
           response.id,
@@ -659,7 +796,10 @@ export class StaffsService {
     }
   }
 
-  async toggleStatus(id: number, userId: number): Promise<any> {
+  async toggleStatus(id: number,
+     revertStaffDto: RevertStaffDto,
+     userId: number,
+    ): Promise<any> {
     try {
       const staff = await this.staffsRepository.findOne({
         where: { id },
@@ -674,6 +814,8 @@ export class StaffsService {
         ],
       });
 
+
+
       if (!staff) {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
@@ -683,6 +825,7 @@ export class StaffsService {
 
       await this.staffsRepository.update(id, {
         status_id: newStatusId,
+        remarks: revertStaffDto.remarks,
       });
 
       const updatedStaff = await this.staffsRepository.findOne({
@@ -709,6 +852,7 @@ export class StaffsService {
         last_name: updatedStaff.last_name,
         first_name: updatedStaff.first_name,
         middle_name: updatedStaff.middle_name,
+        email: updatedStaff.email,
 
         location_id: updatedStaff.location_id,
         vendor_id: updatedStaff.vendor_id,
@@ -748,7 +892,7 @@ export class StaffsService {
           service: "StaffsService",
           method: "toggleStatus",
           raw_data: JSON.stringify(updatedStaff),
-          description: `Toggled status for staff ${id} - ${staff.first_name} ${staff.last_name} to ${newStatusName}`,
+          description: `Toggled status for staff ${id} - ${updatedStaff.first_name} ${updatedStaff.last_name} to ${newStatusName}`,
           status_id: 1,
         },
         userId,
@@ -759,9 +903,7 @@ export class StaffsService {
           module_id: MODULE_IDS.STAFFS,
           ref_id: updatedStaff.id,
           action_id: ACTION_IDS.REVERT,
-          description: `Toggled staff status to ${newStatusName}  ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${
-            staff.vendor?.service_provider_name ?? "N/A"
-          } | Location: ${staff.location?.location_name ?? "N/A"}`,
+          description: `Change staff ${updatedStaff.first_name} ${updatedStaff.last_name} to ${newStatusName}. Remarks: ${updatedStaff.remarks || "No remarks provided"}`,
           raw_data: JSON.stringify({
             id: updatedStaff.id,
             old_status: staff.status_id,
@@ -801,6 +943,19 @@ export class StaffsService {
     userId: number,
   ): Promise<any> {
     try {
+
+      const safeDate = (value: any) => {
+        if (!value || value === "") return null;
+
+        const date = new Date(value);
+
+        if (isNaN(date.getTime())) {
+          throw new BadRequestException(`Invalid date: ${value}`);
+        }
+
+        return date;
+      };
+
       const staff = await this.staffsRepository.findOne({
         where: { id },
         relations: [
@@ -834,6 +989,8 @@ export class StaffsService {
       await this.staffsRepository.update(id, {
         location_id: newLocationId,
         vendor_id: newVendorId,
+        updated_by:userId,
+        effectivity_date:safeDate(updateStaffTransferDto.effectivity_date)
       });
 
       const updatedStaff = await this.staffsRepository.findOne({
@@ -906,6 +1063,7 @@ export class StaffsService {
         staff_code: updatedStaff.staff_code,
         last_name: updatedStaff.last_name,
         first_name: updatedStaff.first_name,
+        email: updatedStaff.email,
         middle_name: updatedStaff.middle_name,
         location_id: updatedStaff.location_id,
         vendor_id: updatedStaff.vendor_id,
@@ -928,6 +1086,7 @@ export class StaffsService {
         birthday: updatedStaff.birthday,
         contact_number: updatedStaff.contact_number,
         status_id: updatedStaff.status_id,
+        effectivity_date: updatedStaff.effectivity_date,
         created_by: userId,
         updated_by: userId,
       });
@@ -977,6 +1136,7 @@ export class StaffsService {
 
       return response;
     } catch (error) {
+
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
@@ -1119,6 +1279,7 @@ export class StaffsService {
         const requiredFields = [
           "First Name",
           "Last Name",
+          "Email",
           "Location",
           "Position",
           "Vendor",
@@ -1253,6 +1414,7 @@ export class StaffsService {
           existingRecord.staff_code = staffCode;
           existingRecord.first_name = firstName;
           existingRecord.last_name = lastName;
+          existingRecord.email = row["Email"];
           existingRecord.middle_name = middleName;
           existingRecord.birthday = parseExcelDate(row["Birthday"]);
           existingRecord.location_id = location.id;
@@ -1382,6 +1544,7 @@ export class StaffsService {
             contact_number: row["Contact Number"],
             last_name: lastName,
             middle_name: middleName,
+            email : row["Email"],
             birthday: parseExcelDate(row["Birthday"]),
             location_id: location.id,
             vendor_id: vendor.id,
