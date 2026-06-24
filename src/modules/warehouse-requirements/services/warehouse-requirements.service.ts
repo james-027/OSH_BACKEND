@@ -2695,6 +2695,203 @@ export class WarehouseRequirementsService {
     }
   }
 
+  /**
+   * Get warehouse requirement detailed report
+   * Returns flat records of Type 2 (Rental) or Type 1 requirements data with supplier, dates, status, and files
+   */
+  async getWarehouseRequirementsReport(
+    warehouse_type_id: number,
+    location_ids?: string,
+    date_from?: string,
+    date_to?: string,
+    status_id?: number,
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number,
+    store_status_ids?: number[],
+    requirementTypeId: number = 2, // Default 2 (Rental) for backward compatibility
+  ): Promise<any> {
+    try {
+      // Step 1: Get allowed location IDs based on user and role
+      let finalLocationIds: number[] = [];
+      const allowedLocationIds = await this.getAllowedLocationIds(
+        userId,
+        roleId,
+      );
+
+      // Step 2: Parse location_ids if provided (comma-separated)
+      let filterLocationIds: number[] = [];
+      if (location_ids) {
+        filterLocationIds = location_ids
+          .split(",")
+          .map((id) => parseInt(id.trim(), 10))
+          .filter((id) => !isNaN(id));
+      }
+
+      // Step 3: Determine final location IDs
+      finalLocationIds =
+        filterLocationIds.length > 0 ? filterLocationIds : allowedLocationIds;
+
+      // Step 4: Get warehouses matching the criteria
+      const warehouseRemStatusId = store_status_ids?.length
+        ? store_status_ids
+        : [8];
+
+      const warehouses = await this.getWarehouses(
+        warehouse_type_id,
+        warehouseRemStatusId,
+        date_to,
+        accessKeyId,
+        finalLocationIds,
+        { warehouse_name: "ASC" },
+        ["location", "warehouseType", "remStatus"],
+      );
+
+      if (warehouses.length === 0) {
+        return [];
+      }
+
+      const warehouseIds = warehouses.map((w) => w.id);
+
+      // Step 5: Build warehouse lookup map (id → warehouse)
+      const warehouseMap = new Map<number, any>();
+      warehouses.forEach((w) => warehouseMap.set(w.id, w));
+
+      // Step 6: Query transaction headers for Type 2 (Rental) contracts
+      // Only fetch requirement_type_id = 2
+      let rentalQuery = this.reqTransactionHeaderRepository
+        .createQueryBuilder("rth")
+        .leftJoinAndSelect("rth.requirement", "requirement")
+        .leftJoinAndSelect("rth.supplier", "supplier")
+        .leftJoinAndSelect("rth.createdBy", "createdBy")
+        .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
+        .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
+        .leftJoinAndSelect(
+          "rtd_dues.warehouseRequirementDue",
+          "warehouseRequirementDue",
+        )
+        .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds })
+        .andWhere("requirement.requirement_type_id = :reqTypeId", {
+          reqTypeId: requirementTypeId,
+        })
+        .andWhere("rth.status_id IN (:...headerStatusIds)", {
+          headerStatusIds: [STATUS_IDS.ACTIVE, STATUS_IDS.TERMINATED],
+        });
+
+      // Apply transaction date filter if provided
+      if (date_from && date_to) {
+        const dateRange = this.buildTransactionDateRangeParams(
+          date_from,
+          date_to,
+        );
+        if (dateRange.dateRange) {
+          rentalQuery = rentalQuery.andWhere(
+            "rth.trans_date IN (:...dateRange)",
+            { dateRange: dateRange.dateRange },
+          );
+        }
+      }
+
+      // Apply specific status_id override if provided
+      if (status_id) {
+        rentalQuery = rentalQuery.andWhere("rth.status_id = :statusId", {
+          statusId: status_id,
+        });
+      }
+
+      const transactionHeaders = await rentalQuery
+        .orderBy("rth.id", "DESC")
+        .getMany();
+
+      if (transactionHeaders.length === 0) {
+        return [];
+      }
+
+      // Step 7: Transform to flat records matching the report columns
+      const result = transactionHeaders.map((header) => {
+        const warehouse = warehouseMap.get(header.warehouse_id);
+        const due = header.reqTransactionDues?.[0]?.warehouseRequirementDue;
+
+        // Get the first active detail's file info
+        const activeDetail = (header.reqTransactionDetails || []).find(
+          (d) =>
+            d.status_id === STATUS_IDS.ACTIVE ||
+            d.status_id === STATUS_IDS.TERMINATED,
+        );
+
+        // Compute due status using the passed requirementTypeId
+        let dueStatus = null;
+        if (due) {
+          dueStatus = this.getWarehouseRequirementDueStatus(
+            requirementTypeId,
+            due.warehouse_requirement_due_date,
+            due.warehouse_requirement_due_end,
+            due.status_id,
+          );
+        }
+
+        // Build file URL if file path exists
+        let fileUrl = null;
+        let fileName = null;
+        if (activeDetail?.requirement_file_path) {
+          fileUrl = `${process.env.APP_URL || "http://localhost:3000"}/${activeDetail.requirement_file_path}`;
+          fileName =
+            this.commonUtilitiesService.formatTransFileName(
+              activeDetail.requirement_file_name,
+            ) || null;
+        }
+
+        // Conditionally include lessor/contract_amount only for Type 2 (Rental)
+        const isRental = requirementTypeId === 2;
+
+        return {
+          location_name: warehouse?.location?.location_name || null,
+          location_abbr: warehouse?.location?.location_abbr || null,
+          warehouse_code: warehouse?.warehouse_code || null,
+          warehouse_name: warehouse?.warehouse_name || null,
+          warehouse_ifs: warehouse?.warehouse_ifs || null,
+          ...(isRental && {
+            lessor: header.supplier?.supplier_name || null,
+            contract_amount: header.contract_amount
+              ? Number(header.contract_amount)
+              : null,
+          }),
+          start_date: due
+            ? this.commonUtilitiesService.formatDateString(
+                due.warehouse_requirement_due_start,
+              )
+            : null,
+          due_date: due
+            ? this.commonUtilitiesService.formatDateString(
+                due.warehouse_requirement_due_date,
+              )
+            : null,
+          expiry_date: due
+            ? this.commonUtilitiesService.formatDateString(
+                due.warehouse_requirement_due_end,
+              )
+            : null,
+          status_name: dueStatus,
+          contract_file_url: fileUrl,
+          contract_file_name: fileName,
+          created_user: header.createdBy
+            ? `${header.createdBy.first_name} ${header.createdBy.last_name}`
+            : null,
+          created_at: header.created_at,
+          header_id: header.id,
+          trans_number: header.trans_number,
+        };
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error fetching rental contracts report:", error);
+      throw new BadRequestException(
+        `Failed to fetch rental contracts report: ${(error as Error).message}`,
+      );
+    }
+  }
+
   // A helper function to determine the warehouse requirement status based on due date, cycle end and requirement type
   public getWarehouseRequirementDueStatus(
     requirementTypeId: number,
