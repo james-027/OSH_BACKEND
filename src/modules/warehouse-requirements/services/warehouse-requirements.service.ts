@@ -2356,21 +2356,7 @@ export class WarehouseRequirementsService {
       });
 
       // Step 7: Fetch transacted requirements with warehouse_requirement_dues data
-      let transactionHeadersQuery = this.reqTransactionHeaderRepository
-        .createQueryBuilder("rth")
-        .leftJoinAndSelect("rth.requirement", "requirement")
-        .leftJoinAndSelect("requirement.renewalType", "renewalType")
-        .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
-        .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
-        .leftJoinAndSelect("rth.createdBy", "createdBy")
-        .leftJoinAndSelect("rth.supplier", "supplier")
-        .leftJoinAndSelect(
-          "rtd_dues.warehouseRequirementDue",
-          "warehouseRequirementDue",
-        )
-        .where("rth.warehouse_id IN (:...warehouseIds)", {
-          warehouseIds,
-        })
+      let transactionHeadersQuery = this.buildBaseTransactionQuery(warehouseIds)
         .andWhere("rth.status_id = :header_status_id", {
           header_status_id: status_id || STATUS_IDS.ACTIVE,
         });
@@ -2778,20 +2764,8 @@ export class WarehouseRequirementsService {
       const warehouseMap = new Map<number, any>();
       warehouses.forEach((w) => warehouseMap.set(w.id, w));
 
-      // Step 6: Query transaction headers for Type 2 (Rental) contracts
-      // Only fetch requirement_type_id = 2
-      let rentalQuery = this.reqTransactionHeaderRepository
-        .createQueryBuilder("rth")
-        .leftJoinAndSelect("rth.requirement", "requirement")
-        .leftJoinAndSelect("rth.supplier", "supplier")
-        .leftJoinAndSelect("rth.createdBy", "createdBy")
-        .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
-        .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
-        .leftJoinAndSelect(
-          "rtd_dues.warehouseRequirementDue",
-          "warehouseRequirementDue",
-        )
-        .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds })
+      // Step 6: Build base query with standard joins, then add report-specific filters
+      let rentalQuery = this.buildBaseTransactionQuery(warehouseIds)
         .andWhere("requirement.requirement_type_id = :reqTypeId", {
           reqTypeId: requirementTypeId,
         })
