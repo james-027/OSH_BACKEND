@@ -145,6 +145,27 @@ export class WarehouseRequirementsService {
   }
 
   /**
+   * Build a base transaction query builder with standard joins
+   * Reusable across multiple report methods to avoid duplicating the same joins.
+   * Callers can add their own .andWhere(), .orderBy(), etc.
+   */
+  private buildBaseTransactionQuery(warehouseIds: number[]) {
+    return this.reqTransactionHeaderRepository
+      .createQueryBuilder("rth")
+      .leftJoinAndSelect("rth.requirement", "requirement")
+      .leftJoinAndSelect("requirement.renewalType", "renewalType")
+      .leftJoinAndSelect("rth.reqTransactionDetails", "rtd")
+      .leftJoinAndSelect("rth.reqTransactionDues", "rtd_dues")
+      .leftJoinAndSelect("rth.createdBy", "createdBy")
+      .leftJoinAndSelect("rth.supplier", "supplier")
+      .leftJoinAndSelect(
+        "rtd_dues.warehouseRequirementDue",
+        "warehouseRequirementDue",
+      )
+      .where("rth.warehouse_id IN (:...warehouseIds)", { warehouseIds });
+  }
+
+  /**
    * Group warehouses by location
    * Returns a Map<locationId, warehouses[]> sorted by location name
    */
