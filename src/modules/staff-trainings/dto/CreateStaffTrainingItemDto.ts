@@ -43,4 +43,10 @@ export class CreateStaffTrainingItemDto {
   @IsOptional()
   @IsDateString()
   training_end_date?: string;
+
+  @IsOptional()
+  @IsInt()
+  staff_training_id?: number; 
+
+  
 }

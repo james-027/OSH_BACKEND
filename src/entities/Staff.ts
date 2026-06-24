@@ -52,7 +52,7 @@ export class Staff {
   @Column()
   position_id: number;
 
-  @Column({ type: "varchar", nullable: true, unique: true })
+  @Column({ type: "varchar", nullable: true })
   email!: string | null;
 
   @Column({ length: 255, nullable: true })
@@ -111,6 +111,9 @@ export class Staff {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ type: "date", nullable: true })
+  effectivity_date: Date;
 
   @CreateDateColumn({
     type: "timestamp",

@@ -115,6 +115,9 @@ export class StaffHistory {
   @Column({ nullable: true })
   updated_by: number;
 
+  @Column({ type: "varchar", nullable: true})
+  email!: string | null;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",
