@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In } from "typeorm";
+import { Repository, In, QueryRunner } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -43,6 +43,7 @@ import { CommonUtilitiesService } from "../../../services/common-utilities.servi
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffTraining } from "src/entities/StaffTrainings";
 import { Training } from "src/entities/Training";
+import { StaffTransfers } from "src/entities/StaffTransfers";
 @Injectable()
 export class StaffsService {
   constructor(
@@ -70,6 +71,8 @@ export class StaffsService {
     private categoryTypeRepository: Repository<CategoryType>,
     @InjectRepository(StaffHistory)
     private readonly staffHistoriesRepository: Repository<StaffHistory>,
+    @InjectRepository(StaffTransfers)
+    private readonly staffTransfersRepository: Repository<StaffTransfers>,
     @InjectRepository(StaffWarehouse)
     private readonly staffWarehouseRepository: Repository<StaffWarehouse>,
     @InjectRepository(StaffTraining)
@@ -84,123 +87,115 @@ export class StaffsService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
-  try {
-    const where: any = {};
+  async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
+    try {
+      const where: any = {};
 
-    if (accessKeyId !== undefined) {
-      where.access_key_id = accessKeyId;
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
+
+      if (statusId && statusId.length > 0) {
+        where.status_id = In(statusId);
+      }
+
+      const staffs = await this.staffsRepository.find({
+        where,
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+          "accessKey",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
+          "staffSalaries",
+           "staffTransfers",
+        ],
+        order: {
+          modified_at: "DESC",
+        },
+      });
+
+      const allTrainings = await this.trainingsRepository.find({
+        where: { status_id: 1 },
+        order: { training_order: "ASC" },
+      });
+
+      const staffTrainings = await this.staffTrainingsRepository.find({
+        relations: ["training"],
+      });
+
+      const trainingMap = new Map<number, any[]>();
+
+      for (const t of staffTrainings) {
+        const key = t.staff_id;
+        if (!trainingMap.has(key)) trainingMap.set(key, []);
+        trainingMap.get(key)!.push(t);
+      }
+
+      const result = staffs.map((staff) => {
+        const trainings = trainingMap.get(staff.id) || [];
+
+        const totalActiveTrainings = allTrainings.length;
+
+        const hasTraining = trainings.length > 0;
+
+        const passedTrainings = trainings.filter((t) => {
+          const trainingMeta = allTrainings.find(
+            (at) => Number(at.id) === Number(t.training_id),
+          );
+
+          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+          return t.ratings !== "" && Number(t.ratings) >= passingRate;
+        });
+
+        const failedTrainings = trainings.filter((t) => {
+          const trainingMeta = allTrainings.find(
+            (at) => Number(at.id) === Number(t.training_id),
+          );
+
+          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+          return t.ratings !== "" && Number(t.ratings) < passingRate;
+        });
+
+        const isSingleTraining = totalActiveTrainings === 1;
+
+        const allPassed =
+          hasTraining &&
+          passedTrainings.length === totalActiveTrainings &&
+          totalActiveTrainings > 0;
+
+        let canPost = false;
+
+        if (!hasTraining) {
+          canPost = false;
+        } else if (isSingleTraining) {
+          canPost = failedTrainings.length > 0;
+        } else if (allPassed) {
+          canPost = true;
+        } else {
+          canPost = failedTrainings.length > 0;
+        }
+
+        return {
+          ...this.responseMapperService.mapEntityToResponse(staff),
+          canPost,
+        };
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Error fetching staffs:", error);
+      throw new Error("Failed to fetch staffs");
     }
-
-    if (statusId && statusId.length > 0) {
-      where.status_id = In(statusId);
-    }
-
-    const staffs = await this.staffsRepository.find({
-      where,
-      relations: [
-        "status",
-        "assignmentStatus",
-        "createdBy",
-        "updatedBy",
-        "location",
-        "vendor",
-        "position",
-        "accessKey",
-        "staffBrands",
-        "staffCategoryTypes",
-        "staffVendorSalaries",
-        "staffSalaries",
-      ],
-      order: {
-        modified_at: "DESC",
-      },
-    });
-
-    const allTrainings = await this.trainingsRepository.find({
-      where: { status_id: 1 },
-      order: { training_order: "ASC" },
-    });
-
-    const staffTrainings = await this.staffTrainingsRepository.find({
-      relations: ["training"],
-    });
-
-    const trainingMap = new Map<number, any[]>();
-
-    for (const t of staffTrainings) {
-      const key = t.staff_id;
-      if (!trainingMap.has(key)) trainingMap.set(key, []);
-      trainingMap.get(key)!.push(t);
-    }
-
-const result = staffs.map((staff) => {
-  const trainings = trainingMap.get(staff.id) || [];
-
-  const totalActiveTrainings = allTrainings.length;
-
-  const hasTraining = trainings.length > 0;
-
-  const passedTrainings = trainings.filter((t) => {
-    const trainingMeta = allTrainings.find(
-      (at) => Number(at.id) === Number(t.training_id),
-    );
-
-    const passingRate = Number(trainingMeta?.passing_rate ?? 0);
-
-    return (
-      t.ratings !== "" &&
-      Number(t.ratings) >= passingRate
-    );
-  });
-
-  const failedTrainings = trainings.filter((t) => {
-    const trainingMeta = allTrainings.find(
-      (at) => Number(at.id) === Number(t.training_id),
-    );
-
-    const passingRate = Number(trainingMeta?.passing_rate ?? 0);
-
-    return (
-      t.ratings !== "" &&
-      Number(t.ratings) < passingRate
-    );
-  });
-
-  const isSingleTraining = totalActiveTrainings === 1;
-
-    const allPassed =
-    hasTraining &&
-    passedTrainings.length === totalActiveTrainings &&
-    totalActiveTrainings > 0;
-
-
-  let canPost = false;
-
-  if (!hasTraining) {
-    canPost = false;
-  } 
-  else if (isSingleTraining) {
-    canPost = failedTrainings.length > 0;
-  } else if(allPassed){
-    canPost = true;
   }
-  else {
-    canPost = failedTrainings.length > 0;
-  }
-
-  return {
-    ...this.responseMapperService.mapEntityToResponse(staff),
-    canPost,
-  };
-});
-
-    return result;
-  } catch (error) {
-    console.error("Error fetching staffs:", error);
-    throw new Error("Failed to fetch staffs");
-  }
-}
 
   async findOne(id: number): Promise<any> {
     try {
@@ -218,6 +213,9 @@ const result = staffs.map((staff) => {
           "staffCategoryTypes",
           "staffVendorSalaries",
           "staffSalaries",
+          "staffTransfers",
+          "staffTransfers.vendor",
+          "staffTransfers.location",
         ],
       });
 
@@ -323,7 +321,7 @@ const result = staffs.map((staff) => {
       });
 
       const savedStaff = await this.staffsRepository.save(newStaff);
-   await this.staffHistoriesRepository.save({
+      await this.staffHistoriesRepository.save({
         staff_id: savedStaff.id,
         staff_code: savedStaff.staff_code,
         last_name: savedStaff.last_name,
@@ -497,7 +495,11 @@ const result = staffs.map((staff) => {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("staffs", response.id, response);
-
+        this.sseEventEmitter.emitCreate(
+          "staff_vendor_salaries",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -604,7 +606,7 @@ const result = staffs.map((staff) => {
 
       const savedStaff = await this.staffsRepository.save(staff);
 
-   await this.staffHistoriesRepository.save({
+      await this.staffHistoriesRepository.save({
         staff_id: staff.id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
@@ -675,52 +677,21 @@ const result = staffs.map((staff) => {
         await this.staffCategoryTypesRepository.save(newRecord);
       }
 
-      let staffVendorSalary = await this.staffVendorSalaryRepository.findOne({
-        where: { staff_id: staff.id },
-        order: { id: "DESC" },
-      });
+      const queryRunner =
+        this.staffsRepository.manager.connection.createQueryRunner();
 
-      let staffSalary = await this.staffSalaryRepository.findOne({
-        where: { staff_id: staff.id },
-        order: { id: "DESC" },
-      });
-
-      const isChanged =
-        !staffVendorSalary ||
-        staffVendorSalary.vendor_id !== updateStaffDto.vendor_id ||
-        staffVendorSalary.location_id !== updateStaffDto.location_id ||
-        Number(staffSalary?.salary_rate ?? 0) !==
-          Number(updateStaffDto.salary_rate) ||
-        Number(staffSalary?.allowance ?? 0) !==
-          Number(updateStaffDto.allowance);
-
-      if (isChanged) {
-        const newstaffVendor = this.staffVendorSalaryRepository.create({
-          staff_id: staff.id,
+      await this.syncVendorAndSalary(
+        queryRunner,
+        staff,
+        {
           vendor_id: updateStaffDto.vendor_id,
           location_id: updateStaffDto.location_id,
-          access_key_id: staff.access_key_id,
-          status_id: updateStaffDto.status_id || 1,
-          created_by: userId,
-          updated_by: userId,
-        });
-
-        staffVendorSalary =
-          await this.staffVendorSalaryRepository.save(newstaffVendor);
-
-        const newRecord = this.staffSalaryRepository.create({
-          staff_id: staff.id,
-          staff_vendor_id: staffVendorSalary.id,
-          allowance: updateStaffDto.allowance,
           salary_rate: updateStaffDto.salary_rate,
-          access_key_id: staff.access_key_id,
-          status_id: updateStaffDto.status_id || 1,
-          created_by: userId,
-          updated_by: userId,
-        });
-
-        await this.staffSalaryRepository.save(newRecord);
-      }
+          allowance: updateStaffDto.allowance,
+          status_id: updateStaffDto.status_id,
+        },
+        userId,
+      );
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -774,7 +745,11 @@ const result = staffs.map((staff) => {
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
         this.sseEventEmitter.emitUpdate("staff_brands", response.id, response);
-        this.sseEventEmitter.emitUpdate("staff_trainings", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_trainings",
+          response.id,
+          response,
+        );
         this.sseEventEmitter.emitUpdate(
           "staff_category_types",
           response.id,
@@ -796,11 +771,24 @@ const result = staffs.map((staff) => {
     }
   }
 
-  async toggleStatus(id: number,
-     revertStaffDto: RevertStaffDto,
-     userId: number,
-    ): Promise<any> {
+  async staffTransfer(
+    id: number,
+    updateStaffTransferDto: UpdateStaffTransferDto,
+    userId: number,
+  ): Promise<any> {
     try {
+      const safeDate = (value: any) => {
+        if (!value || value === "") return null;
+
+        const date = new Date(value);
+
+        if (isNaN(date.getTime())) {
+          throw new BadRequestException(`Invalid date: ${value}`);
+        }
+
+        return date;
+      };
+
       const staff = await this.staffsRepository.findOne({
         where: { id },
         relations: [
@@ -814,7 +802,485 @@ const result = staffs.map((staff) => {
         ],
       });
 
+      if (!staff) {
+        throw new NotFoundException(`Staff with ID ${id} not found`);
+      }
 
+      const newVendorId = updateStaffTransferDto.vendor_id;
+      const newLocationId = updateStaffTransferDto.location_id;
+      const newSalaryRate = updateStaffTransferDto.salary_rate;
+      const newAllowance = updateStaffTransferDto.allowance;
+      const transferRemarks = updateStaffTransferDto.remarks;
+
+      const isVendorChanged = staff.vendor_id !== newVendorId;
+      const isLocationChanged = staff.location_id !== newLocationId;
+
+      if (!isVendorChanged && !isLocationChanged) {
+        return this.responseMapperService.mapEntityToResponse(staff);
+      }
+
+      const effectivityDate = safeDate(
+        updateStaffTransferDto.effectivity_date,
+      );
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (effectivityDate) {
+        const selectedDate = new Date(effectivityDate);
+        selectedDate.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+          throw new BadRequestException(
+            "Effectivity date cannot be earlier than today.",
+          );
+        }
+      }
+
+      await this.staffTransfersRepository.save({
+        staff_id: staff.id,
+        old_vendor_id: staff.vendor_id,
+        new_vendor_id: newVendorId,
+        old_location_id: staff.location_id,
+        new_location_id: newLocationId,
+        salary_rate: newSalaryRate,
+        allowance: newAllowance,
+        remarks: transferRemarks,
+        effectivity_date: safeDate(updateStaffTransferDto.effectivity_date),
+        access_key_id: staff.access_key_id,
+        status: false,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      return {
+        message: "Transfer scheduled successfully.",
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to process staff transfer");
+    }
+  }
+
+  private isTransferRunning = false;
+
+  async processScheduledTransfers(): Promise<void> {
+    if (this.isTransferRunning) {
+      return;
+    }
+
+    this.isTransferRunning = true;
+
+    try {
+      logger.info("Checking for pending transfers...");
+
+      const pendingTransfers = await this.staffTransfersRepository.find({
+        where: {
+          status: false,
+        },
+      });
+
+      logger.info(`Pending transfers found: ${pendingTransfers.length}`);
+
+      if (!pendingTransfers.length) {
+        logger.warn("No pending transfers found.");
+        return;
+      }
+
+      for (const transfer of pendingTransfers) {
+        logger.info(
+          `Processing transfer ID ${transfer.id} for staff ${transfer.staff_id}`,
+        );
+
+        const queryRunner =
+          this.staffsRepository.manager.connection.createQueryRunner();
+
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+
+          const effectivityDate = new Date(transfer.effectivity_date)
+            .toISOString()
+            .split("T")[0];
+
+          const today = new Date()
+            .toISOString()
+            .split("T")[0];
+
+          if (effectivityDate > today) {
+            logger.warn(
+              `Transfer ${transfer.id} skipped. Effectivity date is in the future.`,
+            );
+
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
+
+          const staff = await this.staffsRepository.findOne({
+            where: {
+              id: transfer.staff_id,
+            },
+            relations: ["location", "vendor"],
+          });
+          const vendor = await this.vendorRepository.findOne({
+            where: {
+              id: transfer.new_vendor_id,
+            },
+          });
+          const location = await this.locationRepository.findOne({
+            where: {
+              id: transfer.new_location_id,
+            },
+          });
+
+          if (!staff) {
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
+
+          const oldLocation = staff.location?.location_name ?? "N/A";
+          const oldVendor = staff.vendor?.service_provider_name ?? "N/A";
+
+          const newLocation = location.location_name ?? "N/A";
+          const newVendor = vendor.service_provider_name ?? "N/A";
+
+          logger.info(`Updating staff record...`);
+
+          await queryRunner.manager.update(Staff, transfer.staff_id, {
+            location_id: transfer.new_location_id,
+            vendor_id: transfer.new_vendor_id,
+            updated_by: transfer.created_by,
+            effectivity_date: transfer.effectivity_date,
+          });
+
+          logger.info(`Staff update completed.`);
+
+          await this.syncVendorAndSalary(
+            queryRunner,
+            staff,
+            {
+              vendor_id: transfer.new_vendor_id,
+              location_id: transfer.new_location_id,
+              salary_rate: transfer.salary_rate,
+              allowance: transfer.allowance,
+              status_id: 1,
+            },
+            transfer.created_by,
+          );
+          const isVendorChanged = staff.vendor_id !== transfer.new_vendor_id;
+
+          const isLocationChanged =
+            staff.location_id !== transfer.new_location_id;
+
+          const updatedStaff = await this.staffsRepository.findOne({
+            where: { id: staff.id },
+            relations: [
+              "status",
+              "assignmentStatus",
+              "createdBy",
+              "updatedBy",
+              "location",
+              "vendor",
+              "position",
+            ],
+          });
+
+          if (!updatedStaff) {
+            throw new Error(`Failed to retrieve updated staff ${staff.id}`);
+          }
+
+          let generatedStaffCode: string | null = null;
+
+          if (isVendorChanged || isLocationChanged) {
+            const serviceProviderCode = vendor.service_provider_code ?? "";
+
+            const locationCode = location.location_code ?? "";
+
+            const prefix = `${serviceProviderCode}${locationCode}`;
+
+            const trans_number =
+              await this.commonUtilitiesService.generateTransactionNumber({
+                transaction_type: `STAFF CODE ${locationCode}`,
+                vendor_id: transfer.new_vendor_id,
+                location_id: transfer.new_location_id,
+                access_key_id: transfer.access_key_id,
+                format: "D{abbr}{key}{year}-{seq:6}",
+                reset_per_year: false,
+                currentDate: new Date(),
+                abbr: vendor.service_provider_code ?? "",
+              });
+
+            const series = trans_number.match(/\d+$/)?.[0];
+
+            generatedStaffCode = `${prefix}-${series}`;
+
+            await queryRunner.manager.update(Staff, updatedStaff.id, {
+              staff_code: generatedStaffCode,
+            });
+
+            updatedStaff.staff_code = generatedStaffCode;
+          }
+
+          await queryRunner.manager.save(StaffHistory, {
+            staff_id: updatedStaff.id,
+            staff_code: updatedStaff.staff_code,
+            last_name: updatedStaff.last_name,
+            first_name: updatedStaff.first_name,
+            email: updatedStaff.email,
+            middle_name: updatedStaff.middle_name,
+            location_id: transfer.new_location_id,
+            vendor_id: transfer.new_vendor_id,
+            assign_status_id: updatedStaff.assign_status_id,
+            position_id: updatedStaff.position_id,
+            access_key_id: updatedStaff.access_key_id,
+            sss_number: updatedStaff.sss_number,
+            pagibig_number: updatedStaff.pagibig_number,
+            tin: updatedStaff.tin,
+            remarks: transfer.remarks,
+            overall_remarks: updatedStaff.overall_remarks,
+            store_request: updatedStaff.store_request,
+            hired_date: updatedStaff.hired_date,
+            to_hr_date: updatedStaff.to_hr_date,
+            to_sts_date: updatedStaff.to_sts_date,
+            approved_eprf_date: updatedStaff.approved_eprf_date,
+            req_completion_date: updatedStaff.req_completion_date,
+            actual_deployment_date: updatedStaff.actual_deployment_date,
+            separated_date: updatedStaff.separated_date,
+            birthday: updatedStaff.birthday,
+            contact_number: updatedStaff.contact_number,
+            status_id: updatedStaff.status_id,
+            effectivity_date: updatedStaff.effectivity_date,
+            created_by: transfer.created_by,
+            updated_by: transfer.created_by,
+          });
+
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "StaffsService",
+              method: "staffTransfer",
+              raw_data: JSON.stringify(updatedStaff),
+              description: `Staff transfer executed for ${transfer.staff_id} - ${staff.first_name} ${staff.last_name} from Vendor: ${oldVendor} / Location: ${oldLocation}`,
+              status_id: 1,
+            },
+            transfer.created_by,
+          );
+
+          transfer.status = true;
+
+          await queryRunner.manager.save(StaffTransfers, transfer);
+
+          await queryRunner.commitTransaction();
+
+          try {
+            await this.actionLogsService.logAction({
+              module_id: MODULE_IDS.STAFFS,
+              ref_id: updatedStaff.id,
+              action_id: ACTION_IDS.TRANSFER,
+              description: `Staff transferred ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${oldVendor} → ${
+                newVendor
+              } | Location: ${oldLocation} → ${newLocation}`,
+              raw_data: JSON.stringify({
+                id: updatedStaff.id,
+                old_vendor: staff.vendor_id,
+                new_vendor: updatedStaff.vendor_id,
+                old_location: staff.location_id,
+                new_location: updatedStaff.location_id,
+                new_staff_code: generatedStaffCode,
+                transfer_id: transfer.id,
+                scheduled_transfer: true,
+              }),
+              created_by: transfer.created_by,
+            });
+          } catch (err) {
+            logger.error("Action log failed for scheduled transfer:", err);
+          }
+
+          const response =
+            this.responseMapperService.mapEntityToResponse(updatedStaff);
+
+          try {
+            this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+
+            this.sseEventEmitter.emitUpdate(
+              "staff_vendor_salaries",
+              response.id,
+              response,
+            );
+
+            this.sseEventEmitter.emitUpdate(
+              "staff_transfers",
+              response.id,
+              response,
+            );
+
+            logger.info(`SSE events emitted.`);
+          } catch (err) {
+            logger.error("SSE event failed for scheduled transfer:");
+            logger.error(err);
+          }
+
+          logger.info(`Transfer ${transfer.id} completed successfully.`);
+        } catch (err: any) {
+          await queryRunner.rollbackTransaction();
+
+          logger.error(
+            `Scheduled transfer failed. Transfer ID: ${transfer.id}`,
+          );
+
+          logger.error(`Error Message: ${err?.message}`);
+
+          logger.error(`Error Stack: ${err?.stack}`);
+        } finally {
+          await queryRunner.release();
+
+          logger.info(`QueryRunner released for transfer ${transfer.id}`);
+        }
+      }
+    } catch (err: any) {
+      logger.error(`processScheduledTransfers failed: ${err?.message}`);
+      logger.error(err?.stack);
+    } finally {
+      this.isTransferRunning = false;
+    }
+  }
+
+  private async syncVendorAndSalary(
+    queryRunner: QueryRunner,
+    staff: any,
+    dto: {
+      vendor_id: number;
+      location_id: number;
+      salary_rate?: number;
+      allowance?: number;
+      status_id?: number;
+    },
+    userId: number,
+  ) {
+    try {
+      logger.info(`[syncVendorAndSalary] START - Staff ID: ${staff.id}`);
+
+      const staffVendorSalary = await queryRunner.manager.findOne(
+        StaffVendorSalary,
+        {
+          where: {
+            staff_id: staff.id,
+          },
+          order: {
+            id: "DESC",
+          },
+        },
+      );
+
+      const staffSalary = await queryRunner.manager.findOne(StaffSalary, {
+        where: {
+          staff_id: staff.id,
+        },
+        order: {
+          id: "DESC",
+        },
+      });
+
+      const isChanged =
+        !staffVendorSalary ||
+        staffVendorSalary.vendor_id !== dto.vendor_id ||
+        staffVendorSalary.location_id !== dto.location_id ||
+        Number(staffSalary?.salary_rate ?? 0) !==
+          Number(dto.salary_rate ?? 0) ||
+        Number(staffSalary?.allowance ?? 0) !== Number(dto.allowance ?? 0);
+
+      logger.info(`[syncVendorAndSalary] isChanged: ${isChanged}`);
+
+      if (!isChanged) {
+        logger.info(`[syncVendorAndSalary] No changes detected.`);
+
+        return {
+          staffVendorSalary,
+          staffSalary,
+          changed: false,
+        };
+      }
+
+      logger.info(`[syncVendorAndSalary] Creating StaffVendorSalary`);
+
+      const newStaffVendorSalary = await queryRunner.manager.save(
+        StaffVendorSalary,
+        queryRunner.manager.create(StaffVendorSalary, {
+          staff_id: staff.id,
+          vendor_id: dto.vendor_id,
+          location_id: dto.location_id,
+          access_key_id: staff.access_key_id,
+          status_id: dto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        }),
+      );
+
+      logger.info(
+        `[syncVendorAndSalary] StaffVendorSalary created. ID: ${newStaffVendorSalary.id}`,
+      );
+
+      logger.info(`[syncVendorAndSalary] Creating StaffSalary`);
+
+      const newStaffSalary = await queryRunner.manager.save(
+        StaffSalary,
+        queryRunner.manager.create(StaffSalary, {
+          staff_id: staff.id,
+          staff_vendor_id: newStaffVendorSalary.id,
+          salary_rate: dto.salary_rate ?? 0,
+          allowance: dto.allowance ?? 0,
+          access_key_id: staff.access_key_id,
+          status_id: dto.status_id || 1,
+          created_by: userId,
+          updated_by: userId,
+        }),
+      );
+
+      logger.info(
+        `[syncVendorAndSalary] StaffSalary created. ID: ${newStaffSalary.id}`,
+      );
+
+      logger.info(`[syncVendorAndSalary] END SUCCESS`);
+
+      return {
+        staffVendorSalary: newStaffVendorSalary,
+        staffSalary: newStaffSalary,
+        changed: true,
+      };
+    } catch (err: any) {
+      logger.error(`[syncVendorAndSalary] ERROR`);
+
+      logger.error(`[syncVendorAndSalary] Message: ${err?.message}`);
+
+      logger.error(`[syncVendorAndSalary] Stack: ${err?.stack}`);
+
+      throw err;
+    }
+  }
+
+  async toggleStatus(
+    id: number,
+    revertStaffDto: RevertStaffDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const staff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+        ],
+      });
 
       if (!staff) {
         throw new NotFoundException(`Staff with ID ${id} not found`);
@@ -934,216 +1400,6 @@ const result = staffs.map((staff) => {
         throw error;
       }
       throw new Error("Failed to toggle status for staff");
-    }
-  }
-
-  async staffTransfer(
-    id: number,
-    updateStaffTransferDto: UpdateStaffTransferDto,
-    userId: number,
-  ): Promise<any> {
-    try {
-
-      const safeDate = (value: any) => {
-        if (!value || value === "") return null;
-
-        const date = new Date(value);
-
-        if (isNaN(date.getTime())) {
-          throw new BadRequestException(`Invalid date: ${value}`);
-        }
-
-        return date;
-      };
-
-      const staff = await this.staffsRepository.findOne({
-        where: { id },
-        relations: [
-          "status",
-          "assignmentStatus",
-          "createdBy",
-          "updatedBy",
-          "location",
-          "vendor",
-          "position",
-        ],
-      });
-
-      if (!staff) {
-        throw new NotFoundException(`Staff with ID ${id} not found`);
-      }
-
-      const newVendorId = updateStaffTransferDto.vendor_id;
-      const newLocationId = updateStaffTransferDto.location_id;
-
-      const isVendorChanged = staff.vendor_id !== newVendorId;
-      const isLocationChanged = staff.location_id !== newLocationId;
-
-      if (!isVendorChanged && !isLocationChanged) {
-        return this.responseMapperService.mapEntityToResponse(staff);
-      }
-
-      const oldLocation = staff.location?.location_name ?? "N/A";
-      const oldVendor = staff.vendor?.service_provider_name ?? "N/A";
-
-      await this.staffsRepository.update(id, {
-        location_id: newLocationId,
-        vendor_id: newVendorId,
-        updated_by:userId,
-        effectivity_date:safeDate(updateStaffTransferDto.effectivity_date)
-      });
-
-      const updatedStaff = await this.staffsRepository.findOne({
-        where: { id },
-        relations: [
-          "status",
-          "assignmentStatus",
-          "createdBy",
-          "updatedBy",
-          "location",
-          "vendor",
-          "position",
-        ],
-      });
-
-      if (!updatedStaff) {
-        throw new Error("Failed to retrieve updated staff");
-      }
-
-      let generatedStaffCode: string | null = null;
-
-      if (isVendorChanged || isLocationChanged) {
-        const serviceProviderCode =
-          updatedStaff.vendor?.service_provider_code ?? "";
-
-        const locationCode = updatedStaff.location?.location_code ?? "";
-
-        const prefix = `${serviceProviderCode}${locationCode}`;
-
-        const latestStaff = await this.staffsRepository
-          .createQueryBuilder("staff")
-          .where("staff.staff_code LIKE :prefix", {
-            prefix: `${prefix}%`,
-          })
-          .orderBy("staff.staff_code", "DESC")
-          .getOne();
-
-        let nextSeries = 1;
-
-        if (latestStaff?.staff_code) {
-          const seriesPart = latestStaff.staff_code.substring(prefix.length);
-          nextSeries = parseInt(seriesPart, 10) + 1;
-        }
-
-        const trans_number =
-          await this.commonUtilitiesService.generateTransactionNumber({
-            transaction_type: `STAFF CODE ${locationCode}`,
-            vendor_id: updatedStaff.vendor_id,
-            location_id: updatedStaff.location_id,
-            access_key_id: updatedStaff.access_key_id,
-            format: "D{abbr}{key}{year}-{seq:6}",
-            reset_per_year: false,
-            currentDate: new Date(),
-            abbr: updatedStaff.vendor?.service_provider_code ?? "",
-          });
-
-        const series = trans_number.match(/\d+$/)?.[0];
-
-        generatedStaffCode = `${prefix}-${series}`;
-
-        await this.staffsRepository.update(updatedStaff.id, {
-          staff_code: generatedStaffCode,
-        });
-
-        updatedStaff.staff_code = generatedStaffCode;
-      }
-
-      await this.staffHistoriesRepository.save({
-        staff_id: updatedStaff.id,
-        staff_code: updatedStaff.staff_code,
-        last_name: updatedStaff.last_name,
-        first_name: updatedStaff.first_name,
-        email: updatedStaff.email,
-        middle_name: updatedStaff.middle_name,
-        location_id: updatedStaff.location_id,
-        vendor_id: updatedStaff.vendor_id,
-        assign_status_id: updatedStaff.assign_status_id,
-        position_id: updatedStaff.position_id,
-        access_key_id: updatedStaff.access_key_id,
-        sss_number: updatedStaff.sss_number,
-        pagibig_number: updatedStaff.pagibig_number,
-        tin: updatedStaff.tin,
-        remarks: updatedStaff.remarks,
-        overall_remarks: updatedStaff.overall_remarks,
-        store_request: updatedStaff.store_request,
-        hired_date: updatedStaff.hired_date,
-        to_hr_date: updatedStaff.to_hr_date,
-        to_sts_date: updatedStaff.to_sts_date,
-        approved_eprf_date: updatedStaff.approved_eprf_date,
-        req_completion_date: updatedStaff.req_completion_date,
-        actual_deployment_date: updatedStaff.actual_deployment_date,
-        separated_date: updatedStaff.separated_date,
-        birthday: updatedStaff.birthday,
-        contact_number: updatedStaff.contact_number,
-        status_id: updatedStaff.status_id,
-        effectivity_date: updatedStaff.effectivity_date,
-        created_by: userId,
-        updated_by: userId,
-      });
-
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "StaffsService",
-          method: "staffTransfer",
-          raw_data: JSON.stringify(updatedStaff),
-          description: `Staff transfer executed for ${id} - ${staff.first_name} ${staff.last_name} from Vendor: ${oldVendor} / Location: ${oldLocation}`,
-          status_id: 1,
-        },
-        userId,
-      );
-
-      try {
-        await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS,
-          ref_id: updatedStaff.id,
-          action_id: ACTION_IDS.TRANSFER,
-          description: `Staff transferred ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${oldVendor} → ${
-            updatedStaff.vendor?.service_provider_name ?? "N/A"
-          } | Location: ${oldLocation} → ${
-            updatedStaff.location?.location_name ?? "N/A"
-          }`,
-          raw_data: JSON.stringify({
-            id: updatedStaff.id,
-            old_vendor: staff.vendor_id,
-            new_vendor: updatedStaff.vendor_id,
-            old_location: staff.location_id,
-            new_location: updatedStaff.location_id,
-            new_staff_code: generatedStaffCode,
-          }),
-          created_by: userId,
-        });
-      } catch (err) {
-        logger.error("Action log failed for staffTransfer:", err);
-      }
-
-      const response =
-        this.responseMapperService.mapEntityToResponse(updatedStaff);
-      try {
-        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
-      } catch (err) {
-        logger.error("SSE event failed:", err);
-      }
-
-      return response;
-    } catch (error) {
-
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      throw new Error("Failed to process staff transfer");
     }
   }
 
@@ -1544,7 +1800,7 @@ const result = staffs.map((staff) => {
             contact_number: row["Contact Number"],
             last_name: lastName,
             middle_name: middleName,
-            email : row["Email"],
+            email: row["Email"],
             birthday: parseExcelDate(row["Birthday"]),
             location_id: location.id,
             vendor_id: vendor.id,

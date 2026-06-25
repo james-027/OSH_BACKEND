@@ -19,6 +19,7 @@ import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
 import { Warehouse } from "./Warehouse";
 import { StaffSalary } from "./StaffSalary";
+import { StaffTransfers } from "./StaffTransfers";
 
 @Entity("staffs")
 export class Staff {
@@ -208,10 +209,16 @@ export class Staff {
     warehouse: Warehouse;
 
 
-      @OneToMany(
+    @OneToMany(
       () => StaffSalary,
       (staffSalary) => staffSalary.staff,
     )
     staffSalaries: StaffSalary[];
+
+    @OneToMany(
+      () => StaffTransfers,
+      (staffTransfers) => staffTransfers.staff,
+    )
+    staffTransfers: StaffTransfers[];
 
 }

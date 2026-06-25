@@ -90,6 +90,7 @@ import { StaffHistory } from "../entities/StaffHistory";
 import { StaffTraining } from "../entities/StaffTrainings";
 import { Training } from "../entities/Training";
 import { StaffSalary } from "../entities/StaffSalary";
+import { StaffTransfers } from "../entities/StaffTransfers";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -182,7 +183,8 @@ export const entities = [
   StaffTraining,
   Training,
   StaffHistory,
-  StaffSalary
+  StaffSalary,
+  StaffTransfers
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

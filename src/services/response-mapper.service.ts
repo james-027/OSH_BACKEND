@@ -46,6 +46,7 @@ export class ResponseMapperService {
           "staffSalaries",
           "training",
           "subStatus",
+          "staffTransfers",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -150,6 +151,19 @@ export class ResponseMapperService {
     const latestSalary = entity.staffSalaries?.length
       ? [...entity.staffSalaries].sort((a, b) => b.id - a.id)[0]
       : null;
+
+      const pendingTransfers =
+        entity.staffTransfers
+          ?.filter((transfer) => transfer.status === false)
+          .sort((a, b) => b.id - a.id) || [];
+
+      response.pending_transfers = pendingTransfers.map((transfer) => ({
+        id: transfer.id,
+        new_vendor_name: transfer.vendor?.service_provider_name,
+        new_location_name: transfer.location?.location_name,
+        effectivity_date: transfer.effectivity_date,
+        status: transfer.status,
+      }));
 
     if (latestBrand) {
       response.brand_id = latestBrand.brand_id;
