@@ -15,6 +15,8 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module"; //
 import { Status } from "src/entities/Status";
 import { User } from "src/entities/User";
+import { DebitAdviceCategorySyncService } from "./services/debit-advice-category-sync";
+import { DebitAdviceCategoryScheduler } from "src/schedulers/debit-advice-category.scheduler";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -26,7 +28,7 @@ import { User } from "src/entities/User";
       User,
     ]),
     UsersModule,
-    SSEModule
+    SSEModule,
   ],
 
   controllers: [DebitAdviceCategoryController],
@@ -34,8 +36,10 @@ import { User } from "src/entities/User";
   providers: [
     DebitAdviceCategoryService,
     ResponseMapperService,
+    DebitAdviceCategorySyncService,
+    DebitAdviceCategoryScheduler,
   ],
 
   exports: [DebitAdviceCategoryService],
 })
-export class DebitAdviceCategoryModule { }
+export class DebitAdviceCategoryModule {}
