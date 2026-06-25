@@ -2356,10 +2356,11 @@ export class WarehouseRequirementsService {
       });
 
       // Step 7: Fetch transacted requirements with warehouse_requirement_dues data
-      let transactionHeadersQuery = this.buildBaseTransactionQuery(warehouseIds)
-        .andWhere("rth.status_id = :header_status_id", {
-          header_status_id: status_id || STATUS_IDS.ACTIVE,
-        });
+      let transactionHeadersQuery = this.buildBaseTransactionQuery(
+        warehouseIds,
+      ).andWhere("rth.status_id = :header_status_id", {
+        header_status_id: status_id || STATUS_IDS.ACTIVE,
+      });
 
       // Apply date filtering on transaction date
       if (date_from && date_to) {
@@ -2829,7 +2830,7 @@ export class WarehouseRequirementsService {
         let fileUrl = null;
         let fileName = null;
         if (activeDetail?.requirement_file_path) {
-          fileUrl = `${process.env.APP_URL || "http://localhost:3000"}/${activeDetail.requirement_file_path}`;
+          fileUrl = activeDetail.requirement_file_path;
           fileName =
             this.commonUtilitiesService.formatTransFileName(
               activeDetail.requirement_file_name,
