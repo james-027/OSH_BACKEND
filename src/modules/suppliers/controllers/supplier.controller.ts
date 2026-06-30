@@ -28,7 +28,7 @@ export class SupplierController {
   @Get()
   @RequirePermissions({
     module: ["SUPPLIERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAll(@Request() req) {
     return this.supplierService.findAll();
