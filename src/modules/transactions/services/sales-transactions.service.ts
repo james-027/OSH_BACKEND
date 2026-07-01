@@ -329,12 +329,13 @@ export class SalesTransactionsService {
           LINETOTAL: { format: "number-trim" },
           UNITPRICE: { format: "number-trim" },
           VATAMOUNT: { format: "number-trim" },
-          LINECOST: { format: "number-trim" },
-          ITEMCOST: { format: "number-trim" },
           DISCAMOUNT: { format: "number-trim" },
           VATRATE: { format: "number-trim" },
         },
-        optionalFields: {},
+        optionalFields: {
+          LINECOST: { format: "number-trim" },
+          ITEMCOST: { format: "number-trim" },
+        },
       };
 
       // Step 3: Pre-load lookups for O(1) access (optimization for large files)
