@@ -42,7 +42,7 @@ export class ItemsDwhService {
                   AND s.COMPANY = 'CTGI' 
                   AND s.BRANCH = 'HO' 
                 WHERE
-                  i.ITEMGROUP IN ( 'FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT', 'PAC_MAT_VAT' ) 
+                  i.ITEMGROUP IN ( 'FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT', 'PAC_MAT_VAT', 'FIN_GO_VAT' ) 
                   AND i.ISVALID = 1`;
     const [rows] = await sourceConn.execute(sql);
     let success = 0;
