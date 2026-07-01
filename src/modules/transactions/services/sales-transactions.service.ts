@@ -446,7 +446,7 @@ unmatchedWarehouses.set(
             );
             errors.push({
               row: rowNum,
-              error: `Warehouse not found: ${whsCodeUpperCase}`,
+              error: `Store not found: ${whsCodeUpperCase} - ${formattedRow["STORE"]}`,
             });
             continue;
           }
@@ -466,7 +466,7 @@ unmatchedWarehouses.set(
             );
             errors.push({
               row: rowNum,
-              error: `Item not found: ${itemCodeUpperCase}`,
+              error: `Item not found: ${itemCodeUpperCase} - ${formattedRow["ITEM"]}`,
             });
             continue;
           }
