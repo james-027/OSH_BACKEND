@@ -286,14 +286,14 @@ export class SalesTransactionsService {
     let displayMessage = "";
     let logError = null;
     const errors: { row: number; error: string }[] = [];
-    const inserted_row_numbers: number[] = []; // ✅ Track row numbers of successful inserts
+    const inserted_row_numbers: number[] = []; // Track row numbers of successful inserts
     const unmatchedLocations = new Map<string, number>(); // Track unmatched locations
     const unmatchedItems = new Map<string, number>(); // Track unmatched items
     const unmatchedWarehouses = new Map<string, number>(); // Track unmatched warehouses
     const toInsert: any[] = [];
-    const toInsertRowNumbers: number[] = []; // ✅ Track original row numbers for toInsert
-    let rows: any[] = []; // ✅ Declare outside try block
-    let total = 0; // ✅ Declare outside try block
+    const toInsertRowNumbers: number[] = []; // Track original row numbers for toInsert
+    let rows: any[] = []; // Declare outside try block
+    let total = 0; // Declare outside try block
 
     try {
       // Step 1: Read Excel file
@@ -369,7 +369,7 @@ export class SalesTransactionsService {
       const allItems = await this.itemRepository.find({
         where: { status_id: 1 },
         select: [
-          "id", // ✅ ADD id for item_id
+          "id", // ADD id for item_id
           "item_code",
           "sales_conv",
           "sales_unit_eq",
@@ -433,14 +433,14 @@ export class SalesTransactionsService {
             continue;
           }
           const locationInfo = locationMap.get(bcUpperCase);
-          const bcCode = locationInfo.code; // ✅ Extract code
-          const locationId = locationInfo.id; // ✅ Extract id
+          const bcCode = locationInfo.code; // Extract code
+          const locationId = locationInfo.id; // Extract id
 
-          // ✅ NEW: Lookup warehouse by CODE
+          // Lookup warehouse by CODE
           const whsCodeUpperCase = String(formattedRow["CODE"]).toUpperCase();
           if (!warehouseMap.has(whsCodeUpperCase)) {
             // Warehouse not found - track and skip this row
-unmatchedWarehouses.set(
+            unmatchedWarehouses.set(
               whsCodeUpperCase,
               (unmatchedWarehouses.get(whsCodeUpperCase) || 0) + 1,
             );
@@ -450,7 +450,7 @@ unmatchedWarehouses.set(
             });
             continue;
           }
-          const warehouseId = warehouseMap.get(whsCodeUpperCase); // ✅ Extract warehouse_id
+          const warehouseId = warehouseMap.get(whsCodeUpperCase); // Extract warehouse_id
 
           // Step 4c: Lookup items by ITEMCODE to get cat01, cat02, etc.
           const itemCodeUpperCase = String(
@@ -510,7 +510,7 @@ unmatchedWarehouses.set(
             access_key_id: accessKeyId,
             status_id: 1,
           });
-          toInsertRowNumbers.push(rowNum); // ✅ Track row number
+          toInsertRowNumbers.push(rowNum); // Track row number
         } catch (rowError) {
           // Validation or lookup error - log and continue
           errors.push({
@@ -526,7 +526,7 @@ unmatchedWarehouses.set(
       total = total_items;
       for (let i = 0; i < total_items; i += batchSize) {
         const batch = toInsert.slice(i, i + batchSize);
-        const batchRowNumbers = toInsertRowNumbers.slice(i, i + batchSize); // ✅ Get corresponding row numbers
+        const batchRowNumbers = toInsertRowNumbers.slice(i, i + batchSize); // Get corresponding row numbers
 
         // Step 5a: Build unique keys for this batch
         const keys = batch.map((row) => ({
@@ -569,8 +569,8 @@ unmatchedWarehouses.set(
               await manager.getRepository(SalesTransaction).insert(batch);
             },
           );
-          inserted_count += batch.length; // ✅ Update count
-          inserted_row_numbers.push(...batchRowNumbers); // ✅ Track successful row numbers
+          inserted_count += batch.length; // Update count
+          inserted_row_numbers.push(...batchRowNumbers); // Track successful row numbers
         }
       }
 
