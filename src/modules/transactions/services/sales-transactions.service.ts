@@ -289,6 +289,7 @@ export class SalesTransactionsService {
     const inserted_row_numbers: number[] = []; // ✅ Track row numbers of successful inserts
     const unmatchedLocations = new Map<string, number>(); // Track unmatched locations
     const unmatchedItems = new Map<string, number>(); // Track unmatched items
+    const unmatchedWarehouses = new Map<string, number>(); // Track unmatched warehouses
     const toInsert: any[] = [];
     const toInsertRowNumbers: number[] = []; // ✅ Track original row numbers for toInsert
     let rows: any[] = []; // ✅ Declare outside try block
@@ -438,6 +439,10 @@ export class SalesTransactionsService {
           const whsCodeUpperCase = String(formattedRow["CODE"]).toUpperCase();
           if (!warehouseMap.has(whsCodeUpperCase)) {
             // Warehouse not found - track and skip this row
+unmatchedWarehouses.set(
+              whsCodeUpperCase,
+              (unmatchedWarehouses.get(whsCodeUpperCase) || 0) + 1,
+            );
             errors.push({
               row: rowNum,
               error: `Warehouse not found: ${whsCodeUpperCase}`,
@@ -586,6 +591,11 @@ export class SalesTransactionsService {
           .map(([item, count]) => `${item} (${count})`)
           .join(", ")} item(s) not matched.`;
       }
+      if (unmatchedWarehouses.size > 0) {
+        displayMessage += ` ${Array.from(unmatchedWarehouses.entries())
+          .map(([whs, count]) => `${whs} (${count})`)
+          .join(", ")} warehouse(s) not matched.`;
+      }
 
       // Detailed log for dwh_log (includes raw error data)
       logMessage += `\nProcessed: ${rows.length} rows (${total} passed validation)`;
@@ -604,6 +614,13 @@ export class SalesTransactionsService {
       if (unmatchedItems.size > 0) {
         logMessage += `\nUnmatched Items: ${Array.from(unmatchedItems.entries())
           .map(([item, count]) => `${item} (${count} rows)`)
+          .join(", ")}`;
+      }
+      if (unmatchedWarehouses.size > 0) {
+        logMessage += `\nUnmatched Warehouses: ${Array.from(
+          unmatchedWarehouses.entries(),
+        )
+          .map(([whs, count]) => `${whs} (${count} rows)`)
           .join(", ")}`;
       }
     } catch (err) {
