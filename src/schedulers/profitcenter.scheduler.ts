@@ -10,8 +10,8 @@ export class ProfitcenterScheduler {
     private readonly profitcenterSyncService: ProfitcenterSyncService,
   ) {}
 
-  //   @Cron(CronExpression.EVERY_30_MINUTES)
-  @Cron("*/5 * * * * *")
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  // @Cron("*/5 * * * * *")
   async handleCron() {
     try {
       const result = await this.profitcenterSyncService.syncProfitcenters(1000);
@@ -24,4 +24,3 @@ export class ProfitcenterScheduler {
     }
   }
 }
-

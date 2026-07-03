@@ -9,10 +9,10 @@ export class GLAccountScheduler {
   constructor(private readonly glAccountSyncService: GLAccountSyncService) {}
 
   // Every 30 minutes
-  // @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron(CronExpression.EVERY_30_MINUTES)
 
   // Every 5 seconds (for testing)
-  @Cron("*/5 * * * * *")
+  // @Cron("*/5 * * * * *")
   async handleCron() {
     try {
       const result = await this.glAccountSyncService.syncGLAccounts(1000);

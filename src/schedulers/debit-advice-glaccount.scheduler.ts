@@ -6,7 +6,7 @@ import { DebitAdviceGlAccountSyncService } from "src/modules/debit-advice-glacco
 export class DebitAdviceGlAccountScheduler {
   constructor(private readonly syncService: DebitAdviceGlAccountSyncService) {}
 
-  @Cron("*/5 * * * * *")
+  // @Cron("*/5 * * * * *")
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron() {
     await this.syncService.syncDebitAdviceGL();
