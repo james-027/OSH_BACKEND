@@ -157,6 +157,7 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),
+    ScheduleModule.forRoot(),
     DebitAdviceModule,
     UsersModule,
     EmployeesModule,
