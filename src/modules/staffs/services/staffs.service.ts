@@ -37,7 +37,7 @@ import {
   MODULE_IDS,
   ACTION_IDS,
   STATUS_IDS,
-  STATUS_NAMES,
+  NAMING_CONVENTION,
 } from "src/constants/customConstants";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -87,18 +87,19 @@ export class StaffsService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number, statusId?: number[]): Promise<any[]> {
+  async findAll(accessKeyId?: number, statusId?: number[], assignStatusId?: number[]): Promise<any[]> {
     try {
       const where: any = {};
 
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
-
-      if (statusId && statusId.length > 0) {
+      if (assignStatusId && assignStatusId.length > 0) {
+        where.assign_status_id = In(assignStatusId);
+      } else if (statusId && statusId.length > 0) {
         where.status_id = In(statusId);
+         where.assign_status_id = 13;
       }
-
       const staffs = await this.staffsRepository.find({
         where,
         relations: [
@@ -877,7 +878,6 @@ export class StaffsService {
     this.isTransferRunning = true;
 
     try {
-      logger.info("Checking for pending transfers...");
 
       const pendingTransfers = await this.staffTransfersRepository.find({
         where: {
@@ -887,15 +887,7 @@ export class StaffsService {
 
       logger.info(`Pending transfers found: ${pendingTransfers.length}`);
 
-      if (!pendingTransfers.length) {
-        logger.warn("No pending transfers found.");
-        return;
-      }
-
       for (const transfer of pendingTransfers) {
-        logger.info(
-          `Processing transfer ID ${transfer.id} for staff ${transfer.staff_id}`,
-        );
 
         const queryRunner =
           this.staffsRepository.manager.connection.createQueryRunner();
@@ -950,16 +942,12 @@ export class StaffsService {
           const newLocation = location.location_name ?? "N/A";
           const newVendor = vendor.service_provider_name ?? "N/A";
 
-          logger.info(`Updating staff record...`);
-
           await queryRunner.manager.update(Staff, transfer.staff_id, {
             location_id: transfer.new_location_id,
             vendor_id: transfer.new_vendor_id,
             updated_by: transfer.created_by,
             effectivity_date: transfer.effectivity_date,
           });
-
-          logger.info(`Staff update completed.`);
 
           await this.syncVendorAndSalary(
             queryRunner,
@@ -1125,7 +1113,6 @@ export class StaffsService {
             logger.error(err);
           }
 
-          logger.info(`Transfer ${transfer.id} completed successfully.`);
         } catch (err: any) {
           await queryRunner.rollbackTransaction();
 
@@ -1263,7 +1250,7 @@ export class StaffsService {
     }
   }
 
-  async toggleStatus(
+  async revertStaff(
     id: number,
     revertStaffDto: RevertStaffDto,
     userId: number,
@@ -1436,7 +1423,7 @@ export class StaffsService {
         location_id: staff.location_id,
         vendor_id: staff.vendor_id,
         effectivity_date: updateStaffDeployDto.effectivity_date,
-        end_date: updateStaffDeployDto.end_date,
+        end_date: updateStaffDeployDto.end_date || null,
         remarks: updateStaffDeployDto.remarks,
         created_by: userId,
         updated_by: userId,
@@ -1450,10 +1437,58 @@ export class StaffsService {
         },
       );
 
+        const isBuddyUp = updateStaffDeployDto.action === "buddyup";
+        const assignStatusId = isBuddyUp ? STATUS_IDS.TEMPORARY_ASSIGNMENT : STATUS_IDS.WITH_ASSIGNMENT;
+        const actionId = isBuddyUp ? ACTION_IDS.BUDDY_UP : ACTION_IDS.DEPLOY;
+
       if (staffWarehouse) {
+
+ 
+
         await this.staffsRepository.update(id, {
-          assign_status_id: 21,
+          assign_status_id: assignStatusId,
+          warehouse_id: staffWarehouseDetails.warehouse_id,
+          effectivity_date: staffWarehouseDetails.effectivity_date,
+          updated_by: staffWarehouseDetails.updated_by,
         });
+
+        const updatedStaff = await this.staffsRepository.findOne({
+          where: { id },
+        });
+
+        await this.staffHistoriesRepository.save({
+        staff_id: updatedStaff.id,
+        staff_code: updatedStaff.staff_code,
+        last_name: updatedStaff.last_name,
+        first_name: updatedStaff.first_name,
+        email: updatedStaff.email,
+        middle_name: updatedStaff.middle_name,
+        location_id: updatedStaff.location_id,
+        vendor_id: updatedStaff.vendor_id,
+        assign_status_id: updatedStaff.assign_status_id,
+        position_id: updatedStaff.position_id,
+        access_key_id: updatedStaff.access_key_id,
+        sss_number: updatedStaff.sss_number,
+        pagibig_number: updatedStaff.pagibig_number,
+        tin: updatedStaff.tin,
+        remarks: updatedStaff.remarks,
+        overall_remarks: updatedStaff.overall_remarks,
+        store_request: updatedStaff.store_request,
+        hired_date: updatedStaff.hired_date,
+        to_hr_date: updatedStaff.to_hr_date,
+        to_sts_date: updatedStaff.to_sts_date,
+        approved_eprf_date: updatedStaff.approved_eprf_date,
+        req_completion_date: updatedStaff.req_completion_date,
+        actual_deployment_date: updatedStaff.actual_deployment_date,
+        separated_date: updatedStaff.separated_date,
+        birthday: updatedStaff.birthday,
+        contact_number: updatedStaff.contact_number,
+        status_id: updatedStaff.status_id,
+        warehouse_id: updatedStaff.warehouse_id,
+        effectivity_date: updatedStaff.effectivity_date,
+        created_by: userId,
+        updated_by: userId,
+      });
       }
 
       await this.userAuditTrailCreateService.create(
@@ -1461,7 +1496,7 @@ export class StaffsService {
           service: "StaffsService",
           method: "staffTransfer",
           raw_data: JSON.stringify(staffWarehouse),
-          description: `Staff Deploy executed for ${id} - ${staff.first_name} ${staff.last_name} to Warehouse: ${staffWarehouseDetails.warehouse.warehouse_name} `,
+          description: `Staff Deploy executed for ${id} - ${staff.first_name} ${staff.last_name} to ${NAMING_CONVENTION.WAREHOUSE}: ${staffWarehouseDetails.warehouse.warehouse_name} `,
           status_id: 1,
         },
         userId,
@@ -1470,9 +1505,9 @@ export class StaffsService {
       try {
         await this.actionLogsService.logAction({
           module_id: MODULE_IDS.STAFFS,
-          ref_id: staffWarehouse.id,
-          action_id: ACTION_IDS.DEPLOY,
-          description: `Staff ${staff.first_name} ${staff.last_name} Deployed to Warehouse: ${staffWarehouseDetails.warehouse.warehouse_name}`,
+          ref_id: staff.id,
+          action_id: actionId,
+          description: `Staff ${staff.first_name} ${staff.last_name} Deployed to ${NAMING_CONVENTION.WAREHOUSE}: ${staffWarehouseDetails.warehouse.warehouse_name}`,
           raw_data: JSON.stringify({
             staffWarehouse,
           }),
@@ -1486,6 +1521,7 @@ export class StaffsService {
         this.responseMapperService.mapEntityToResponse(staffWarehouse);
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate("staff_warehouses", response.id, response);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -1677,7 +1713,6 @@ export class StaffsService {
           existingRecord.vendor_id = vendor.id;
           existingRecord.position_id = position.id;
           existingRecord.access_key_id = accessKeyId;
-          existingRecord.assign_status_id = 13;
           existingRecord.store_request = row["Store Request"];
           existingRecord.sss_number = row["SSS Number"];
           existingRecord.tin = row["TIN"];
@@ -2024,5 +2059,75 @@ export class StaffsService {
   async findOneHistory(ref_id: number) {
     const module_id = MODULE_IDS.STAFFS;
     return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+  }
+
+  async toggleStatus(id: number, userId: number): Promise<any> {
+    try {
+      const staff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      if (!staff) {
+        throw new NotFoundException(`Staff with ID ${id} not found`);
+      }
+
+      const updatedByUser = await this.usersService.findUserById(userId);
+
+      if (!updatedByUser) {
+        throw new BadRequestException("Authenticated user not found");
+      }
+
+      const newStatusId = staff.status_id === 1 ? 2 : 1;
+
+      await this.staffsRepository.update(id, {
+        status_id: newStatusId,
+        updated_by: userId,
+      });
+
+      const updatedStaff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      if (!updatedStaff) {
+        throw new Error("Failed to retrieve updated staff");
+      }
+
+      // Audit Trail
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffsService",
+          method: "toggleStatus",
+          raw_data: JSON.stringify(updatedStaff),
+          description: `${
+            newStatusId === 1 ? "Activated" : "Deactivated"
+          } staff ${updatedStaff.first_name} ${updatedStaff.last_name}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedStaff);
+
+      // SSE Events
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return response;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+    throw new Error("Failed to process staff transfer");
+    }
   }
 }

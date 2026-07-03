@@ -42,6 +42,7 @@ export class StaffsController {
 async findAll(
   @Request() req,
   @Query("status_id") statusId?: string,
+   @Query("assign_status_id") assignStatusId?: string,
 ) {
   const accessKeyId = req.user.current_access_key;
 
@@ -49,7 +50,11 @@ async findAll(
     ? statusId.split(",").map(Number)
     : undefined;
 
-  return this.staffsService.findAll(accessKeyId, parsedStatusId);
+      const parsedAssignStatusId = assignStatusId
+    ? assignStatusId.split(",").map(Number)
+    : undefined;
+
+  return this.staffsService.findAll(accessKeyId, parsedStatusId,parsedAssignStatusId);
 }
 
   @Get(":id")
@@ -78,17 +83,15 @@ async findAll(
   }
 
   @Patch(":id/revert-staff")
-  @RequirePermissions({ module: "STAFFS", action: "ACTIVATE" })
-  async toggleStatusActivate(
+  @RequirePermissions({ module: "STAFFS", action: "REVERT" })
+  async updateRevertStaff(
     @Param("id", ParseIntPipe) id: number,
     @Body() revertStaffDto: RevertStaffDto,
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffsService.toggleStatus(id,revertStaffDto,userId,);
+    return this.staffsService.revertStaff(id,revertStaffDto,userId,);
   }
-
-
 
   @Post("upload-excel")
   @UseInterceptors(
@@ -119,7 +122,6 @@ async findAll(
     return this.staffsService.findOneHistory(id);
   }
 
-
   
   @Patch(":id/transfer")
   @RequirePermissions({ module: "STAFFS", action: "TRANSFER" })
@@ -132,7 +134,7 @@ async findAll(
     return this.staffsService.staffTransfer(id, updateStaffTransferDto, userId);
   }
 
-  @Post(":id/deploy")
+  @Patch(":id/deploy")
   @RequirePermissions({ module: "STAFFS", action: "DEPLOY" })
   async updateStaffDeploy(
     @Param("id", ParseIntPipe) id: number,
@@ -143,4 +145,27 @@ async findAll(
     const accessKeyId = req.user.current_access_key;
     return this.staffsService.staffDeploy(id, updateStaffDeployDto, userId,accessKeyId);
   }
+
+    @Patch(":id/toggle-status-activate")
+  @RequirePermissions({ module: "STAFFS", action: "ACTIVATE" })
+  async activateStatus(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    const userId = req.user.id;
+    const staff = await this.staffsService.findOne(id);
+    if (staff.status_id === 1) return staff;
+    await this.staffsService.toggleStatus(id, userId);
+    return this.staffsService.findOne(id);
+  }
+
+    @Patch(":id/toggle-status-deactivate")
+    @RequirePermissions({ module: "STAFFS", action: "DEACTIVATE" })
+    async deactivateStatus(
+      @Param("id", ParseIntPipe) id: number,
+      @Request() req,
+    ) {
+      const userId = req.user.id;
+      const staff = await this.staffsService.findOne(id);
+      if (staff.status_id === 2) return staff;
+      await this.staffsService.toggleStatus(id, userId);
+      return this.staffsService.findOne(id);
+    }
 }

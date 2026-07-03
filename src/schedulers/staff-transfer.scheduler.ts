@@ -12,11 +12,7 @@ export class StaffTransferScheduler {
   @Cron(CronExpression.EVERY_SECOND)
   async processScheduledTransfers() {
     try {
-      logger.info("Starting scheduled staff transfer process...");
-
       await this.staffsService.processScheduledTransfers();
-
-      logger.info("Scheduled staff transfer process completed.");
     } catch (error: any) {
       logger.error(
         `Scheduled staff transfer process failed: ${error.message}`,

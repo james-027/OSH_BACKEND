@@ -11,6 +11,9 @@ export const MODULE_IDS = {
   STAFFS: 40,
 } as const;
 
+export const NAMING_CONVENTION = {
+  WAREHOUSE: "Store",
+} as const;
 // ============= ACTION IDs =============
 export const ACTION_IDS = {
   ADD: 1,
@@ -23,6 +26,7 @@ export const ACTION_IDS = {
   REVERT: 10,
   TRANSFER:11,
   DEPLOY:12,
+  BUDDY_UP:13,
 } as const;
 
 // ============= STATUS IDs =============
@@ -34,6 +38,8 @@ export const STATUS_IDS = {
   FOR_APPROVAL: 6,
   APPROVED: 7,
   TERMINATED: 18,
+  WITH_ASSIGNMENT: 21,
+  TEMPORARY_ASSIGNMENT: 26,
 } as const;
 
 export const STATUS_NAMES = {
