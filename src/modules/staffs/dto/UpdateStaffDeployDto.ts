@@ -16,4 +16,9 @@ export class UpdateStaffDeployDto {
   @IsOptional()
   @IsString()
   remarks: string;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
+  
 }

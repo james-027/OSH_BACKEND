@@ -144,47 +144,64 @@ export class StaffTrainingService {
     }
   }
 
-async create(
-  createStaffTrainingDto: CreateStaffTrainingDto,
-  userId: number,
-  accessKeyId?: number,
-): Promise<any> {
-  try {
-    const createdByUser = await this.usersService.findUserById(userId);
+  async create(
+    createStaffTrainingDto: CreateStaffTrainingDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
+    try {
+      const createdByUser = await this.usersService.findUserById(userId);
 
-    if (!createdByUser) {
-      throw new BadRequestException("Authenticated user not found");
-    }
+      if (!createdByUser) {
+        throw new BadRequestException("Authenticated user not found");
+      }
 
-    const savedTrainings = [];
+      const savedTrainings = [];
 
-    const staff = await this.staffRepository.findOne({
-      where: { id: createStaffTrainingDto.staff_id },
-      relations: ["vendor", "location"],
-    });
-
-
-
-    if (!staff) {
-      throw new BadRequestException("Staff not found");
-    }
-
-    let staffCodeGenerated = false;
-
-    for (const item of createStaffTrainingDto.trainings) {
-      let staffTraining;
-
-      const training = await this.trainingsRepository.findOne({
-        where: { id: item.training_id },
+      const staff = await this.staffRepository.findOne({
+        where: { id: createStaffTrainingDto.staff_id },
+        relations: ["vendor", "location"],
       });
 
-      if (item.staff_training_id) {
-        staffTraining = await this.staffTrainingsRepository.findOne({
-          where: { id: item.staff_training_id },
+
+
+      if (!staff) {
+        throw new BadRequestException("Staff not found");
+      }
+
+      let staffCodeGenerated = false;
+
+      for (const item of createStaffTrainingDto.trainings) {
+        let staffTraining;
+
+        const training = await this.trainingsRepository.findOne({
+          where: { id: item.training_id },
         });
 
-        if (staffTraining) {
-          Object.assign(staffTraining, {
+        if (item.staff_training_id) {
+          staffTraining = await this.staffTrainingsRepository.findOne({
+            where: { id: item.staff_training_id },
+          });
+
+          if (staffTraining) {
+            Object.assign(staffTraining, {
+              training_id: item.training_id,
+              employee_id: item.employee_id,
+              sub_status_id: item.sub_status_id,
+              warehouse_id: item.warehouse_id || null,
+              training_start_date: item.training_start_date,
+              training_end_date: item.training_end_date,
+              ratings: item.ratings,
+              remarks: item.remarks,
+              status_id: item.status_id ?? 1,
+              updated_by: userId,
+            });
+          }
+        }
+
+        if (!staffTraining) {
+          staffTraining = this.staffTrainingsRepository.create({
+            staff_id: createStaffTrainingDto.staff_id,
             training_id: item.training_id,
             employee_id: item.employee_id,
             sub_status_id: item.sub_status_id,
@@ -194,171 +211,154 @@ async create(
             ratings: item.ratings,
             remarks: item.remarks,
             status_id: item.status_id ?? 1,
+            created_by: userId,
             updated_by: userId,
           });
         }
-      }
 
-      if (!staffTraining) {
-        staffTraining = this.staffTrainingsRepository.create({
-          staff_id: createStaffTrainingDto.staff_id,
-          training_id: item.training_id,
-          employee_id: item.employee_id,
-          sub_status_id: item.sub_status_id,
-          warehouse_id: item.warehouse_id || null,
-          training_start_date: item.training_start_date,
-          training_end_date: item.training_end_date,
-          ratings: item.ratings,
-          remarks: item.remarks,
-          status_id: item.status_id ?? 1,
-          created_by: userId,
-          updated_by: userId,
-        });
-      }
+        const saved = await this.staffTrainingsRepository.save(staffTraining);
+        savedTrainings.push(saved);
 
-      const saved = await this.staffTrainingsRepository.save(staffTraining);
-      savedTrainings.push(saved);
-
-      const trainingStatus = await this.statusRepository.findOne({
-        where: { id: saved.sub_status_id },
-      });
-
-
-      try {
-        await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS,
-          ref_id: staff.id,
-          action_id: item.staff_training_id
-            ? ACTION_IDS.EDIT
-            : ACTION_IDS.ADD,
-          description: item.staff_training_id
-            ? `Updated training ${training?.training_name} to ${trainingStatus?.status_name ?? "Unknown Status"} for ${staff.first_name} ${staff.last_name}`
-            : `Created training ${training?.training_name} with status ${trainingStatus?.status_name ?? "Unknown Status"} for ${staff.first_name} ${staff.last_name}`,
-          raw_data: JSON.stringify(saved),
-          created_by: userId,
-        });
-      } catch (err) {
-        logger.error("Action log failed for staff training:", err);
-      }
-
-
-      try {
-        this.sseEventEmitter.emitCreate("staff_trainings", saved.id, saved);
-        this.sseEventEmitter.emitCreate("staffs", saved.id, saved);
-      } catch (err) {
-        logger.error("SSE event failed:", err);
-      }
-    }
-
-
-      if (!createStaffTrainingDto.isDraft) { 
-        const trainings = createStaffTrainingDto.trainings ?? [];
-
-        const allPassed = trainings.every((t) => t.sub_status_id === 19);
-
-        const failedTraining = trainings.find(
-          (t) => t.sub_status_id !== 19,
-        );
-
-        await this.staffRepository.update(staff.id, {
-          status_id: allPassed ? 1 : failedTraining?.sub_status_id,
-          updated_by: userId,
+        const trainingStatus = await this.statusRepository.findOne({
+          where: { id: saved.sub_status_id },
         });
 
-        if (allPassed && !staff.staff_code && !staffCodeGenerated) {
-          const serviceProviderCode =
-            staff.vendor?.service_provider_code ?? "";
 
-          const locationCode =
-            staff.location?.location_code ?? "";
+        try {
+          await this.actionLogsService.logAction({
+            module_id: MODULE_IDS.STAFFS,
+            ref_id: staff.id,
+            action_id: item.staff_training_id
+              ? ACTION_IDS.EDIT
+              : ACTION_IDS.ADD,
+            description: item.staff_training_id
+              ? `Updated training ${training?.training_name} to ${trainingStatus?.status_name ?? "Unknown Status"} for ${staff.first_name} ${staff.last_name}`
+              : `Created training ${training?.training_name} with status ${trainingStatus?.status_name ?? "Unknown Status"} for ${staff.first_name} ${staff.last_name}`,
+            raw_data: JSON.stringify(saved),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error("Action log failed for staff training:", err);
+        }
 
-          const prefix = `${serviceProviderCode}${locationCode}`;
 
-          const trans_number =
-            await this.commonUtilitiesService.generateTransactionNumber({
-              transaction_type: `STAFF CODE ${locationCode}`,
-              vendor_id: staff.vendor_id,
-              location_id: staff.location_id,
-              access_key_id: accessKeyId,
-              format: "D{abbr}{key}{year}-{seq:6}",
-              reset_per_year: true,
-              currentDate: new Date(),
-              abbr: staff.vendor?.service_provider_code ?? "",
-            });
+        try {
+          this.sseEventEmitter.emitCreate("staff_trainings", saved.id, saved);
+          this.sseEventEmitter.emitCreate("staffs", saved.id, saved);
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
 
-          const series = trans_number.match(/\d+$/)?.[0];
 
-          const generatedStaffCode = `${prefix}-${series}`;
+        if (!createStaffTrainingDto.isDraft) { 
+          const trainings = createStaffTrainingDto.trainings ?? [];
+
+          const allPassed = trainings.every((t) => t.sub_status_id === 19);
+
+          const failedTraining = trainings.find(
+            (t) => t.sub_status_id !== 19,
+          );
 
           await this.staffRepository.update(staff.id, {
-            staff_code: generatedStaffCode,
+            status_id: allPassed ? 1 : failedTraining?.sub_status_id,
             updated_by: userId,
           });
 
-          try {
-            await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STAFFS,
-              ref_id: staff.id,
-              action_id: ACTION_IDS.EDIT,
-              description: `Generated staff code '${generatedStaffCode}' for ${staff.first_name} ${staff.last_name}`,
-              raw_data: JSON.stringify({
-                staff_id: staff.id,
-                old_staff_code: staff.staff_code,
-                new_staff_code: generatedStaffCode,
-              }),
-              created_by: userId,
-            });
-          } catch (err) {
-            logger.error("Action log failed for staff code generation:", err);
-          }
+          if (allPassed && !staff.staff_code && !staffCodeGenerated) {
+            const serviceProviderCode =
+              staff.vendor?.service_provider_code ?? "";
 
-          staffCodeGenerated = true;
+            const locationCode =
+              staff.location?.location_code ?? "";
+
+            const prefix = `${serviceProviderCode}${locationCode}`;
+
+            const trans_number =
+              await this.commonUtilitiesService.generateTransactionNumber({
+                transaction_type: `STAFF CODE ${locationCode}`,
+                vendor_id: staff.vendor_id,
+                location_id: staff.location_id,
+                access_key_id: accessKeyId,
+                format: "D{abbr}{key}{year}-{seq:6}",
+                reset_per_year: true,
+                currentDate: new Date(),
+                abbr: staff.vendor?.service_provider_code ?? "",
+              });
+
+            const series = trans_number.match(/\d+$/)?.[0];
+
+            const generatedStaffCode = `${prefix}-${series}`;
+
+            await this.staffRepository.update(staff.id, {
+              staff_code: generatedStaffCode,
+              updated_by: userId,
+            });
+
+            try {
+              await this.actionLogsService.logAction({
+                module_id: MODULE_IDS.STAFFS,
+                ref_id: staff.id,
+                action_id: ACTION_IDS.EDIT,
+                description: `Generated staff code '${generatedStaffCode}' for ${staff.first_name} ${staff.last_name}`,
+                raw_data: JSON.stringify({
+                  staff_id: staff.id,
+                  old_staff_code: staff.staff_code,
+                  new_staff_code: generatedStaffCode,
+                }),
+                created_by: userId,
+              });
+            } catch (err) {
+              logger.error("Action log failed for staff code generation:", err);
+            }
+
+            staffCodeGenerated = true;
+          }
         }
+
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffTrainingsService",
+          method: "upsert-create",
+          raw_data: JSON.stringify(savedTrainings),
+          description: `Upserted ${savedTrainings.length} staff trainings`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+
+      const response = savedTrainings[0];
+
+      const staffTrainingWithRelations =
+        await this.staffTrainingsRepository.findOne({
+          where: { id: response.id },
+          relations: [
+            "status",
+            "createdBy",
+            "updatedBy",
+            "staff",
+            "warehouse",
+            "employee",
+          ],
+        });
+
+      if (!staffTrainingWithRelations) {
+        throw new Error("Failed to retrieve staff training");
       }
 
+      return this.responseMapperService.mapEntityToResponse(
+        staffTrainingWithRelations,
+      );
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
 
-    await this.userAuditTrailCreateService.create(
-      {
-        service: "StaffTrainingsService",
-        method: "upsert-create",
-        raw_data: JSON.stringify(savedTrainings),
-        description: `Upserted ${savedTrainings.length} staff trainings`,
-        status_id: 1,
-      },
-      userId,
-    );
-
-
-    const response = savedTrainings[0];
-
-    const staffTrainingWithRelations =
-      await this.staffTrainingsRepository.findOne({
-        where: { id: response.id },
-        relations: [
-          "status",
-          "createdBy",
-          "updatedBy",
-          "staff",
-          "warehouse",
-          "employee",
-        ],
-      });
-
-    if (!staffTrainingWithRelations) {
-      throw new Error("Failed to retrieve staff training");
+      throw new Error("Failed to upsert staff training");
     }
-
-    return this.responseMapperService.mapEntityToResponse(
-      staffTrainingWithRelations,
-    );
-  } catch (error) {
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-
-    throw new Error("Failed to upsert staff training");
   }
-}
 
   async update(
     id: number,
