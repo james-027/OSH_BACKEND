@@ -489,7 +489,8 @@ export class SalesTransactionsService {
             quantity: Number(formattedRow["QUANTITY"]) || 0,
             converted_quantity: Number(formattedRow["QUANTITY"]) || 0,
             line_total: Number(formattedRow["LINE TOTAL"]) || 0,
-            unit_price: Number(formattedRow["UNITPRICE"]) || 0,
+            unit_price:
+              Number(Number(formattedRow["UNITPRICE"]).toFixed(6)) || 0, // Round to 6 decimals to match DB precision
             vat_amount: Number(formattedRow["VATAMOUNT"]) || 0,
             line_cost: Number(formattedRow["LINECOST"]) || 0,
             item_cost: Number(formattedRow["ITEMCOST"]) || 0,
