@@ -15,8 +15,7 @@ export class CreateSupplierDto {
     message: "Supplier code must be a string",
   })
   @MaxLength(100, {
-    message:
-      "Supplier code cannot be longer than 100 characters",
+    message: "Supplier code cannot be longer than 100 characters",
   })
   supplier_code!: string;
 
@@ -25,8 +24,7 @@ export class CreateSupplierDto {
     message: "Supplier name must be a string",
   })
   @MaxLength(255, {
-    message:
-      "Supplier name cannot be longer than 255 characters",
+    message: "Supplier name cannot be longer than 255 characters",
   })
   supplier_name?: string;
 
@@ -35,8 +33,7 @@ export class CreateSupplierDto {
     message: "Old code must be a string",
   })
   @MaxLength(100, {
-    message:
-      "Old code cannot be longer than 100 characters",
+    message: "Old code cannot be longer than 100 characters",
   })
   old_code?: string;
 
@@ -45,8 +42,27 @@ export class CreateSupplierDto {
     message: "Status ID must be an integer",
   })
   @Min(1, {
-    message:
-      "Status ID must be a positive integer",
+    message: "Status ID must be a positive integer",
   })
   status_id?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  group_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  group_code?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  taxid?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  company?: string;
 }

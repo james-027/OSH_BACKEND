@@ -15,6 +15,8 @@ import { SSEModule } from "../sse/sse.module";
 
 import { Status } from "src/entities/Status";
 import { User } from "src/entities/User";
+import { GLAccountScheduler } from "src/schedulers/glaccount.scheduler";
+import { GLAccountSyncService } from "./services/glaccount-sync.service";
 
 @Module({
   imports: [
@@ -32,7 +34,12 @@ import { User } from "src/entities/User";
 
   controllers: [GlAccountsController],
 
-  providers: [GlAccountsService, ResponseMapperService],
+  providers: [
+    GlAccountsService,
+    ResponseMapperService,
+    GLAccountScheduler,
+    GLAccountSyncService,
+  ],
 
   exports: [GlAccountsService],
 })

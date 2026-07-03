@@ -114,6 +114,7 @@ import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,

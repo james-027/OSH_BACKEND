@@ -48,108 +48,58 @@ export class ProfitcenterService {
   // Get all profit centers
   async findAll(): Promise<any[]> {
     try {
-      const profitcenters =
-        await this.profitcenterRepository.find({
-          relations: ["status"],
-        });
+      const profitcenters = await this.profitcenterRepository.find({
+        relations: ["status", "companyCode"],
+      });
 
-      return profitcenters.map(
-        (profitcenter) => ({
-          id: profitcenter.id,
-
-          profitcenter_code:
-            profitcenter.profitcenter_code,
-
-          profitcenter_name:
-            profitcenter.profitcenter_name,
-
-          old_code:
-            profitcenter.old_code,
-
-          status_id:
-            profitcenter.status_id,
-
-          status_name:
-            profitcenter.status
-              ? profitcenter.status
-                  .status_name
-              : null,
-
-          created_at:
-            profitcenter.created_at,
-
-          updated_at:
-            profitcenter.updated_at,
-
-          created_by:
-            profitcenter.created_by,
-        }),
-      );
+      return profitcenters.map((profitcenter) => ({
+        id: profitcenter.id,
+        profitcenter_code: profitcenter.profitcenter_code,
+        profitcenter_name: profitcenter.profitcenter_name,
+        old_code: profitcenter.old_code,
+        business_center: profitcenter.business_center,
+        company: profitcenter.companyCode?.company_abbr ?? null,
+        status_id: profitcenter.status_id,
+        status_name: profitcenter.status?.status_name ?? null,
+        created_at: profitcenter.created_at,
+        updated_at: profitcenter.updated_at,
+        created_by: profitcenter.created_by,
+      }));
     } catch (error) {
-      logger.error(
-        "Error fetching profit centers:",
-        error,
-      );
+      logger.error("Error fetching profit centers:", error);
 
-      throw new Error(
-        "Failed to fetch profit centers",
-      );
+      throw new Error("Failed to fetch profit centers");
     }
   }
 
   // Get single profit center
   async findOne(id: number): Promise<any> {
     try {
-      const profitcenter =
-        await this.profitcenterRepository.findOne(
-          {
-            where: { id },
+      const profitcenter = await this.profitcenterRepository.findOne({
+        where: { id },
 
-            relations: ["status"],
-          },
-        );
+        relations: ["status", "companyCode"],
+      });
 
       if (!profitcenter) {
-        throw new NotFoundException(
-          `Profitcenter with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Profitcenter with ID ${id} not found`);
       }
 
       return {
         id: profitcenter.id,
-
-        profitcenter_code:
-          profitcenter.profitcenter_code,
-
-        profitcenter_name:
-          profitcenter.profitcenter_name,
-
-        old_code:
-          profitcenter.old_code,
-
-        status_id:
-          profitcenter.status_id,
-
-        status_name:
-          profitcenter.status
-            ? profitcenter.status
-                .status_name
-            : null,
-
-        created_at:
-          profitcenter.created_at,
-
-        updated_at:
-          profitcenter.updated_at,
-
-        created_by:
-          profitcenter.created_by,
+        profitcenter_code: profitcenter.profitcenter_code,
+        profitcenter_name: profitcenter.profitcenter_name,
+        old_code: profitcenter.old_code,
+        business_center: profitcenter.business_center,
+        company: profitcenter.companyCode?.company_abbr ?? null,
+        status_id: profitcenter.status_id,
+        status_name: profitcenter.status?.status_name ?? null,
+        created_at: profitcenter.created_at,
+        updated_at: profitcenter.updated_at,
+        created_by: profitcenter.created_by,
       };
     } catch (error) {
-      logger.error(
-        "Error fetching profit center:",
-        error,
-      );
+      logger.error("Error fetching profit center:", error);
 
       throw error;
     }
@@ -160,35 +110,24 @@ export class ProfitcenterService {
     createProfitcenterDto: CreateProfitcenterDto,
     userId: number,
   ): Promise<any> {
-    const { status_id } =
-      createProfitcenterDto;
+    const { status_id } = createProfitcenterDto;
 
     try {
-      const existingProfitcenter =
-        await this.profitcenterRepository.findOne(
-          {
-            where: {
-              profitcenter_code:
-                createProfitcenterDto.profitcenter_code,
-            },
-          },
-        );
+      const existingProfitcenter = await this.profitcenterRepository.findOne({
+        where: {
+          profitcenter_code: createProfitcenterDto.profitcenter_code,
+        },
+      });
 
       if (existingProfitcenter) {
-        throw new BadRequestException(
-          "Profit center code already exists",
-        );
+        throw new BadRequestException("Profit center code already exists");
       }
 
-      const resolvedStatusId =
-        status_id || 1;
+      const resolvedStatusId = status_id || 1;
 
-      const statusEntity =
-        await this.statusRepository.findOneBy(
-          {
-            id: resolvedStatusId,
-          },
-        );
+      const statusEntity = await this.statusRepository.findOneBy({
+        id: resolvedStatusId,
+      });
 
       if (!statusEntity) {
         throw new BadRequestException(
@@ -196,31 +135,19 @@ export class ProfitcenterService {
         );
       }
 
-      const newProfitcenter =
-        this.profitcenterRepository.create({
-          profitcenter_code:
-            createProfitcenterDto.profitcenter_code,
-
-          profitcenter_name:
-            createProfitcenterDto.profitcenter_name ||
-            null,
-
-          old_code:
-            createProfitcenterDto.old_code ||
-            null,
-
-          status_id:
-            resolvedStatusId,
-
-          status: statusEntity,
-
-          created_by: userId,
-        });
+      const newProfitcenter = this.profitcenterRepository.create({
+        profitcenter_code: createProfitcenterDto.profitcenter_code,
+        profitcenter_name: createProfitcenterDto.profitcenter_name || null,
+        old_code: createProfitcenterDto.old_code || null,
+        business_center: createProfitcenterDto.business_center || null,
+        company: createProfitcenterDto.company || null,
+        status_id: resolvedStatusId,
+        status: statusEntity,
+        created_by: userId,
+      });
 
       const savedProfitcenter =
-        await this.profitcenterRepository.save(
-          newProfitcenter,
-        );
+        await this.profitcenterRepository.save(newProfitcenter);
 
       await this.userAuditTrailCreateService.create(
         {
@@ -228,9 +155,7 @@ export class ProfitcenterService {
 
           method: "CREATE",
 
-          raw_data: JSON.stringify(
-            savedProfitcenter,
-          ),
+          raw_data: JSON.stringify(savedProfitcenter),
 
           description: `Created profit center: ${savedProfitcenter.profitcenter_code}`,
 
@@ -247,38 +172,26 @@ export class ProfitcenterService {
       return {
         id: savedProfitcenter.id,
 
-        profitcenter_code:
-          savedProfitcenter.profitcenter_code,
+        profitcenter_code: savedProfitcenter.profitcenter_code,
 
-        profitcenter_name:
-          savedProfitcenter.profitcenter_name,
+        profitcenter_name: savedProfitcenter.profitcenter_name,
 
-        old_code:
-          savedProfitcenter.old_code,
+        old_code: savedProfitcenter.old_code,
 
-        status_id:
-          savedProfitcenter.status_id,
+        status_id: savedProfitcenter.status_id,
 
-        status_name:
-          savedProfitcenter.status
-            ? savedProfitcenter.status
-                .status_name
-            : null,
+        status_name: savedProfitcenter.status
+          ? savedProfitcenter.status.status_name
+          : null,
 
-        created_at:
-          savedProfitcenter.created_at,
+        created_at: savedProfitcenter.created_at,
 
-        updated_at:
-          savedProfitcenter.updated_at,
+        updated_at: savedProfitcenter.updated_at,
 
-        created_by:
-          savedProfitcenter.created_by,
+        created_by: savedProfitcenter.created_by,
       };
     } catch (error) {
-      logger.error(
-        "Error creating profit center:",
-        error,
-      );
+      logger.error("Error creating profit center:", error);
 
       throw error;
     }
@@ -291,17 +204,12 @@ export class ProfitcenterService {
     userId: number,
   ): Promise<any> {
     try {
-      const profitcenter =
-        await this.profitcenterRepository.findOne(
-          {
-            where: { id },
-          },
-        );
+      const profitcenter = await this.profitcenterRepository.findOne({
+        where: { id },
+      });
 
       if (!profitcenter) {
-        throw new NotFoundException(
-          `Profitcenter with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Profitcenter with ID ${id} not found`);
       }
 
       if (
@@ -309,49 +217,41 @@ export class ProfitcenterService {
         updateProfitcenterDto.profitcenter_code !==
           profitcenter.profitcenter_code
       ) {
-        const existing =
-          await this.profitcenterRepository.findOne(
-            {
-              where: {
-                profitcenter_code:
-                  updateProfitcenterDto.profitcenter_code,
-              },
-            },
-          );
+        const existing = await this.profitcenterRepository.findOne({
+          where: {
+            profitcenter_code: updateProfitcenterDto.profitcenter_code,
+          },
+        });
 
         if (existing) {
-          throw new BadRequestException(
-            "Profit center code already exists",
-          );
+          throw new BadRequestException("Profit center code already exists");
         }
       }
 
       Object.assign(profitcenter, {
         profitcenter_code:
-          updateProfitcenterDto.profitcenter_code ||
+          updateProfitcenterDto.profitcenter_code ??
           profitcenter.profitcenter_code,
 
         profitcenter_name:
-          updateProfitcenterDto.profitcenter_name ||
+          updateProfitcenterDto.profitcenter_name ??
           profitcenter.profitcenter_name,
 
-        old_code:
-          updateProfitcenterDto.old_code ||
-          profitcenter.old_code,
+        old_code: updateProfitcenterDto.old_code ?? profitcenter.old_code,
+
+        business_center:
+          updateProfitcenterDto.business_center ?? profitcenter.business_center,
+
+        company: updateProfitcenterDto.company ?? profitcenter.company,
       });
 
-      await this.profitcenterRepository.save(
-        profitcenter,
-      );
+      await this.profitcenterRepository.save(profitcenter);
 
-      const updatedProfitcenter =
-        await this.profitcenterRepository.findOne(
-          {
-            where: { id },
+      const updatedProfitcenter = await this.profitcenterRepository.findOne({
+        where: { id },
 
-            relations: ["status"],
-          },
-        );
+        relations: ["status"],
+      });
 
       await this.userAuditTrailCreateService.create(
         {
@@ -359,15 +259,11 @@ export class ProfitcenterService {
 
           method: "EDIT",
 
-          raw_data: JSON.stringify(
-            updatedProfitcenter,
-          ),
+          raw_data: JSON.stringify(updatedProfitcenter),
 
           description: `Updated profit center: ${updatedProfitcenter.profitcenter_code}`,
 
-          status_id:
-            updatedProfitcenter.status_id ||
-            1,
+          status_id: updatedProfitcenter.status_id || 1,
         },
         userId,
       );
@@ -380,68 +276,43 @@ export class ProfitcenterService {
       return {
         ...updatedProfitcenter,
 
-        status_name:
-          updatedProfitcenter.status
-            ? updatedProfitcenter.status
-                .status_name
-            : null,
+        status_name: updatedProfitcenter.status
+          ? updatedProfitcenter.status.status_name
+          : null,
       };
     } catch (error) {
-      logger.error(
-        "Error updating profit center:",
-        error,
-      );
+      logger.error("Error updating profit center:", error);
 
       throw error;
     }
   }
 
   // Toggle status
-  async toggleStatus(
-    id: number,
-    userId: number,
-  ) {
-    const profitcenter =
-      await this.profitcenterRepository.findOne(
-        {
-          where: { id },
-        },
-      );
+  async toggleStatus(id: number, userId: number) {
+    const profitcenter = await this.profitcenterRepository.findOne({
+      where: { id },
+    });
 
     if (!profitcenter) {
-      throw new NotFoundException(
-        "Profit center not found.",
-      );
+      throw new NotFoundException("Profit center not found.");
     }
 
-    const newStatusId =
-      profitcenter.status_id === 1
-        ? 14
-        : 1;
+    const newStatusId = profitcenter.status_id === 1 ? 14 : 1;
 
-    const newStatusEntity =
-      await this.statusRepository.findOneBy(
-        {
-          id: newStatusId,
-        },
-      );
+    const newStatusEntity = await this.statusRepository.findOneBy({
+      id: newStatusId,
+    });
 
     if (!newStatusEntity) {
-      throw new Error(
-        "Target status not found.",
-      );
+      throw new Error("Target status not found.");
     }
 
-    profitcenter.status =
-      newStatusEntity;
+    profitcenter.status = newStatusEntity;
 
-    profitcenter.status_id =
-      newStatusEntity.id;
+    profitcenter.status_id = newStatusEntity.id;
 
     const updatedProfitcenter =
-      await this.profitcenterRepository.save(
-        profitcenter,
-      );
+      await this.profitcenterRepository.save(profitcenter);
 
     await this.userAuditTrailCreateService.create(
       {
@@ -449,14 +320,11 @@ export class ProfitcenterService {
 
         method: "TOGGLE_STATUS",
 
-        raw_data: JSON.stringify(
-          updatedProfitcenter,
-        ),
+        raw_data: JSON.stringify(updatedProfitcenter),
 
         description: `Toggled profit center: ${updatedProfitcenter.profitcenter_code}`,
 
-        status_id:
-          updatedProfitcenter.status_id,
+        status_id: updatedProfitcenter.status_id,
       },
       userId,
     );
@@ -468,19 +336,15 @@ export class ProfitcenterService {
 
     return {
       message: `Profit center ${updatedProfitcenter.profitcenter_code} successfully toggled ${
-        newStatusId === 1
-          ? "to active"
-          : "to deleted"
+        newStatusId === 1 ? "to active" : "to deleted"
       }.`,
 
       profitcenter: {
         ...updatedProfitcenter,
 
-        status_name:
-          updatedProfitcenter.status
-            ? updatedProfitcenter.status
-                .status_name
-            : null,
+        status_name: updatedProfitcenter.status
+          ? updatedProfitcenter.status.status_name
+          : null,
       },
     };
   }

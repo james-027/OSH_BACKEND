@@ -10,6 +10,9 @@ import { User } from "../../entities/User";
 
 import { SupplierController } from "./controllers/supplier.controller";
 import { SupplierService } from "./services/supplier.service";
+import { SupplierSyncService } from "./services/supplier-sync.service";
+
+import { SupplierScheduler } from "../../schedulers/supplier.scheduler";
 
 import { UsersModule } from "../users/users.module";
 import { SSEModule } from "../sse/sse.module";
@@ -34,9 +37,11 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
 
   providers: [
     SupplierService,
+    SupplierSyncService,
+    SupplierScheduler,
     ResponseMapperService,
   ],
 
-  exports: [SupplierService],
+  exports: [SupplierService, SupplierSyncService],
 })
 export class SupplierModule {}

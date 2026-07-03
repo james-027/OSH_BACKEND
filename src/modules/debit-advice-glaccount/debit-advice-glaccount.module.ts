@@ -16,6 +16,8 @@ import { SSEModule } from "../sse/sse.module";
 
 import { Status } from "src/entities/Status";
 import { User } from "src/entities/User";
+import { DebitAdviceGlAccountSyncService } from "./services/debit-advice-glaccount-sync.service";
+import { DebitAdviceGlAccountScheduler } from "src/schedulers/debit-advice-glaccount.scheduler";
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { User } from "src/entities/User";
   providers: [
     DebitAdviceGlAccountService,
     ResponseMapperService,
+    DebitAdviceGlAccountSyncService,
+    DebitAdviceGlAccountScheduler,
   ],
 
   exports: [DebitAdviceGlAccountService],

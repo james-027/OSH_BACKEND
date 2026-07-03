@@ -32,11 +32,6 @@ export class UpdateGlAccountDto {
   @IsString({
     message: "Company must be a string",
   })
-  @MaxLength(255, {
-    message: "Company cannot be longer than 255 characters",
-  })
-  company?: string;
-
   @IsOptional()
   @IsInt({
     message: "Status ID must be an integer",
@@ -45,4 +40,8 @@ export class UpdateGlAccountDto {
     message: "Status ID must be a positive integer",
   })
   status_id?: number;
+
+  @IsOptional()
+  @IsString()
+  company?: string;
 }
