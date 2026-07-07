@@ -31,7 +31,7 @@ export class OSHJVService {
                 data: payload
             };
             const response = await axios.post(
-                "http://10.2.0.156:81/ctgi/udp.php?objectcode=u_OSHJV",
+                `${process.env.BOS_Server}/ctgi/udp.php?objectcode=u_OSHJV`,
                 requestBody,
                 {
                     headers: {
