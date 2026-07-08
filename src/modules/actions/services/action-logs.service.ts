@@ -1,15 +1,18 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ActionLog } from "src/entities/ActionLog";
 import { CreateActionLogDto } from "../dto/CreateActionLogDto";
 import { UpdateActionLogDto } from "../dto/UpdateActionLogDto";
+import { Module } from "src/entities/Module";
 
 @Injectable()
 export class ActionLogsService {
   constructor(
     @InjectRepository(ActionLog)
     private readonly actionLogRepository: Repository<ActionLog>,
+    @InjectRepository(Module)
+    private readonly moduleRepository: Repository<Module>,
   ) {}
 
   async create(createActionLogDto: CreateActionLogDto, created_by: number) {
@@ -74,7 +77,7 @@ export class ActionLogsService {
     await this.actionLogRepository.delete(id);
   }
 
-  async logAction(params: {
+  async logActionOld(params: {
     module_id: number;
     ref_id: number;
     action_id: number;
@@ -86,6 +89,36 @@ export class ActionLogsService {
       ...params,
       status_id: 1,
     });
+    return this.actionLogRepository.save(actionLog);
+  }
+
+  async logAction(params: {
+    module_name: string;
+    ref_id: number;
+    action_id: number;
+    description: string;
+    raw_data?: any;
+    created_by: number;
+  }) {
+    // Destructure module_name separately, keep rest for log data
+    const { module_name, ...logData } = params;
+
+    // Look up module by name
+    const module = await this.moduleRepository.findOne({
+      where: { module_name, status_id: 1 },
+    });
+
+    if (!module) {
+      throw new NotFoundException(`Module '${module_name}' not found`);
+    }
+
+    // Create log entry with spread + module_id
+    const actionLog = this.actionLogRepository.create({
+      ...logData,
+      module_id: module.id,
+      status_id: 1,
+    });
+
     return this.actionLogRepository.save(actionLog);
   }
 
