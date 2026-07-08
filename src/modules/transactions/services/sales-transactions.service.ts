@@ -302,7 +302,16 @@ export class SalesTransactionsService {
       });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      // rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      rows = rawRows.map((row: Record<string, any>) => {
+        const normalized: Record<string, any> = {};
+        for (const key of Object.keys(row)) {
+          const cleanKey = key.trim().toUpperCase(); // e.g., " UNITPRICE " → "UNITPRICE"
+          normalized[cleanKey] = row[key];
+        }
+        return normalized;
+      });
 
       logMessage = `Processing Excel file with ${rows.length} rows`;
 
