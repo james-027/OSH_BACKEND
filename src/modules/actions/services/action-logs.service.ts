@@ -29,10 +29,10 @@ export class ActionLogsService {
     return this.actionLogRepository.findOneBy({ id });
   }
 
-  async findPerModuleRefID(module_id: number, ref_id: number) {
+  async findPerModuleRefID(module_name: string, ref_id: number) {
     const logs = await this.actionLogRepository.find({
-      where: { module_id, ref_id },
-      relations: ["action", "createdBy"],
+      where: { module: { module_name }, ref_id },
+      relations: ["action", "createdBy", "module"],
       order: { created_at: "DESC" },
     });
 
