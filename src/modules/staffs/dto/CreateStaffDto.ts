@@ -19,6 +19,10 @@ export class CreateStaffDto {
   @IsNotEmpty()
   first_name!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  email!: string;
+
   @IsOptional()
   @IsString()
   middle_name?: string;
@@ -118,4 +122,25 @@ export class CreateStaffDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+}
+
+export class CheckStaffDto {
+  @IsString()
+  first_name: string;
+
+  @IsOptional()
+  @IsString()
+  middle_name?: string;
+
+  @IsString()
+  last_name: string;
+}
+
+
+export class RevertStaffDto {
+  @IsInt()
+  status_id: number;
+
+  @IsString()
+  remarks: string;
 }

@@ -3,7 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -11,24 +10,27 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { Staff } from "./Staff";
-import { Vendor } from "./Vendor";
+import { Warehouse } from "./Warehouse";
 import { Location } from "./Location";
+import { Vendor } from "./Vendor";
 import { AccessKey } from "./AccessKey";
-import { StaffSalary } from "./StaffSalary";
 
-@Entity("staff_vendors")
-export class StaffVendorSalary {
+@Entity("trainings")
+export class Training {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  staff_id: number;
+  @Column({ type: "varchar", length: 255 })
+  training_name: string;
+
+  @Column({ type: "varchar", length: 15 })
+  training_abbr: string;
 
   @Column()
-  vendor_id: number;
+  passing_rate: number;
 
-  @Column()
-  location_id: number;
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -39,8 +41,11 @@ export class StaffVendorSalary {
   @Column({ nullable: true })
   updated_by: number;
 
-  @Column({ nullable: true })
-  access_key_id: number;
+  @Column({ type: 'boolean', nullable: true })
+  with_warehouse: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  training_order: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -79,37 +84,7 @@ export class StaffVendorSalary {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-  @ManyToOne(() => Staff, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "staff_id" })
-  staff: Staff;
-
-  @ManyToOne(() => Vendor, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "vendor_id" })
-  vendor: Vendor;
-
-  @ManyToOne(() => Location, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "location_id" })
-  location: Location;
-
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
-
-  @OneToMany(
-  () => StaffSalary,
-  (staffSalary) => staffSalary.staffVendor,
-)
-staffSalaries: StaffSalary[];
 }

@@ -17,14 +17,16 @@ import { AccessKey } from "./AccessKey";
 import { StaffBrand } from "./StaffBrand";
 import { StaffCategoryType } from "./StaffCategoryType";
 import { StaffVendorSalary } from "./StaffVendorSalary";
+import { Staff } from "./Staff";
 import { Warehouse } from "./Warehouse";
-import { StaffSalary } from "./StaffSalary";
-import { StaffTransfers } from "./StaffTransfers";
 
-@Entity("staffs")
-export class Staff {
+@Entity("staff_histories")
+export class StaffHistory {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ nullable: true })
+  staff_id: number;
 
   @Column({ length: 255, nullable: true })
   staff_code: string;
@@ -52,9 +54,6 @@ export class Staff {
 
   @Column()
   position_id: number;
-
-  @Column({ type: "varchar", nullable: true })
-  email!: string | null;
 
   @Column({ length: 255, nullable: true })
   sss_number: string;
@@ -101,6 +100,9 @@ export class Staff {
   @Column({ type: "text", nullable: true })
   store_request: string;
 
+  @Column({ type: "date", nullable: true })
+  effectivity_date: Date;
+
   @Column({ nullable: true })
   access_key_id: number;
 
@@ -113,8 +115,8 @@ export class Staff {
   @Column({ nullable: true })
   updated_by: number;
 
-  @Column({ type: "date", nullable: true })
-  effectivity_date: Date;
+  @Column({ type: "varchar", nullable: true})
+  email!: string | null;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -177,6 +179,15 @@ export class Staff {
   @JoinColumn({ name: "vendor_id" })
   vendor: Vendor;
 
+
+  @ManyToOne(() => Warehouse, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse: Warehouse;
+
   @ManyToOne(() => Position, {
     eager: false,
     onDelete: "RESTRICT",
@@ -189,6 +200,10 @@ export class Staff {
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
 
+  @ManyToOne(() => Staff, { eager: false })
+  @JoinColumn({ name: "staff_id" })
+  staff: Staff;
+
 
   @OneToMany(() => StaffBrand, (staffBrand) => staffBrand.staff)
   staffBrands: StaffBrand[];
@@ -198,27 +213,4 @@ export class Staff {
 
   @OneToMany(() => StaffVendorSalary, (staffVendorSalary) => staffVendorSalary.staff)
   staffVendorSalaries: StaffVendorSalary[];
-
-
-    @ManyToOne(() => Warehouse, {
-      eager: false,
-      onDelete: "RESTRICT",
-      onUpdate: "CASCADE",
-    })
-    @JoinColumn({ name: "warehouse_id" })
-    warehouse: Warehouse;
-
-
-    @OneToMany(
-      () => StaffSalary,
-      (staffSalary) => staffSalary.staff,
-    )
-    staffSalaries: StaffSalary[];
-
-    @OneToMany(
-      () => StaffTransfers,
-      (staffTransfers) => staffTransfers.staff,
-    )
-    staffTransfers: StaffTransfers[];
-
 }

@@ -3,7 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -11,13 +10,13 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { Staff } from "./Staff";
-import { Vendor } from "./Vendor";
-import { Location } from "./Location";
-import { AccessKey } from "./AccessKey";
-import { StaffSalary } from "./StaffSalary";
 
-@Entity("staff_vendors")
-export class StaffVendorSalary {
+import { Training } from "./Training";
+import { Warehouse } from "./Warehouse";
+import { Employee } from "./Employee";
+
+@Entity("staff_trainings")
+export class StaffTraining {
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -25,10 +24,29 @@ export class StaffVendorSalary {
   staff_id: number;
 
   @Column()
-  vendor_id: number;
+  training_id: number;
+
+  @Column({ nullable: true })
+  warehouse_id?: number | null;
 
   @Column()
-  location_id: number;
+  employee_id: number;
+
+  @Column()
+  ratings: number;
+
+  @Column()
+  sub_status_id: number;
+
+  @Column({ type: "date", nullable: true })
+  training_start_date: Date;
+
+  @Column({ type: "date", nullable: true })
+  training_end_date: Date;
+
+  @Column({ length: 255, nullable: true })
+  remarks: string;
+
 
   @Column({ default: 1 })
   status_id: number;
@@ -39,8 +57,6 @@ export class StaffVendorSalary {
   @Column({ nullable: true })
   updated_by: number;
 
-  @Column({ nullable: true })
-  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -62,6 +78,14 @@ export class StaffVendorSalary {
   })
   @JoinColumn({ name: "status_id" })
   status: Status;
+
+  @ManyToOne(() => Status, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "sub_status_id" })
+  subStatus: Status;
 
   @ManyToOne(() => User, {
     eager: false,
@@ -87,29 +111,27 @@ export class StaffVendorSalary {
   @JoinColumn({ name: "staff_id" })
   staff: Staff;
 
-  @ManyToOne(() => Vendor, {
+  @ManyToOne(() => Training, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
-  @JoinColumn({ name: "vendor_id" })
-  vendor: Vendor;
+  @JoinColumn({ name: "training_id" })
+  training: Training;
 
-  @ManyToOne(() => Location, {
+  @ManyToOne(() => Warehouse, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
-  @JoinColumn({ name: "location_id" })
-  location: Location;
+  @JoinColumn({ name: "warehouse_id" })
+  warehouse: Warehouse;
 
-  @ManyToOne(() => AccessKey, { eager: false })
-  @JoinColumn({ name: "access_key_id" })
-  accessKey: AccessKey;
-
-  @OneToMany(
-  () => StaffSalary,
-  (staffSalary) => staffSalary.staffVendor,
-)
-staffSalaries: StaffSalary[];
+  @ManyToOne(() => Employee, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "employee_id" })
+  employee: Employee;
 }

@@ -209,7 +209,8 @@ export class CommonUtilitiesService {
    */
   async generateTransactionNumber(params: {
     transaction_type: string;
-    location_id: number;
+    location_id?: number;
+    vendor_id?: number;
     access_key_id: number;
     format: string;
     reset_per_year?: boolean;
@@ -217,10 +218,12 @@ export class CommonUtilitiesService {
     abbr?: string;
     type?: string;
     location?: string;
+    vendor?: string;
   }): Promise<string> {
     const {
       transaction_type,
       location_id,
+      vendor_id,
       access_key_id,
       format,
       reset_per_year = true,
@@ -240,6 +243,7 @@ export class CommonUtilitiesService {
         where: {
           transaction_type,
           location_id,
+          vendor_id,
           access_key_id,
           ...(reset_per_year ? { year } : {}),
         },
@@ -251,6 +255,7 @@ export class CommonUtilitiesService {
         sequence = new TransactionSequence();
         sequence.transaction_type = transaction_type;
         sequence.location_id = location_id;
+        sequence.vendor_id = vendor_id;
         sequence.access_key_id = access_key_id;
         sequence.year = year;
         sequence.current_sequence = 0;
@@ -281,6 +286,7 @@ export class CommonUtilitiesService {
         abbr: params.abbr || "LOC",
         type: params.type || transaction_type,
         location: params.location || location_id.toString(),
+        vendor_id: params.vendor || vendor_id.toString(),
       });
 
       return transNumber;

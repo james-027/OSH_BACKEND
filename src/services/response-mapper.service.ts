@@ -43,6 +43,10 @@ export class ResponseMapperService {
           "staffBrands",
           "staffCategoryTypes",
           "staffVendorSalaries",
+          "staffSalaries",
+          "training",
+          "subStatus",
+          "staffTransfers",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null) {
@@ -117,7 +121,8 @@ export class ResponseMapperService {
 
     // Map vendor relation
     if (entity.vendor && typeof entity.vendor === "object") {
-      response.service_provider_name = entity.vendor.service_provider_name || null;
+      response.service_provider_name =
+        entity.vendor.service_provider_name || null;
     }
 
     // Map staff relation
@@ -128,18 +133,58 @@ export class ResponseMapperService {
           : null;
     }
 
-    if (entity.staffBrands?.length) {
-      response.brand_id = entity.staffBrands[0].brand_id;
-      response.brand_name = entity.staffBrands[0].brand?.brand_name || null;
+    // Latest Brand
+    const latestBrand = entity.staffBrands?.length
+      ? [...entity.staffBrands].sort((a, b) => b.id - a.id)[0]
+      : null;
+
+      // Latest Category
+    const latestCategoryType = entity.staffCategoryTypes?.length
+      ? [...entity.staffCategoryTypes].sort((a, b) => b.id - a.id)[0]
+      : null;
+    // Latest Vendor
+    const latestVendorSalary = entity.staffVendorSalaries?.length
+      ? [...entity.staffVendorSalaries].sort((a, b) => b.id - a.id)[0]
+      : null;
+
+      // Latest Salary
+    const latestSalary = entity.staffSalaries?.length
+      ? [...entity.staffSalaries].sort((a, b) => b.id - a.id)[0]
+      : null;
+
+      const pendingTransfers =
+        entity.staffTransfers
+          ?.filter((transfer) => transfer.status === false)
+          .sort((a, b) => b.id - a.id) || [];
+
+      response.pending_transfers = pendingTransfers.map((transfer) => ({
+        id: transfer.id,
+        new_vendor_name: transfer.vendor?.service_provider_name,
+        new_location_name: transfer.location?.location_name,
+        effectivity_date: transfer.effectivity_date,
+        status: transfer.status,
+      }));
+
+    if (latestBrand) {
+      response.brand_id = latestBrand.brand_id;
+      response.brand_name = latestBrand.brand?.brand_name || null;
     }
-    if (entity.staffCategoryTypes?.length) {
-      response.category_type_id = entity.staffCategoryTypes[0].category_type_id;
-      response.category_type_name = entity.staffCategoryTypes[0].categoryType?.category_type_name || null;
+
+    if (latestCategoryType) {
+      response.category_type_id = latestCategoryType.category_type_id;
+      response.category_type_name =
+        latestCategoryType.categoryType?.category_type_name || null;
     }
-    if (entity.staffVendorSalaries?.length) {
-      response.vendor_id = entity.staffVendorSalaries[0].vendor_id;
-      response.allowance = entity.staffVendorSalaries[0].allowance;
-      response.salary_rate = entity.staffVendorSalaries[0].salary_rate;
+
+    if (latestVendorSalary) {
+      response.vendor_id = latestVendorSalary.vendor_id;
+      response.location_id = latestVendorSalary.location_id;
+    }
+
+    if (latestSalary) {
+      response.staff_vendor_id = latestSalary.staff_vendor_id;
+      response.allowance = latestSalary.allowance;
+      response.salary_rate = latestSalary.salary_rate;
     }
 
     // Map brand relation
@@ -156,6 +201,15 @@ export class ResponseMapperService {
     // Map position relation
     if (entity.position && typeof entity.position === "object") {
       response.position_name = entity.position.position_name || null;
+    }
+    // Map training relation
+    if (entity.training && typeof entity.training === "object") {
+      response.training_name = entity.training.training_name || null;
+      response.passing_rate = entity.training.passing_rate || null;
+    }
+    // Map sub status relation
+    if (entity.subStatus && typeof entity.subStatus === "object") {
+      response.sub_status_name = entity.subStatus.status_name || null;
     }
 
     // Map accessKey relation
@@ -180,48 +234,53 @@ export class ResponseMapperService {
 
     //AUDIT FORM NAME RELATION
     if (entity.auditForm && typeof entity.auditForm === "object") {
-    response.audit_form_name =
-      entity.auditForm.audit_form_name || null;
-  }
+      response.audit_form_name = entity.auditForm.audit_form_name || null;
+    }
 
-  //regionalHead  relation
+    //regionalHead  relation
     if (entity.regionalHead && typeof entity.regionalHead === "object") {
-    response.regional_head_name =
-      entity.regionalHead.employee_first_name && entity.regionalHead.employee_last_name
-        ? `${entity.regionalHead.employee_first_name} ${entity.regionalHead.employee_last_name}`
-        : null;
-  }
-  // AREA HEAD RELATION
+      response.regional_head_name =
+        entity.regionalHead.employee_first_name &&
+        entity.regionalHead.employee_last_name
+          ? `${entity.regionalHead.employee_first_name} ${entity.regionalHead.employee_last_name}`
+          : null;
+    }
+    // AREA HEAD RELATION
     if (entity.areaHead && typeof entity.areaHead === "object") {
-    response.area_head_name =
-      entity.areaHead.employee_first_name && entity.areaHead.employee_last_name
-        ? `${entity.areaHead.employee_first_name} ${entity.areaHead.employee_last_name}`
-        : null;
-  }
+      response.area_head_name =
+        entity.areaHead.employee_first_name &&
+        entity.areaHead.employee_last_name
+          ? `${entity.areaHead.employee_first_name} ${entity.areaHead.employee_last_name}`
+          : null;
+    }
 
-  // GROUP BUSINESS CENTER HEAD RELATION
-      if (entity.groupBusinessCenterHead && typeof entity.groupBusinessCenterHead === "object") {
-    response.group_business_center_head_name =
-      entity.groupBusinessCenterHead.employee_first_name && entity.groupBusinessCenterHead.employee_last_name
-        ? `${entity.groupBusinessCenterHead.employee_first_name} ${entity.groupBusinessCenterHead.employee_last_name}`
-        : null;
-  }
-  
-  //GROUP AREA HEAD
-      if (entity.groupAreaHead && typeof entity.groupAreaHead === "object") {
-    response.group_area_head_name =
-      entity.groupAreaHead.employee_first_name && entity.groupAreaHead.employee_last_name
-        ? `${entity.groupAreaHead.employee_first_name} ${entity.groupAreaHead.employee_last_name}`
-        : null;
-  }
-  //AUDIT BY RELATION
-      if (entity.auditBy && typeof entity.auditBy === "object") {
-    response.audit_by_name =
-      entity.auditBy.employee_first_name && entity.auditBy.employee_last_name
-        ? `${entity.auditBy.employee_first_name} ${entity.auditBy.employee_last_name}`
-        : null;
-  }
+    // GROUP BUSINESS CENTER HEAD RELATION
+    if (
+      entity.groupBusinessCenterHead &&
+      typeof entity.groupBusinessCenterHead === "object"
+    ) {
+      response.group_business_center_head_name =
+        entity.groupBusinessCenterHead.employee_first_name &&
+        entity.groupBusinessCenterHead.employee_last_name
+          ? `${entity.groupBusinessCenterHead.employee_first_name} ${entity.groupBusinessCenterHead.employee_last_name}`
+          : null;
+    }
 
+    //GROUP AREA HEAD
+    if (entity.groupAreaHead && typeof entity.groupAreaHead === "object") {
+      response.group_area_head_name =
+        entity.groupAreaHead.employee_first_name &&
+        entity.groupAreaHead.employee_last_name
+          ? `${entity.groupAreaHead.employee_first_name} ${entity.groupAreaHead.employee_last_name}`
+          : null;
+    }
+    //AUDIT BY RELATION
+    if (entity.auditBy && typeof entity.auditBy === "object") {
+      response.audit_by_name =
+        entity.auditBy.employee_first_name && entity.auditBy.employee_last_name
+          ? `${entity.auditBy.employee_first_name} ${entity.auditBy.employee_last_name}`
+          : null;
+    }
 
     // Flatten requirementReminders if present
     if (

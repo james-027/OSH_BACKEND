@@ -13,7 +13,7 @@ import {
  * Used for generating transaction numbers with database-level locking to prevent race conditions
  */
 @Entity("transaction_sequences")
-@Index(["transaction_type", "location_id", "access_key_id", "year"], {
+@Index(["transaction_type", "location_id", "access_key_id", "year","vendor_id"], {
   unique: true,
 })
 @Index(["transaction_type"], {})
@@ -34,6 +34,12 @@ export class TransactionSequence {
    */
   @Column({ type: "int" })
   location_id: number;
+  /**
+   * Vendor ID - used as part of sequence scope
+   * Allows each vendor to have independent sequences
+   */
+  @Column({ type: "int",nullable: true })
+  vendor_id: number;
 
   /**
    * Access Key ID - used as part of sequence scope
