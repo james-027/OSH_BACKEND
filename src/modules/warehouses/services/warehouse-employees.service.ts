@@ -44,6 +44,8 @@ export class WarehouseEmployeesService {
     private actionLogsService: ActionLogsService,
   ) {}
 
+  private readonly module_name = "STORE_EMPLOYEES";
+
   private getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
       return error.message;
@@ -690,8 +692,8 @@ export class WarehouseEmployeesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = MODULE_IDS.STORE_EMPLOYEES;
-    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = MODULE_IDS.STORE_EMPLOYEES;
+    return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
   /**

@@ -53,6 +53,8 @@ export class WarehouseHurdlesService {
     private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
+  private readonly module_name = "STORE HURDLES";
+
   async findAll(
     accessKeyId?: number,
     userId?: number,
@@ -496,8 +498,8 @@ export class WarehouseHurdlesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = MODULE_IDS.STORE_HURDLES;
-    return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = MODULE_IDS.STORE_HURDLES;
+    return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
   async getAllowedLocationIds(

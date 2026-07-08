@@ -87,7 +87,13 @@ export class StaffsService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number, statusId?: number[], assignStatusId?: number[]): Promise<any[]> {
+  private readonly module_name = "STAFFS";
+
+  async findAll(
+    accessKeyId?: number,
+    statusId?: number[],
+    assignStatusId?: number[],
+  ): Promise<any[]> {
     try {
       const where: any = {};
 
@@ -2057,8 +2063,8 @@ export class StaffsService {
     };
   }
   async findOneHistory(ref_id: number) {
-    const module_id = MODULE_IDS.STAFFS;
-    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = MODULE_IDS.STAFFS;
+    return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
   async toggleStatus(id: number, userId: number): Promise<any> {

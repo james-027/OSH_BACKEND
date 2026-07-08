@@ -45,7 +45,9 @@ export class DebitAdviceService {
         private ActionLogsService: ActionLogsService,
         @InjectRepository(TransactionAttachment)
         private readonly attachmentRepository: Repository<TransactionAttachment>,
-    ) { }
+  ) {}
+
+  private readonly module_name = "DEBIT ADVICE";
     // Get all debit advices
     async findAll(): Promise<any[]> {
         try {
@@ -86,8 +88,8 @@ export class DebitAdviceService {
     }
 
     async findOneHistory(ref_id: number) {
-        const module_id = 34; // DEBIT ADVICES
-        return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = 34; // DEBIT ADVICES
+    return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
     }
 
     // Get single debit advice by ID

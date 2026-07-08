@@ -57,6 +57,8 @@ export class LocationHurdlesService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
+  private readonly module_name = "LOCATION HURDLES";
+
   async findAll(
     accessKeyId?: number,
     userId?: number,
@@ -488,8 +490,8 @@ export class LocationHurdlesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = MODULE_IDS.LOCATION_HURDLES;
-    return this.ActionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = MODULE_IDS.LOCATION_HURDLES;
+    return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
   async bulkUploadFromExcel(

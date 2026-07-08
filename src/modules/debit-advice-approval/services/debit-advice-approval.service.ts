@@ -39,6 +39,8 @@ export class ApprovalStagesListService {
     private cacheInvalidationService: CacheInvalidationService,
   ) {}
 
+  private readonly module_name = "DEBIT ADVICE APPROVAL";
+
   async findAll(userId: number): Promise<any[]> {
     const approvals = await this.approvalStagesListRepository
       .createQueryBuilder("approval")
@@ -448,8 +450,7 @@ export class ApprovalStagesListService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = 17;
-
-    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = 17;
+    return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 }

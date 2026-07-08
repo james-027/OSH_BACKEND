@@ -83,8 +83,9 @@ export class ApprovalMatrixService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = 999; // change this
-    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = 999; // change this
+    const module_name = "APPROVAL MATRIX";
+    return this.actionLogsService.findPerModuleRefID(module_name, ref_id);
   }
 
   async create(
@@ -268,7 +269,7 @@ export class ApprovalMatrixService {
             opt_approval_id: levelDto.opt_approval_id
               ? Number(levelDto.opt_approval_id)
               : null,
-            
+
             approval_title: levelDto.approval_title,
             module: Number(levelDto.module),
             userid: dto.userid,
