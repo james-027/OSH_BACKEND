@@ -104,7 +104,7 @@ export class StaffsService {
         where.assign_status_id = In(assignStatusId);
       } else if (statusId && statusId.length > 0) {
         where.status_id = In(statusId);
-         where.assign_status_id = 13;
+        where.assign_status_id = 13;
       }
       const staffs = await this.staffsRepository.find({
         where,
@@ -121,7 +121,7 @@ export class StaffsService {
           "staffCategoryTypes",
           "staffVendorSalaries",
           "staffSalaries",
-           "staffTransfers",
+          "staffTransfers",
         ],
         order: {
           modified_at: "DESC",
@@ -484,7 +484,7 @@ export class StaffsService {
       // Action Log
       try {
         await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          module_name: this.module_name, // use your actual module name
           ref_id: savedStaff.id,
           action_id: ACTION_IDS.ADD,
           description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
@@ -734,7 +734,7 @@ export class StaffsService {
 
       try {
         await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS, // use your actual module ID
+          module_name: this.module_name, // use your actual module name
           ref_id: savedStaff.id,
           action_id: ACTION_IDS.EDIT,
           description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
@@ -826,9 +826,7 @@ export class StaffsService {
         return this.responseMapperService.mapEntityToResponse(staff);
       }
 
-      const effectivityDate = safeDate(
-        updateStaffTransferDto.effectivity_date,
-      );
+      const effectivityDate = safeDate(updateStaffTransferDto.effectivity_date);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -884,7 +882,6 @@ export class StaffsService {
     this.isTransferRunning = true;
 
     try {
-
       const pendingTransfers = await this.staffTransfersRepository.find({
         where: {
           status: false,
@@ -894,7 +891,6 @@ export class StaffsService {
       logger.info(`Pending transfers found: ${pendingTransfers.length}`);
 
       for (const transfer of pendingTransfers) {
-
         const queryRunner =
           this.staffsRepository.manager.connection.createQueryRunner();
 
@@ -902,14 +898,11 @@ export class StaffsService {
         await queryRunner.startTransaction();
 
         try {
-
           const effectivityDate = new Date(transfer.effectivity_date)
             .toISOString()
             .split("T")[0];
 
-          const today = new Date()
-            .toISOString()
-            .split("T")[0];
+          const today = new Date().toISOString().split("T")[0];
 
           if (effectivityDate > today) {
             logger.warn(
@@ -1073,7 +1066,7 @@ export class StaffsService {
 
           try {
             await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STAFFS,
+              module_name: this.module_name,
               ref_id: updatedStaff.id,
               action_id: ACTION_IDS.TRANSFER,
               description: `Staff transferred ${updatedStaff.first_name} ${updatedStaff.last_name} | Vendor: ${oldVendor} → ${
@@ -1118,7 +1111,6 @@ export class StaffsService {
             logger.error("SSE event failed for scheduled transfer:");
             logger.error(err);
           }
-
         } catch (err: any) {
           await queryRunner.rollbackTransaction();
 
@@ -1359,7 +1351,7 @@ export class StaffsService {
 
       try {
         await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS,
+          module_name: this.module_name,
           ref_id: updatedStaff.id,
           action_id: ACTION_IDS.REVERT,
           description: `Change staff ${updatedStaff.first_name} ${updatedStaff.last_name} to ${newStatusName}. Remarks: ${updatedStaff.remarks || "No remarks provided"}`,
@@ -1443,14 +1435,13 @@ export class StaffsService {
         },
       );
 
-        const isBuddyUp = updateStaffDeployDto.action === "buddyup";
-        const assignStatusId = isBuddyUp ? STATUS_IDS.TEMPORARY_ASSIGNMENT : STATUS_IDS.WITH_ASSIGNMENT;
-        const actionId = isBuddyUp ? ACTION_IDS.BUDDY_UP : ACTION_IDS.DEPLOY;
+      const isBuddyUp = updateStaffDeployDto.action === "buddyup";
+      const assignStatusId = isBuddyUp
+        ? STATUS_IDS.TEMPORARY_ASSIGNMENT
+        : STATUS_IDS.WITH_ASSIGNMENT;
+      const actionId = isBuddyUp ? ACTION_IDS.BUDDY_UP : ACTION_IDS.DEPLOY;
 
       if (staffWarehouse) {
-
- 
-
         await this.staffsRepository.update(id, {
           assign_status_id: assignStatusId,
           warehouse_id: staffWarehouseDetails.warehouse_id,
@@ -1463,38 +1454,38 @@ export class StaffsService {
         });
 
         await this.staffHistoriesRepository.save({
-        staff_id: updatedStaff.id,
-        staff_code: updatedStaff.staff_code,
-        last_name: updatedStaff.last_name,
-        first_name: updatedStaff.first_name,
-        email: updatedStaff.email,
-        middle_name: updatedStaff.middle_name,
-        location_id: updatedStaff.location_id,
-        vendor_id: updatedStaff.vendor_id,
-        assign_status_id: updatedStaff.assign_status_id,
-        position_id: updatedStaff.position_id,
-        access_key_id: updatedStaff.access_key_id,
-        sss_number: updatedStaff.sss_number,
-        pagibig_number: updatedStaff.pagibig_number,
-        tin: updatedStaff.tin,
-        remarks: updatedStaff.remarks,
-        overall_remarks: updatedStaff.overall_remarks,
-        store_request: updatedStaff.store_request,
-        hired_date: updatedStaff.hired_date,
-        to_hr_date: updatedStaff.to_hr_date,
-        to_sts_date: updatedStaff.to_sts_date,
-        approved_eprf_date: updatedStaff.approved_eprf_date,
-        req_completion_date: updatedStaff.req_completion_date,
-        actual_deployment_date: updatedStaff.actual_deployment_date,
-        separated_date: updatedStaff.separated_date,
-        birthday: updatedStaff.birthday,
-        contact_number: updatedStaff.contact_number,
-        status_id: updatedStaff.status_id,
-        warehouse_id: updatedStaff.warehouse_id,
-        effectivity_date: updatedStaff.effectivity_date,
-        created_by: userId,
-        updated_by: userId,
-      });
+          staff_id: updatedStaff.id,
+          staff_code: updatedStaff.staff_code,
+          last_name: updatedStaff.last_name,
+          first_name: updatedStaff.first_name,
+          email: updatedStaff.email,
+          middle_name: updatedStaff.middle_name,
+          location_id: updatedStaff.location_id,
+          vendor_id: updatedStaff.vendor_id,
+          assign_status_id: updatedStaff.assign_status_id,
+          position_id: updatedStaff.position_id,
+          access_key_id: updatedStaff.access_key_id,
+          sss_number: updatedStaff.sss_number,
+          pagibig_number: updatedStaff.pagibig_number,
+          tin: updatedStaff.tin,
+          remarks: updatedStaff.remarks,
+          overall_remarks: updatedStaff.overall_remarks,
+          store_request: updatedStaff.store_request,
+          hired_date: updatedStaff.hired_date,
+          to_hr_date: updatedStaff.to_hr_date,
+          to_sts_date: updatedStaff.to_sts_date,
+          approved_eprf_date: updatedStaff.approved_eprf_date,
+          req_completion_date: updatedStaff.req_completion_date,
+          actual_deployment_date: updatedStaff.actual_deployment_date,
+          separated_date: updatedStaff.separated_date,
+          birthday: updatedStaff.birthday,
+          contact_number: updatedStaff.contact_number,
+          status_id: updatedStaff.status_id,
+          warehouse_id: updatedStaff.warehouse_id,
+          effectivity_date: updatedStaff.effectivity_date,
+          created_by: userId,
+          updated_by: userId,
+        });
       }
 
       await this.userAuditTrailCreateService.create(
@@ -1510,7 +1501,7 @@ export class StaffsService {
 
       try {
         await this.actionLogsService.logAction({
-          module_id: MODULE_IDS.STAFFS,
+          module_name: this.module_name,
           ref_id: staff.id,
           action_id: actionId,
           description: `Staff ${staff.first_name} ${staff.last_name} Deployed to ${NAMING_CONVENTION.WAREHOUSE}: ${staffWarehouseDetails.warehouse.warehouse_name}`,
@@ -1527,7 +1518,11 @@ export class StaffsService {
         this.responseMapperService.mapEntityToResponse(staffWarehouse);
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
-        this.sseEventEmitter.emitUpdate("staff_warehouses", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -1995,7 +1990,7 @@ export class StaffsService {
               staffWithRelations.location?.location_name ?? "N/A";
 
             await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STAFFS,
+              module_name: this.module_name,
               ref_id: savedStaff.id,
               action_id: existingRecord ? ACTION_IDS.EDIT : ACTION_IDS.ADD,
               description: existingRecord
@@ -2133,7 +2128,7 @@ export class StaffsService {
         throw error;
       }
 
-    throw new Error("Failed to process staff transfer");
+      throw new Error("Failed to process staff transfer");
     }
   }
 }

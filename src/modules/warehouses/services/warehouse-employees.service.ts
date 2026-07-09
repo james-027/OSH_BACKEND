@@ -398,7 +398,7 @@ export class WarehouseEmployeesService {
             savedWithRelations,
           );
           await this.actionLogsService.logAction({
-            module_id: MODULE_IDS.STORE_EMPLOYEES,
+            module_name: this.module_name,
             ref_id: saved.id,
             action_id: ACTION_IDS.ADD,
             description,
@@ -545,7 +545,7 @@ export class WarehouseEmployeesService {
               updatedRecRaw,
             );
             await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STORE_EMPLOYEES,
+              module_name: this.module_name,
               ref_id: id,
               action_id: ACTION_IDS.EDIT,
               description,
@@ -671,7 +671,7 @@ export class WarehouseEmployeesService {
       const description = `${newStatusName} personnel assignment for ${warehouse?.warehouse_name || "Unknown"} (${warehouse?.warehouse_code || "N/A"}) - ${assignmentDateFormatted}${personnelDetails ? ": " + personnelDetails : ""}`;
 
       await this.actionLogsService.logAction({
-        module_id: MODULE_IDS.STORE_EMPLOYEES,
+        module_name: this.module_name,
         ref_id: id,
         action_id: actionId,
         description,

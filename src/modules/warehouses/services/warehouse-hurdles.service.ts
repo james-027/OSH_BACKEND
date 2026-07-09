@@ -224,9 +224,9 @@ export class WarehouseHurdlesService {
       const description = `Created warehouse hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${STATUS_NAMES[saved.status_id] || "Unknown"}`;
       // Action log
       await this.ActionLogsService.logAction({
-        action_id: ACTION_IDS.ADD, // ✅ Clear intent
+        action_id: ACTION_IDS.ADD, // Clear intent
         ref_id: saved.id,
-        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
+        module_name: this.module_name,
         description: description,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
@@ -338,7 +338,7 @@ export class WarehouseHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: ACTION_IDS.EDIT, // edit
         ref_id: saved.id,
-        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
+        module_name: this.module_name,
         description: description,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
@@ -412,7 +412,7 @@ export class WarehouseHurdlesService {
     await this.ActionLogsService.logAction({
       action_id: action_id, // dynamic
       ref_id: id,
-      module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
+      module_name: this.module_name,
       description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
@@ -467,7 +467,7 @@ export class WarehouseHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: action_id,
         ref_id: id,
-        module_id: MODULE_IDS.STORE_HURDLES, // ✅ Self-documenting
+        module_name: this.module_name, // ✅ Self-documenting
         description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({ id, status_id }),
         created_by: userId,

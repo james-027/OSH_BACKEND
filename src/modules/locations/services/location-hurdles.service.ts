@@ -213,7 +213,7 @@ export class LocationHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: ACTION_IDS.ADD,
         ref_id: saved.id,
-        module_id: MODULE_IDS.LOCATION_HURDLES,
+        module_name: this.module_name,
         description: `Created location hurdle with hurdle qty ${saved.ss_hurdle_qty} and status ${STATUS_NAMES[saved.status_id] || "Unknown"}`,
         raw_data: JSON.stringify(mainDto),
         created_by: userId,
@@ -323,7 +323,7 @@ export class LocationHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: ACTION_IDS.EDIT,
         ref_id: saved.id,
-        module_id: MODULE_IDS.LOCATION_HURDLES,
+        module_name: this.module_name,
         description: description,
         raw_data: JSON.stringify(updateDto),
         created_by: userId,
@@ -399,7 +399,7 @@ export class LocationHurdlesService {
     await this.ActionLogsService.logAction({
       action_id: action_id,
       ref_id: id,
-      module_id: MODULE_IDS.LOCATION_HURDLES,
+      module_name: this.module_name,
       description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
       raw_data: JSON.stringify({ id: id, status_id: newStatusId }),
       created_by: userId,
@@ -467,7 +467,7 @@ export class LocationHurdlesService {
       await this.ActionLogsService.logAction({
         action_id: action_id,
         ref_id: hurdle.id,
-        module_id: MODULE_IDS.LOCATION_HURDLES,
+        module_name: this.module_name,
         description: `${newStatusName} ${undo_reason ? `with reason: ${undo_reason}` : ""}.`,
         raw_data: JSON.stringify({
           id: hurdle.id,
