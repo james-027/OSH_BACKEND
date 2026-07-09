@@ -833,7 +833,7 @@ export class WarehouseEmployeesService {
               true, // Indicate this is from bulk upload for description formatting
             );
             actionLogs.push({
-              module_id: MODULE_IDS.STORE_EMPLOYEES,
+              // module_id: MODULE_IDS.STORE_EMPLOYEES,
               ref_id: fullRec.id,
               action_id: actionId,
               description,
@@ -867,7 +867,10 @@ export class WarehouseEmployeesService {
     // Batch insert all action logs (optimized DB roundtrip)
     if (actionLogs.length > 0) {
       try {
-        await this.actionLogsService.logActionBatch(actionLogs);
+        await this.actionLogsService.logActionBatch(
+          this.module_name,
+          actionLogs,
+        );
       } catch (err) {
         logger.error("Failed to batch insert action logs:", err);
         // Don't throw - action log failure shouldn't block bulk operation
