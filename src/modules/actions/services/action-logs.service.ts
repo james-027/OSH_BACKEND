@@ -126,14 +126,16 @@ export class ActionLogsService {
    * Batch insert action logs for optimized DB performance
    * Used when logging multiple actions at once (e.g., bulk upload)
    */
-  async logActionBatch(logs: Array<{
-    module_id: number;
-    ref_id: number;
-    action_id: number;
-    description: string;
-    raw_data?: any;
-    created_by: number;
-  }>) {
+  async logActionBatchOld(
+    logs: Array<{
+      module_id: number;
+      ref_id: number;
+      action_id: number;
+      description: string;
+      raw_data?: any;
+      created_by: number;
+    }>,
+  ) {
     if (!logs || logs.length === 0) {
       return [];
     }
@@ -141,8 +143,43 @@ export class ActionLogsService {
       this.actionLogRepository.create({
         ...log,
         status_id: 1,
-      })
+      }),
     );
+    return this.actionLogRepository.save(actionLogs);
+  }
+
+  async logActionBatch(
+    module_name: string,
+    logs: Array<{
+      ref_id: number;
+      action_id: number;
+      description: string;
+      raw_data?: any;
+      created_by: number;
+    }>,
+  ) {
+    if (!logs || logs.length === 0) {
+      return [];
+    }
+
+    // Look up module once
+    const module = await this.moduleRepository.findOne({
+      where: { module_name, status_id: 1 },
+    });
+
+    if (!module) {
+      throw new NotFoundException(`Module '${module_name}' not found`);
+    }
+
+    // Create all logs with the same module_id
+    const actionLogs = logs.map((log) =>
+      this.actionLogRepository.create({
+        ...log,
+        module_id: module.id,
+        status_id: 1,
+      }),
+    );
+
     return this.actionLogRepository.save(actionLogs);
   }
 
