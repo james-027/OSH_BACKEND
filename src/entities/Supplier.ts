@@ -44,7 +44,6 @@ export class Supplier {
 
   @Column({
     name: "group_code",
-    unique: true,
   })
   group_code: string;
 
@@ -70,7 +69,7 @@ export class Supplier {
     referencedColumnName: "company_abbr",
   })
   companyCode!: Company;
-  
+
   @Column({ default: 1 })
   status_id!: number;
 

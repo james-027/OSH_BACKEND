@@ -47,6 +47,8 @@ export class StaffTrainingService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
+  private readonly module_name = "STAFFS";
+
   async findAll(): Promise<any[]> {
     try {
       const staffTrainings = await this.staffTrainingsRepository.find({
@@ -163,8 +165,6 @@ export class StaffTrainingService {
         relations: ["vendor", "location"],
       });
 
-
-
       if (!staff) {
         throw new BadRequestException("Staff not found");
       }
@@ -223,10 +223,9 @@ export class StaffTrainingService {
           where: { id: saved.sub_status_id },
         });
 
-
         try {
           await this.actionLogsService.logAction({
-            module_id: MODULE_IDS.STAFFS,
+            module_name: this.module_name,
             ref_id: staff.id,
             action_id: item.staff_training_id
               ? ACTION_IDS.EDIT
@@ -241,7 +240,6 @@ export class StaffTrainingService {
           logger.error("Action log failed for staff training:", err);
         }
 
-
         try {
           this.sseEventEmitter.emitCreate("staff_trainings", saved.id, saved);
           this.sseEventEmitter.emitCreate("staffs", saved.id, saved);
@@ -250,72 +248,66 @@ export class StaffTrainingService {
         }
       }
 
+      if (!createStaffTrainingDto.isDraft) {
+        const trainings = createStaffTrainingDto.trainings ?? [];
 
-        if (!createStaffTrainingDto.isDraft) { 
-          const trainings = createStaffTrainingDto.trainings ?? [];
+        const allPassed = trainings.every((t) => t.sub_status_id === 19);
 
-          const allPassed = trainings.every((t) => t.sub_status_id === 19);
+        const failedTraining = trainings.find((t) => t.sub_status_id !== 19);
 
-          const failedTraining = trainings.find(
-            (t) => t.sub_status_id !== 19,
-          );
+        await this.staffRepository.update(staff.id, {
+          status_id: allPassed ? 1 : failedTraining?.sub_status_id,
+          updated_by: userId,
+        });
+
+        if (allPassed && !staff.staff_code && !staffCodeGenerated) {
+          const serviceProviderCode = staff.vendor?.service_provider_code ?? "";
+
+          const locationCode = staff.location?.location_code ?? "";
+
+          const prefix = `${serviceProviderCode}${locationCode}`;
+
+          const trans_number =
+            await this.commonUtilitiesService.generateTransactionNumber({
+              transaction_type: `STAFF CODE ${locationCode}`,
+              vendor_id: staff.vendor_id,
+              location_id: staff.location_id,
+              access_key_id: accessKeyId,
+              format: "D{abbr}{key}{year}-{seq:6}",
+              reset_per_year: true,
+              currentDate: new Date(),
+              abbr: staff.vendor?.service_provider_code ?? "",
+            });
+
+          const series = trans_number.match(/\d+$/)?.[0];
+
+          const generatedStaffCode = `${prefix}-${series}`;
 
           await this.staffRepository.update(staff.id, {
-            status_id: allPassed ? 1 : failedTraining?.sub_status_id,
+            staff_code: generatedStaffCode,
             updated_by: userId,
           });
 
-          if (allPassed && !staff.staff_code && !staffCodeGenerated) {
-            const serviceProviderCode =
-              staff.vendor?.service_provider_code ?? "";
-
-            const locationCode =
-              staff.location?.location_code ?? "";
-
-            const prefix = `${serviceProviderCode}${locationCode}`;
-
-            const trans_number =
-              await this.commonUtilitiesService.generateTransactionNumber({
-                transaction_type: `STAFF CODE ${locationCode}`,
-                vendor_id: staff.vendor_id,
-                location_id: staff.location_id,
-                access_key_id: accessKeyId,
-                format: "D{abbr}{key}{year}-{seq:6}",
-                reset_per_year: true,
-                currentDate: new Date(),
-                abbr: staff.vendor?.service_provider_code ?? "",
-              });
-
-            const series = trans_number.match(/\d+$/)?.[0];
-
-            const generatedStaffCode = `${prefix}-${series}`;
-
-            await this.staffRepository.update(staff.id, {
-              staff_code: generatedStaffCode,
-              updated_by: userId,
+          try {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: staff.id,
+              action_id: ACTION_IDS.EDIT,
+              description: `Generated staff code '${generatedStaffCode}' for ${staff.first_name} ${staff.last_name}`,
+              raw_data: JSON.stringify({
+                staff_id: staff.id,
+                old_staff_code: staff.staff_code,
+                new_staff_code: generatedStaffCode,
+              }),
+              created_by: userId,
             });
-
-            try {
-              await this.actionLogsService.logAction({
-                module_id: MODULE_IDS.STAFFS,
-                ref_id: staff.id,
-                action_id: ACTION_IDS.EDIT,
-                description: `Generated staff code '${generatedStaffCode}' for ${staff.first_name} ${staff.last_name}`,
-                raw_data: JSON.stringify({
-                  staff_id: staff.id,
-                  old_staff_code: staff.staff_code,
-                  new_staff_code: generatedStaffCode,
-                }),
-                created_by: userId,
-              });
-            } catch (err) {
-              logger.error("Action log failed for staff code generation:", err);
-            }
-
-            staffCodeGenerated = true;
+          } catch (err) {
+            logger.error("Action log failed for staff code generation:", err);
           }
-        }
 
+          staffCodeGenerated = true;
+        }
+      }
 
       await this.userAuditTrailCreateService.create(
         {
@@ -327,7 +319,6 @@ export class StaffTrainingService {
         },
         userId,
       );
-
 
       const response = savedTrainings[0];
 
@@ -602,7 +593,7 @@ export class StaffTrainingService {
 
           try {
             await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STAFFS,
+              module_name: this.module_name,
               ref_id: staff.id,
               action_id: ACTION_IDS.EDIT,
               description: `Generated staff code '${generatedStaffCode}' for ${staff.first_name} ${staff.last_name} after passing ${training.training_name}`,

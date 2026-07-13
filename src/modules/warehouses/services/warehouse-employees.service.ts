@@ -44,6 +44,8 @@ export class WarehouseEmployeesService {
     private actionLogsService: ActionLogsService,
   ) {}
 
+  private readonly module_name = "STORE_EMPLOYEES";
+
   private getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
       return error.message;
@@ -396,7 +398,7 @@ export class WarehouseEmployeesService {
             savedWithRelations,
           );
           await this.actionLogsService.logAction({
-            module_id: MODULE_IDS.STORE_EMPLOYEES,
+            module_name: this.module_name,
             ref_id: saved.id,
             action_id: ACTION_IDS.ADD,
             description,
@@ -543,7 +545,7 @@ export class WarehouseEmployeesService {
               updatedRecRaw,
             );
             await this.actionLogsService.logAction({
-              module_id: MODULE_IDS.STORE_EMPLOYEES,
+              module_name: this.module_name,
               ref_id: id,
               action_id: ACTION_IDS.EDIT,
               description,
@@ -669,7 +671,7 @@ export class WarehouseEmployeesService {
       const description = `${newStatusName} personnel assignment for ${warehouse?.warehouse_name || "Unknown"} (${warehouse?.warehouse_code || "N/A"}) - ${assignmentDateFormatted}${personnelDetails ? ": " + personnelDetails : ""}`;
 
       await this.actionLogsService.logAction({
-        module_id: MODULE_IDS.STORE_EMPLOYEES,
+        module_name: this.module_name,
         ref_id: id,
         action_id: actionId,
         description,
@@ -690,8 +692,8 @@ export class WarehouseEmployeesService {
   }
 
   async findOneHistory(ref_id: number) {
-    const module_id = MODULE_IDS.STORE_EMPLOYEES;
-    return this.actionLogsService.findPerModuleRefID(module_id, ref_id);
+    // const module_id = MODULE_IDS.STORE_EMPLOYEES;
+    return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
   /**
@@ -831,7 +833,7 @@ export class WarehouseEmployeesService {
               true, // Indicate this is from bulk upload for description formatting
             );
             actionLogs.push({
-              module_id: MODULE_IDS.STORE_EMPLOYEES,
+              // module_id: MODULE_IDS.STORE_EMPLOYEES,
               ref_id: fullRec.id,
               action_id: actionId,
               description,
@@ -865,7 +867,10 @@ export class WarehouseEmployeesService {
     // Batch insert all action logs (optimized DB roundtrip)
     if (actionLogs.length > 0) {
       try {
-        await this.actionLogsService.logActionBatch(actionLogs);
+        await this.actionLogsService.logActionBatch(
+          this.module_name,
+          actionLogs,
+        );
       } catch (err) {
         logger.error("Failed to batch insert action logs:", err);
         // Don't throw - action log failure shouldn't block bulk operation

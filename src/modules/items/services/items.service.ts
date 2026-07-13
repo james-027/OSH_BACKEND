@@ -27,7 +27,7 @@ export class ItemsService {
   async findAll(): Promise<any[]> {
     const items = await this.itemsRepository.find({
       relations: ["category1", "category2", "status", "createdBy", "updatedBy"],
-      where: { category2_id: In([6]) },
+      // where: { category2_id: In([6]) },
       order: { modified_at: "DESC" },
     });
     return items.map((item) => ({

@@ -42,7 +42,7 @@ export class ItemsDwhService {
                   AND s.COMPANY = 'CTGI' 
                   AND s.BRANCH = 'HO' 
                 WHERE
-                  i.ITEMGROUP IN ( 'FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT' ) 
+                  i.ITEMGROUP IN ( 'FIN_GO', 'TRD_GO', 'RAW_MAT', 'PAC_MAT', 'PAC_MAT_VAT', 'FIN_GO_VAT', 'OPR_SUP_VAT' ) 
                   AND i.ISVALID = 1`;
     const [rows] = await sourceConn.execute(sql);
     let success = 0;
@@ -56,14 +56,20 @@ export class ItemsDwhService {
           let category1 = null;
           if (row.U_CAT01) {
             category1 = await this.itemCategoryRepository.findOne({
-              where: { code: row.U_CAT01, level: 1 },
+              where: [
+                { code: row.U_CAT01, level: 1 },
+                { name: row.U_CAT01, level: 1 },
+              ],
             });
           }
           // Find category2_id
           let category2 = null;
           if (row.U_CAT02) {
             category2 = await this.itemCategoryRepository.findOne({
-              where: { code: row.U_CAT02, level: 2 },
+              where: [
+                { code: row.U_CAT02, level: 2 },
+                { name: row.U_CAT02, level: 2 },
+              ],
             });
           }
           // Upsert logic: try to find by item_code

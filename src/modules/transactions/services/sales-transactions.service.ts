@@ -286,13 +286,14 @@ export class SalesTransactionsService {
     let displayMessage = "";
     let logError = null;
     const errors: { row: number; error: string }[] = [];
-    const inserted_row_numbers: number[] = []; // ✅ Track row numbers of successful inserts
+    const inserted_row_numbers: number[] = []; // Track row numbers of successful inserts
     const unmatchedLocations = new Map<string, number>(); // Track unmatched locations
     const unmatchedItems = new Map<string, number>(); // Track unmatched items
+    const unmatchedWarehouses = new Map<string, number>(); // Track unmatched warehouses
     const toInsert: any[] = [];
-    const toInsertRowNumbers: number[] = []; // ✅ Track original row numbers for toInsert
-    let rows: any[] = []; // ✅ Declare outside try block
-    let total = 0; // ✅ Declare outside try block
+    const toInsertRowNumbers: number[] = []; // Track original row numbers for toInsert
+    let rows: any[] = []; // Declare outside try block
+    let total = 0; // Declare outside try block
 
     try {
       // Step 1: Read Excel file
@@ -301,7 +302,16 @@ export class SalesTransactionsService {
       });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      // rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      rows = rawRows.map((row: Record<string, any>) => {
+        const normalized: Record<string, any> = {};
+        for (const key of Object.keys(row)) {
+          const cleanKey = key.trim().toUpperCase(); // e.g., " UNITPRICE " → "UNITPRICE"
+          normalized[cleanKey] = row[key];
+        }
+        return normalized;
+      });
 
       logMessage = `Processing Excel file with ${rows.length} rows`;
 
@@ -328,12 +338,13 @@ export class SalesTransactionsService {
           LINETOTAL: { format: "number-trim" },
           UNITPRICE: { format: "number-trim" },
           VATAMOUNT: { format: "number-trim" },
-          LINECOST: { format: "number-trim" },
-          ITEMCOST: { format: "number-trim" },
           DISCAMOUNT: { format: "number-trim" },
           VATRATE: { format: "number-trim" },
         },
-        optionalFields: {},
+        optionalFields: {
+          LINECOST: { format: "number-trim" },
+          ITEMCOST: { format: "number-trim" },
+        },
       };
 
       // Step 3: Pre-load lookups for O(1) access (optimization for large files)
@@ -367,7 +378,7 @@ export class SalesTransactionsService {
       const allItems = await this.itemRepository.find({
         where: { status_id: 1 },
         select: [
-          "id", // ✅ ADD id for item_id
+          "id", // ADD id for item_id
           "item_code",
           "sales_conv",
           "sales_unit_eq",
@@ -431,20 +442,24 @@ export class SalesTransactionsService {
             continue;
           }
           const locationInfo = locationMap.get(bcUpperCase);
-          const bcCode = locationInfo.code; // ✅ Extract code
-          const locationId = locationInfo.id; // ✅ Extract id
+          const bcCode = locationInfo.code; // Extract code
+          const locationId = locationInfo.id; // Extract id
 
-          // ✅ NEW: Lookup warehouse by CODE
+          // Lookup warehouse by CODE
           const whsCodeUpperCase = String(formattedRow["CODE"]).toUpperCase();
           if (!warehouseMap.has(whsCodeUpperCase)) {
             // Warehouse not found - track and skip this row
+            unmatchedWarehouses.set(
+              whsCodeUpperCase,
+              (unmatchedWarehouses.get(whsCodeUpperCase) || 0) + 1,
+            );
             errors.push({
               row: rowNum,
-              error: `Warehouse not found: ${whsCodeUpperCase}`,
+              error: `Store not found: ${whsCodeUpperCase} - ${formattedRow["STORE"]}`,
             });
             continue;
           }
-          const warehouseId = warehouseMap.get(whsCodeUpperCase); // ✅ Extract warehouse_id
+          const warehouseId = warehouseMap.get(whsCodeUpperCase); // Extract warehouse_id
 
           // Step 4c: Lookup items by ITEMCODE to get cat01, cat02, etc.
           const itemCodeUpperCase = String(
@@ -460,7 +475,7 @@ export class SalesTransactionsService {
             );
             errors.push({
               row: rowNum,
-              error: `Item not found: ${itemCodeUpperCase}`,
+              error: `Item not found: ${itemCodeUpperCase} - ${formattedRow["ITEM"]}`,
             });
             continue;
           }
@@ -483,7 +498,8 @@ export class SalesTransactionsService {
             quantity: Number(formattedRow["QUANTITY"]) || 0,
             converted_quantity: Number(formattedRow["QUANTITY"]) || 0,
             line_total: Number(formattedRow["LINE TOTAL"]) || 0,
-            unit_price: Number(formattedRow["UNITPRICE"]) || 0,
+            unit_price:
+              Number(Number(formattedRow["UNITPRICE"]).toFixed(6)) || 0, // Round to 6 decimals to match DB precision
             vat_amount: Number(formattedRow["VATAMOUNT"]) || 0,
             line_cost: Number(formattedRow["LINECOST"]) || 0,
             item_cost: Number(formattedRow["ITEMCOST"]) || 0,
@@ -504,7 +520,7 @@ export class SalesTransactionsService {
             access_key_id: accessKeyId,
             status_id: 1,
           });
-          toInsertRowNumbers.push(rowNum); // ✅ Track row number
+          toInsertRowNumbers.push(rowNum); // Track row number
         } catch (rowError) {
           // Validation or lookup error - log and continue
           errors.push({
@@ -520,7 +536,7 @@ export class SalesTransactionsService {
       total = total_items;
       for (let i = 0; i < total_items; i += batchSize) {
         const batch = toInsert.slice(i, i + batchSize);
-        const batchRowNumbers = toInsertRowNumbers.slice(i, i + batchSize); // ✅ Get corresponding row numbers
+        const batchRowNumbers = toInsertRowNumbers.slice(i, i + batchSize); // Get corresponding row numbers
 
         // Step 5a: Build unique keys for this batch
         const keys = batch.map((row) => ({
@@ -563,8 +579,8 @@ export class SalesTransactionsService {
               await manager.getRepository(SalesTransaction).insert(batch);
             },
           );
-          inserted_count += batch.length; // ✅ Update count
-          inserted_row_numbers.push(...batchRowNumbers); // ✅ Track successful row numbers
+          inserted_count += batch.length; // Update count
+          inserted_row_numbers.push(...batchRowNumbers); // Track successful row numbers
         }
       }
 
@@ -586,6 +602,11 @@ export class SalesTransactionsService {
           .map(([item, count]) => `${item} (${count})`)
           .join(", ")} item(s) not matched.`;
       }
+      if (unmatchedWarehouses.size > 0) {
+        displayMessage += ` ${Array.from(unmatchedWarehouses.entries())
+          .map(([whs, count]) => `${whs} (${count})`)
+          .join(", ")} warehouse(s) not matched.`;
+      }
 
       // Detailed log for dwh_log (includes raw error data)
       logMessage += `\nProcessed: ${rows.length} rows (${total} passed validation)`;
@@ -604,6 +625,13 @@ export class SalesTransactionsService {
       if (unmatchedItems.size > 0) {
         logMessage += `\nUnmatched Items: ${Array.from(unmatchedItems.entries())
           .map(([item, count]) => `${item} (${count} rows)`)
+          .join(", ")}`;
+      }
+      if (unmatchedWarehouses.size > 0) {
+        logMessage += `\nUnmatched Warehouses: ${Array.from(
+          unmatchedWarehouses.entries(),
+        )
+          .map(([whs, count]) => `${whs} (${count} rows)`)
           .join(", ")}`;
       }
     } catch (err) {

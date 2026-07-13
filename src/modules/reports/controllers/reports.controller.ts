@@ -161,6 +161,53 @@ export class ReportsController {
   }
 
   /**
+   * GET /reports/warehouse-req-report
+   * Returns flat records of transaction data for a given requirement type
+   * For requirement_type_id=2 (Rental): includes lessor, contract_amount, start/due/expiry dates
+   * For requirement_type_id=1 (Regulatory): excludes lessor/contract_amount
+   * Query params: warehouse_type_id, location_ids, date_from, date_to, status_id,
+   *              requirement_type_id, store_status_ids
+   * Example: /reports/warehouse-req-report?warehouse_type_id=1&requirement_type_id=2
+   */
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions({
+    module: "STORE REQUIREMENTS LISTING REPORTS",
+    action: "VIEW",
+    dynamicModuleSuffix: "requirement_type_id",
+  })
+  @Get("warehouse-req-report")
+  async getWarehouseRequirementsReport(
+    @Query("warehouse_type_id", ParseIntPipe) warehouse_type_id: number,
+    @Query("location_ids") location_ids?: string,
+    @Query("date_from") date_from?: string,
+    @Query("date_to") date_to?: string,
+    @Query("status_id") status_id?: number,
+    @Query("requirement_type_id") requirement_type_id?: number,
+    @Query("store_status_ids") store_status_ids?: string,
+    @Req() req?: any,
+  ) {
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+    const warehouseRemStatusId: number[] = store_status_ids
+      ? store_status_ids.split(",").map((id) => Number(id.trim()))
+      : [8];
+
+    return await this.warehouseRequirementsService.getWarehouseRequirementsReport(
+      warehouse_type_id,
+      location_ids,
+      date_from,
+      date_to,
+      status_id ? Number(status_id) : undefined,
+      userId,
+      roleId,
+      accessKeyId,
+      warehouseRemStatusId,
+      requirement_type_id,
+    );
+  }
+
+  /**
    * GET /reports/location-hurdles-comparison
    * Compare location hurdles (declared) vs warehouse hurdles (actual operations)
    * Query params: location_ids (comma-separated), region, year, month, status_ids (comma-separated)
