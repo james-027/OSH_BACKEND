@@ -141,6 +141,24 @@ export class DebitAdviceCategorySyncService {
         }
       }
 
+      // Get all category codes returned from BOS
+      const bosCategoryCodes = new Set(
+        data.map((row) => row.CODE?.trim()).filter((code) => !!code),
+      );
+
+      // Mark OSH records that no longer exist in BOS as Inactive
+      for (const existing of existingCategories) {
+        const existsInBos =
+          bosCategoryCodes.has(existing.category_code) ||
+          (existing.old_code && bosCategoryCodes.has(existing.old_code));
+
+        if (!existsInBos && existing.status_id !== 2) {
+          existing.status_id = 2;
+          updates.push(existing);
+          result.updated++;
+        }
+      }
+      
       if (inserts.length > 0) {
         const saved = await this.debitAdviceCategoryRepository.save(inserts, {
           chunk: batchSize,
