@@ -243,7 +243,13 @@ export class DebitAdviceService {
         })),
       };
     } catch (error) {
-      await this.rollbackWarehouseTransaction(savedDebitAdvice);
+      if (savedDebitAdvice && savedDebitAdvice.id) {
+        await this.rollbackWarehouseTransaction(savedDebitAdvice);
+      } else {
+        logger.warn(
+          "No debit advice to rollback - error occurred before save or save failed",
+        );
+      }
       logger.error("Error creating debit advice:", error);
       throw error;
     }
