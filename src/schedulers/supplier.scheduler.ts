@@ -3,26 +3,29 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 
 import { SupplierSyncService } from "src/modules/suppliers/services/supplier-sync.service";
 import logger from "src/config/logger";
+import { ConditionalCron } from "src/decorators/conditional-cron.decorator";
 
 @Injectable()
 export class SupplierScheduler {
   constructor(private readonly supplierSyncService: SupplierSyncService) {}
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  // @Cron(CronExpression.EVERY_2_HOURS)
   // @Cron("*/5 * * * * *")
+  @ConditionalCron(CronExpression.EVERY_5_MINUTES, "ENABLE_SUPPLIER_CRON")
   async handleCron() {
-    const batchSize = 1000; // Default batch size
+    try {
+      const batchSize = 1000; // Default batch size
 
-    const result = await this.supplierSyncService.syncSuppliers(batchSize);
-    logger.info(
-      `Supplier sync completed: ${result.inserted} inserted, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors.`,
-    );
-  }
-  catch(error) {
-    logger.error(
-      `Supplier sync failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+      const result = await this.supplierSyncService.syncSuppliers(batchSize);
+      logger.info(
+        `Supplier sync completed: ${result.inserted} inserted, ${result.updated} updated, ${result.skipped} skipped, ${result.errors} errors.`,
+      );
+    } catch (error) {
+      logger.error(
+        `Supplier sync failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 }
