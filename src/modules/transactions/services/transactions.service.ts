@@ -223,6 +223,7 @@ export class TransactionsService {
         await this.commonUtilitiesService.generateTransactionNumber({
           transaction_type: "INCENTIVES",
           location_id: header.location_id,
+          vendor_id: 0,
           access_key_id,
           format: "{abbr}{key}{year}-{seq:4}",
           reset_per_year: true,
