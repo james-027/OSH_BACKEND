@@ -41,6 +41,7 @@ import multer from "multer";
 import { join } from 'path';
 import { Response } from 'express';
 
+
 @Controller("debit-advices")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceController {
@@ -187,11 +188,15 @@ export class DebitAdviceController {
 
 
     @Post(":docno/upload-attachment")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "ADD"
+    })
     @UseInterceptors(
         FileInterceptor("file", {
             storage: diskStorage({
                 destination: (req, file, cb) => {
-                    console.log("STORAGE HIT");
+
 
                     const docno = req.params.docno;
 
@@ -203,7 +208,7 @@ export class DebitAdviceController {
                         docno,
                     );
 
-                    console.log(uploadPath);
+
 
                     if (!fs.existsSync(uploadPath)) {
                         fs.mkdirSync(uploadPath, {
