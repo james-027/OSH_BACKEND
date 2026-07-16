@@ -22,6 +22,8 @@ import { Inject } from "@nestjs/common";
 import * as fs from "fs";
 import { Brackets } from "typeorm";
 import * as path from "path";
+import { ApprovalMatrixService } from "src/modules/approval-matrix/services/approval-matrix.service";
+import { ApprovalLogsService } from "src/modules/approval-logs/services/approval-logs.service";
 
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
 // create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary
@@ -31,6 +33,8 @@ import * as path from "path";
 @Injectable()
 export class DebitAdviceService {
     constructor(
+        private readonly approvalMatrixService: ApprovalMatrixService,
+        private readonly approvalLogsService: ApprovalLogsService,
         @InjectRepository(DebitAdvice_header)
         private debitAdviceRepository: Repository<DebitAdvice_header>,
         @InjectRepository(DebitAdviceLine)
@@ -514,6 +518,20 @@ export class DebitAdviceService {
 
         const groupedDocuments: Record<string, any> = {};
 
+        // Same filter the frontend applies: active matrix lines belonging to this user.
+        const approvalMatrices = await this.approvalMatrixService.findAll();
+        const userApprovalLines = approvalMatrices.flatMap(
+            (matrix: any) =>
+                matrix.lines?.filter(
+                    (line: any) =>
+                        Number(line.userid) === userId && line.status_id === 1,
+                ) ?? [],
+        );
+        // The line id used as the `approval` value on each document (0 = none).
+        console.log("userApprovalLines", userApprovalLines);
+        const defaultApprovalId = userApprovalLines[0]?.id ?? 0;
+        // console.log(defaultApprovalId);
+
         for (let index = 0; index < rows.length; index++) {
             const row = rows[index];
 
@@ -545,6 +563,9 @@ export class DebitAdviceService {
                         transaction_date: formatExcelDate(row["TRANSACTION DATE"]),
                         status_id: 3,
                         quarter: 1,
+                        remarks: row["DOCUMENT REMARKS"] ?? "",
+                        approval: defaultApprovalId,
+                        createdBy: { id: userId } as any,
                         line: [],
                     };
                 }
@@ -598,6 +619,26 @@ export class DebitAdviceService {
                     STATUS: "Inserted",
                     id: createdDebitAdvice.id,
                 });
+
+
+                // Create a new debit advice and get the default approval ID for the user
+                // Reload relations after save
+                const reloadedDebitAdvice = await this.debitAdviceRepository.findOne({
+                    where: { id: createdDebitAdvice.id },
+                    relations: ["status", "createdBy", "lines", "lines.glItems"],
+                });
+
+                // Initialize approval stages for this debit advice
+                await this.approvalLogsService.initialize(
+                    {
+                        transaction_id: reloadedDebitAdvice.id,
+                        module_id: 34, // DEBIT ADVICES
+                        document_number: reloadedDebitAdvice.document_number,
+                        transaction_date: reloadedDebitAdvice.transaction_date,
+                        approval_id: defaultApprovalId,
+                    },
+                    userId,
+                );
             } catch (err) {
                 errors.push({
                     row: document.rowNum,
@@ -617,6 +658,7 @@ export class DebitAdviceService {
                 logger.error("SSE event failed:", err);
             }
         }
+
 
         return {
             inserted_count,

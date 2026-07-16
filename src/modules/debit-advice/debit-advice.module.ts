@@ -19,6 +19,12 @@ import { ActionLogsService } from "src/modules/actions/services/action-logs.serv
 import { ActionLog } from "src/entities/ActionLog";
 import { DocumentPostingLog } from "src/entities/DocumentPostingLog";
 import { TransactionAttachment } from "src/entities/TransactionAttachment";
+import { ApprovalMatrixService } from "../approval-matrix/services/approval-matrix.service";
+import { ApprovalMatrix } from "../../entities/ApprovalMatrix";
+import { ApprovalMatrixDetails } from "../../entities/ApprovalMatrixDetails";
+import { ApprovalMatrixLevels } from "../../entities/ApprovalMatrixLevels";
+import { ApprovalStagesList } from "src/entities/ApprovalStagesList";
+import { ApprovalLogsService } from "../approval-logs/services/approval-logs.service";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
     imports: [TypeOrmModule.forFeature([
@@ -32,6 +38,10 @@ import { TransactionAttachment } from "src/entities/TransactionAttachment";
         ActionLog,
         DocumentPostingLog,
         TransactionAttachment,
+        ApprovalMatrix,
+        ApprovalMatrixDetails,
+        ApprovalMatrixLevels,
+        ApprovalStagesList,
     ]),
         UsersModule,
         SSEModule],
@@ -43,6 +53,8 @@ import { TransactionAttachment } from "src/entities/TransactionAttachment";
         ResponseMapperService,
         ActionLogsService,
         OSHJVService,
+        ApprovalMatrixService,
+        ApprovalLogsService,
     ],
     exports: [DebitAdviceService, OSHJVService],
 })
