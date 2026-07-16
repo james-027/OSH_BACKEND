@@ -23,23 +23,33 @@ export class SupplierSyncService {
     };
 
     try {
-      const url = process.env.BOS_SUPPLIER_API;
-      const jwt = process.env.BOS_JWT;
-      const user = process.env.BOS_USER;
+      const requestBody = {
+        userid: process.env.BOS_USER,
+        jwt: process.env.BOS_JWT,
+      };
 
-      const { data } = await axios.get(url!, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-User": user, // Remove this if your API doesn't require it
+      const response = await axios.post(
+        process.env.BOS_SUPPLIER_API!,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+
+      const suppliers = response.data.data.suppliers;
+
+      if (!Array.isArray(suppliers) || suppliers.length === 0) {
         logger.warn("No supplier records returned.");
         return result;
       }
 
-      logger.info(`Retrieved ${data.length} supplier records.`);
+      logger.info(`Retrieved ${suppliers.length} supplier records.`);
 
       // -----------------------------------------
       // STEP 2: Load existing suppliers ONCE
@@ -63,7 +73,7 @@ export class SupplierSyncService {
       const inserts: Supplier[] = [];
       const updates: Supplier[] = [];
 
-      for (const row of data) {
+      for (const row of suppliers) {
         try {
           const supplierCode = row.suppno?.trim();
           const supplierName = row.suppname?.trim();

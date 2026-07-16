@@ -24,23 +24,33 @@ export class ProfitcenterSyncService {
     };
 
     try {
-      const url = process.env.BOS_PROFITCENTER_API;
-      const jwt = process.env.BOS_JWT;
-      const user = process.env.BOS_USER;
+      const requestBody = {
+        userid: process.env.BOS_USER,
+        jwt: process.env.BOS_JWT,
+      };
 
-      const { data } = await axios.get(url!, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-User": user, // Remove this if your API doesn't require it
+      const response = await axios.post(
+        process.env.BOS_PROFITCENTER_API!,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+
+      const profitCenters = response.data.data.profitCenters;
+
+      if (!Array.isArray(profitCenters) || profitCenters.length === 0) {
         logger.warn("No profit center records returned.");
         return result;
       }
 
-      logger.info(`Retrieved ${data.length} profit center records.`);
+      logger.info(`Retrieved ${profitCenters.length} profit center records.`);
 
       // Load existing records once
       const existingProfitcenters = await this.profitcenterRepository.find();
@@ -58,7 +68,7 @@ export class ProfitcenterSyncService {
       const inserts: Profitcenter[] = [];
       const updates: Profitcenter[] = [];
 
-      for (const row of data) {
+      for (const row of profitCenters) {
         try {
           const profitcenterCode = row.PROFITCENTER?.trim();
           const profitcenterName = row.PROFITCENTERNAME?.trim();

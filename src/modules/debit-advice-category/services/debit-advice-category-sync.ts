@@ -25,23 +25,35 @@ export class DebitAdviceCategorySyncService {
     };
 
     try {
-      const url = process.env.BOS_DEBITCAT_API;
-      const jwt = process.env.BOS_JWT;
-      const user = process.env.BOS_USER;
+      const requestBody = {
+        userid: process.env.BOS_USER,
+        jwt: process.env.BOS_JWT,
+      };
 
-      const { data } = await axios.get(url!, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-User": user, // Remove this if your API doesn't require it
+      const response = await axios.post(
+        process.env.BOS_DEBITCAT_API!,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+
+      const categories = response.data.data.categories;
+
+      if (!Array.isArray(categories) || categories.length === 0) {
         logger.warn("No Debit Advice Category records returned.");
         return result;
       }
 
-      logger.info(`Retrieved ${data.length} Debit Advice Category records.`);
+      logger.info(
+        `Retrieved ${categories.length} Debit Advice Category records.`,
+      );
 
       const existingCategories =
         await this.debitAdviceCategoryRepository.find();
@@ -59,7 +71,7 @@ export class DebitAdviceCategorySyncService {
       const inserts: DebitAdviceCategory[] = [];
       const updates: DebitAdviceCategory[] = [];
 
-      for (const row of data) {
+      for (const row of categories) {
         try {
           const categoryCode = row.CODE?.trim();
           const categoryName = row.NAME?.trim();
@@ -147,7 +159,7 @@ export class DebitAdviceCategorySyncService {
 
       // Get all category codes returned from BOS
       const bosCategoryCodes = new Set(
-        data.map((row) => row.CODE?.trim()).filter((code) => !!code),
+        categories.map((row) => row.CODE?.trim()).filter((code) => !!code),
       );
 
       // Mark OSH records that no longer exist in BOS as Inactive
