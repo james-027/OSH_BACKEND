@@ -535,7 +535,7 @@ export class LocationHurdlesService {
       }
 
       const itemCategory = itemCategories.find(
-        (c) => c.code === record.item_category_code,
+        (c) => c.category_code === record.item_category_code,
       );
       if (!itemCategory) {
         errors.push({
