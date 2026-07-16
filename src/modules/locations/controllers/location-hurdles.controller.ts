@@ -33,6 +33,7 @@ import {
 import * as XLSX from "xlsx";
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
+import { normalizeKeysArray } from "src/utils/excel-validation";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
@@ -191,7 +192,8 @@ export class LocationHurdlesController {
     const workbook = XLSX.read(fs.readFileSync(file.path), { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const jsonRaw: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const json = normalizeKeysArray(jsonRaw);
     const userId = req.user.id;
     const roleId = req.user.role_id;
     // Get allowed location_ids for this user/role
