@@ -24,7 +24,7 @@ export class SegmentsController {
   constructor(private readonly segmentsService: SegmentsService) {}
 
   @Get()
-  @RequirePermissions({ module: "SEGMENTS", action: "VIEW" })
+  @RequirePermissions({ module: "SEGMENTS", action: "DATA ACCESS" })
   async findAll() {
     return this.segmentsService.findAll();
   }

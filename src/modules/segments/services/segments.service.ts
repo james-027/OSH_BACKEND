@@ -198,7 +198,7 @@ export class SegmentsService {
 
       const segmentWithRelations = await this.segmentsRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy","brand"],
+        relations: ["status", "createdBy", "updatedBy", "brand"],
       });
 
       if (!segmentWithRelations) {
