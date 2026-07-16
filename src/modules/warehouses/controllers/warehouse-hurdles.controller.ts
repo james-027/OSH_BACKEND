@@ -40,6 +40,7 @@ import { CreateUserAuditTrailDto } from "../../users/dto/CreateUserAuditTrailDto
 import { buildWarehouseHurdleKey, CACHE_TTL } from "src/config/cache.config";
 import { CacheCustom } from "src/decorators/cache.decorator";
 import { parseToFirstDayOfMonth } from "../../../utils/date.utils";
+import { normalizeKeysArray } from "src/utils/excel-validation";
 
 @Controller("warehouse-hurdles")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -209,7 +210,8 @@ export class WarehouseHurdlesController {
     const workbook = XLSX.read(fs.readFileSync(file.path), { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const jsonRaw: any[] = XLSX.utils.sheet_to_json(sheet, { defval: null });
+    const json = normalizeKeysArray(jsonRaw);
     const userId = req.user.id;
     const roleId = req.user.role_id;
 
