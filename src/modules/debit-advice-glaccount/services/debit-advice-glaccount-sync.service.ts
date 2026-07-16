@@ -25,10 +25,14 @@ export class DebitAdviceGlAccountSyncService {
     };
 
     try {
-      const { data } = await axios.get(process.env.BOS_DEBITGL_API!, {
-        auth: {
-          username: process.env.POS_USERNAME,
-          password: process.env.POS_PASSWORD,
+      const url = process.env.BOS_DEBITGL_API;
+      const jwt = process.env.BOS_JWT;
+      const user = process.env.BOS_USER;
+
+      const { data } = await axios.get(url!, {
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "X-User": user, // Remove this if your API doesn't require it
         },
       });
 
