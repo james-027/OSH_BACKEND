@@ -252,7 +252,7 @@ export class ApprovalMatrixService {
           approval_title: detailDto.approval_title,
           userid: dto.userid,
           module: Number(detailDto.module),
-          status_id: detailDto.status_id ?? 1,
+          status_id: dto.status_id === 2 ? 14 : 1,
           created_by: existingDetails[0]?.created_by,
           updatedBy: { id: userId } as any,
         }),

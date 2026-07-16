@@ -104,7 +104,6 @@ export class ApprovalMatrixController {
     module: "APPROVAL MATRIX",
     action: "ACTIVATE",
   })
-  @Patch(":id/toggle-status-activate")
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
