@@ -24,23 +24,33 @@ export class GLAccountSyncService {
     };
 
     try {
-      const url = process.env.BOS_GLACCOUNT_API;
-      const jwt = process.env.BOS_JWT;
-      const user = process.env.BOS_USER;
+      const requestBody = {
+        userid: process.env.BOS_USER,
+        jwt: process.env.BOS_JWT,
+      };
 
-      const { data } = await axios.get(url!, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-User": user, // Remove this if your API doesn't require it
+      const response = await axios.post(
+        process.env.BOS_GLACCOUNT_API!,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+
+      const glAccounts = response.data.data.glAccounts;
+
+      if (!Array.isArray(glAccounts) || glAccounts.length === 0) {
         logger.warn("No GL Account records returned.");
         return result;
       }
 
-      logger.info(`Retrieved ${data.length} GL Account records.`);
+      logger.info(`Retrieved ${glAccounts.length} GL Account records.`);
 
       const existingAccounts = await this.glAccountRepository.find();
 
@@ -57,7 +67,7 @@ export class GLAccountSyncService {
       const inserts: GLAccounts[] = [];
       const updates: GLAccounts[] = [];
 
-      for (const row of data) {
+      for (const row of glAccounts) {
         try {
           const accountCode = row.ACCTCODE?.trim();
           const accountName = row.ACCTNAME?.trim();

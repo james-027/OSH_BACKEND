@@ -25,23 +25,38 @@ export class DebitAdviceGlAccountSyncService {
     };
 
     try {
-      const url = process.env.BOS_DEBITGL_API;
-      const jwt = process.env.BOS_JWT;
-      const user = process.env.BOS_USER;
+      const requestBody = {
+        userid: process.env.BOS_USER,
+        jwt: process.env.BOS_JWT,
+      };
 
-      const { data } = await axios.get(url!, {
-        headers: {
-          Authorization: `Bearer ${jwt}`,
-          "X-User": user, // Remove this if your API doesn't require it
+      const response = await axios.post(
+        process.env.BOS_DEBITGL_API!,
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+
+      const debitAdviceGLAccounts = response.data.data.glAccounts;
+
+      if (
+        !Array.isArray(debitAdviceGLAccounts) ||
+        debitAdviceGLAccounts.length === 0
+      ) {
         logger.warn("No Debit Advice GL records returned.");
         return result;
       }
 
-      logger.info(`Retrieved ${data.length} Debit Advice GL records.`);
+      logger.info(
+        `Retrieved ${debitAdviceGLAccounts.length} Debit Advice GL records.`,
+      );
 
       const existingRecords = await this.repository.find();
 
@@ -54,7 +69,7 @@ export class DebitAdviceGlAccountSyncService {
       const inserts: DebitAdviceGLAccounts[] = [];
       const updates: DebitAdviceGLAccounts[] = [];
 
-      for (const row of data) {
+      for (const row of debitAdviceGLAccounts) {
         try {
           const categoryCode = row.CODE?.trim();
           const categoryName = row.NAME?.trim();
