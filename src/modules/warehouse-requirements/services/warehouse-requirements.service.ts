@@ -1975,6 +1975,7 @@ export class WarehouseRequirementsService {
     accessKeyId?: number,
     warehouse_rem_status_id?: number[],
     requirementTypeId?: number,
+    segment_id?: number[],
   ): Promise<any[]> {
     try {
       const activeRequirements =
@@ -2008,6 +2009,7 @@ export class WarehouseRequirementsService {
       const warehouses = await this.getWarehouses(
         warehouse_type_id,
         warehouse_rem_status_id,
+        segment_id,
         date_to,
         accessKeyId,
         finalLocationIds,
@@ -2271,6 +2273,7 @@ export class WarehouseRequirementsService {
       | "withRequirements"
       | "withoutRequirements" = "all",
     warehouse_rem_status_id?: number[],
+    segment_id?: number[],
   ): Promise<any> {
     try {
       // Step 1: Get active requirements only (status_id = 1)
@@ -2309,6 +2312,7 @@ export class WarehouseRequirementsService {
       const warehouses = await this.getWarehouses(
         warehouse_type_id,
         warehouse_rem_status_id,
+        segment_id,
         date_to,
         accessKeyId,
         finalLocationIds,
@@ -2718,6 +2722,7 @@ export class WarehouseRequirementsService {
     accessKeyId?: number,
     store_status_ids?: number[],
     requirementTypeId: number = 2, // Default 2 (Rental) for backward compatibility
+    segment_id?: number[],
   ): Promise<any> {
     try {
       // Step 1: Get allowed location IDs based on user and role
@@ -2748,6 +2753,7 @@ export class WarehouseRequirementsService {
       const warehouses = await this.getWarehouses(
         warehouse_type_id,
         warehouseRemStatusId,
+        segment_id,
         date_to,
         accessKeyId,
         finalLocationIds,
@@ -2940,6 +2946,7 @@ export class WarehouseRequirementsService {
   private async getWarehouses(
     warehouse_type_id: number,
     warehouse_rem_status_id?: number[],
+    segment_id?: number[],
     date_to?: string,
     accessKeyId?: number,
     finalLocationIds: number[] = [],
@@ -2951,6 +2958,7 @@ export class WarehouseRequirementsService {
       rem_status_id: In(
         warehouse_rem_status_id || WAREHOUSE_REM_STATUS_IDS.NEEDS_REQUIREMENTS,
       ),
+      segment_id: In(segment_id),
     };
 
     const end_date = date_to ? endOfLocalRange(date_to) : null;
