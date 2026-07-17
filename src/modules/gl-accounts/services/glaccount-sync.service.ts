@@ -66,12 +66,14 @@ export class GLAccountSyncService {
 
       const inserts: GLAccounts[] = [];
       const updates: GLAccounts[] = [];
-
+      const updatedIds = new Set<number>();
       for (const row of glAccounts) {
         try {
           const accountCode = row.ACCTCODE?.trim();
           const accountName = row.ACCTNAME?.trim();
           const company = row.U_COMPANY?.trim() ?? "";
+          const statusId = Number(row.U_STATUS) || 1;
+
           if (!accountCode) {
             result.skipped++;
             continue;
@@ -110,10 +112,16 @@ export class GLAccountSyncService {
               existing.company = company;
               hasChanges = true;
             }
-
+            if (existing.status_id !== statusId) {
+              existing.status_id = statusId;
+              hasChanges = true;
+            }
             if (hasChanges) {
-              updates.push(existing);
-              result.updated++;
+              if (!updatedIds.has(existing.id)) {
+                updates.push(existing);
+                updatedIds.add(existing.id);
+                result.updated++;
+              }
             } else {
               result.skipped++;
             }
@@ -126,9 +134,13 @@ export class GLAccountSyncService {
               existing.gl_code = accountCode;
               existing.gl_name = accountName;
               existing.company = company;
+              existing.status_id = statusId;
 
-              updates.push(existing);
-              result.updated++;
+              if (!updatedIds.has(existing.id)) {
+                updates.push(existing);
+                updatedIds.add(existing.id);
+                result.updated++;
+              }
             } else {
               inserts.push(
                 this.glAccountRepository.create({
@@ -136,7 +148,7 @@ export class GLAccountSyncService {
                   gl_name: accountName,
                   old_code: accountCode,
                   company,
-                  status_id: 1,
+                  status_id: statusId,
                 }),
               );
 
@@ -153,7 +165,28 @@ export class GLAccountSyncService {
           );
         }
       }
+      // Get all GL Account codes returned from BOS
+      const bosAccountCodes = new Set(
+        glAccounts.map((row) => row.ACCTCODE?.trim()).filter((code) => !!code),
+      );
 
+      // Mark OSH records that no longer exist in BOS as Inactive
+      // Mark OSH records that no longer exist in BOS as Inactive
+      for (const existing of existingAccounts) {
+        const existsInBos =
+          bosAccountCodes.has(existing.gl_code) ||
+          (existing.old_code && bosAccountCodes.has(existing.old_code));
+
+        if (!existsInBos && existing.status_id !== 2) {
+          existing.status_id = 2;
+
+          if (!updatedIds.has(existing.id)) {
+            updates.push(existing);
+            updatedIds.add(existing.id);
+            result.updated++;
+          }
+        }
+      }
       if (inserts.length > 0) {
         const savedInserts = await this.glAccountRepository.save(inserts, {
           chunk: batchSize,

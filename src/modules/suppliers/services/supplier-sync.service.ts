@@ -72,6 +72,7 @@ export class SupplierSyncService {
       // -----------------------------------------
       const inserts: Supplier[] = [];
       const updates: Supplier[] = [];
+      const updatedIds = new Set<number>();
 
       for (const row of suppliers) {
         try {
@@ -81,7 +82,7 @@ export class SupplierSyncService {
           const groupName = row.groupname?.trim();
           const taxId = row.taxid?.trim();
           const company = row.u_company?.trim();
-
+          const statusId = Number(row.u_status) || 1;
           if (!supplierCode) {
             result.skipped++;
             continue;
@@ -136,10 +137,17 @@ export class SupplierSyncService {
               existing.company = company;
               hasChanges = true;
             }
+            if (existing.status_id !== statusId) {
+              existing.status_id = statusId;
+              hasChanges = true;
+            }
 
             if (hasChanges) {
-              updates.push(existing);
-              result.updated++;
+              if (!updatedIds.has(existing.id)) {
+                updates.push(existing);
+                updatedIds.add(existing.id);
+                result.updated++;
+              }
             } else {
               result.skipped++;
             }
@@ -157,8 +165,11 @@ export class SupplierSyncService {
               existing.taxid = taxId;
               existing.company = company;
 
-              updates.push(existing);
-              result.updated++;
+              if (!updatedIds.has(existing.id)) {
+                updates.push(existing);
+                updatedIds.add(existing.id);
+                result.updated++;
+              }
             } else {
               // Completely new supplier
               inserts.push(
@@ -170,7 +181,7 @@ export class SupplierSyncService {
                   group_name: groupName,
                   taxid: taxId,
                   company: company,
-                  status_id: 1,
+                  status_id: statusId,
                 }),
               );
 
@@ -187,7 +198,27 @@ export class SupplierSyncService {
           );
         }
       }
+      // Get all supplier codes returned from BOS
+      const bosSupplierCodes = new Set(
+        suppliers.map((row) => row.suppno?.trim()).filter((code) => !!code),
+      );
 
+      // Mark OSH records that no longer exist in BOS as Inactive
+      for (const existing of existingSuppliers) {
+        const existsInBos =
+          bosSupplierCodes.has(existing.supplier_code) ||
+          (existing.old_code && bosSupplierCodes.has(existing.old_code));
+
+        if (!existsInBos && existing.status_id !== 2) {
+          existing.status_id = 2;
+
+          if (!updatedIds.has(existing.id)) {
+            updates.push(existing);
+            updatedIds.add(existing.id);
+            result.updated++;
+          }
+        }
+      }
       if (inserts.length > 0) {
         const savedInserts = await this.supplierRepository.save(inserts, {
           chunk: batchSize,

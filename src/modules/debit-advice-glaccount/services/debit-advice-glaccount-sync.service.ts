@@ -169,7 +169,25 @@ export class DebitAdviceGlAccountSyncService {
           );
         }
       }
+      // Get all GL Codes returned from BOS
+      const bosGLCodes = new Set(
+        debitAdviceGLAccounts
+          .map((row) => row.U_GL_CODE?.trim())
+          .filter((code) => !!code),
+      );
 
+      // Mark OSH records that no longer exist in BOS as Inactive
+      for (const existing of existingRecords) {
+        const existsInBos =
+          bosGLCodes.has(existing.gl_code) ||
+          (existing.old_code && bosGLCodes.has(existing.old_code));
+
+        if (!existsInBos && existing.status_id !== 2) {
+          existing.status_id = 2;
+          updates.push(existing);
+          result.updated++;
+        }
+      }
       if (inserts.length) {
         const saved = await this.repository.save(inserts, {
           chunk: batchSize,
