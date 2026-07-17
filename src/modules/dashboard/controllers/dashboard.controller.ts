@@ -67,6 +67,7 @@ export class DashboardController {
     @Query("date_to") date_to?: string,
     @Query("status_id") status_id?: number,
     @Query("store_status_ids") store_status_ids?: string,
+    @Query("segment_ids") segment_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -75,6 +76,9 @@ export class DashboardController {
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
+    const segmentIds: number[] = segment_ids
+      ? segment_ids.split(",").map((id) => Number(id.trim()))
+      : [2];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingPerLocation(
       warehouse_type_id,
@@ -86,6 +90,8 @@ export class DashboardController {
       roleId,
       accessKeyId,
       warehouseRemStatusId,
+      1,
+      segmentIds,
     );
   }
 }
