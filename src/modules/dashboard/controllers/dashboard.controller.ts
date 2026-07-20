@@ -90,7 +90,7 @@ export class DashboardController {
       roleId,
       accessKeyId,
       warehouseRemStatusId,
-      1,
+      null,
       segmentIds,
     );
   }
