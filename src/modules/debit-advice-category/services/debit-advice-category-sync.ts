@@ -168,8 +168,8 @@ export class DebitAdviceCategorySyncService {
           bosCategoryCodes.has(existing.category_code) ||
           (existing.old_code && bosCategoryCodes.has(existing.old_code));
 
-        if (!existsInBos && existing.status_id !== 2) {
-          existing.status_id = 2;
+        if (!existsInBos && existing.status_id !== 14) {
+          existing.status_id = 14;
           updates.push(existing);
           result.updated++;
         }

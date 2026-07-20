@@ -177,8 +177,8 @@ export class GLAccountSyncService {
           bosAccountCodes.has(existing.gl_code) ||
           (existing.old_code && bosAccountCodes.has(existing.old_code));
 
-        if (!existsInBos && existing.status_id !== 2) {
-          existing.status_id = 2;
+        if (!existsInBos && existing.status_id !== 14) {
+          existing.status_id = 14;
 
           if (!updatedIds.has(existing.id)) {
             updates.push(existing);
