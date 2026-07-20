@@ -74,6 +74,8 @@ export class ProfitcenterSyncService {
           const profitcenterName = row.PROFITCENTERNAME?.trim();
           const businessCenter = row.U_BC?.trim() ?? "";
           const company = row.U_COMPANY?.trim();
+          const statusId = Number(row.U_STATUS) || 1;
+
           if (!profitcenterCode) {
             result.skipped++;
             continue;
@@ -116,7 +118,10 @@ export class ProfitcenterSyncService {
               existing.company = company;
               hasChanges = true;
             }
-
+            if (existing.status_id !== statusId) {
+              existing.status_id = statusId;
+              hasChanges = true;
+            }
             if (hasChanges) {
               updates.push(existing);
               result.updated++;
@@ -149,7 +154,7 @@ export class ProfitcenterSyncService {
                   business_center: businessCenter,
 
                   company,
-                  status_id: 1,
+                  status_id: statusId,
                 }),
               );
             }
@@ -166,7 +171,25 @@ export class ProfitcenterSyncService {
           );
         }
       }
+      // Get all Profit Center codes returned from BOS
+      const bosProfitcenterCodes = new Set(
+        profitCenters
+          .map((row) => row.PROFITCENTER?.trim())
+          .filter((code) => !!code),
+      );
 
+      // Mark OSH records that no longer exist in BOS as Inactive
+      for (const existing of existingProfitcenters) {
+        const existsInBos =
+          bosProfitcenterCodes.has(existing.profitcenter_code) ||
+          (existing.old_code && bosProfitcenterCodes.has(existing.old_code));
+
+        if (!existsInBos && existing.status_id !== 2) {
+          existing.status_id = 2;
+          updates.push(existing);
+          result.updated++;
+        }
+      }
       // Batch insert
       if (inserts.length > 0) {
         const savedInserts = await this.profitcenterRepository.save(inserts, {
