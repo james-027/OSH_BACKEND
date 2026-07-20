@@ -209,8 +209,8 @@ export class SupplierSyncService {
           bosSupplierCodes.has(existing.supplier_code) ||
           (existing.old_code && bosSupplierCodes.has(existing.old_code));
 
-        if (!existsInBos && existing.status_id !== 2) {
-          existing.status_id = 2;
+        if (!existsInBos && existing.status_id !== 14) {
+          existing.status_id = 14;
 
           if (!updatedIds.has(existing.id)) {
             updates.push(existing);

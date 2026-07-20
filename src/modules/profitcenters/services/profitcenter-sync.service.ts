@@ -184,8 +184,8 @@ export class ProfitcenterSyncService {
           bosProfitcenterCodes.has(existing.profitcenter_code) ||
           (existing.old_code && bosProfitcenterCodes.has(existing.old_code));
 
-        if (!existsInBos && existing.status_id !== 2) {
-          existing.status_id = 2;
+        if (!existsInBos && existing.status_id !== 14) {
+          existing.status_id = 14;
           updates.push(existing);
           result.updated++;
         }
