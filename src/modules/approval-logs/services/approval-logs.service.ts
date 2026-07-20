@@ -10,15 +10,17 @@ import logger from "../../../config/logger";
 import { ApprovalMatrix } from "src/entities/ApprovalMatrix";
 import { CreateApprovalStagesDto } from "../dto/CreateApprovalStagesDto";
 import { BadRequestException } from "@nestjs/common";
+import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 @Injectable()
 export class ApprovalLogsService {
   constructor(
+    private sseEventEmitter: SSEEventEmitterHelper,
     @InjectRepository(ApprovalStagesList)
     private approvalStagesListRepository: Repository<ApprovalStagesList>,
 
     @InjectRepository(ApprovalMatrix)
     private approvalMatrixRepository: Repository<ApprovalMatrix>,
-  ) { }
+  ) {}
 
   // Fetch approval logs by debit advice header ID
   async findByHeaderId(transaction_id: number): Promise<any[]> {
@@ -130,7 +132,8 @@ export class ApprovalLogsService {
 
     const moduleLine = matrix.lines.find(
       (x) =>
-        Number(x.module) === Number(dto.module_id) && Number(x.id) === Number(dto.approval_id),
+        Number(x.module) === Number(dto.module_id) &&
+        Number(x.id) === Number(dto.approval_id),
     );
 
     if (!moduleLine) {
@@ -189,7 +192,14 @@ export class ApprovalLogsService {
         created_by: userId,
       });
     }
-
+    try {
+      this.sseEventEmitter.emitUpdateSignal(
+        "approval-stageslist",
+        dto.transaction_id,
+      );
+    } catch (err) {
+      logger.error("SSE event failed:", err);
+    }
     return {
       success: true,
       stages_created: levels.length,

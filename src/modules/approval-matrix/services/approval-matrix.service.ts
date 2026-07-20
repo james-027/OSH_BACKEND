@@ -252,7 +252,7 @@ export class ApprovalMatrixService {
           approval_title: detailDto.approval_title,
           userid: dto.userid,
           module: Number(detailDto.module),
-          status_id: dto.status_id === 2 ? 14 : 1,
+          status_id: dto.status_id === 2 ? 14 : undefined,
           created_by: existingDetails[0]?.created_by,
           updatedBy: { id: userId } as any,
         }),
@@ -320,34 +320,36 @@ export class ApprovalMatrixService {
     const updatedApprovalMatrix =
       await this.approvalMatrixRepository.save(approvalMatrix);
 
-    // Soft delete / restore all details
-    await this.approvalMatrixDetailsRepository
-      .createQueryBuilder()
-      .update()
-      .set({
-        status_id: newStatusId,
-        updated_by: userId,
-      })
-      .where("header_id = :id", { id })
-      .execute();
+    // Only deactivate details and levels when the header is being deactivated.
+    // When the header is activated, keep their existing statuses.
+    if (newStatusId === 14) {
+      await this.approvalMatrixDetailsRepository
+        .createQueryBuilder()
+        .update()
+        .set({
+          status_id: 14,
+          updated_by: userId,
+        })
+        .where("header_id = :id", { id })
+        .execute();
 
-    // Soft delete / restore all levels
-    await this.approvalMatrixLevelsRepository
-      .createQueryBuilder()
-      .update()
-      .set({
-        status_id: newStatusId,
-        updated_by: userId,
-      })
-      .where(
-        `line_id IN (
+      await this.approvalMatrixLevelsRepository
+        .createQueryBuilder()
+        .update()
+        .set({
+          status_id: 14,
+          updated_by: userId,
+        })
+        .where(
+          `line_id IN (
         SELECT id
         FROM approval_matrix_details
         WHERE header_id = :id
       )`,
-        { id },
-      )
-      .execute();
+          { id },
+        )
+        .execute();
+    }
 
     const result = await this.findOne(id);
 
