@@ -14,6 +14,7 @@ import { UserLocationsService } from "../../users/services/user-locations.servic
 // import { access } from "fs";
 import {
   ExcelValidationConfig,
+  normalizeKeysArray,
   validateAndFormatExcelRow,
 } from "src/utils/excel-validation";
 import { Item } from "src/entities/Item";
@@ -304,14 +305,15 @@ export class SalesTransactionsService {
       const sheet = workbook.Sheets[sheetName];
       // rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
       const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null });
-      rows = rawRows.map((row: Record<string, any>) => {
-        const normalized: Record<string, any> = {};
-        for (const key of Object.keys(row)) {
-          const cleanKey = key.trim().toUpperCase(); // e.g., " UNITPRICE " → "UNITPRICE"
-          normalized[cleanKey] = row[key];
-        }
-        return normalized;
-      });
+      // rows = rawRows.map((row: Record<string, any>) => {
+      //   const normalized: Record<string, any> = {};
+      //   for (const key of Object.keys(row)) {
+      //     const cleanKey = key.trim().toUpperCase(); // e.g., " UNITPRICE " → "UNITPRICE"
+      //     normalized[cleanKey] = row[key];
+      //   }
+      //   return normalized;
+      // });
+      const rows = normalizeKeysArray(rawRows);
 
       logMessage = `Processing Excel file with ${rows.length} rows`;
 

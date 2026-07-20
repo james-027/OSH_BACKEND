@@ -70,6 +70,33 @@ function formatValue(value: any, format?: string): any {
 }
 
 /**
+ * Normalizes object keys by trimming and converting to uppercase
+ * @param obj - The object to normalize
+ * @returns A new object with normalized keys
+ */
+export const normalizeKeys = <T extends Record<string, any>>(
+  obj: T,
+): Record<string, any> => {
+  const normalized: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    const cleanKey = key.trim().toUpperCase();
+    normalized[cleanKey] = obj[key];
+  }
+  return normalized;
+};
+
+/**
+ * Normalizes keys for an array of objects
+ * @param rows - Array of objects to normalize
+ * @returns Array of objects with normalized keys
+ */
+export const normalizeKeysArray = <T extends Record<string, any>>(
+  rows: T[],
+): Record<string, any>[] => {
+  return rows.map((row) => normalizeKeys(row));
+};
+
+/**
  * Validates and formats an Excel row based on provided configuration
  * @param row - Raw Excel row data
  * @param config - Validation and formatting configuration

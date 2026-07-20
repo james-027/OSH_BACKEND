@@ -902,6 +902,7 @@ export class WarehouseEmployeesService {
     userId?: number,
     roleId?: number,
     accessKeyId?: number,
+    segment_id?: number[],
   ): Promise<any[]> {
     try {
       // Step 1: Parse location_ids if provided (comma-separated)
@@ -984,6 +985,11 @@ export class WarehouseEmployeesService {
       if (store_status_ids && store_status_ids.length > 0) {
         query = query.andWhere("w.rem_status_id IN (:...store_status_ids)");
         queryParams.store_status_ids = store_status_ids;
+      }
+
+      if (segment_id && segment_id.length > 0) {
+        query = query.andWhere("w.segment_id IN (:...segment_id)");
+        queryParams.segment_id = segment_id;
       }
 
       // Apply access_key_id filter if provided (accumulate before setParameters)

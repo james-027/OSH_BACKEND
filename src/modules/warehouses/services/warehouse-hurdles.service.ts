@@ -555,12 +555,12 @@ export class WarehouseHurdlesService {
         continue;
       }
       const itemCategory = itemCategories.find(
-        (c) => c.code == row.item_category_code,
+        (c) => c.category_code == row.item_category_code,
       );
       if (!itemCategory) {
         errors.push({
           row: i + 2,
-          error: `Invalid ITEM CATEGORY CODE: ${row.item_category_code}`,
+          error: `Invalid ITEM CATEGORY CODE: ${row.item_category_code}.`,
         });
         continue;
       }

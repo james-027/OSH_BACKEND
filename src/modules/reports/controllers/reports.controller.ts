@@ -83,6 +83,7 @@ export class ReportsController {
     @Query("status_id") status_id?: number,
     @Query("requirement_type_id") requirement_type_id?: number,
     @Query("store_status_ids") store_status_ids?: string,
+    @Query("segment_ids") segment_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -91,6 +92,9 @@ export class ReportsController {
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
+    const segmentIds: number[] = segment_ids
+      ? segment_ids.split(",").map((id) => Number(id.trim()))
+      : [2];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingPerLocation(
       warehouse_type_id,
@@ -103,6 +107,7 @@ export class ReportsController {
       accessKeyId,
       warehouseRemStatusId,
       requirement_type_id,
+      segmentIds,
     );
   }
 
@@ -129,6 +134,7 @@ export class ReportsController {
     @Query("flatten") flatten?: boolean,
     @Query("requirement_type_id") requirement_type_id?: number,
     @Query("store_status_ids") store_status_ids?: string,
+    @Query("segment_ids") segment_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -143,6 +149,9 @@ export class ReportsController {
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
+    const segmentIds: number[] = segment_ids
+      ? segment_ids.split(",").map((id) => Number(id.trim()))
+      : [2];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsListingDetailedPerStore(
       warehouse_type_id,
@@ -157,6 +166,7 @@ export class ReportsController {
       requirement_type_id,
       baseRequirementsFilter,
       warehouseRemStatusId,
+      segmentIds,
     );
   }
 
@@ -184,6 +194,7 @@ export class ReportsController {
     @Query("status_id") status_id?: number,
     @Query("requirement_type_id") requirement_type_id?: number,
     @Query("store_status_ids") store_status_ids?: string,
+    @Query("segment_ids") segment_ids?: string,
     @Req() req?: any,
   ) {
     const userId = req.user.id;
@@ -192,6 +203,9 @@ export class ReportsController {
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
+    const segmentIds: number[] = segment_ids
+      ? segment_ids.split(",").map((id) => Number(id.trim()))
+      : [2];
 
     return await this.warehouseRequirementsService.getWarehouseRequirementsReport(
       warehouse_type_id,
@@ -204,6 +218,7 @@ export class ReportsController {
       accessKeyId,
       warehouseRemStatusId,
       requirement_type_id,
+      segmentIds,
     );
   }
 
@@ -277,28 +292,37 @@ export class ReportsController {
     @Query("date_to") date_to?: string,
     @Query("store_status_ids") store_status_ids?: string,
     @Query("status_id") status_id?: string,
+    @Query("segment_ids") segment_ids?: string,
     @Req() req?: any,
   ) {
     if (!locationIdsParam || !date_from || !date_to) {
       throw new BadRequestException(
-        "location_ids, date_from, and date_to query parameters are required",
+        "Location, Date from, and Date to filter parameters are required",
       );
     }
 
-    // Parse and validate location_ids (ensure all are valid numbers)
-    const locationIds = locationIdsParam.split(",").map((id) => {
-      const parsed = parseInt(id.trim(), 10);
-      if (isNaN(parsed)) {
-        throw new BadRequestException(
-          `Invalid location_id: ${id}. Must be a valid number.`,
-        );
-      }
-      return parsed;
-    });
+    let locationIds: number[] | undefined = undefined;
+    if (locationIdsParam) {
+      // Parse and validate location_ids (ensure all are valid numbers)
+      locationIds = locationIdsParam.split(",").map((id) => {
+        const parsed = parseInt(id.trim(), 10);
+        if (isNaN(parsed)) {
+          throw new BadRequestException(
+            `Invalid location_id: ${id}. Must be a valid number.`,
+          );
+        }
+        return parsed;
+      });
+    }
 
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
+
+    const segmentIds: number[] = segment_ids
+      ? segment_ids.split(",").map((id) => Number(id.trim()))
+      : [2];
+    console.log("segmentIds", segment_ids);
 
     // Validate date range format and order
     validateDateRangeParam(date_from, date_to);
@@ -316,6 +340,7 @@ export class ReportsController {
       userId,
       roleId,
       accessKeyId,
+      segmentIds,
     );
   }
 }
