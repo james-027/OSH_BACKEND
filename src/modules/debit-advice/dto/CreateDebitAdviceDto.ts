@@ -6,7 +6,7 @@
 // the DTOs separate for clarity and future extensibility, we can do so as well. In this case,
 //  I have included the id field in the CreateDebitAdviceDto as optional, but it can be removed if you prefer to keep it strictly for updates.
 import { Type } from 'class-transformer';
-import { ValidateNested, IsArray, ArrayMinSize, IsNumber, IsString, IsDateString, IsNotEmpty } from 'class-validator';
+import { ValidateNested, IsArray, ArrayMinSize, IsNumber, IsString, IsDateString, IsNotEmpty, IsOptional } from 'class-validator';
 import { DebitAdviceLineItemDto } from "./CreateDebitAdviceLineItemDto";
 import { isDate } from 'util/types';
 
@@ -38,6 +38,10 @@ export class CreateDebitAdviceDto {
     line!: DebitAdviceLineItemDto[];
     access_key_id?: number;
     status_id?: number;
+
+
+    @IsNumber()
+    location_id: number;
 
 }
 
