@@ -60,9 +60,11 @@ export class DebitAdviceGlAccountSyncService {
 
       const existingRecords = await this.repository.find();
 
-      const glCodeMap = new Map(existingRecords.map((x) => [x.gl_code, x]));
+      const categoryCodeMap = new Map(
+        existingRecords.map((x) => [x.category_code, x]),
+      );
 
-      const oldCodeMap = new Map(
+      const oldCategoryCodeMap = new Map(
         existingRecords.filter((x) => x.old_code).map((x) => [x.old_code, x]),
       );
 
@@ -86,12 +88,11 @@ export class DebitAdviceGlAccountSyncService {
             continue;
           }
 
-          let existing = glCodeMap.get(glCode);
+          let existing = categoryCodeMap.get(categoryCode);
 
           if (!existing) {
-            existing = oldCodeMap.get(glCode);
+            existing = oldCategoryCodeMap.get(categoryCode);
           }
-
           if (!existing) {
             existing = existingRecords.find(
               (g) => g.gl_name?.trim() === glName,
@@ -170,18 +171,17 @@ export class DebitAdviceGlAccountSyncService {
         }
       }
       // Get all GL Codes returned from BOS
-      const bosGLCodes = new Set(
+      const bosCategoryCodes = new Set(
         debitAdviceGLAccounts
-          .map((row) => row.U_GL_CODE?.trim())
+          .map((row) => row.CODE?.trim())
           .filter((code) => !!code),
       );
-
       // Mark OSH records that no longer exist in BOS as Inactive
       for (const existing of existingRecords) {
         const existsInBos =
-          bosGLCodes.has(existing.gl_code) ||
-          (existing.old_code && bosGLCodes.has(existing.old_code));
-
+          bosCategoryCodes.has(existing.category_code) ||
+          (existing.old_code && bosCategoryCodes.has(existing.old_code));
+          
         if (!existsInBos && existing.status_id !== 14) {
           existing.status_id = 14;
           updates.push(existing);
