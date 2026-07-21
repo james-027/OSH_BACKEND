@@ -48,6 +48,9 @@ export class DebitAdvice_header {
     @Column({ nullable: true })
     approval: number;
 
+    @Column({ nullable: true })
+    location_id: number;
+
 
     @CreateDateColumn({
         type: "timestamp",

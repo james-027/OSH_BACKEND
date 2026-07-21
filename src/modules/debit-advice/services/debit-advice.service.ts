@@ -25,6 +25,7 @@ import * as path from "path";
 import { ApprovalMatrixService } from "src/modules/approval-matrix/services/approval-matrix.service";
 import { ApprovalLogsService } from "src/modules/approval-logs/services/approval-logs.service";
 
+
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
 // create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary
 // transformations or validations before returning the response to the controller. Additionally, it will log audit trails for create
@@ -75,6 +76,7 @@ export class DebitAdviceService {
                 updated_at: item.updated_at,
                 jv_no: item.jv_no,
                 remarks: item.remarks,
+                location_id: item.location_id,
                 approval: item.approval,
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
@@ -116,6 +118,7 @@ export class DebitAdviceService {
                 updated_at: debitAdvice.updated_at,
                 jv_no: debitAdvice.jv_no,
                 remarks: debitAdvice.remarks,
+                location_id: debitAdvice.location_id,
                 approval: debitAdvice.approval,
                 created_user: debitAdvice.createdBy
                     ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
@@ -140,9 +143,12 @@ export class DebitAdviceService {
         userId: number,
         accessKeyId: number,
         docno: string,
+        roleId?: number,
     ): Promise<any> {
         let savedDebitAdvice: any;
         try {
+
+            console.log("createDebitAdviceDto", createDebitAdviceDto);
             let trans_number = "";
             let location_id: number | null = 1;
             let location_abbr: string | null = null;
@@ -182,6 +188,7 @@ export class DebitAdviceService {
                 transaction_date: createDebitAdviceDto.transaction_date,
                 status_id: createDebitAdviceDto.status_id ?? 17,
                 remarks: createDebitAdviceDto.remarks,
+                location_id: createDebitAdviceDto.location_id,
                 approval: createDebitAdviceDto.approval,
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
@@ -239,6 +246,10 @@ export class DebitAdviceService {
                 created_at: reloadedDebitAdvice.created_at,
                 document_number: reloadedDebitAdvice.document_number,
                 Transaction_date: reloadedDebitAdvice.transaction_date,
+                jv_no: reloadedDebitAdvice.jv_no,
+                remarks: reloadedDebitAdvice.remarks,
+                approval: reloadedDebitAdvice.approval,
+                location_id: reloadedDebitAdvice.location_id,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
                     : null,
@@ -431,6 +442,7 @@ export class DebitAdviceService {
                 jv_no: reloadedDebitAdvice.jv_no,
                 remarks: reloadedDebitAdvice.remarks,
                 approval: reloadedDebitAdvice.approval,
+                location_id: reloadedDebitAdvice.location_id,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
                     : null,
@@ -528,7 +540,7 @@ export class DebitAdviceService {
                 ) ?? [],
         );
         // The line id used as the `approval` value on each document (0 = none).
-        console.log("userApprovalLines", userApprovalLines);
+        // console.log("userApprovalLines", userApprovalLines);
         const defaultApprovalId = userApprovalLines[0]?.id ?? 0;
         // console.log(defaultApprovalId);
 
@@ -564,6 +576,7 @@ export class DebitAdviceService {
                         status_id: 3,
                         quarter: 1,
                         remarks: row["DOCUMENT REMARKS"] ?? "",
+                        location_id: Number(row["LOCATION"]) ?? 0,
                         approval: defaultApprovalId,
                         createdBy: { id: userId } as any,
                         line: [],
@@ -670,32 +683,63 @@ export class DebitAdviceService {
         };
     }
 
+
+    /**
+     * Get allowed location IDs based on user and role
+     * Reusable helper to avoid redundant code across multiple methods
+     */
+    private async getAllowedLocationIds(
+        userId?: number,
+        roleId?: number,
+    ): Promise<number[]> {
+        if (!userId || !roleId) {
+            return [];
+        }
+        return await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+        );
+    }
+
     async GetbysearchAndPages(
         page: number,
         pageSize: number,
         search: string,
         statusId: number | string,
+        userId: number,
+        roleId: number,
     ) {
         try {
             const query = this.debitAdviceRepository.createQueryBuilder("da");
+
+            const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
 
             query
                 .leftJoinAndSelect("da.status", "status")
                 .leftJoinAndSelect("da.createdBy", "createdBy");
 
-            // SEARCH
-            if (search) {
+            // Prevent SQL error when no locations are assigned
+            if (allowedLocationIds.length > 0) {
+                query.where("da.location_id IN (:...allowedLocationIds)", {
+                    allowedLocationIds,
+                });
+            } else {
+                query.where("1 = 0"); // Return no records
+            }
+
+            // Search
+            if (search?.trim()) {
                 query.andWhere(
                     new Brackets((qb) => {
-                        // Search in document number, created by first name, or created by last name
                         qb.where("da.document_number LIKE :search")
                             .orWhere("createdBy.first_name LIKE :search")
                             .orWhere("createdBy.last_name LIKE :search");
                     }),
-                    { search: `%${search}%` },
+                    {
+                        search: `%${search.trim()}%`,
+                    },
                 );
             }
-
             // FILTER BY STATUS
             if (statusId) {
                 query.andWhere("da.status_id = :statusId", {

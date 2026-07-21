@@ -61,12 +61,18 @@ export class DebitAdviceController {
         @Query("pageSize") pageSize = 5,
         @Query("search") search = "",
         @Query("statusid") statusId = "",
+        @Request() req: any,
     ) {
+        const userId = req.user.id;
+        const roleId = req.user.role_id;
+
         return this.debitAdviceService.GetbysearchAndPages(
             Number(page),
             Number(pageSize),
             search,
             statusId,
+            userId,
+            roleId
         );
     }
 
@@ -111,7 +117,8 @@ export class DebitAdviceController {
         const userId = req.user.id;
         const accessKeyId = req.user?.current_access_key;
         const docno = req.user?.document_number;
-        return this.debitAdviceService.create(createDebitAdviceDto, userId, accessKeyId, docno);
+        const roleId = req.user?.role_id;
+        return this.debitAdviceService.create(createDebitAdviceDto, userId, accessKeyId, docno, roleId);
     }
 
 

@@ -47,5 +47,8 @@ export class UpdateDebitAdviceDto {
 
     @IsOptional()
     quarter?: number;
+
+    @IsNumber()
+    location_id: number;
 }
 
