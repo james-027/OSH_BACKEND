@@ -17,6 +17,7 @@ import {
   getCtgiBosDwhConnection,
 } from "../../../utils/dwh-datasources";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
 
 @Injectable()
 export class ApiService {
@@ -44,6 +45,7 @@ export class ApiService {
     @InjectRepository(ReqTransactionDetail)
     private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
     private commonUtilitiesService: CommonUtilitiesService,
+    private warehouseEmployeesService: WarehouseEmployeesService,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -717,6 +719,25 @@ export class ApiService {
             sqlParams3,
           );
           return supp_rows;
+
+        case "store-personnels":
+          const assignment_date = queryParams.assignment_date;
+          const modified_at = queryParams.modified_at ?? "";
+
+          if (!assignment_date) {
+            throw new HttpException(
+              "assignment_date is required",
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          return await this.warehouseEmployeesService.findAll(
+            1,
+            null,
+            null,
+            assignment_date,
+            modified_at || undefined,
+          );
 
         default:
           throw new HttpException(
