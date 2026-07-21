@@ -169,6 +169,7 @@ export class WarehouseEmployeesService {
     userId?: number,
     roleId?: number,
     assignmentDate?: string,
+    modifiedAt?: string,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
@@ -198,13 +199,18 @@ export class WarehouseEmployeesService {
       query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
       });
-    } else {
-      query.andWhere("1=0"); // No access to any records if no allowed locations
+    } else if (userId && roleId) {
+      // User exists but has no location access — block all records
+      query.andWhere("1=0");
     }
+    // If no userId/roleId (e.g. API key access), skip location filtering entirely
     if (assignmentDate) {
       query.andWhere("we.assignment_date = :assignmentDate", {
         assignmentDate,
       });
+    }
+    if (modifiedAt) {
+      query.andWhere("we.modified_at >= :modifiedAt", { modifiedAt });
     }
     query.orderBy("we.modified_at", "DESC").addOrderBy("we.id", "DESC");
     const records = await query.getMany();
@@ -212,6 +218,7 @@ export class WarehouseEmployeesService {
       id: rec.id,
       warehouse_id: rec.warehouse_id,
       warehouse_ifs: rec.warehouse ? rec.warehouse.warehouse_ifs : null,
+      warehouse_code: rec.warehouse ? rec.warehouse.warehouse_code : null,
       warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
       location_id: rec.warehouse ? rec.warehouse.location_id : null,
       location_name:
@@ -222,26 +229,44 @@ export class WarehouseEmployeesService {
         ? dayjs(rec.assignment_date).format("MMMM YYYY")
         : null,
       assigned_ss: rec.assigned_ss,
+      assigned_ss_emp_no: rec.assignedSs
+        ? rec.assignedSs.employee_number
+        : null,
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
         : null,
       assigned_ah: rec.assigned_ah,
+      assigned_ah_emp_no: rec.assignedAh
+        ? rec.assignedAh.employee_number
+        : null,
       assigned_ah_name: rec.assignedAh
         ? `${rec.assignedAh.employee_first_name} ${rec.assignedAh.employee_last_name}`
         : null,
       assigned_bch: rec.assigned_bch,
+      assigned_bch_emp_no: rec.assignedBch
+        ? rec.assignedBch.employee_number
+        : null,
       assigned_bch_name: rec.assignedBch
         ? `${rec.assignedBch.employee_first_name} ${rec.assignedBch.employee_last_name}`
         : null,
       assigned_gbch: rec.assigned_gbch,
+      assigned_gbch_emp_no: rec.assignedGbch
+        ? rec.assignedGbch.employee_number
+        : null,
       assigned_gbch_name: rec.assignedGbch
         ? `${rec.assignedGbch.employee_first_name} ${rec.assignedGbch.employee_last_name}`
         : null,
       assigned_rh: rec.assigned_rh,
+      assigned_rh_emp_no: rec.assignedRh
+        ? rec.assignedRh.employee_number
+        : null,
       assigned_rh_name: rec.assignedRh
         ? `${rec.assignedRh.employee_first_name} ${rec.assignedRh.employee_last_name}`
         : null,
       assigned_grh: rec.assigned_grh,
+      assigned_grh_emp_no: rec.assignedGrh
+        ? rec.assignedGrh.employee_number
+        : null,
       assigned_grh_name: rec.assignedGrh
         ? `${rec.assignedGrh.employee_first_name} ${rec.assignedGrh.employee_last_name}`
         : null,
