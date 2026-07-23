@@ -442,8 +442,8 @@ export class ApiService {
               ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const connectionToUse =
-            process.env.PORT === "3002" ? sourceConnQa : sourceConn;
+          const isQAEnvironment = process.env.PORT === "3002";
+          const connectionToUse = isQAEnvironment ? sourceConnQa : sourceConn;
 
           const [rows] = (await connectionToUse.execute(
             storeCrewAssignmentQuery,
