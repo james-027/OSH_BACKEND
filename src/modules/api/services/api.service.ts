@@ -19,6 +19,7 @@ import {
 } from "../../../utils/dwh-datasources";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
+import { QA_PORT } from "src/constants/customConstants";
 
 @Injectable()
 export class ApiService {
@@ -442,7 +443,7 @@ export class ApiService {
               ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const isQAEnvironment = process.env.PORT === "3002";
+          const isQAEnvironment = process.env.PORT === QA_PORT;
           const connectionToUse = isQAEnvironment ? sourceConnQa : sourceConn;
 
           const [rows] = (await connectionToUse.execute(
