@@ -53,6 +53,8 @@ export class ApprovalStagesListService {
 
       .leftJoinAndSelect("approval.optionalApprover", "optionalApprover")
 
+      .leftJoinAndSelect("approval.createdBy", "createdBy")
+      .leftJoinAndSelect("approval.updatedBy", "updatedBy")
       .where(
         "(approval.approverid = :userId OR approval.approverid_opt = :userId)",
         { userId },
@@ -129,9 +131,13 @@ export class ApprovalStagesListService {
 
       updated_at: approval.updated_at,
 
-      created_by: approval.created_by,
+      created_by: approval.createdBy
+        ? `${approval.createdBy.first_name} ${approval.createdBy.last_name}`
+        : null,
 
-      updated_by: approval.updated_by,
+      updated_by: approval.updatedBy
+        ? `${approval.updatedBy.first_name} ${approval.updatedBy.last_name}`
+        : null,
     }));
   }
 
