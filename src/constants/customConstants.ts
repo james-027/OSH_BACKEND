@@ -24,9 +24,9 @@ export const ACTION_IDS = {
   DEACTIVATE: 6,
   APPROVE: 7,
   REVERT: 10,
-  TRANSFER:11,
-  DEPLOY:12,
-  BUDDY_UP:13,
+  TRANSFER: 11,
+  DEPLOY: 12,
+  BUDDY_UP: 13,
 } as const;
 
 // ============= STATUS IDs =============
@@ -81,3 +81,5 @@ export const SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS = [
   ROLE_IDS.SPA_OSS_ADMIN,
   ROLE_IDS.SPA_OSA_ADMIN,
 ] as const;
+
+export const QA_PORT = "3002";
