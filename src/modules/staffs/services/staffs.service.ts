@@ -898,11 +898,11 @@ export class StaffsService {
         await queryRunner.startTransaction();
 
         try {
-          const effectivityDate = new Date(transfer.effectivity_date)
-            .toISOString()
-            .split("T")[0];
+          const effectivityDate = new Date(transfer.effectivity_date);
+          effectivityDate.setHours(0, 0, 0, 0);
 
-          const today = new Date().toISOString().split("T")[0];
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
 
           if (effectivityDate > today) {
             logger.warn(
@@ -2008,6 +2008,149 @@ export class StaffsService {
           row: i + 2,
           action: existingRecord ? "updated" : "inserted",
           data: staffWithRelations,
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
+    };
+  }
+  async uploadStaffTransfer(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
+    });
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = [
+          "Staff Code",
+          "Agency",
+          "Location",
+          "Allowance",
+          "Salary Rate",
+          "Effectivity Date",
+        ];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const location = await this.locationRepository.findOne({
+          where: { location_name: row["Location"] },
+        });
+
+        const vendor = await this.vendorRepository.findOne({
+          where: { service_provider_name: row["Agency"] },
+        });
+
+        if (!location) {
+          errors.push({
+            row: i + 2,
+            error: `Location '${row["Location"]}' not found`,
+          });
+          continue;
+        }
+
+        if (!vendor) {
+          errors.push({
+            row: i + 2,
+            error: `Vendor '${row["Vendor"]}' not found`,
+          });
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+
+          if (!existingRecord) {
+            errors.push({
+              row: i + 2, 
+              error: `Staff with Staff Code '${staffCode}' not found`,
+            });
+            continue;
+          }
+
+        const dto: UpdateStaffTransferDto = {
+          vendor_id: vendor.id,
+          location_id: location.id,
+          salary_rate: Number(row["Salary Rate"]),
+          allowance: Number(row["Allowance"]),
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: row["Effectivity Date"],
+        };
+
+        const result = await this.staffTransfer(existingRecord.id, dto, userId);
+          success.push({
+          row: i + 2,
+          action: "Staff Transfer Updated",
+          data: {
+            staff_code: existingRecord.staff_code,
+            location: {
+              location_name: location.location_name,
+            },
+            vendor: {
+              service_provider_name: vendor.service_provider_name,
+            },
+            salary_rate: dto.salary_rate,
+            allowance: dto.allowance,
+            effectivity_date: dto.effectivity_date,
+            remarks: dto.remarks,
+          },
         });
       } catch (error) {
         errors.push({

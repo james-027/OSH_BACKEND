@@ -112,6 +112,25 @@ async findAll(
     );
   }
 
+  @Post("upload-transfer-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/staffs/transfer",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+    }),
+  )
+  async uploadStaffTransferExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    return this.staffsService.uploadStaffTransfer(
+      file,
+      req.user.id,
+      req.user.current_access_key,
+    );
+  }
+
   @Post("check-existing")
   async checkExisting(@Body() dto: CheckStaffDto) {
     return this.staffsService.checkExistingStaff(dto);
@@ -146,7 +165,7 @@ async findAll(
     return this.staffsService.staffDeploy(id, updateStaffDeployDto, userId,accessKeyId);
   }
 
-    @Patch(":id/toggle-status-activate")
+  @Patch(":id/toggle-status-activate")
   @RequirePermissions({ module: "STAFFS", action: "ACTIVATE" })
   async activateStatus(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const userId = req.user.id;
