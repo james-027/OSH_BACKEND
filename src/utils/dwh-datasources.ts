@@ -21,6 +21,12 @@ export const DWH_CONFIG = {
     password: "B@v1CM$r3m0t3Localdba@C3sS",
     database: "ctgi_sems",
   },
+  CTGI_SEMS_QA: {
+    host: "192.168.74.121",
+    user: "ctgi_cms_rem_usr",
+    password: "B@v1CM$r3m0t3Localdba@C3sS",
+    database: "ctgi_sems_qa_2",
+  },
   CTGI_EBT: {
     host: "192.168.74.214",
     user: "dba_remote",
@@ -53,6 +59,17 @@ export const CTGI_BOS_POOL = mysql.createPool({
  */
 export const CTGI_SEMS_POOL = mysql.createPool({
   ...DWH_CONFIG.CTGI_SEMS,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+/**
+ * CTGI SEMS QA Pool - Warehouse/Outlets data for QA environment
+ * Used by: WarehouseDwhService
+ */
+export const CTGI_SEMS_QA_POOL = mysql.createPool({
+  ...DWH_CONFIG.CTGI_SEMS_QA,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -97,6 +114,14 @@ export async function getCtgiBosDwhConnection() {
  */
 export async function getCtgiSemsConnection() {
   return CTGI_SEMS_POOL.getConnection();
+}
+
+/**
+ * Get connection from CTGI SEMS pool for QA
+ * Automatically returns connection from pool
+ */
+export async function getCtgiSemsQAConnection() {
+  return CTGI_SEMS_QA_POOL.getConnection();
 }
 
 /**
