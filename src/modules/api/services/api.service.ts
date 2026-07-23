@@ -15,8 +15,11 @@ import { ReqTransactionDetail } from "../../../entities/ReqTransactionDetail";
 import {
   getCtgiSemsConnection,
   getCtgiBosDwhConnection,
+  getCtgiSemsQAConnection,
 } from "../../../utils/dwh-datasources";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
+import { QA_PORT } from "src/constants/customConstants";
 
 @Injectable()
 export class ApiService {
@@ -44,6 +47,7 @@ export class ApiService {
     @InjectRepository(ReqTransactionDetail)
     private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
     private commonUtilitiesService: CommonUtilitiesService,
+    private warehouseEmployeesService: WarehouseEmployeesService,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -352,6 +356,7 @@ export class ApiService {
     queryParams: any,
   ): Promise<any> {
     const sourceConn = await getCtgiSemsConnection();
+    const sourceConnQa = await getCtgiSemsQAConnection();
     const bosSourceConn = await getCtgiBosDwhConnection();
 
     try {
@@ -438,7 +443,10 @@ export class ApiService {
               ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const [rows] = (await sourceConn.execute(
+          const isQAEnvironment = process.env.PORT === QA_PORT;
+          const connectionToUse = isQAEnvironment ? sourceConnQa : sourceConn;
+
+          const [rows] = (await connectionToUse.execute(
             storeCrewAssignmentQuery,
             sqlParams,
           )) as any;
@@ -718,6 +726,25 @@ export class ApiService {
           );
           return supp_rows;
 
+        case "store-personnels":
+          const assignment_date = queryParams.assignment_date;
+          const modified_at = queryParams.modified_at ?? "";
+
+          if (!assignment_date) {
+            throw new HttpException(
+              "assignment_date is required",
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          return await this.warehouseEmployeesService.findAll(
+            1,
+            null,
+            null,
+            assignment_date,
+            modified_at || undefined,
+          );
+
         default:
           throw new HttpException(
             `Endpoint '${endpoint}' not supported`,
@@ -730,6 +757,11 @@ export class ApiService {
         await sourceConn.release();
       } catch (err) {
         console.error("Error releasing sourceConn:", err);
+      }
+      try {
+        await sourceConnQa.release();
+      } catch (err) {
+        console.error("Error releasing sourceConnQa:", err);
       }
       try {
         await bosSourceConn.release();

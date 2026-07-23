@@ -84,7 +84,7 @@ export interface SavedFileInfo {
 }
 
 export class FileUploadHandler {
-  private static readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+  private static readonly MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
   private static readonly ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
   private static readonly ALLOWED_MIME_TYPES = [
     "image/jpeg",
@@ -177,7 +177,7 @@ export class FileUploadHandler {
       if (fileSize > this.MAX_FILE_SIZE) {
         return {
           valid: false,
-          error: `File size ${(fileSize / 1024 / 1024).toFixed(2)}MB exceeds max 5MB`,
+          error: `File size ${(fileSize / 1024 / 1024).toFixed(2)}MB exceeds max ${this.MAX_FILE_SIZE / 1024 / 1024}MB`,
         };
       }
 

@@ -25,7 +25,7 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
-  @RequirePermissions({ module: "COMPANIES", action: "VIEW" })
+  @RequirePermissions({ module: "COMPANIES", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     return this.companiesService.findAll();
   }

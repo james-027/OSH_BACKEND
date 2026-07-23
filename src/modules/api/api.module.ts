@@ -19,6 +19,7 @@ import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { UsersModule } from "../users/users.module";
+import { WarehousesModule } from "../warehouses/warehouses.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { UsersModule } from "../users/users.module";
       TransactionSequence,
     ]),
     UsersModule,
+    WarehousesModule,
   ],
   controllers: [ApiController],
   providers: [ApiService, ApiKeyGuard, CommonUtilitiesService],

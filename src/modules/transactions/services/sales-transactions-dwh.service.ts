@@ -150,7 +150,8 @@ export class SalesTransactionsDwhService {
               quantity: row.QUANTITY,
               converted_quantity: row.CONVERTED_QUANTITY,
               line_total: row.LINETOTAL,
-              unit_price: row.UNITPRICE,
+              // unit_price: row.UNITPRICE,
+              unit_price: Number(Number(row.UNITPRICE).toFixed(6)) || 0,
               vat_amount: row.VATAMOUNT,
               line_cost: row.LINECOST,
               item_cost: row.ITEMCOST,
@@ -179,6 +180,7 @@ export class SalesTransactionsDwhService {
           item_code: row.item_code,
           whs_code: row.whs_code,
           doc_date: row.doc_date,
+          unit_price: row.unit_price,
         }));
 
         // 2. Update all existing records for this batch to status_id = 2
@@ -191,7 +193,7 @@ export class SalesTransactionsDwhService {
               keys
                 .map(
                   (k, idx) =>
-                    `(item_code = :item_code${idx} AND whs_code = :whs_code${idx} AND doc_date = :doc_date${idx})`,
+                    `(item_code = :item_code${idx} AND whs_code = :whs_code${idx} AND doc_date = :doc_date${idx} AND unit_price = :unit_price${idx})`,
                 )
                 .join(" OR "),
               Object.assign(
@@ -200,6 +202,7 @@ export class SalesTransactionsDwhService {
                   [`item_code${idx}`]: k.item_code,
                   [`whs_code${idx}`]: k.whs_code,
                   [`doc_date${idx}`]: k.doc_date,
+                  [`unit_price${idx}`]: k.unit_price,
                 })),
               ),
             )
