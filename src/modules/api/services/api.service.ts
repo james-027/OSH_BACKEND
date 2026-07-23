@@ -15,6 +15,7 @@ import { ReqTransactionDetail } from "../../../entities/ReqTransactionDetail";
 import {
   getCtgiSemsConnection,
   getCtgiBosDwhConnection,
+  getCtgiSemsQAConnection,
 } from "../../../utils/dwh-datasources";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
@@ -354,6 +355,7 @@ export class ApiService {
     queryParams: any,
   ): Promise<any> {
     const sourceConn = await getCtgiSemsConnection();
+    const sourceConnQa = await getCtgiSemsQAConnection();
     const bosSourceConn = await getCtgiBosDwhConnection();
 
     try {
@@ -440,7 +442,10 @@ export class ApiService {
               ORDER BY a.crewCode, a.tsCreated
           `;
 
-          const [rows] = (await sourceConn.execute(
+          const connectionToUse =
+            process.env.PORT === "3002" ? sourceConnQa : sourceConn;
+
+          const [rows] = (await connectionToUse.execute(
             storeCrewAssignmentQuery,
             sqlParams,
           )) as any;
@@ -751,6 +756,11 @@ export class ApiService {
         await sourceConn.release();
       } catch (err) {
         console.error("Error releasing sourceConn:", err);
+      }
+      try {
+        await sourceConnQa.release();
+      } catch (err) {
+        console.error("Error releasing sourceConnQa:", err);
       }
       try {
         await bosSourceConn.release();
