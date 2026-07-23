@@ -56,6 +56,13 @@ export class OSHJVService {
                     catch (err) {
                         logger.error("SSE event failed:", err);
                     }
+
+                    await this.debitAdviceRepository.update(
+                        { document_number: payload[0].Sequence }, // or documentNumber, depending on your entity
+                        {
+                            status_id: 7,
+                        },
+                    );
                 }
                 throw new Error(response.data.error);
             }
@@ -66,7 +73,7 @@ export class OSHJVService {
                 where: { document_number: docno },
             });
 
-            console.log("Here:", debitAdvice.document_number);
+
             if (!debitAdvice) {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
                     where: { ref_docno: docno },
@@ -91,6 +98,13 @@ export class OSHJVService {
                         logger.error("SSE event failed:", err);
                     }
 
+                    await this.debitAdviceRepository.update(
+                        { document_number: payload[0].Sequence }, // or documentNumber, depending on your entity
+                        {
+                            status_id: 7,
+                        },
+                    );
+
                 } else {
                     updateDatalogs.jv_docno = "Not Created - JV Creation Failed";
                     updateDatalogs.status = { id: 3 } as Status;
@@ -103,6 +117,12 @@ export class OSHJVService {
 
                         logger.error("SSE event failed:", err);
                     }
+                    await this.debitAdviceRepository.update(
+                        { document_number: payload[0].Sequence }, // or documentNumber, depending on your entity
+                        {
+                            status_id: 7,
+                        },
+                    );
 
                 }
             } else {
@@ -110,6 +130,7 @@ export class OSHJVService {
                     const updateDatalogs = await this.documentPostingLogRepository.findOne({
                         where: { ref_docno: docno },
                     });
+
                     if (!updateDatalogs) {
                         debitAdvice.jv_no = jv_no;
                         await this.debitAdviceRepository.save(debitAdvice);
@@ -147,6 +168,12 @@ export class OSHJVService {
                         }
                     }
 
+                    await this.debitAdviceRepository.update(
+                        { document_number: payload[0].Sequence }, // or documentNumber, depending on your entity
+                        {
+                            jv_no: jv_no,
+                        },
+                    );
 
                 }
             }
@@ -220,15 +247,30 @@ export class OSHJVService {
 
     async createDocumentPostingLog(payload: any, userId: number,) {
 
-        const postingLog = this.documentPostingLogRepository.create({
-            module_name: "DEBIT ADVICE",
-            ref_docno: payload[0].Sequence,
-            payload: JSON.stringify(payload),
-            created_by: { id: userId } as any,
-            status: { id: 3 },
+
+        const updateDatalogs = await this.documentPostingLogRepository.findOne({
+            where: { ref_docno: payload[0].Sequence },
         });
-        const NewlogSave = await this.documentPostingLogRepository.save(postingLog);
-        return NewlogSave;
+
+        if (!updateDatalogs) {
+            const postingLog = this.documentPostingLogRepository.create({
+                module_name: "DEBIT ADVICE",
+                ref_docno: payload[0].Sequence,
+                payload: JSON.stringify(payload),
+                created_by: { id: userId } as any,
+                status: { id: 3 },
+            });
+            const NewlogSave = await this.documentPostingLogRepository.save(postingLog);
+            return NewlogSave;
+        } else {
+            updateDatalogs.payload = JSON.stringify(payload);
+            await this.documentPostingLogRepository.save(updateDatalogs);
+            return updateDatalogs;
+        }
+
+
+
+
     }
 }
 
