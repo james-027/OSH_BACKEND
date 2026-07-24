@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-} from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -16,10 +12,18 @@ import { SessionTokenResponse } from "src/modules/auth/dto/SessionTokenResponse"
 import { CreateSessionDto } from "src/modules/auth/dto/CreateSessionDto";
 import { UserSessionService } from "src/modules/users/services/user-session.service";
 import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
+import { UsersService } from "src/modules/users/services/users.service";
 import logger from "@config/logger";
 
 @Injectable()
 export class AuthService {
+  /**
+   * Generate a cryptographically secure random temporary password
+   */
+  private generateTemporaryPassword(): string {
+    return crypto.randomBytes(4).toString("hex").toUpperCase(); // 8-char hex string
+  }
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
