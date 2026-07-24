@@ -13,6 +13,7 @@ import {
 import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "../services/auth.service";
 import { LoginUserDto } from "src/modules/auth/dto/LoginUserDto";
+import { ForgotPasswordDto } from "src/modules/auth/dto/ForgotPasswordDto";
 import { RefreshTokenDto } from "src/modules/auth/dto/RefreshTokenDto";
 import { CreateSessionDto } from "src/modules/auth/dto/CreateSessionDto";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
@@ -32,6 +33,13 @@ export class AuthController {
     };
 
     return this.authService.login(loginDto, sessionInfo);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("forgot-password")
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto, @Request() req) {
+    return this.authService.forgotPassword(forgotPasswordDto.email, req);
   }
 
   @UseGuards(JwtAuthGuard)

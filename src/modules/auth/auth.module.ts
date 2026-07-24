@@ -7,6 +7,8 @@ import { Role } from "../../entities/Role";
 import { UserLoginSession } from "../../entities/UserLoginSession";
 import { UsersModule } from "../users/users.module";
 import { JwtService } from "@nestjs/jwt";
+import { EmailService } from "../../services/email.service";
+import { FrontendUrlUtil } from "../../utils/frontend-url.util";
 
 @Module({
   imports: [
@@ -14,7 +16,7 @@ import { JwtService } from "@nestjs/jwt";
     UsersModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtService],
+  providers: [AuthService, JwtService, EmailService, FrontendUrlUtil],
   exports: [AuthService],
 })
 export class AuthModule {}
