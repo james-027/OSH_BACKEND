@@ -44,6 +44,7 @@ import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffTraining } from "src/entities/StaffTrainings";
 import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
+import { Warehouse } from "src/entities/Warehouse";
 @Injectable()
 export class StaffsService {
   constructor(
@@ -75,6 +76,8 @@ export class StaffsService {
     private readonly staffTransfersRepository: Repository<StaffTransfers>,
     @InjectRepository(StaffWarehouse)
     private readonly staffWarehouseRepository: Repository<StaffWarehouse>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(StaffTraining)
     private readonly staffTrainingsRepository: Repository<StaffTraining>,
     @InjectRepository(Training)
@@ -1511,7 +1514,7 @@ export class StaffsService {
           created_by: userId,
         });
       } catch (err) {
-        logger.error("Action log failed for staffTransfer:", err);
+        logger.error("Action log failed for staff deploy:", err);
       }
 
       const response =
@@ -1535,7 +1538,7 @@ export class StaffsService {
       ) {
         throw error;
       }
-      throw new Error("Failed to process staff transfer");
+      throw new Error("Failed to process staff deploy");
     }
   }
 
@@ -2111,19 +2114,19 @@ export class StaffsService {
 
         let existingRecord = null;
 
-          existingRecord = await this.staffsRepository.findOne({
-            where: {
-              staff_code: staffCode,
-            },
-          });
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
 
-          if (!existingRecord) {
-            errors.push({
-              row: i + 2, 
-              error: `Staff with Staff Code '${staffCode}' not found`,
-            });
-            continue;
-          }
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
 
         const dto: UpdateStaffTransferDto = {
           vendor_id: vendor.id,
@@ -2135,11 +2138,11 @@ export class StaffsService {
         };
 
         const result = await this.staffTransfer(existingRecord.id, dto, userId);
-          success.push({
+        success.push({
           row: i + 2,
           action: "Staff Transfer Updated",
           data: {
-            staff_code: existingRecord.staff_code,
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
             location: {
               location_name: location.location_name,
             },
@@ -2150,6 +2153,293 @@ export class StaffsService {
             allowance: dto.allowance,
             effectivity_date: dto.effectivity_date,
             remarks: dto.remarks,
+          },
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
+    };
+  }
+  async uploadStaffDeploy(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
+    });
+
+    const formatDate = (dateStr: string): string => {
+      const date = new Date(dateStr);
+
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date: ${dateStr}`);
+      }
+
+      return date.toISOString().split("T")[0];
+    };
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = [
+          "Staff Code",
+          "Store",
+          "Effectivity Date",
+          "End Date",
+        ];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["Store"]}' not found`,
+          });
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
+        const dto: UpdateStaffDeployDto = {
+          warehouse_id: warehouse.id,
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: formatDate(row["Effectivity Date"]),
+          end_date: formatDate(row["End Date"]),
+          action: "deploy",
+        };
+
+        const result = await this.staffDeploy(
+          existingRecord.id,
+          dto,
+          userId,
+          accessKeyId,
+        );
+        success.push({
+          row: i + 2,
+          action: "updated",
+          message: "Staff Deploy Updated",
+          data: {
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
+            warehouse: {
+              warehouse_name: warehouse.warehouse_name,
+            },
+            effectivity_date: dto.effectivity_date,
+            end_date: dto.end_date,
+          },
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
+    };
+  }
+  async uploadStaffBuddyUp(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
+    });
+
+    const formatDate = (dateStr: string): string => {
+      const date = new Date(dateStr);
+
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date: ${dateStr}`);
+      }
+
+      return date.toISOString().split("T")[0];
+    };
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = [
+          "Staff Code",
+          "Store",
+          "Effectivity Date",
+          "End Date",
+        ];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["Store"]}' not found`,
+          });
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
+        const isBuddyUp = existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
+        if (!isBuddyUp) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' is already deployed`,
+          });
+          continue;
+        }
+
+        const dto: UpdateStaffDeployDto = {
+          warehouse_id: warehouse.id,
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: formatDate(row["Effectivity Date"]),
+          end_date: formatDate(row["End Date"]),
+          action: "buddyup",
+        };
+
+        const result = await this.staffDeploy(
+          existingRecord.id,
+          dto,
+          userId,
+          accessKeyId,
+        );
+        success.push({
+          row: i + 2,
+          action: "updated",
+          message: "Staff Buddy Up Updated",
+          data: {
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
+            warehouse: {
+              warehouse_name: warehouse.warehouse_name,
+            },
+            effectivity_date: dto.effectivity_date,
+            end_date: dto.end_date,
           },
         });
       } catch (error) {

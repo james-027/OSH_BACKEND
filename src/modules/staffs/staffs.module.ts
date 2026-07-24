@@ -30,6 +30,7 @@ import { StaffSalary } from "src/entities/StaffSalary";
 import { StaffTraining } from "src/entities/StaffTrainings";
 import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
+import { Warehouse } from "src/entities/Warehouse";
 
 
 @Module({
@@ -56,7 +57,8 @@ import { StaffTransfers } from "src/entities/StaffTransfers";
       StaffSalary,
       StaffTraining,
       Training,
-      StaffTransfers
+      StaffTransfers,
+      Warehouse
     ]),
     UsersModule,
     SSEModule,

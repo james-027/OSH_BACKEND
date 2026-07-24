@@ -131,6 +131,45 @@ async findAll(
     );
   }
 
+
+  @Post("upload-deploy-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/staffs/deploy",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+    }),
+  )
+  async uploadStaffDeployExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    return this.staffsService.uploadStaffDeploy(
+      file,
+      req.user.id,
+      req.user.current_access_key,
+    );
+  }
+
+  @Post("upload-buddy-up-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/staffs/buddy-up",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+    }),
+  )
+  async uploadStaffBuddyUpExcel(@UploadedFile() file: Express.Multer.File, @Request() req) {
+    return this.staffsService.uploadStaffBuddyUp(
+      file,
+      req.user.id,
+      req.user.current_access_key,
+    );
+  }
+
   @Post("check-existing")
   async checkExisting(@Body() dto: CheckStaffDto) {
     return this.staffsService.checkExistingStaff(dto);
