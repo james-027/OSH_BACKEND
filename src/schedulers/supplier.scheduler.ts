@@ -11,7 +11,7 @@ export class SupplierScheduler {
 
   // @Cron(CronExpression.EVERY_2_HOURS)
   // @Cron("*/5 * * * * *")
-  @ConditionalCron(CronExpression.EVERY_5_MINUTES, "ENABLE_SUPPLIER_CRON")
+  @ConditionalCron("0 */2 * * * *", "ENABLE_SUPPLIER_CRON")
   async handleCron() {
     try {
       const batchSize = 1000; // Default batch size
