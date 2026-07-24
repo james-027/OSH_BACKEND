@@ -1924,6 +1924,29 @@ export class UsersService {
   }
 
   /**
+   * Helper method to find a user by email for use by other services
+   */
+  async findUserByEmail(email: string): Promise<User | null> {
+    try {
+      return await this.usersRepository.findOne({
+        where: { email },
+        select: [
+          "id",
+          "email",
+          "first_name",
+          "last_name",
+          "password",
+          "status_id",
+          "user_reset",
+        ],
+      });
+    } catch (error) {
+      logger.error(`Error finding user with email ${email}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Helper method to send welcome email to user
    * Used by uploadExcelUsers in both create and update blocks
    * Generates HTML email, sends via email service, and creates audit trail
