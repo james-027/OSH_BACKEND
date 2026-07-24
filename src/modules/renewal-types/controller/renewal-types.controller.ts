@@ -23,7 +23,7 @@ export class RenewalTypesController {
   constructor(private readonly renewalTypesService: RenewalTypesService) {}
 
   @Get()
-  @RequirePermissions({ module: "RENEWAL TYPES", action: "VIEW" })
+  @RequirePermissions({ module: "RENEWAL TYPES", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     return this.renewalTypesService.findAll();
   }

@@ -23,7 +23,7 @@ export class RequirementsController {
   constructor(private readonly requirementsService: RequirementsService) {}
 
   @Get()
-  @RequirePermissions({ module: "REQUIREMENTS", action: "VIEW" })
+  @RequirePermissions({ module: "REQUIREMENTS", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     return this.requirementsService.findAll();
   }
