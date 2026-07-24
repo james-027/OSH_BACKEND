@@ -444,8 +444,10 @@ export class UsersService {
     password: string,
     userId: number,
     request?: any,
+    selfService?: boolean,
   ): Promise<void> {
     if (email) {
+      const selfServiceText = selfService ? " (Self-Service)" : "";
       let emailStatus = "success";
       let emailError = null;
       const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
@@ -483,7 +485,7 @@ export class UsersService {
             status: emailStatus,
             error: emailError,
           }),
-          description: `Reset email ${emailStatus} for user (${first_name} ${last_name})`,
+          description: `${selfServiceText} Reset email ${emailStatus} for user (${first_name} ${last_name})`,
           status_id: 1,
         },
         userId,
