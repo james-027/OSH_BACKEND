@@ -29,7 +29,7 @@ export class ApprovalMatrixController {
   @Get()
   @RequirePermissions({
     module: "APPROVAL MATRIX",
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAll() {
     return this.approvalMatrixService.findAll();
