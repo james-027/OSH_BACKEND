@@ -1144,6 +1144,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
         this.sseEventEmitter.emitUpdateSignal("users", 0);
+        this.sseEventEmitter.emitUpdateSignal("locations", 0);
         await this.cacheInvalidationService.invalidateFindAll("users");
         await this.cacheInvalidationService.invalidateWarehouseEmployees();
         await this.cacheInvalidationService.invalidateWarehouseHurdles();
