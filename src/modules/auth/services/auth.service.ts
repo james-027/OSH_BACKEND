@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  BadRequestException,
-} from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -16,16 +12,25 @@ import { SessionTokenResponse } from "src/modules/auth/dto/SessionTokenResponse"
 import { CreateSessionDto } from "src/modules/auth/dto/CreateSessionDto";
 import { UserSessionService } from "src/modules/users/services/user-session.service";
 import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
+import { UsersService } from "src/modules/users/services/users.service";
 import logger from "@config/logger";
 
 @Injectable()
 export class AuthService {
+  /**
+   * Generate a cryptographically secure random temporary password
+   */
+  private generateTemporaryPassword(): string {
+    return crypto.randomBytes(4).toString("hex").toUpperCase(); // 8-char hex string
+  }
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private userSessionService: UserSessionService,
     private jwtService: JwtService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
+    private usersService: UsersService,
   ) {}
 
   async validateUser(
@@ -327,6 +332,57 @@ export class AuthService {
       throw new UnauthorizedException("Failed to refresh token");
     }
   }
+  /**
+   * Self-service forgot password flow.
+   * Accepts email, generates a temporary password, updates the user,
+   * sends the temp password via email, and always returns a generic success message.
+   * Does NOT reveal whether the email exists (security best practice).
+   */
+  async forgotPassword(
+    email: string,
+    request?: any,
+  ): Promise<{ message: string }> {
+    const user = await this.usersService.findUserByEmail(email);
+
+    if (!user || user.status_id !== 1) {
+      // Always return success — don't reveal if email exists
+      return {
+        message:
+          "If that email exists in our system, a temporary password has been sent.",
+      };
+    }
+
+    // Generate temporary password
+    const tempPassword = this.generateTemporaryPassword();
+
+    // Update user with temp password (set user_reset=true to force password change on next login)
+    await this.usersService.update(user.id, {
+      password: tempPassword,
+      user_reset: true,
+      updated_by: user.id,
+    });
+
+    // Send reset email using existing method
+    await this.usersService.sendResetEmail(
+      user.email,
+      user.first_name || "User",
+      user.last_name || "",
+      tempPassword,
+      user.id,
+      request,
+      true,
+    );
+
+    logger.info(
+      `Forgot password: temporary password sent to email ${user.email} (user ID: ${user.id})`,
+    );
+
+    return {
+      message:
+        "If that email exists in our system, a temporary password has been sent.",
+    };
+  }
+
   private generateRefreshToken(): string {
     return crypto.randomBytes(32).toString("hex");
   }

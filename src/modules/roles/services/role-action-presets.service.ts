@@ -1700,6 +1700,7 @@ export class RoleActionPresetsService {
             this.sseEventEmitter.emitUpdateSignal("users", uid);
           });
           this.sseEventEmitter.emitUpdateSignal("users", 0);
+          this.sseEventEmitter.emitUpdateSignal("locations", 0);
           this.sseEventEmitter.emitUpdateSignal("role_presets", role_id);
           this.sseEventEmitter.emitUpdateSignal("roles", role_id);
           await this.cacheInvalidationService.invalidateFindAll("users");

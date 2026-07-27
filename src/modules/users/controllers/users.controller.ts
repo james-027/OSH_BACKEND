@@ -45,7 +45,7 @@ export class UsersController {
   @Get()
   @UseGuards(PermissionsGuard)
   @CacheCustom(CACHE_KEYS.FIND_ALL("users"), CACHE_TTL.COUNTS)
-  @RequirePermissions({ module: "USERS", action: "VIEW" })
+  @RequirePermissions({ module: "USERS", action: "DATA ACCESS" })
   async findAll() {
     return this.usersService.findAll();
   }

@@ -21,7 +21,7 @@ export class DashboardController {
   ) {}
 
   @UseGuards(PermissionsGuard)
-  @RequirePermissions({ module: "DASHBOARD", action: "VIEW" })
+  @RequirePermissions({ module: "DASHBOARD", action: "DATA ACCESS" })
   @Get()
   async getTransactionDashboard(
     @Query("location_ids") location_ids?: string,

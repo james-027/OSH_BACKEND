@@ -444,8 +444,10 @@ export class UsersService {
     password: string,
     userId: number,
     request?: any,
+    selfService?: boolean,
   ): Promise<void> {
     if (email) {
+      const selfServiceText = selfService ? " (Self-Service)" : "";
       let emailStatus = "success";
       let emailError = null;
       const loginUrl = this.frontendUrlUtil.getFrontendUrlFromRequest(request);
@@ -483,7 +485,7 @@ export class UsersService {
             status: emailStatus,
             error: emailError,
           }),
-          description: `Reset email ${emailStatus} for user (${first_name} ${last_name})`,
+          description: `${selfServiceText} Reset email ${emailStatus} for user (${first_name} ${last_name})`,
           status_id: 1,
         },
         userId,
@@ -1142,6 +1144,7 @@ export class UsersService {
         // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
         this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
         this.sseEventEmitter.emitUpdateSignal("users", 0);
+        this.sseEventEmitter.emitUpdateSignal("locations", 0);
         await this.cacheInvalidationService.invalidateFindAll("users");
         await this.cacheInvalidationService.invalidateWarehouseEmployees();
         await this.cacheInvalidationService.invalidateWarehouseHurdles();
@@ -1919,6 +1922,29 @@ export class UsersService {
       return await this.usersRepository.findOneBy({ id });
     } catch (error) {
       logger.error(`Error finding user with ID ${id}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Helper method to find a user by email for use by other services
+   */
+  async findUserByEmail(email: string): Promise<User | null> {
+    try {
+      return await this.usersRepository.findOne({
+        where: { email },
+        select: [
+          "id",
+          "email",
+          "first_name",
+          "last_name",
+          "password",
+          "status_id",
+          "user_reset",
+        ],
+      });
+    } catch (error) {
+      logger.error(`Error finding user with email ${email}:`, error);
       return null;
     }
   }
