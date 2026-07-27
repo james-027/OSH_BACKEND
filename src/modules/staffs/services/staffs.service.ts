@@ -34,7 +34,6 @@ import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import {
-  MODULE_IDS,
   ACTION_IDS,
   STATUS_IDS,
   NAMING_CONVENTION,
@@ -45,6 +44,8 @@ import { StaffTraining } from "src/entities/StaffTrainings";
 import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
 import { Warehouse } from "src/entities/Warehouse";
+import { Not } from "typeorm";
+
 @Injectable()
 export class StaffsService {
   constructor(
@@ -276,6 +277,34 @@ export class StaffsService {
       if (existingRecord) {
         throw new BadRequestException(
           `Staff '${createStaffDto.first_name} ${createStaffDto.last_name}' may already exist`,
+        );
+      }
+
+      const existingTin = await this.staffsRepository.findOne({
+        where: { tin: createStaffDto.tin },
+      });
+      const existingSSS = await this.staffsRepository.findOne({
+        where: { sss_number: createStaffDto.sss_number },
+      });
+      const existingPagibig = await this.staffsRepository.findOne({
+        where: { pagibig_number: createStaffDto.pagibig_number },
+      });
+
+      if (existingTin) {
+        throw new BadRequestException(
+          `Staff with TIN '${createStaffDto.tin}' already exists`,
+        );
+      }
+
+      if (existingSSS) {
+        throw new BadRequestException(
+          `Staff with SSS Number '${createStaffDto.sss_number}' already exists`,
+        );
+      }
+
+      if (existingPagibig) {
+        throw new BadRequestException(
+          `Staff with PagIBIG Number '${createStaffDto.pagibig_number}' already exists`,
         );
       }
 
@@ -2036,10 +2065,12 @@ export class StaffsService {
       errors,
     };
   }
+
   async uploadStaffTransfer(
     file: Express.Multer.File,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const XLSX = require("xlsx");
 
@@ -2063,8 +2094,8 @@ export class StaffsService {
         // REQUIRED FIELD VALIDATION
         const requiredFields = [
           "Staff Code",
-          "Agency",
-          "Location",
+          "New Agency",
+          "New Location",
           "Allowance",
           "Salary Rate",
           "Effectivity Date",
@@ -2090,9 +2121,15 @@ export class StaffsService {
           where: { location_name: row["Location"] },
         });
 
-        const vendor = await this.vendorRepository.findOne({
-          where: { service_provider_name: row["Agency"] },
-        });
+        let allowedLocationIds: number[] | undefined = undefined;
+
+        if (userId && roleId) {
+          allowedLocationIds =
+            await this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+            );
+        }
 
         if (!location) {
           errors.push({
@@ -2101,6 +2138,18 @@ export class StaffsService {
           });
           continue;
         }
+
+        if (allowedLocationIds && !allowedLocationIds.includes(location.id)) {
+          errors.push({
+            row: i + 2,
+            error: `You are not permitted to transfer staff to location '${row["Location"]}'.`,
+          });
+          continue;
+        }
+
+        const vendor = await this.vendorRepository.findOne({
+          where: { service_provider_name: row["Agency"] },
+        });
 
         if (!vendor) {
           errors.push({
@@ -2179,6 +2228,7 @@ export class StaffsService {
       errors,
     };
   }
+
   async uploadStaffDeploy(
     file: Express.Multer.File,
     userId: number,
@@ -2216,7 +2266,7 @@ export class StaffsService {
         // REQUIRED FIELD VALIDATION
         const requiredFields = [
           "Staff Code",
-          "Store",
+          "New Store",
           "Effectivity Date",
           "End Date",
         ];
@@ -2318,6 +2368,7 @@ export class StaffsService {
       errors,
     };
   }
+
   async uploadStaffBuddyUp(
     file: Express.Multer.File,
     userId: number,
@@ -2355,7 +2406,7 @@ export class StaffsService {
         // REQUIRED FIELD VALIDATION
         const requiredFields = [
           "Staff Code",
-          "Store",
+          "New Store",
           "Effectivity Date",
           "End Date",
         ];
@@ -2406,7 +2457,8 @@ export class StaffsService {
           continue;
         }
 
-        const isBuddyUp = existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
+        const isBuddyUp =
+          existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
         if (!isBuddyUp) {
           errors.push({
             row: i + 2,
@@ -2469,27 +2521,56 @@ export class StaffsService {
 
   async checkExistingStaff(dto: CheckStaffDto) {
     const firstName = dto.first_name.toUpperCase().trim();
-    const lastName = dto.last_name.trim();
+    const lastName = dto.last_name.toUpperCase().trim();
     const middleName = (dto.middle_name || "").toUpperCase().trim();
 
-    const whereCondition: any = {
-      first_name: firstName,
-      last_name: lastName,
-    };
-
-    if (middleName) {
-      whereCondition.middle_name = middleName;
-    }
-
-    const existingRecord = await this.staffsRepository.findOne({
-      where: whereCondition,
+    const existingStaff = await this.staffsRepository.findOne({
+      where: [
+        {
+          first_name: firstName,
+          last_name: lastName,
+          ...(middleName && { middle_name: middleName }),
+        },
+        ...(dto.email ? [{ email: dto.email.trim() }] : []),
+        ...(dto.sss_number ? [{ sss_number: dto.sss_number.trim() }] : []),
+        ...(dto.tin ? [{ tin: dto.tin.trim() }] : []),
+        ...(dto.pagibig_number
+          ? [{ pagibig_number: dto.pagibig_number.trim() }]
+          : []),
+      ],
     });
 
+    if (!existingStaff) {
+      return {
+        exists: false,
+      };
+    }
+
     return {
-      exists: !!existingRecord,
-      staff: existingRecord,
+      exists: true,
+      duplicate: {
+        staff:
+          existingStaff.first_name === firstName &&
+          existingStaff.last_name === lastName &&
+          (middleName ? existingStaff.middle_name === middleName : true),
+
+        email:
+          dto.email &&
+          existingStaff.email?.toUpperCase() === dto.email.toUpperCase().trim(),
+
+        sss_number:
+          dto.sss_number && existingStaff.sss_number === dto.sss_number.trim(),
+
+        tin: dto.tin && existingStaff.tin === dto.tin.trim(),
+
+        pagibig_number:
+          dto.pagibig_number &&
+          existingStaff.pagibig_number === dto.pagibig_number.trim(),
+      },
+      staff: existingStaff,
     };
   }
+
   async findOneHistory(ref_id: number) {
     // const module_id = MODULE_IDS.STAFFS;
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);

@@ -128,6 +128,7 @@ async findAll(
       file,
       req.user.id,
       req.user.current_access_key,
+      req.user?.role_id
     );
   }
 
@@ -174,6 +175,8 @@ async findAll(
   async checkExisting(@Body() dto: CheckStaffDto) {
     return this.staffsService.checkExistingStaff(dto);
   }
+
+
     @Get("history/:id")
   @RequirePermissions({ module: "LOCATION HURDLES", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {

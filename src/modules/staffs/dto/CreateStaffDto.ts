@@ -134,6 +134,18 @@ export class CheckStaffDto {
 
   @IsString()
   last_name: string;
+
+  @IsString()
+  pagibig_number: string;
+
+  @IsString()
+  tin: string;
+
+  @IsString()
+  sss_number: string;
+  @IsString()
+  
+  email: string;
 }
 
 
