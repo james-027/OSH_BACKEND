@@ -30,7 +30,6 @@ import {
   validateAndFormatExcelRow,
   ExcelValidationConfig,
 } from "../../../utils/excel-validation";
-import { Warehouse } from "../../../entities/Warehouse";
 
 @Injectable()
 export class UsersService {
@@ -47,8 +46,6 @@ export class UsersService {
     private userPermissionsRepository: Repository<UserPermissions>,
     @InjectRepository(UserLocations)
     private userLocationsRepository: Repository<UserLocations>,
-    @InjectRepository(Warehouse)
-    private warehouseRepository: Repository<Warehouse>,
     @InjectRepository(Module)
     private moduleRepository: Repository<Module>,
     @InjectRepository(Action)

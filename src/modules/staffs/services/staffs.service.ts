@@ -2458,10 +2458,9 @@ export class StaffsService {
         let allowedWarehouseIds: number[] | undefined = undefined;
 
         if (userId) {
-          allowedWarehouseIds =
-            await this.commonUtilitiesService.getStaffAllowedWarehouseIds(
-              existingRecord.location_id,
-            );
+          allowedWarehouseIds = await this.getStaffAllowedWarehouseIds(
+            existingRecord.location_id,
+          );
         }
 
         const warehouse = await this.warehouseRepository.findOne({
@@ -2618,10 +2617,9 @@ export class StaffsService {
         let allowedWarehouseIds: number[] | undefined = undefined;
 
         if (userId) {
-          allowedWarehouseIds =
-            await this.commonUtilitiesService.getStaffAllowedWarehouseIds(
-              existingRecord.location_id,
-            );
+          allowedWarehouseIds = await this.getStaffAllowedWarehouseIds(
+            existingRecord.location_id,
+          );
         }
 
         const warehouse = await this.warehouseRepository.findOne({
@@ -2715,6 +2713,19 @@ export class StaffsService {
       success,
       errors,
     };
+  }
+
+  private async getStaffAllowedWarehouseIds(
+    locationId: number,
+  ): Promise<number[]> {
+    const warehouses = await this.warehouseRepository.find({
+      where: {
+        location_id: locationId,
+      },
+      select: ['id'],
+    });
+
+    return warehouses.map((warehouse) => warehouse.id);
   }
 
   async checkExistingStaff(dto: CheckStaffDto) {

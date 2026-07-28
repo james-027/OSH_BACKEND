@@ -45,37 +45,6 @@ export class CommonUtilitiesService {
   }
 
   /**
- * Get staff's allowed warehouse IDs based on their assigned locations
- * @param locationId - The location's ID
- * @returns Array of allowed warehouse IDs
- */
-async getStaffAllowedWarehouseIds(
-  locationId: number,
-): Promise<number[]> {
-  if (!locationId) {
-    return [];
-  }
-
-  try {
-
-    const warehouses = await this.usersService[
-      "warehouseRepository"
-    ].find({
-      where: {
-        location_id: In([locationId]),
-      },
-      select: ["id"],
-    });
-
-    return warehouses.map((w) => w.id);
-
-  } catch (error) {
-    console.error("Error fetching staff warehouse IDs:", error);
-    return [];
-  }
-}
-
-  /**
    * Generate array of dates within a range
    * @param dateFrom - Start date (YYYY-MM-DD format)
    * @param dateTo - End date (YYYY-MM-DD format)
