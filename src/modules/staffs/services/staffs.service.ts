@@ -45,6 +45,8 @@ import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
 import { Warehouse } from "src/entities/Warehouse";
 import { Not } from "typeorm";
+import * as XLSX from "xlsx";
+import { throws } from "assert";
 
 @Injectable()
 export class StaffsService {
@@ -1583,8 +1585,7 @@ export class StaffsService {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
     const rows = XLSX.utils.sheet_to_json(sheet, {
-      raw: false,
-      dateNF: "yyyy-mm-dd",
+      raw: true,
       defval: null,
     });
 
@@ -1729,6 +1730,117 @@ export class StaffsService {
           });
         }
 
+        const TIN = String(row["TIN"] || "").trim();
+        const SSS = String(row["SSS Number"] || "").trim();
+        const PAGIBIG = String(row["PAGIBIG Number"] || "").trim();
+        const EMAIL = String(row["Email"] || "").trim();
+
+        if (!EMAIL) {
+          errors.push({
+            row: i + 2,
+            error: "Email is required.",
+          });
+          continue;
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(EMAIL)) {
+          errors.push({
+            row: i + 2,
+            error: `Invalid email format: '${EMAIL}'.`,
+          });
+          continue;
+        }
+
+        if (!SSS) {
+          errors.push({
+            row: i + 2,
+            error: "SSS Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{10}$/.test(SSS)) {
+          errors.push({
+            row: i + 2,
+            error: "SSS Number must be exactly 10 digits.",
+          });
+          continue;
+        }
+
+        if (!TIN) {
+          errors.push({
+            row: i + 2,
+            error: "TIN Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{9}$/.test(TIN)) {
+          errors.push({
+            row: i + 2,
+            error: "TIN Number must be exactly 9 digits.",
+          });
+          continue;
+        }
+
+        if (!PAGIBIG) {
+          errors.push({
+            row: i + 2,
+            error: "PAGIBIG Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{12}$/.test(PAGIBIG)) {
+          errors.push({
+            row: i + 2,
+            error: "PAGIBIG Number must be exactly 9 digits.",
+          });
+          continue;
+        }
+
+        const existingTin = await this.staffsRepository.findOne({
+          where: { tin: TIN },
+        });
+        const existingSSS = await this.staffsRepository.findOne({
+          where: { sss_number: SSS },
+        });
+        const existingPagibig = await this.staffsRepository.findOne({
+          where: { pagibig_number: PAGIBIG },
+        });
+        const existingEmail = await this.staffsRepository.findOne({
+          where: { email: EMAIL },
+        });
+
+        if (existingTin && existingTin.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `TIN '${TIN}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingSSS && existingSSS.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `SSS '${SSS}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingPagibig && existingPagibig.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `PAGIBIG '${PAGIBIG}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingEmail && existingEmail.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `EMAIL '${EMAIL}' already exists for another staff`,
+          });
+          continue;
+        }
+
         let savedStaff;
         let savedStaffBrand;
         let savedStaffCategoryType;
@@ -1741,7 +1853,7 @@ export class StaffsService {
           existingRecord.last_name = lastName;
           existingRecord.email = row["Email"];
           existingRecord.middle_name = middleName;
-          existingRecord.birthday = parseExcelDate(row["Birthday"]);
+          existingRecord.birthday = this.formatDateToString(row["Birthday"]);
           existingRecord.location_id = location.id;
           existingRecord.vendor_id = vendor.id;
           existingRecord.position_id = position.id;
@@ -1751,17 +1863,25 @@ export class StaffsService {
           existingRecord.tin = row["TIN"];
           existingRecord.pagibig_number = row["PAGIBIG Number"];
           existingRecord.remarks = row["Remarks"];
-          existingRecord.hired_date = parseExcelDate(row["Hired Date"]);
-          existingRecord.to_hr_date = parseExcelDate(row["To HR Date"]);
-          existingRecord.separated_date = parseExcelDate(row["Seperated Date"]);
-          existingRecord.to_sts_date = parseExcelDate(row["To STS Date"]);
-          existingRecord.approved_eprf_date = parseExcelDate(
+          existingRecord.hired_date = this.formatDateToString(
+            row["Hired Date"],
+          );
+          existingRecord.to_hr_date = this.formatDateToString(
+            row["To HR Date"],
+          );
+          existingRecord.separated_date = this.formatDateToString(
+            row["Seperated Date"],
+          );
+          existingRecord.to_sts_date = this.formatDateToString(
+            row["To STS Date"],
+          );
+          existingRecord.approved_eprf_date = this.formatDateToString(
             row["Approved EPRF Date"],
           );
-          existingRecord.req_completion_date = parseExcelDate(
+          existingRecord.req_completion_date = this.formatDateToString(
             row["Req Completion Date"],
           );
-          existingRecord.actual_deployment_date = parseExcelDate(
+          existingRecord.actual_deployment_date = this.formatDateToString(
             row["Actual Deployment Date"],
           );
           existingRecord.overall_remarks = row["Overall Remarks"];
@@ -1876,17 +1996,21 @@ export class StaffsService {
             access_key_id: accessKeyId,
             assign_status_id: 13,
             store_request: row["Store Request"],
-            sss_number: row["SSS Number"],
-            tin: row["TIN"],
-            pagibig_number: row["PAGIBIG Number"],
+            sss_number: SSS,
+            tin: TIN,
+            pagibig_number: PAGIBIG,
             remarks: row["Remarks"],
-            hired_date: parseExcelDate(row["Hired Date"]),
-            to_hr_date: parseExcelDate(row["To HR Date"]),
-            separated_date: parseExcelDate(row["Seperated Date"]),
-            to_sts_date: parseExcelDate(row["To STS Date"]),
-            approved_eprf_date: parseExcelDate(row["Approved EPRF Date"]),
-            req_completion_date: parseExcelDate(row["Req Completion Date"]),
-            actual_deployment_date: parseExcelDate(
+            hired_date: this.formatDateToString(row["Hired Date"]),
+            to_hr_date: this.formatDateToString(row["To HR Date"]),
+            separated_date: this.formatDateToString(row["Seperated Date"]),
+            to_sts_date: this.formatDateToString(row["To STS Date"]),
+            approved_eprf_date: this.formatDateToString(
+              row["Approved EPRF Date"],
+            ),
+            req_completion_date: this.formatDateToString(
+              row["Req Completion Date"],
+            ),
+            actual_deployment_date: this.formatDateToString(
               row["Actual Deployment Date"],
             ),
             overall_remarks: row["Overall Remarks"],
@@ -2066,6 +2190,40 @@ export class StaffsService {
     };
   }
 
+  private formatDateToString(date: Date | string | number): string | null {
+    if (!date) return null;
+
+    if (typeof date === "number") {
+      const parsed = XLSX.SSF.parse_date_code(date);
+
+      if (!parsed) return null;
+
+      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+    }
+
+    // dd/MM/yyyy
+    if (typeof date === "string") {
+      const value = date.trim();
+
+      const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+      if (match) {
+        const [, day, month, year] = match;
+        return `${year}-${month}-${day}`;
+      }
+
+      const parsed = new Date(value);
+
+      if (!isNaN(parsed.getTime())) {
+        return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      }
+
+      return null;
+    }
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
   async uploadStaffTransfer(
     file: Express.Multer.File,
     userId: number,
@@ -2118,7 +2276,7 @@ export class StaffsService {
         }
 
         const location = await this.locationRepository.findOne({
-          where: { location_name: row["Location"] },
+          where: { location_name: row["New Location"] },
         });
 
         let allowedLocationIds: number[] | undefined = undefined;
@@ -2134,7 +2292,7 @@ export class StaffsService {
         if (!location) {
           errors.push({
             row: i + 2,
-            error: `Location '${row["Location"]}' not found`,
+            error: `Location '${row["New Location"]}' not found`,
           });
           continue;
         }
@@ -2142,19 +2300,19 @@ export class StaffsService {
         if (allowedLocationIds && !allowedLocationIds.includes(location.id)) {
           errors.push({
             row: i + 2,
-            error: `You are not permitted to transfer staff to location '${row["Location"]}'.`,
+            error: `You are not permitted to transfer staff to location '${row["New Location"]}'.`,
           });
           continue;
         }
 
         const vendor = await this.vendorRepository.findOne({
-          where: { service_provider_name: row["Agency"] },
+          where: { service_provider_name: row["New Agency"] },
         });
 
         if (!vendor) {
           errors.push({
             row: i + 2,
-            error: `Vendor '${row["Vendor"]}' not found`,
+            error: `Vendor '${row["New Agency"]}' not found`,
           });
           continue;
         }
@@ -2287,18 +2445,6 @@ export class StaffsService {
           continue;
         }
 
-        const warehouse = await this.warehouseRepository.findOne({
-          where: { warehouse_name: row["Store"] },
-        });
-
-        if (!warehouse) {
-          errors.push({
-            row: i + 2,
-            error: `Warehouse '${row["Store"]}' not found`,
-          });
-          continue;
-        }
-
         const staffCode = row["Staff Code"]?.toString().trim();
 
         let existingRecord = null;
@@ -2308,6 +2454,38 @@ export class StaffsService {
             staff_code: staffCode,
           },
         });
+
+        let allowedWarehouseIds: number[] | undefined = undefined;
+
+        if (userId) {
+          allowedWarehouseIds =
+            await this.commonUtilitiesService.getStaffAllowedWarehouseIds(
+              existingRecord.location_id,
+            );
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["New Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["New Store"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedWarehouseIds &&
+          !allowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `${existingRecord.staff_code} is not allowed to be transferred to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
 
         if (!existingRecord) {
           errors.push({
@@ -2427,18 +2605,6 @@ export class StaffsService {
           continue;
         }
 
-        const warehouse = await this.warehouseRepository.findOne({
-          where: { warehouse_name: row["Store"] },
-        });
-
-        if (!warehouse) {
-          errors.push({
-            row: i + 2,
-            error: `Warehouse '${row["Store"]}' not found`,
-          });
-          continue;
-        }
-
         const staffCode = row["Staff Code"]?.toString().trim();
 
         let existingRecord = null;
@@ -2448,6 +2614,38 @@ export class StaffsService {
             staff_code: staffCode,
           },
         });
+
+        let allowedWarehouseIds: number[] | undefined = undefined;
+
+        if (userId) {
+          allowedWarehouseIds =
+            await this.commonUtilitiesService.getStaffAllowedWarehouseIds(
+              existingRecord.location_id,
+            );
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["New Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["New Store"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedWarehouseIds &&
+          !allowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `${existingRecord.staff_code} is not allowed to be transferred to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
 
         if (!existingRecord) {
           errors.push({

@@ -25,6 +25,7 @@ import { UserAccessKeyController } from "src/modules/users/controllers/user-acce
 import { SSEModule } from "../sse/sse.module";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 import { CacheInvalidationModule } from "../cache/cache.module";
+import { Warehouse } from "../../entities/Warehouse";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       Location,
       UserAuditTrail,
       UserLoginSession,
+      Warehouse,
     ]),
     SSEModule,
     CacheInvalidationModule,
