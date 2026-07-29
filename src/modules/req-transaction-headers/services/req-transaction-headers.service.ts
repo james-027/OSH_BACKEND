@@ -944,16 +944,22 @@ export class ReqTransactionHeadersService {
    *   - 50000123-SRLC-2026-01-01_2026-12-31 (copy).pdf
    *   - 50000123-SRLC-2026-01-01_2026-12-31 (anything_inside).pdf
    *
+   * For mass upload (multi-warehouse mode), the format also includes supplier_code and contract_amount:
+   *   warehouse_ifs-supplier_code-YYYY-MM-DD_YYYY-MM-DD-contract_amount[optional (...)].ext
+   *   Example: 50000123-SUP001-2026-01-01_2026-12-31-150000.00.pdf
+   *
    * Optional duplicate counter can have any text inside parentheses: (2), (copy), (etc), (backup_v1), etc.
    * Text outside parentheses after date range will be rejected.
    *
-   * Returns: { valid, warehouse_ifs, start_date, end_date, error }
+   * Returns: { valid, warehouse_ifs, start_date, end_date, supplier_code?, contract_amount?, error }
    */
   private parseType2Filename(filename: string): {
     valid: boolean;
     warehouse_ifs?: string;
     start_date?: string;
     end_date?: string;
+    supplier_code?: string;
+    contract_amount?: number;
     error?: string;
   } {
     try {
@@ -962,44 +968,91 @@ export class ReqTransactionHeadersService {
         FileUploadHandler.normalizeFilenameForSave(filename);
       const withoutExt = cleanedFilename.replace(/\.[^/.]+$/, "");
 
-      // Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text_here)]
+      // New format (mass upload): warehouse_ifs-requirement_abbr-supplier_code-YYYY-MM-DD_YYYY-MM-DD-contract_amount[optional (any_text)]
       // Regex breakdown:
-      // ^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})  <- base format (required)
+      // ^([^-]+)-([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})-([\d.]+)  <- base: wh_ifs, abbr, supp_code, dates, amount
       // (?:\s*\([^)]*\))?  <- optional: spaces + "(" + any chars except ")" + ")"
       // $  <- end of string (nothing else allowed)
-      const regex =
-        /^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?$/;
-      const match = withoutExt.match(regex);
+      const newRegex =
+        /^([^-]+)-([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})-([\d.]+)(?:\s*\([^)]*\))?$/;
+      const newMatch = withoutExt.match(newRegex);
 
-      if (!match) {
+      if (newMatch) {
+        // New format matched — includes requirement_abbr, supplier_code, and contract_amount
+        const warehouse_ifs = newMatch[1];
+        // const requirement_abbr = newMatch[2]; // Captured but not used
+        const supplier_code = newMatch[3];
+        const start_date = newMatch[4];
+        const end_date = newMatch[5];
+        const contract_amount = parseFloat(newMatch[6]);
+
+        // Validate dates
+        if (!isValidCalendarDate(start_date)) {
         return {
           valid: false,
-          error:
-            "Invalid format. Expected: store_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text)].ext | Examples: 50000123-SRLC-2026-01-01_2026-12-31.pdf OR 50000123-SRLC-2026-01-01_2026-12-31 (2).pdf",
+            error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
+          };
+        }
+        if (!isValidCalendarDate(end_date)) {
+          return {
+            valid: false,
+            error: `Invalid end date: '${end_date}' (not a valid calendar date)`,
+          };
+        }
+        if (start_date > end_date) {
+          return {
+            valid: false,
+            error: "Start date must be before or equal to end date",
+          };
+        }
+        if (isNaN(contract_amount) || contract_amount < 0) {
+          return {
+            valid: false,
+            error: `Invalid contract amount: '${newMatch[6]}'`,
+          };
+        }
+        // Reject values with multiple dots (e.g. "20900.98.00")
+        const amountStr = newMatch[6];
+        if ((amountStr.match(/\./g) || []).length > 1) {
+          return {
+            valid: false,
+            error: `Invalid contract amount format: '${amountStr}' (multiple decimal points)`,
+          };
+        }
+
+        return {
+          valid: true,
+          warehouse_ifs,
+          supplier_code,
+          start_date,
+          end_date,
+          contract_amount,
         };
       }
 
-      const warehouse_ifs = match[1];
-      // const requirement_abbr = match[2]; // Captured but not used
-      const start_date = match[3];
-      const end_date = match[4];
+      // Fallback: old format — warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text)]
+      const oldRegex =
+        /^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?$/;
+      const oldMatch = withoutExt.match(oldRegex);
 
-      // Validate dates are actual valid calendar dates (e.g., reject 2026-11-31)
+      if (oldMatch) {
+        const warehouse_ifs = oldMatch[1];
+        // const requirement_abbr = oldMatch[2]; // Captured but not used
+        const start_date = oldMatch[3];
+        const end_date = oldMatch[4];
+
       if (!isValidCalendarDate(start_date)) {
         return {
           valid: false,
-          error: `Invalid start date: '${start_date}' (not a valid calendar date, e.g., November only has 30 days)`,
+            error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
         };
       }
-
       if (!isValidCalendarDate(end_date)) {
         return {
           valid: false,
-          error: `Invalid end date: '${end_date}' (not a valid calendar date, e.g., November only has 30 days)`,
+            error: `Invalid end date: '${end_date}' (not a valid calendar date)`,
         };
       }
-
-      // Validate start_date <= end_date (using string comparison works for YYYY-MM-DD format)
       if (start_date > end_date) {
         return {
           valid: false,
@@ -1012,6 +1065,14 @@ export class ReqTransactionHeadersService {
         warehouse_ifs,
         start_date,
         end_date,
+        };
+      }
+
+      // Neither format matched
+      return {
+        valid: false,
+        error:
+          "Invalid format. Expected (mass upload): store_ifs-requirement_abbr-supplier_code-YYYY-MM-DD_YYYY-MM-DD-amount.ext | Or (single): store_ifs-abbr-YYYY-MM-DD_YYYY-MM-DD.ext | Examples: 50000123-SRLC-SUP001-2026-01-01_2026-12-31-150000.00.pdf OR 50000123-SRLC-2026-01-01_2026-12-31.pdf",
       };
     } catch (err) {
       return {
