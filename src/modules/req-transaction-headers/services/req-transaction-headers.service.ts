@@ -65,6 +65,8 @@ export class ReqTransactionHeadersService {
     private requirementRemindersRepository: Repository<RequirementReminder>,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
+    @InjectRepository(Supplier)
+    private supplierRepository: Repository<Supplier>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private cacheInvalidationService: CacheInvalidationService,
@@ -1414,20 +1416,26 @@ export class ReqTransactionHeadersService {
         try {
           // Dates from payload (single-warehouse) or fallback to filename parsing
           const hasPayloadDates = !!(start_date && end_date);
-          // Extract rental dates from files (should be same for all files in this batch)
+          // Extract rental info (dates + optional supplier/contract) from files
           const rentalDates: Map<
             string,
-            { start_date: string; end_date: string }
+            {
+              start_date: string;
+              end_date: string;
+              supplier_code?: string;
+              contract_amount?: number;
+            }
           > = new Map();
 
           for (const file of files) {
             if (hasPayloadDates) {
-              // Single-warehouse: dates provided from frontend, accept any filename
+              // Single-warehouse: dates & supplier/contract from payload
               rentalDates.set(file.filename, {
                 start_date: start_date!,
                 end_date: end_date!,
               });
             } else {
+              // Multi-warehouse: extract dates & supplier/contract from filename
               const parseResult = this.parseType2Filename(file.filename);
 
               if (!parseResult.valid) {
@@ -1442,6 +1450,8 @@ export class ReqTransactionHeadersService {
               rentalDates.set(file.filename, {
                 start_date: parseResult.start_date,
                 end_date: parseResult.end_date,
+                supplier_code: parseResult.supplier_code,
+                contract_amount: parseResult.contract_amount,
               });
             }
           }
@@ -1479,7 +1489,36 @@ export class ReqTransactionHeadersService {
               continue;
             }
 
-            const { start_date, end_date } = rentalInfo;
+            const {
+              start_date,
+              end_date,
+              supplier_code: fileSupplierCode,
+              contract_amount: fileContractAmount,
+            } = rentalInfo;
+
+            // Resolve supplier_id and contract_amount per warehouse:
+            //   - Single-warehouse mode: use payload params (supplier_id / contract_amount)
+            //   - Multi-warehouse mode: extract from filename (supplier_code / contract_amount)
+            let effectiveSupplierId: number | undefined = supplier_id;
+            let effectiveContractAmount: number | undefined = contract_amount;
+
+            if (!hasPayloadDates && fileSupplierCode) {
+              // Multi-warehouse: look up supplier by supplier_code from filename
+              const supplierEntity = await this.supplierRepository.findOne({
+                where: { supplier_code: fileSupplierCode },
+              });
+              if (!supplierEntity) {
+                errors.push({
+                  warehouse_name: `${warehouse.warehouse_ifs} - ${warehouse.warehouse_name}`,
+                  file: firstFile.filename,
+                  reason: `Supplier not found for code: ${fileSupplierCode}`,
+                  field: "supplier_code",
+                });
+                continue;
+              }
+              effectiveSupplierId = supplierEntity.id;
+              effectiveContractAmount = fileContractAmount;
+            }
 
             // Check if active rental already exists
             const existingReq = await queryRunner.manager.findOne(
@@ -1548,8 +1587,12 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               access_key_id: accessKeyId,
               created_by: userId,
-              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
-              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
+              ...(effectiveSupplierId !== undefined && {
+                supplier_id: effectiveSupplierId,
+              }), // Include supplier for Type 2 (Rental)
+              ...(effectiveContractAmount !== undefined && {
+                contract_amount: effectiveContractAmount,
+              }), // Include contract amount for Type 2 (Rental)
             });
 
             const savedRental = await queryRunner.manager.save(newRental);
@@ -1618,8 +1661,12 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               trans_number,
               location_id,
-              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
-              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
+              ...(effectiveSupplierId !== undefined && {
+                supplier_id: effectiveSupplierId,
+              }), // Include supplier for Type 2 (Rental)
+              ...(effectiveContractAmount !== undefined && {
+                contract_amount: effectiveContractAmount,
+              }), // Include contract amount for Type 2 (Rental)
             };
 
             const headerRecord = queryRunner.manager.create(
