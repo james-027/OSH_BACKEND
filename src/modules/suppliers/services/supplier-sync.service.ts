@@ -61,11 +61,7 @@ export class SupplierSyncService {
         existingSuppliers.map((item) => [item.supplier_code, item]),
       );
 
-      const oldCodeMap = new Map(
-        existingSuppliers
-          .filter((item) => item.old_code)
-          .map((item) => [item.old_code, item]),
-      );
+
 
       // -----------------------------------------
       // STEP 3: Prepare batch arrays
@@ -88,30 +84,41 @@ export class SupplierSyncService {
             continue;
           }
 
-          let existing = supplierMap.get(supplierCode);
+          // 1. Highest priority: old_code + taxid (supplier code was renamed)
+          let existing = existingSuppliers.find(
+            (s) =>
+              s.old_code === supplierCode && (s.taxid ?? "").trim() === taxId,
+          );
 
-          // If not found by supplier_code, try old_code
-          if (!existing) {
-            existing = oldCodeMap.get(supplierCode);
-          }
-
-          // If still not found, try matching by supplier name
+          // 2. Exact supplier_code + taxid
           if (!existing) {
             existing = existingSuppliers.find(
-              (s) => s.supplier_name?.trim() === supplierName,
+              (s) =>
+                s.supplier_code === supplierCode &&
+                (s.taxid ?? "").trim() === taxId,
+            );
+          }
+
+          // 3. Exact supplier_code only
+          if (!existing) {
+            existing = supplierMap.get(supplierCode);
+          }
+          // 4. Same Tax ID but supplier code changed
+          if (!existing && taxId) {
+            existing = existingSuppliers.find(
+              (s) =>
+                (s.taxid ?? "").trim() === taxId &&
+                s.supplier_code !== supplierCode,
             );
           }
           if (existing) {
             let hasChanges = false;
 
-            // Supplier code changed
             if (existing.supplier_code !== supplierCode) {
-              console.log(existing.supplier_code);
               existing.old_code = existing.supplier_code;
               existing.supplier_code = supplierCode;
               hasChanges = true;
             }
-
             // Supplier name changed
             if (existing.supplier_name !== supplierName) {
               existing.supplier_name = supplierName;
@@ -128,20 +135,21 @@ export class SupplierSyncService {
               hasChanges = true;
             }
 
-            if (existing.taxid !== taxId) {
-              existing.taxid = taxId;
-              hasChanges = true;
-            }
+            // Tax ID is now the identifier, so don't update it.
+            // if (existing.taxid !== taxId) {
+            //   existing.taxid = taxId;
+            //   hasChanges = true;
+            // }
 
             if (existing.company !== company) {
               existing.company = company;
               hasChanges = true;
             }
+
             if (existing.status_id !== statusId) {
               existing.status_id = statusId;
               hasChanges = true;
             }
-
             if (hasChanges) {
               if (!updatedIds.has(existing.id)) {
                 updates.push(existing);
@@ -152,41 +160,20 @@ export class SupplierSyncService {
               result.skipped++;
             }
           } else {
-            // If not found, check whether the new SUPPNO matches an existing old_code
-            existing = oldCodeMap.get(supplierCode);
+            inserts.push(
+              this.supplierRepository.create({
+                supplier_code: supplierCode,
+                supplier_name: supplierName,
+                old_code: supplierCode,
+                group_code: groupCode,
+                group_name: groupName,
+                taxid: taxId,
+                company: company,
+                status_id: statusId,
+              }),
+            );
 
-            if (existing) {
-              // Preserve the previous supplier_code as old_code
-              existing.old_code = existing.supplier_code;
-              existing.supplier_code = supplierCode;
-              existing.supplier_name = supplierName;
-              existing.group_code = groupCode;
-              existing.group_name = groupName;
-              existing.taxid = taxId;
-              existing.company = company;
-
-              if (!updatedIds.has(existing.id)) {
-                updates.push(existing);
-                updatedIds.add(existing.id);
-                result.updated++;
-              }
-            } else {
-              // Completely new supplier
-              inserts.push(
-                this.supplierRepository.create({
-                  supplier_code: supplierCode,
-                  supplier_name: supplierName,
-                  old_code: supplierCode,
-                  group_code: groupCode,
-                  group_name: groupName,
-                  taxid: taxId,
-                  company: company,
-                  status_id: statusId,
-                }),
-              );
-
-              result.inserted++;
-            }
+            result.inserted++;
           }
         } catch (err) {
           result.errors++;
@@ -205,9 +192,7 @@ export class SupplierSyncService {
 
       // Mark OSH records that no longer exist in BOS as Inactive
       for (const existing of existingSuppliers) {
-        const existsInBos =
-          bosSupplierCodes.has(existing.supplier_code) ||
-          (existing.old_code && bosSupplierCodes.has(existing.old_code));
+        const existsInBos = bosSupplierCodes.has(existing.supplier_code);
 
         if (!existsInBos && existing.status_id !== 14) {
           existing.status_id = 14;
