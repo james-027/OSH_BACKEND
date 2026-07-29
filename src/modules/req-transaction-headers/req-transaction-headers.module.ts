@@ -28,6 +28,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UploadProgressLoggerService } from "src/services/upload-progress-logger.service";
 import { WarehouseRequirementStart } from "src/entities/WarehouseRequirementStart";
+import { Supplier } from "src/entities/Supplier";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { WarehouseRequirementStart } from "src/entities/WarehouseRequirementStar
       TransactionSequence,
       UserAuditTrail,
       WarehouseRequirementStart,
+      Supplier,
     ]),
     UsersModule,
     UserAuditTrailModule,
