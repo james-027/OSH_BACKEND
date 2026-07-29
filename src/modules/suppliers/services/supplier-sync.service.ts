@@ -14,6 +14,11 @@ export class SupplierSyncService {
     private readonly sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
+  /** Normalize a value for comparison: null/undefined → "", trimmed string. */
+  private norm(value: unknown): string {
+    return (value ?? "").toString().trim();
+  }
+
   async syncSuppliers(batchSize) {
     const result = {
       inserted: 0,
@@ -58,7 +63,7 @@ export class SupplierSyncService {
 
       // Create maps
       const supplierMap = new Map(
-        existingSuppliers.map((item) => [item.supplier_code, item]),
+        existingSuppliers.map((item) => [item.supplier_code?.trim(), item]),
       );
 
 
@@ -84,33 +89,12 @@ export class SupplierSyncService {
             continue;
           }
 
-          // 1. Highest priority: old_code + taxid (supplier code was renamed)
-          let existing = existingSuppliers.find(
-            (s) =>
-              s.old_code === supplierCode && (s.taxid ?? "").trim() === taxId,
-          );
+          // Match strictly by supplier_code. It is the primary (and only) key,
+          // so a code BOS sends that we don't have is inserted as a new
+          // supplier rather than merged onto an existing record via old_code /
+          // tax id (which caused distinct suppliers to ping-pong every sync).
+          const existing = supplierMap.get(supplierCode);
 
-          // 2. Exact supplier_code + taxid
-          if (!existing) {
-            existing = existingSuppliers.find(
-              (s) =>
-                s.supplier_code === supplierCode &&
-                (s.taxid ?? "").trim() === taxId,
-            );
-          }
-
-          // 3. Exact supplier_code only
-          if (!existing) {
-            existing = supplierMap.get(supplierCode);
-          }
-          // 4. Same Tax ID but supplier code changed
-          if (!existing && taxId) {
-            existing = existingSuppliers.find(
-              (s) =>
-                (s.taxid ?? "").trim() === taxId &&
-                s.supplier_code !== supplierCode,
-            );
-          }
           if (existing) {
             let hasChanges = false;
 
