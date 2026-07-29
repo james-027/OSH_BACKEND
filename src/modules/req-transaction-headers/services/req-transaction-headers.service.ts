@@ -32,6 +32,7 @@ import { FileUploadHandler } from "src/utils/file-upload.utils";
 import { RequirementRemindersService } from "../../requirements/services/requirement-reminders.service";
 import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
 import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
+import { Supplier } from "src/entities/Supplier";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
@@ -990,8 +991,8 @@ export class ReqTransactionHeadersService {
 
         // Validate dates
         if (!isValidCalendarDate(start_date)) {
-        return {
-          valid: false,
+          return {
+            valid: false,
             error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
           };
         }
@@ -1043,30 +1044,30 @@ export class ReqTransactionHeadersService {
         const start_date = oldMatch[3];
         const end_date = oldMatch[4];
 
-      if (!isValidCalendarDate(start_date)) {
-        return {
-          valid: false,
+        if (!isValidCalendarDate(start_date)) {
+          return {
+            valid: false,
             error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
-        };
-      }
-      if (!isValidCalendarDate(end_date)) {
-        return {
-          valid: false,
+          };
+        }
+        if (!isValidCalendarDate(end_date)) {
+          return {
+            valid: false,
             error: `Invalid end date: '${end_date}' (not a valid calendar date)`,
-        };
-      }
-      if (start_date > end_date) {
-        return {
-          valid: false,
-          error: "Start date must be before or equal to end date",
-        };
-      }
+          };
+        }
+        if (start_date > end_date) {
+          return {
+            valid: false,
+            error: "Start date must be before or equal to end date",
+          };
+        }
 
-      return {
-        valid: true,
-        warehouse_ifs,
-        start_date,
-        end_date,
+        return {
+          valid: true,
+          warehouse_ifs,
+          start_date,
+          end_date,
         };
       }
 
@@ -1913,22 +1914,29 @@ export class ReqTransactionHeadersService {
       }
 
       //* Step 1.5: Validate conditional fields for requirement_type_id = 2 (Rental)
+      //* Single-warehouse mode (payload has dates): supplier/contract come from payload — require them
+      //* Multi-warehouse mode (dates from filename): supplier/contract come from filename — not required in payload
       if (requirement.requirement_type_id === 2) {
-        if (
-          createDto.supplier_id === undefined ||
-          createDto.supplier_id === null
-        ) {
-          throw new BadRequestException(
-            "supplier_id is required for requirement type 2 (Store Rental)",
-          );
-        }
-        if (
-          createDto.contract_amount === undefined ||
-          createDto.contract_amount === null
-        ) {
-          throw new BadRequestException(
-            "contract_amount is required for requirement type 2 (Store Rental)",
-          );
+        const isSingleWarehouseType2 =
+          createDto.start_date && createDto.end_date;
+
+        if (isSingleWarehouseType2) {
+          if (
+            createDto.supplier_id === undefined ||
+            createDto.supplier_id === null
+          ) {
+            throw new BadRequestException(
+              "supplier_id is required for requirement type 2 (Store Rental)",
+            );
+          }
+          if (
+            createDto.contract_amount === undefined ||
+            createDto.contract_amount === null
+          ) {
+            throw new BadRequestException(
+              "contract_amount is required for requirement type 2 (Store Rental)",
+            );
+          }
         }
       }
 
