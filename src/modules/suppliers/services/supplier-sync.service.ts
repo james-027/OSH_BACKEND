@@ -136,10 +136,10 @@ export class SupplierSyncService {
             }
 
             // Tax ID is now the identifier, so don't update it.
-            // if (existing.taxid !== taxId) {
-            //   existing.taxid = taxId;
-            //   hasChanges = true;
-            // }
+            if (existing.taxid !== taxId) {
+              existing.taxid = taxId;
+              hasChanges = true;
+            }
 
             if (existing.company !== company) {
               existing.company = company;
