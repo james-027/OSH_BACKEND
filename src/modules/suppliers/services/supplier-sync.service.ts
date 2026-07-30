@@ -74,6 +74,8 @@ export class SupplierSyncService {
       const inserts: Supplier[] = [];
       const updates: Supplier[] = [];
       const updatedIds = new Set<number>();
+      const updatedLog: string[] = [];
+      const insertedLog: string[] = [];
 
       for (const row of suppliers) {
         try {
@@ -96,48 +98,63 @@ export class SupplierSyncService {
           const existing = supplierMap.get(supplierCode);
 
           if (existing) {
-            let hasChanges = false;
+            const changes: string[] = [];
 
             if (existing.supplier_code !== supplierCode) {
+              changes.push(
+                `supplier_code: "${existing.supplier_code}" -> "${supplierCode}"`,
+              );
               existing.old_code = existing.supplier_code;
               existing.supplier_code = supplierCode;
-              hasChanges = true;
             }
             // Supplier name changed
             if (existing.supplier_name !== supplierName) {
+              changes.push(
+                `supplier_name: "${existing.supplier_name}" -> "${supplierName}"`,
+              );
               existing.supplier_name = supplierName;
-              hasChanges = true;
             }
 
             if (existing.group_code !== groupCode) {
+              changes.push(
+                `group_code: "${existing.group_code}" -> "${groupCode}"`,
+              );
               existing.group_code = groupCode;
-              hasChanges = true;
             }
 
             if (existing.group_name !== groupName) {
+              changes.push(
+                `group_name: "${existing.group_name}" -> "${groupName}"`,
+              );
               existing.group_name = groupName;
-              hasChanges = true;
             }
 
             // Tax ID is now the identifier, so don't update it.
             if (existing.taxid !== taxId) {
+              changes.push(`taxid: "${existing.taxid}" -> "${taxId}"`);
               existing.taxid = taxId;
-              hasChanges = true;
             }
 
             if (existing.company !== company) {
+              changes.push(`company: "${existing.company}" -> "${company}"`);
               existing.company = company;
-              hasChanges = true;
             }
 
             if (existing.status_id !== statusId) {
+              changes.push(
+                `status_id: "${existing.status_id}" -> "${statusId}"`,
+              );
               existing.status_id = statusId;
-              hasChanges = true;
             }
+
+            const hasChanges = changes.length > 0;
             if (hasChanges) {
               if (!updatedIds.has(existing.id)) {
                 updates.push(existing);
                 updatedIds.add(existing.id);
+                updatedLog.push(
+                  `Supplier ${existing.id} (${existing.supplier_code}) changed: ${changes.join(", ")}`,
+                );
                 result.updated++;
               }
             } else {
@@ -157,6 +174,7 @@ export class SupplierSyncService {
               }),
             );
 
+            insertedLog.push(`${supplierCode} (${supplierName})`);
             result.inserted++;
           }
         } catch (err) {
@@ -179,33 +197,38 @@ export class SupplierSyncService {
         const existsInBos = bosSupplierCodes.has(existing.supplier_code);
 
         if (!existsInBos && existing.status_id !== 14) {
+          const previousStatus = existing.status_id;
           existing.status_id = 14;
 
           if (!updatedIds.has(existing.id)) {
             updates.push(existing);
             updatedIds.add(existing.id);
+            updatedLog.push(
+              `Supplier ${existing.id} (${existing.supplier_code}) changed: status_id: "${previousStatus}" -> "14"`,
+            );
             result.updated++;
           }
         }
       }
       if (inserts.length > 0) {
-        const savedInserts = await this.supplierRepository.save(inserts, {
-          chunk: batchSize,
-        });
-
-        for (const supplier of savedInserts) {
-          this.sseEventEmitter.emitCreateSignal("suppliers", supplier.id);
-        }
+        this.sseEventEmitter.emitCreateSignal("suppliers", 0);
       }
       if (updates.length > 0) {
-        const savedUpdates = await this.supplierRepository.save(updates, {
-          chunk: batchSize,
-        });
-
-        for (const supplier of savedUpdates) {
-          this.sseEventEmitter.emitUpdateSignal("suppliers", supplier.id);
-        }
+        this.sseEventEmitter.emitUpdateSignal("suppliers", 0);
       }
+
+      logger.info(
+        `Supplier Updated (${updatedLog.length}):` +
+          (updatedLog.length
+            ? "\n" + updatedLog.map((line) => `  - ${line}`).join("\n")
+            : " none"),
+      );
+      logger.info(
+        `Supplier Inserted (${insertedLog.length}):` +
+          (insertedLog.length
+            ? "\n" + insertedLog.map((code) => `  - ${code}`).join("\n")
+            : " none"),
+      );
 
       return result;
     } catch (error) {
