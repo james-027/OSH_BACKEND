@@ -40,6 +40,45 @@ export class OSHJVService {
                 },
             );
 
+
+            // BOS/PHP sometimes echoes the real error OUTSIDE the JSON body, e.g.
+            //   "Fail to lookup GLAcctNo [APACCT] ... for Supplier [3005586]..
+            //    {"error":""}"
+            // In that case axios keeps response.data as a raw string, so extract the
+            // echoed text (everything before the trailing {...}) and treat it as the error.
+            if (typeof response.data === "string") {
+                const raw = response.data;
+                const jsonStart = raw.lastIndexOf("{");
+                const echoedError = (jsonStart >= 0 ? raw.slice(0, jsonStart) : raw).trim();
+                if (echoedError) {
+                    const updateDatalogs = await this.documentPostingLogRepository.findOne({
+                        where: { ref_docno: payload[0].Sequence },
+                    });
+                    if (updateDatalogs) {
+                        updateDatalogs.jv_docno = "Not Created - JV Creation Failed";
+                        updateDatalogs.status = { id: 3 } as Status;
+                        updateDatalogs.remarks = echoedError;
+                        await this.documentPostingLogRepository.save(updateDatalogs);
+                        try {
+                            this.sseEventEmitter.emitUpdate("document-posting-logs", updateDatalogs.id);
+                        } catch (err) {
+                            logger.error("SSE event failed:", err);
+                        }
+                        await this.debitAdviceRepository.update(
+                            { document_number: payload[0].Sequence },
+                            { status_id: 7 },
+                        );
+                    }
+                    throw new Error(echoedError);
+                }
+            }
+
+
+            if (!response.data) {
+                throw new Error("Internal Server Error: No response data from BOS Server");
+            }
+
+
             if (response.data.error) {
                 const updateDatalogs = await this.documentPostingLogRepository.findOne({
                     where: { ref_docno: payload[0].Sequence },
