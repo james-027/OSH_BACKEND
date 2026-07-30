@@ -109,6 +109,7 @@ import { DebitAdviceCategory } from "./entities/DebitAdviceCategory";
 import { ApprovalStagesList } from "./entities/ApprovalStagesList";
 import { ApprovalLogsModule } from "./modules/approval-logs/approval-logs.module";
 import { ApprovalMatrixModule } from "./modules/approval-matrix/approval-matrix.module";
+import { EmailNotificationMatrixModule } from "./modules/email-notification-matrix/email-notification-matrix.module";
 import { ApprovalMatrix } from "./entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "./entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
@@ -218,6 +219,7 @@ import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.mod
     DebitAdviceApprovalModule,
     ApprovalLogsModule,
     ApprovalMatrixModule,
+    EmailNotificationMatrixModule,
     StaffTrainingModule,
     TrainingsModule,
     StaffSalariesModule,
