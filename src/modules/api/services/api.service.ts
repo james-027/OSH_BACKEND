@@ -430,7 +430,9 @@ export class ApiService {
               DATE_FORMAT(b.tsModified, '%Y-%m-%d %H:%i:%s') AS crew_ts_modified,
               d.status AS assignment_status,
               e.asgnStat AS assignment_status_flag,
-              f.status AS crew_status
+              f.status AS crew_status,
+              g.agencyDesc AS agency_name,
+              g.agencyCode AS agency_code
             FROM
               crew_outlet a
               INNER JOIN crew b ON a.crewID = b.crewID
@@ -438,6 +440,7 @@ export class ApiService {
               INNER JOIN status d ON a.statusID = d.statusID
               INNER JOIN asgnstatus e ON a.asgnStatID = e.asgnStatID
               INNER JOIN status f ON b.statusID = f.statusID
+              INNER JOIN agency g ON b.agencyID = g.agencyID
             WHERE
               ${whereClauses.join(" AND ")}
               ORDER BY a.crewCode, a.tsCreated
@@ -467,6 +470,8 @@ export class ApiService {
                 crew_ts_created: row.crew_ts_created,
                 crew_ts_modified: row.crew_ts_modified,
                 crew_status: row.crew_status,
+                agency_name: row.agency_name,
+                agency_code: row.agency_code,
               });
             }
 
