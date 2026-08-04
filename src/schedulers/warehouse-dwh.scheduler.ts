@@ -6,8 +6,8 @@ import { WarehouseDwhService } from "../modules/warehouses/services/warehouse-dw
 export class WarehouseDwhScheduler {
   constructor(private readonly dwhService: WarehouseDwhService) {}
 
-  // Runs every hour
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  // Runs every 2 minutes
+  @Cron("0 */2 * * * *")
   async handleCron() {
     const accessKeyId = 1; // CTGI key
     const batchSize = 1000; // Default batch size
