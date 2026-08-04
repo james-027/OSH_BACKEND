@@ -95,6 +95,48 @@ export class DebitAdviceService {
         }
     }
 
+    async findAllConfirmation(): Promise<any[]> {
+        try {
+            const debitAdvices = await this.debitAdviceRepository.find({
+                // Add the where clause here
+                where: {
+                    status_id: 7,
+                },
+                relations: ["status", "createdBy", "lines", "lines.glItems"],
+                order: {
+                    id: "ASC",
+                    lines: {
+                        id: "ASC",
+                    },
+                },
+            });
+
+            return debitAdvices.map((item) => ({
+                id: item.id,
+                document_number: item.document_number,
+                transaction_date: item.transaction_date,
+                status_id: item.status_id,
+                status_name: item.status ? item.status.status_name : null,
+                created_at: item.created_at,
+                updated_at: item.updated_at,
+                jv_no: item.jv_no,
+                remarks: item.remarks,
+                location_id: item.location_id,
+                approval: item.approval,
+                created_user: item.createdBy
+                    ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
+                    : null,
+                // ✅ include GL items inside each line
+                lines_items: (item.lines || []).map(line => ({
+                    ...line,
+                })),
+            }));
+        } catch (error) {
+            logger.error("Error fetching debit advices:", error);
+            throw new Error("Failed to fetch debit advices");
+        }
+    }
+
     async findOneHistory(ref_id: number) {
         // const module_id = 34; // DEBIT ADVICES
         return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);

@@ -50,9 +50,21 @@ export class DebitAdviceController {
         private readonly oshjvService: OSHJVService,
     ) { }
     @Get()
-    // @RequirePermissions({ module: "DEBIT_ADVICES", action: "VIEW" })
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "VIEW"
+    })
     async findAll(@Request() req) {
         return this.debitAdviceService.findAll();
+    }
+
+    @Get("confirmation")
+    @RequirePermissions({
+        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+        action: "VIEW"
+    })
+    async findAllConfirmation(@Request() req) {
+        return this.debitAdviceService.findAllConfirmation();
     }
 
     @Get("pagination")
