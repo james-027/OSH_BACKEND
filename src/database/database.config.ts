@@ -83,6 +83,9 @@ import { ApprovalStagesList } from "../entities/ApprovalStagesList";
 import { ApprovalMatrix } from "../entities/ApprovalMatrix";
 import { ApprovalMatrixDetails } from "../entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "../entities/ApprovalMatrixLevels";
+import { EmailNotificationMatrix } from "../entities/EmailNotificationMatrix";
+import { EmailNotificationMatrixDetails } from "../entities/EmailNotificationMatrixDetails";
+import { EmailNotificationMatrixRecipients } from "../entities/EmailNotificationMatrixRecipients";
 import { GLAccounts } from "../entities/GLAccounts";
 import { DocumentPostingLog } from "../entities/DocumentPostingLog";
 import { TransactionAttachment } from "../entities/TransactionAttachment";
@@ -178,6 +181,9 @@ export const entities = [
   ApprovalMatrix,
   ApprovalMatrixDetails,
   ApprovalMatrixLevels,
+  EmailNotificationMatrix,
+  EmailNotificationMatrixDetails,
+  EmailNotificationMatrixRecipients,
   DocumentPostingLog,
   TransactionAttachment,
   StaffTraining,

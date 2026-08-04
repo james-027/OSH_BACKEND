@@ -24,6 +24,7 @@ import { Brackets } from "typeorm";
 import * as path from "path";
 import { ApprovalMatrixService } from "src/modules/approval-matrix/services/approval-matrix.service";
 import { ApprovalLogsService } from "src/modules/approval-logs/services/approval-logs.service";
+import { EmailNotificationSenderService } from "src/modules/email-notification-matrix/services/email-notification-sender.service";
 
 
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
@@ -34,6 +35,7 @@ import { ApprovalLogsService } from "src/modules/approval-logs/services/approval
 @Injectable()
 export class DebitAdviceService {
     constructor(
+        private readonly emailNotificationSenderService: EmailNotificationSenderService,
         private readonly approvalMatrixService: ApprovalMatrixService,
         private readonly approvalLogsService: ApprovalLogsService,
         @InjectRepository(DebitAdvice_header)
@@ -234,10 +236,35 @@ export class DebitAdviceService {
                     raw_data: JSON.stringify(reloadedDebitAdvice),
                     description: `Created debit advice: ${createDebitAdviceDto.id}`,
                     status_id: reloadedDebitAdvice.status_id,
-                },
-                userId,
-            );
+                                        },
+                        userId,
+                        );
 
+             if (reloadedDebitAdvice.status_id === 3) {
+                    this.emailNotificationSenderService
+                        .processTrigger({
+                            moduleId: 34,
+                            triggerStatusId: 3,
+                            transactionId: reloadedDebitAdvice.id,
+                            documentNumber: reloadedDebitAdvice.document_number,
+                        })
+                        .catch((err) => {
+                            logger.error("Email notification failed", err);
+                        });
+                }
+
+                if (reloadedDebitAdvice.status_id === 4) {
+                    this.emailNotificationSenderService
+                        .processTrigger({
+                            moduleId: 35,
+                            triggerStatusId: 4,
+                            transactionId: reloadedDebitAdvice.id,
+                            documentNumber: reloadedDebitAdvice.document_number,
+                        })
+                        .catch((err) => {
+                            logger.error("Email notification failed", err);
+                        });
+                }
             // return this.responseMapperService.mapEntityToResponse(savedDebitAdvice);
             return {
                 id: reloadedDebitAdvice.id,
@@ -430,7 +457,30 @@ export class DebitAdviceService {
                 },
                 userId,
             );
-
+           if (current_status_id !== reloadedDebitAdvice.status_id) {
+                this.emailNotificationSenderService
+                    .processTrigger({
+                        moduleId: 34,
+                        triggerStatusId: reloadedDebitAdvice.status_id,
+                        transactionId: reloadedDebitAdvice.id,
+                        documentNumber: reloadedDebitAdvice.document_number,
+                    })
+                    .catch((err) => {
+                        logger.error("Email notification failed", err);
+                    });
+            }
+              if (reloadedDebitAdvice.status_id === 4) {
+                    this.emailNotificationSenderService
+                        .processTrigger({
+                            moduleId: 35,
+                            triggerStatusId: 4,
+                            transactionId: reloadedDebitAdvice.id,
+                            documentNumber: reloadedDebitAdvice.document_number,
+                        })
+                        .catch((err) => {
+                            logger.error("Email notification failed", err);
+                        });
+                }
             return {
                 id: reloadedDebitAdvice.id,
                 status_id: reloadedDebitAdvice.status_id,

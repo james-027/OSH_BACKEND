@@ -25,37 +25,41 @@ import { ApprovalMatrixDetails } from "../../entities/ApprovalMatrixDetails";
 import { ApprovalMatrixLevels } from "../../entities/ApprovalMatrixLevels";
 import { ApprovalStagesList } from "src/entities/ApprovalStagesList";
 import { ApprovalLogsService } from "../approval-logs/services/approval-logs.service";
+import { EmailNotificationMatrixModule } from "../email-notification-matrix/email-notification-matrix.module";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
-    imports: [TypeOrmModule.forFeature([
-        DebitAdvice_header,
-        DebitAdviceLine, // Don't forget to include the line item entity
-        DebitAdviceGLItems,
-        UserPermissions,
-        AppModule,
-        Action,
-        TransactionSequence,
-        ActionLog,
-        DocumentPostingLog,
-        TransactionAttachment,
-        ApprovalMatrix,
-        ApprovalMatrixDetails,
-        ApprovalMatrixLevels,
-        ApprovalStagesList,
+  imports: [
+    TypeOrmModule.forFeature([
+      DebitAdvice_header,
+      DebitAdviceLine, // Don't forget to include the line item entity
+      DebitAdviceGLItems,
+      UserPermissions,
+      AppModule,
+      Action,
+      TransactionSequence,
+      ActionLog,
+      DocumentPostingLog,
+      TransactionAttachment,
+      ApprovalMatrix,
+      ApprovalMatrixDetails,
+      ApprovalMatrixLevels,
+      ApprovalStagesList,
     ]),
-        UsersModule,
-        SSEModule],
+    UsersModule,
+    SSEModule,
+    EmailNotificationMatrixModule,
+  ],
 
-    controllers: [DebitAdviceController],
-    providers: [
-        DebitAdviceService,
-        CommonUtilitiesService,
-        ResponseMapperService,
-        ActionLogsService,
-        OSHJVService,
-        ApprovalMatrixService,
-        ApprovalLogsService,
-    ],
-    exports: [DebitAdviceService, OSHJVService],
+  controllers: [DebitAdviceController],
+  providers: [
+    DebitAdviceService,
+    CommonUtilitiesService,
+    ResponseMapperService,
+    ActionLogsService,
+    OSHJVService,
+    ApprovalMatrixService,
+    ApprovalLogsService,
+  ],
+  exports: [DebitAdviceService, OSHJVService],
 })
-export class DebitAdviceModule { }
+export class DebitAdviceModule {}
