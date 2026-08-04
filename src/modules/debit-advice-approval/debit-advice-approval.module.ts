@@ -26,7 +26,7 @@ import { SSEModule } from "../sse/sse.module";
 import { CacheInvalidationModule } from "../cache/cache.module";
 
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
-
+import { EmailNotificationMatrixModule } from "src/modules/email-notification-matrix/email-notification-matrix.module";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -46,11 +46,10 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
     ActionsModule,
     SSEModule,
     CacheInvalidationModule,
+    EmailNotificationMatrixModule,
   ],
 
-  controllers: [
-    DebitAdviceApprovalController,
-  ],
+  controllers: [DebitAdviceApprovalController],
 
   providers: [
     ApprovalStagesListService,
@@ -58,8 +57,6 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
     CommonUtilitiesService,
   ],
 
-  exports: [
-    ApprovalStagesListService,
-  ],
+  exports: [ApprovalStagesListService],
 })
 export class DebitAdviceApprovalModule {}

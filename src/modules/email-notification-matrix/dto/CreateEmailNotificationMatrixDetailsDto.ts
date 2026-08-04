@@ -32,6 +32,11 @@ export class CreateEmailNotificationMatrixDetailsDto {
   @IsString()
   email_format?: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_approval_matrix?: number;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

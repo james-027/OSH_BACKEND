@@ -161,6 +161,7 @@ export class EmailNotificationMatrixService {
             trigger_status_id: detailDto.trigger_status_id
               ? Number(detailDto.trigger_status_id)
               : null,
+            is_approval_matrix: detailDto.is_approval_matrix ? 1 : 0,
             email_format: detailDto.email_format ?? null,
             status_id: detailDto.status_id ?? 1,
             createdBy: { id: userId } as any,
@@ -173,7 +174,7 @@ export class EmailNotificationMatrixService {
               line_id: detail.id,
               userid: Number(recipientDto.userid),
               email: recipientDto.email ?? null,
-              is_approval_matrix: recipientDto.is_approval_matrix ? 1 : 0,
+              recipient_type: recipientDto.recipient_type ?? "TO",
               module: recipientDto.module
                 ? Number(recipientDto.module)
                 : dto.module,
@@ -258,6 +259,8 @@ export class EmailNotificationMatrixService {
     });
 
     for (const detailDto of dto.lines) {
+      console.log("DETAIL DTO:", detailDto);
+      console.log("APPROVAL:", detailDto.is_approval_matrix);
       const detail = await this.emailNotificationMatrixDetailsRepository.save(
         this.emailNotificationMatrixDetailsRepository.create({
           header,
@@ -266,6 +269,7 @@ export class EmailNotificationMatrixService {
           trigger_status_id: detailDto.trigger_status_id
             ? Number(detailDto.trigger_status_id)
             : null,
+          is_approval_matrix: detailDto.is_approval_matrix ? 1 : 0,
           email_format: detailDto.email_format ?? null,
           status_id: dto.status_id === 2 ? 14 : (detailDto.status_id ?? 1),
           created_by: existingDetails[0]?.created_by,
@@ -279,7 +283,7 @@ export class EmailNotificationMatrixService {
             line_id: detail.id,
             userid: Number(recipientDto.userid),
             email: recipientDto.email ?? null,
-            is_approval_matrix: recipientDto.is_approval_matrix ? 1 : 0,
+            recipient_type: recipientDto.recipient_type ?? "TO",
             module: recipientDto.module
               ? Number(recipientDto.module)
               : dto.module,

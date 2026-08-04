@@ -26,6 +26,12 @@ export class EmailNotificationMatrixRecipients {
   @Column({ type: "varchar", length: 255, nullable: true })
   email: string;
 
+  @Column({
+    type: "varchar",
+    length: 2,
+    default: "TO",
+  })
+  recipient_type: "TO" | "CC";
   // "isapprovalmatrix?" checkbox
   @Column({ type: "tinyint", default: 0 })
   is_approval_matrix: number;
@@ -57,10 +63,7 @@ export class EmailNotificationMatrixRecipients {
   updated_at: Date;
 
   //Relationships
-  @ManyToOne(
-    () => EmailNotificationMatrixDetails,
-    (line) => line.recipients,
-  )
+  @ManyToOne(() => EmailNotificationMatrixDetails, (line) => line.recipients)
   @JoinColumn({ name: "line_id" })
   detail: EmailNotificationMatrixDetails;
 

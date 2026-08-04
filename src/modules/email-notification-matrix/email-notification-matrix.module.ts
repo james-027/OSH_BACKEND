@@ -7,7 +7,7 @@ import { EmailNotificationMatrixRecipients } from "../../entities/EmailNotificat
 
 import { EmailNotificationMatrixController } from "./controllers/email-notification-matrix.controller";
 import { EmailNotificationMatrixService } from "./services/email-notification-matrix.service";
-
+import { EmailNotificationSenderService } from "./services/email-notification-sender.service";
 import { UsersModule } from "../users/users.module";
 import { SSEModule } from "../sse/sse.module";
 
@@ -18,7 +18,10 @@ import { ActionLog } from "../../entities/ActionLog";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { ActionLogsService } from "../actions/services/action-logs.service";
 import logger from "src/config/logger";
-
+import { ApprovalStagesList } from "../../entities/ApprovalStagesList";
+import { User } from "../../entities/User";
+import { EmailNotificationMailService } from "./services/email-notification-mail.service";
+import { DebitAdvice_header } from "src/entities/DebitAdviceHeader";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -26,12 +29,14 @@ import logger from "src/config/logger";
       EmailNotificationMatrixDetails,
       EmailNotificationMatrixRecipients,
 
+      ApprovalStagesList,
+      User,
+      DebitAdvice_header,
       UserPermissions,
       AppModule,
       Action,
       ActionLog,
     ]),
-
     UsersModule,
     SSEModule,
   ],
@@ -40,11 +45,13 @@ import logger from "src/config/logger";
 
   providers: [
     EmailNotificationMatrixService,
+    EmailNotificationSenderService,
+    EmailNotificationMailService,
     ResponseMapperService,
     ActionLogsService,
   ],
 
-  exports: [EmailNotificationMatrixService],
+  exports: [EmailNotificationMatrixService, EmailNotificationSenderService],
 })
 export class EmailNotificationMatrixModule {
   constructor() {

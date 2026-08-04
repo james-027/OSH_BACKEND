@@ -15,6 +15,10 @@ export class CreateEmailNotificationMatrixRecipientsDto {
   email?: string;
 
   @IsOptional()
+  @IsString()
+  recipient_type?: "TO" | "CC";
+
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   is_approval_matrix?: number;

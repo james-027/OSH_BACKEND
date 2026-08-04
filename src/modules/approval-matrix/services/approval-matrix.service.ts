@@ -231,56 +231,152 @@ export class ApprovalMatrixService {
 
     await this.approvalMatrixRepository.save(header);
 
-    const existingDetails = await this.approvalMatrixDetailsRepository.find({
-      where: { header_id: id },
-    });
-
-    for (const detail of existingDetails) {
-      await this.approvalMatrixLevelsRepository.delete({
-        line_id: detail.id,
-      });
-    }
-
-    await this.approvalMatrixDetailsRepository.delete({
-      header_id: id,
-    });
-
+    // 3. Process Details and Levels
     for (const detailDto of dto.lines) {
-      const detail = await this.approvalMatrixDetailsRepository.save(
-        this.approvalMatrixDetailsRepository.create({
-          header,
-          approval_title: detailDto.approval_title,
-          userid: dto.userid,
-          module: Number(detailDto.module),
-          status_id: dto.status_id === 2 ? 14 : undefined,
-          created_by: existingDetails[0]?.created_by,
-          updatedBy: { id: userId } as any,
-        }),
-      );
+      let detail: ApprovalMatrixDetails;
 
-      for (const [index, levelDto] of detailDto.approvalmatrixLevel.entries()) {
-        await this.approvalMatrixLevelsRepository.save(
-          this.approvalMatrixLevelsRepository.create({
-            line_id: detail.id,
-            level: index + 1,
+      if (detailDto.id) {
+        detail = await this.approvalMatrixDetailsRepository.findOneOrFail({
+          where: { id: detailDto.id },
+        });
 
-            approval_id: Number(levelDto.approval_id),
+        detail.approval_title = detailDto.approval_title;
+        detail.userid = dto.userid;
+        detail.module = Number(detailDto.module);
+        detail.status_id = detailDto.status_id ?? 1;
+        detail.updatedBy = { id: userId } as any;
 
-            opt_approval_id: levelDto.opt_approval_id
-              ? Number(levelDto.opt_approval_id)
-              : null,
-
-            approval_title: levelDto.approval_title,
-            module: Number(levelDto.module),
+        detail = await this.approvalMatrixDetailsRepository.save(detail);
+      } else {
+        detail = await this.approvalMatrixDetailsRepository.save(
+          this.approvalMatrixDetailsRepository.create({
+            header,
+            approval_title: detailDto.approval_title,
             userid: dto.userid,
-            status_id: levelDto.status_id ?? 1,
-
-            created_by: existingDetails[0]?.created_by,
-            updatedBy: { id: userId } as any,
+            module: Number(detailDto.module),
+            status_id: detailDto.status_id ?? 1,
+            createdBy: { id: userId } as any,
           }),
         );
       }
+
+      const levelsToUpdate: {
+        entity: ApprovalMatrixLevels;
+        dto: any;
+        index: number;
+      }[] = [];
+
+      for (const [index, levelDto] of detailDto.approvalmatrixLevel.entries()) {
+        if (levelDto.id) {
+          const level = await this.approvalMatrixLevelsRepository.findOneOrFail(
+            {
+              where: { id: levelDto.id },
+            },
+          );
+
+          const newApprovalId = Number(levelDto.approval_id);
+          const newOptApprovalId =
+            levelDto.opt_approval_id && Number(levelDto.opt_approval_id) !== 0
+              ? Number(levelDto.opt_approval_id)
+              : null;
+
+          // Skip if no changes detected
+          if (
+            level.level === index + 1 &&
+            level.approval_id === newApprovalId &&
+            (level.opt_approval_id ?? null) === newOptApprovalId &&
+            level.approval_title === levelDto.approval_title &&
+            level.module === Number(levelDto.module) &&
+            level.userid === dto.userid &&
+            level.status_id === (levelDto.status_id ?? 1)
+          ) {
+            continue;
+          }
+
+          levelsToUpdate.push({
+            entity: level,
+            dto: levelDto,
+            index,
+          });
+        } else {
+          // INSERT NEW LEVEL
+          await this.approvalMatrixLevelsRepository.save(
+            this.approvalMatrixLevelsRepository.create({
+              line_id: detail.id,
+              level: index + 1,
+              approval_id: Number(levelDto.approval_id),
+              opt_approval_id: levelDto.opt_approval_id
+                ? Number(levelDto.opt_approval_id)
+                : null,
+              approval_title: levelDto.approval_title,
+              module: Number(detailDto.module),
+              userid: dto.userid,
+              status_id: levelDto.status_id ?? 1,
+              createdBy: { id: userId } as any,
+            }),
+          );
+        }
+      }
+
+      if (levelsToUpdate.length > 0) {
+        // Execute key-swapping logic with FK checks temporarily disabled
+        const queryRunner =
+          this.approvalMatrixLevelsRepository.manager.connection.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+          // Disable foreign key checks for the current session
+          await queryRunner.query("SET FOREIGN_KEY_CHECKS = 0;");
+
+          // PASS 1: Assign dummy negative values to avoid Unique Key conflict
+          for (const item of levelsToUpdate) {
+            await queryRunner.manager.update(
+              ApprovalMatrixLevels,
+              item.entity.id,
+              {
+                approval_id: -item.entity.id,
+              },
+            );
+          }
+
+          // PASS 2: Assign final accurate values
+          for (const item of levelsToUpdate) {
+            const newOptApprovalId =
+              item.dto.opt_approval_id && Number(item.dto.opt_approval_id) !== 0
+                ? Number(item.dto.opt_approval_id)
+                : null;
+
+            await queryRunner.manager.update(
+              ApprovalMatrixLevels,
+              item.entity.id,
+              {
+                level: item.index + 1,
+                approval_id: Number(item.dto.approval_id),
+                opt_approval_id: newOptApprovalId,
+                approval_title: item.dto.approval_title,
+                module: Number(item.dto.module),
+                userid: dto.userid,
+                status_id: item.dto.status_id ?? 1,
+                updatedBy: { id: userId } as any,
+              },
+            );
+          }
+
+          // Re-enable foreign key checks before commit
+          await queryRunner.query("SET FOREIGN_KEY_CHECKS = 1;");
+          await queryRunner.commitTransaction();
+        } catch (err) {
+          await queryRunner.query("SET FOREIGN_KEY_CHECKS = 1;");
+          await queryRunner.rollbackTransaction();
+          throw err;
+        } finally {
+          await queryRunner.release();
+        }
+      }
     }
+
+    // Trigger SSE & Audit logs
     try {
       this.sseEventEmitter.emitUpdate("approval-matrix", id);
     } catch (err) {

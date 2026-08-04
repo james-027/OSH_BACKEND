@@ -21,7 +21,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import logger from "src/config/logger";
 
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
-
+import { EmailNotificationSenderService } from "src/modules/email-notification-matrix/services/email-notification-sender.service";
 @Injectable()
 export class ApprovalStagesListService {
   constructor(
@@ -37,6 +37,7 @@ export class ApprovalStagesListService {
     private sseEventEmitter: SSEEventEmitterHelper,
 
     private cacheInvalidationService: CacheInvalidationService,
+    private readonly emailNotificationSenderService: EmailNotificationSenderService,
   ) {}
 
   private readonly module_name = "DEBIT ADVICE APPROVAL";
@@ -364,7 +365,86 @@ export class ApprovalStagesListService {
     } catch (err) {
       logger.error("[SSE] SSE event failed for update:", err);
     }
+    // Notify next approver (background)
+    if (status_id === 7) {
+      const nextApproval = await this.approvalStagesListRepository.findOne({
+        where: {
+          transaction_id: approval.transaction_id,
+          approval_cycle: approval.approval_cycle,
+          status_id: 3,
+        },
+        order: {
+          series: "ASC",
+        },
+      });
 
+    
+
+      if (nextApproval) {
+        // 1. Send APPROVED email to Maker (background)
+        this.emailNotificationSenderService
+          .processTrigger({
+            moduleId: approval.module,
+            triggerStatusId: 7,
+            transactionId: approval.transaction_id,
+            documentNumber: approval.document_number,
+          })
+          .catch((err) => {
+            logger.error(
+              `Approved email failed for ${approval.document_number}`,
+              err,
+            );
+          });
+
+        // 2. Send PENDING email to Next Approver (background)
+        this.emailNotificationSenderService
+          .processTrigger({
+            moduleId: approval.module,
+            triggerStatusId: 3,
+            transactionId: approval.transaction_id,
+            documentNumber: approval.document_number,
+          })
+          .catch((err) => {
+            logger.error(
+              `Pending email failed for ${approval.document_number}`,
+              err,
+            );
+          });
+      } else {
+        // Last approver -> FINAL APPROVED email (background)
+        this.emailNotificationSenderService
+          .processTrigger({
+            moduleId: approval.module,
+            triggerStatusId: 7,
+            transactionId: approval.transaction_id,
+            documentNumber: approval.document_number,
+          })
+          .catch((err) => {
+            logger.error(
+              `Final approval email failed for ${approval.document_number}`,
+              err,
+            );
+          });
+      }
+    }
+
+    // Notify maker (background)
+    if (status_id === 15) {
+   
+      this.emailNotificationSenderService
+        .processTrigger({
+          moduleId: approval.module,
+          triggerStatusId: 15,
+          transactionId: approval.transaction_id,
+          documentNumber: approval.document_number,
+        })
+        .catch((err) => {
+          logger.error(
+            `Return to Maker email failed for ${approval.document_number}`,
+            err,
+          );
+        });
+    }
     return this.findOne(id);
   }
 
@@ -450,6 +530,73 @@ export class ApprovalStagesListService {
       this.sseEventEmitter.emitUpdateSignal("approval-stageslist", 0);
     } catch (err) {
       logger.error("SSE event failed for update:", err);
+    }
+
+    if (status_id === 7) {
+      for (const approvalId of ids) {
+        const approval = await this.approvalStagesListRepository.findOne({
+          where: { id: approvalId },
+        });
+
+        if (!approval) continue;
+
+        const nextApproval = await this.approvalStagesListRepository.findOne({
+          where: {
+            transaction_id: approval.transaction_id,
+            approval_cycle: approval.approval_cycle,
+            status_id: 3,
+          },
+          order: {
+            series: "ASC",
+          },
+        });
+
+        try {
+          if (nextApproval) {
+            // 1. Send APPROVED email to Maker
+            // Send APPROVED email in background
+            this.emailNotificationSenderService
+              .processTrigger({
+                moduleId: approval.module,
+                triggerStatusId: 7,
+                transactionId: approval.transaction_id,
+                documentNumber: approval.document_number,
+              })
+              .catch((err) => {
+                logger.error("Approved email failed", err);
+              });
+
+            // Send PENDING email in background
+            this.emailNotificationSenderService
+              .processTrigger({
+                moduleId: approval.module,
+                triggerStatusId: 3,
+                transactionId: approval.transaction_id,
+                documentNumber: approval.document_number,
+              })
+              .catch((err) => {
+                logger.error("Pending email failed", err);
+              });
+          } else {
+            // Last approver
+            this.emailNotificationSenderService
+              .processTrigger({
+                moduleId: approval.module,
+                triggerStatusId: 7,
+                transactionId: approval.transaction_id,
+                documentNumber: approval.document_number,
+              })
+              .catch((err) => {
+                logger.error("Final approval email failed", err);
+              });
+          }
+        } catch (err) {
+          logger.error(
+            `Bulk approval email failed for ${approval.document_number}`,
+            err,
+          );
+        }
+      }
     }
 
     return Promise.all(ids.map((id) => this.findOne(id)));

@@ -37,6 +37,12 @@ export class EmailNotificationMatrixDetails {
   @Column({ type: "text", nullable: true })
   email_format: string;
 
+  @Column({
+    type: "tinyint",
+    default: 0,
+  })
+  is_approval_matrix: number;
+
   @Column({ default: 1 })
   status_id: number;
 
@@ -87,12 +93,8 @@ export class EmailNotificationMatrixDetails {
   updatedBy: User;
 
   //Relationships
-  @OneToMany(
-    () => EmailNotificationMatrixRecipients,
-    (item) => item.detail,
-    {
-      cascade: true,
-    },
-  )
+  @OneToMany(() => EmailNotificationMatrixRecipients, (item) => item.detail, {
+    cascade: true,
+  })
   recipients: EmailNotificationMatrixRecipients[];
 }

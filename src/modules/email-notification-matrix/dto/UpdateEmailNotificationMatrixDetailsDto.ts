@@ -36,6 +36,11 @@ export class UpdateEmailNotificationMatrixDetailsDto {
   email_format?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_approval_matrix?: number;
+
+  @IsOptional()
   @IsNumber()
   status_id?: number;
 

@@ -160,6 +160,7 @@ export class DebitAdviceApprovalController {
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
   ) {
+    console.log("APPROVE ENDPOINT HIT");
     const userId = req.user.id;
     const status_id = 7;
 
