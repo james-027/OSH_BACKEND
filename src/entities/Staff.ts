@@ -50,9 +50,6 @@ export class Staff {
   @Column()
   assign_status_id: number;
 
-  @Column({nullable:true})
-  approval_status_id: number;
-
   @Column()
   position_id: number;
 
@@ -148,13 +145,6 @@ export class Staff {
   @JoinColumn({ name: "assign_status_id" })
   assignmentStatus: Status;
 
-  @ManyToOne(() => Status, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "approval_status_id" })
-  approvalStatus: Status;
 
   @ManyToOne(() => User, {
     eager: false,

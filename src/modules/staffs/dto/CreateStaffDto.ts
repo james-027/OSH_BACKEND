@@ -143,8 +143,9 @@ export class CheckStaffDto {
 
   @IsString()
   sss_number: string;
-  @IsString()
   
+  @IsString()
+  @IsOptional()
   email: string;
 }
 

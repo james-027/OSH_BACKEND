@@ -34,10 +34,10 @@ import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import {
-  ACTION_IDS,
   STATUS_IDS,
   NAMING_CONVENTION,
   POS_AVAILABILITY_IDS,
+  ACTION_IDS
 } from "src/constants/customConstants";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -566,6 +566,25 @@ export class StaffsService {
 
     return date;
   };
+
+    private async getApprovalStatusId(warehouseId: number): Promise<number> {
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: warehouseId },
+        select: {
+          id: true,
+          pos_availability_id: true,
+        },
+      });
+
+      if (!warehouse) {
+        throw new NotFoundException(`Warehouse with ID ${warehouseId} not found.`);
+      }
+
+      return warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
+        ? STATUS_IDS.FOR_APPROVAL
+        : STATUS_IDS.APPROVED;
+    }
+
   async update(
     id: number,
     updateStaffDto: UpdateStaffDto,
@@ -1086,29 +1105,63 @@ export class StaffsService {
               assignment.updated_by = transfer.created_by;
             }
 
+
             await queryRunner.manager.save(currentAssignments);
 
             // Only recreate assignments if only the vendor changed
-            if (!isLocationChanged && isVendorChanged) {
-              const newAssignments = currentAssignments.map((assignment) =>
-                queryRunner.manager.create(StaffWarehouse, {
-                  staff_id: updatedStaff.id,
-                  staff_code: generatedStaffCode,
-                  warehouse_id: assignment.warehouse_id,
-                  location_id: assignment.location_id, // Keep the same location
-                  vendor_id: transfer.new_vendor_id,
-                  effectivity_date: transfer.effectivity_date,
-                  end_date: null,
-                  remarks: assignment.remarks,
-                  status_id: assignment.status_id,
-                  access_key_id: assignment.access_key_id,
-                  created_by: transfer.created_by,
-                  updated_by: transfer.created_by,
-                }),
+        if (!isLocationChanged && isVendorChanged) {
+          const newAssignments = await Promise.all(
+            currentAssignments.map(async (assignment) => {
+              const approval_status_id = await this.getApprovalStatusId(
+                assignment.warehouse_id,
               );
 
-              await queryRunner.manager.save(newAssignments);
+              return queryRunner.manager.create(StaffWarehouse, {
+                staff_id: updatedStaff.id,
+                staff_code: generatedStaffCode,
+                warehouse_id: assignment.warehouse_id,
+                location_id: assignment.location_id,
+                vendor_id: transfer.new_vendor_id,
+                effectivity_date: transfer.effectivity_date,
+                end_date: null,
+                remarks: assignment.remarks,
+                status_id: assignment.status_id,
+                approval_status_id,
+                access_key_id: assignment.access_key_id,
+                created_by: transfer.created_by,
+                updated_by: transfer.created_by,
+              });
+            }),
+          );
+
+          const savedAssignments = await queryRunner.manager.save(newAssignments);
+
+          for (const staffWarehouseDetails of savedAssignments) {
+            try {
+              const staffWarehouseActionId =
+                staffWarehouseDetails.approval_status_id === STATUS_IDS.FOR_APPROVAL
+                  ? ACTION_IDS.ACTIVATE
+                  : ACTION_IDS.APPROVE;
+
+              await this.actionLogsService.logAction({
+                action_id: staffWarehouseActionId,
+                ref_id: staffWarehouseDetails.id,
+                module_name: "STAFF WAREHOUSES",
+                description:
+                  staffWarehouseActionId === ACTION_IDS.APPROVE
+                    ? "Approved"
+                    : "For Approval",
+                raw_data: JSON.stringify({
+                  id: staffWarehouseDetails.id,
+                  approval_status_id: staffWarehouseDetails.approval_status_id,
+                }),
+                created_by: transfer.created_by,
+              });
+            } catch (err) {
+              logger.error("Action log failed for staff deploy:", err);
             }
+          }
+        }
           }
 
           await queryRunner.manager.save(StaffHistory, {
@@ -1533,6 +1586,7 @@ export class StaffsService {
         staffWarehouse.staff_code = staff.staff_code;
         staffWarehouse.location_id = staff.location_id;
         staffWarehouse.vendor_id = staff.vendor_id;
+        staffWarehouse.approval_status_id = approval_status_id;
         staffWarehouse.effectivity_date = this.safeDate(
           updateStaffDeployDto.effectivity_date,
         );
@@ -1553,6 +1607,7 @@ export class StaffsService {
             staff_code: staff.staff_code,
             location_id: staff.location_id,
             vendor_id: staff.vendor_id,
+            approval_status_id: approval_status_id,
             effectivity_date: updateStaffDeployDto.effectivity_date,
             end_date: updateStaffDeployDto.end_date || null,
             remarks: updateStaffDeployDto.remarks,
@@ -1579,7 +1634,6 @@ export class StaffsService {
       if (staffWarehouse) {
         await this.staffsRepository.update(id, {
           assign_status_id: assignStatusId,
-          approval_status_id: approval_status_id,
           warehouse_id: staffWarehouseDetails.warehouse_id,
           effectivity_date: staffWarehouseDetails.effectivity_date,
           updated_by: staffWarehouseDetails.updated_by,
@@ -1619,11 +1673,13 @@ export class StaffsService {
           status_id: updatedStaff.status_id,
           warehouse_id: updatedStaff.warehouse_id,
           effectivity_date: updatedStaff.effectivity_date,
-          approval_status_id: approval_status_id,
           created_by: userId,
           updated_by: userId,
         });
       }
+
+       const staffWarehouseAction_id =
+        approval_status_id === STATUS_IDS.FOR_APPROVAL ? ACTION_IDS.ACTIVATE : ACTION_IDS.APPROVE;
 
       await this.userAuditTrailCreateService.create(
         {
@@ -1647,6 +1703,15 @@ export class StaffsService {
           }),
           created_by: userId,
         });
+
+        await this.actionLogsService.logAction({
+                    action_id: staffWarehouseAction_id,
+                    ref_id: staffWarehouseDetails.id,
+                    module_name: 'STAFF WAREHOUSES', // ✅ Self-documenting
+                    description: staffWarehouseAction_id === ACTION_IDS.APPROVE ? 'Approved' : 'For Approval' ,
+                    raw_data: JSON.stringify({ id, approval_status_id }),
+                    created_by: userId,
+                  });
       } catch (err) {
         logger.error("Action log failed for staff deploy:", err);
       }
@@ -2827,7 +2892,6 @@ export class StaffsService {
           last_name: lastName,
           ...(middleName && { middle_name: middleName }),
         },
-        ...(dto.email ? [{ email: dto.email.trim() }] : []),
         ...(dto.sss_number ? [{ sss_number: dto.sss_number.trim() }] : []),
         ...(dto.tin ? [{ tin: dto.tin.trim() }] : []),
         ...(dto.pagibig_number
@@ -2842,17 +2906,17 @@ export class StaffsService {
       };
     }
 
+    const dbFirstName = (existingStaff.first_name || "").toUpperCase().trim();
+    const dbLastName = (existingStaff.last_name || "").toUpperCase().trim();
+    const dbMiddleName = (existingStaff.middle_name || "").toUpperCase().trim();
+
     return {
       exists: true,
       duplicate: {
         staff:
-          existingStaff.first_name === firstName &&
-          existingStaff.last_name === lastName &&
-          (middleName ? existingStaff.middle_name === middleName : true),
-
-        email:
-          dto.email &&
-          existingStaff.email?.toUpperCase() === dto.email.toUpperCase().trim(),
+          dbFirstName === firstName &&
+          dbLastName === lastName &&
+          (middleName ? dbMiddleName === middleName : true),
 
         sss_number:
           dto.sss_number && existingStaff.sss_number === dto.sss_number.trim(),

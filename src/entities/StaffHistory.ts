@@ -115,13 +115,6 @@ export class StaffHistory {
   @Column({ nullable: true })
   updated_by: number;
 
-
-  @Column({nullable:true})
-  approval_status_id: number;
-  
-  @JoinColumn({ name: "approval_status_id" })
-  approvalStatus: Status;
-
   @Column({ type: "varchar", nullable: true})
   email!: string | null;
 

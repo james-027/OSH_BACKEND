@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+   BadRequestException,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
@@ -28,15 +29,43 @@ export class StaffWarehousesController {
   @Get()
   @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
   async findAll(  @Request() req,
-    @Query("approval_status_id") assignStatusId?: string,)  {
+    @Query("approval_status_id") assignStatusId?: string,
+    @Query("warehouse_id") warehouseId?: string,
+  )  {
     const accessKeyId = req.user.current_access_key;
 
         const parsedApprovalStatusId = assignStatusId
     ? assignStatusId.split(",").map(Number)
     : undefined;
+    
+        const parsedWarehouseId = warehouseId
+    ? warehouseId.split(",").map(Number)
+    : undefined;
 
-    return this.staffWarehousesService.findAll(accessKeyId,parsedApprovalStatusId);
+
+    return this.staffWarehousesService.findAll(accessKeyId, parsedApprovalStatusId, parsedWarehouseId);
   }
+
+    @Post("/change-bulk-status")
+    @RequirePermissions({ module: "STAFF WAREHOUSES", action: ["POST", "APPROVE"] })
+    async toggleBulkStatus(
+      @Body() body: { ids: number[]; approval_status_id: number; undo_reason?: string },
+      @Request() req,
+    ) {
+      const userId = req.user.id;
+      const { ids, approval_status_id, undo_reason } = body;
+      if (!Array.isArray(ids) || typeof approval_status_id !== "number") {
+        throw new BadRequestException(
+          "Invalid payload: ids and approval_status_id are required.",
+        );
+      }
+      return this.staffWarehousesService.toggleBulkStatus(
+        ids,
+        approval_status_id,
+        userId,
+        undo_reason,
+      );
+    }
 
   @Get(":id")
   @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
@@ -89,4 +118,24 @@ export class StaffWarehousesController {
     const userId = req.user.id;
     return this.staffWarehousesService.toggleStatus(id, userId);
   }
+
+  @Get("history/:id")
+  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.staffWarehousesService.findOneHistory(id);
+  }
+
+  @Get("find-by-staff")
+async findByStaff(
+  @Query("staff_code") staffCode: string,
+  @Query("warehouse_id") warehouseId: number,
+) {
+  return this.staffWarehousesService.findByStaff(
+    staffCode,
+    Number(warehouseId),
+  );
+}
+
+
+  
 }

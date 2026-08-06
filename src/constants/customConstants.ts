@@ -43,6 +43,7 @@ export const STATUS_IDS = {
 } as const;
 
 
+
 // ============= POS AVAILABIITY =============
 export const POS_AVAILABILITY_IDS = {
   WITH_POS: 1,
@@ -63,6 +64,7 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.PENDING]: "Back to Pending", // Toggle action name
   [STATUS_IDS.FOR_APPROVAL]: "For Approval",
   [STATUS_IDS.APPROVED]: "Approved",
+  [STATUS_IDS.INACTIVE]: "Inactive",
 } as const;
 
 // ============= WAREHOUSE REM STATUS =============

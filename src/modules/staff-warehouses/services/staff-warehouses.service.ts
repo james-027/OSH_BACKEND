@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -15,6 +16,11 @@ import { CreateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/Create
 import { UpdateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/UpdateStaffWarehouseDto";
 import logger from "../../../config/logger";
 import { In } from "typeorm";
+import { STATUS_IDS, TOGGLE_NAMES } from "src/constants/customConstants";
+import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { User } from "src/entities/User";
+import { Warehouse } from "src/entities/Warehouse";
+
 @Injectable()
 export class StaffWarehousesService {
   private readonly entityName = "StaffWarehouse";
@@ -34,27 +40,42 @@ export class StaffWarehousesService {
     private staffWarehousesRepository: Repository<StaffWarehouse>,
     @InjectRepository(Staff)
     private staffRepository: Repository<Staff>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
+    @Inject(ActionLogsService)
+    private ActionLogsService: ActionLogsService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(accesskeyId?: number,approvalStatusId?:number[]): Promise<any[]> {
+  private readonly module_name = "STAFF WAREHOUSES";
+
+  async findAll(
+    accesskeyId?: number,
+    approvalStatusId?: number[],
+    warehouseId?: number[],
+  ): Promise<any[]> {
     try {
       const where: any = {};
       if (accesskeyId !== undefined) {
         where.access_key_id = accesskeyId;
       }
 
-    if (approvalStatusId?.length) {
-      where.staff = {
-        approval_status_id: In(approvalStatusId),
-      };
-    }
+      if (approvalStatusId?.length) {
+        where.approval_status_id = In(approvalStatusId);
+      }
+      if (warehouseId?.length) {
+        where.warehouse_id = In(warehouseId);
+      }
+
       const records = await this.staffWarehousesRepository.find({
         where,
         relations: this.relationFields,
+        order:{
+          modified_at: "DESC",
+        }
       });
 
       return this.responseMapperService.mapEntitiesToResponse(records);
@@ -329,5 +350,106 @@ export class StaffWarehousesService {
       }
       throw new Error(`Failed to toggle status for ${this.entityName}`);
     }
+  }
+
+  async toggleBulkStatus(
+    ids: number[],
+    approval_status_id: number,
+    userId: number,
+    undo_reason?: string,
+  ): Promise<any[]> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException("No staff warehouse IDs provided");
+    }
+
+    // Bulk update
+    await this.staffWarehousesRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        approval_status_id,
+        updated_by: userId,
+      })
+      .whereInIds(ids)
+      .execute();
+
+    const newStatusName = TOGGLE_NAMES[approval_status_id];
+
+    const action_id =
+      await this.ActionLogsService.get_action_id_from_status(
+        approval_status_id,
+      );
+
+
+    for (const id of ids) {
+      await this.ActionLogsService.logAction({
+        action_id: action_id,
+        ref_id: id,
+        module_name: this.module_name, // ✅ Self-documenting
+        description: `${newStatusName} ${undo_reason ? `. Reason: ${undo_reason}` : ""}.`,
+        raw_data: JSON.stringify({ id, approval_status_id }),
+        created_by: userId,
+      });
+    }
+
+    // Audit Trail
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "StaffWarehousesService",
+        method: "toggleBulkStatus",
+        raw_data: JSON.stringify({
+          ids,
+          approval_status_id,
+          undo_reason,
+        }),
+        description: `Bulk changed status for Staff Warehouse IDs [${ids.join(
+          ", ",
+        )}] to status ${approval_status_id}`,
+        status_id: STATUS_IDS.ACTIVE,
+      },
+      userId,
+    );
+
+    // Retrieve updated records
+    const updatedRecords = await Promise.all(ids.map((id) => this.findOne(id)));
+
+    // Emit SSE for each updated record
+    for (const record of updatedRecords) {
+      const response = this.responseMapperService.mapEntityToResponse(record);
+
+      try {
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+    }
+
+    return updatedRecords;
+  }
+
+  async findOneHistory(ref_id: number) {
+    return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
+  }
+
+  async findByStaff(staffCode: string, warehouseId: number): Promise<any> {
+    const record = await this.staffWarehousesRepository.findOne({
+      where: {
+        staff_code: staffCode,
+        warehouse_id: warehouseId,
+      },
+      relations: this.relationFields,
+    });
+
+    if (!record) {
+      throw new NotFoundException(
+        `Staff warehouse not found for staff code ${staffCode} and warehouse ${warehouseId}`,
+      );
+    }
+
+    return this.responseMapperService.mapEntityToResponse(record);
   }
 }
