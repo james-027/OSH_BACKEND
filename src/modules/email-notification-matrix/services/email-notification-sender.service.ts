@@ -147,18 +147,18 @@ export class EmailNotificationSenderService {
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
                           <!-- Row 1: Document No & Date -->
                           <tr>
-                            <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
-                            <td width="30%" style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">${debitAdvice.document_number}</td>
-                            <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
-                            <td width="30%" style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
+                            <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
+                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">${debitAdvice.document_number}</td>
+                            <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
+                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
                           </tr>
 
                           <!-- Row 2: Maker & Status -->
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
                               <span style="display: inline-block; background-color: ${currentStatus.badgeBg}; color: ${currentStatus.badgeText}; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">
                                 ${currentStatus.label}
                               </span>
@@ -170,10 +170,10 @@ export class EmailNotificationSenderService {
                             showConfirmationRow
                               ? `
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
                           </tr>
                           `
                               : ""
@@ -181,61 +181,55 @@ export class EmailNotificationSenderService {
 
                           <!-- Row 3: Approver Info -->
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
+                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
                           </tr>
 
                           <!-- Row 4: Next Approver & Optional Approver -->
-                     ${
-                       showNextApprover
-                         ? `
+                          ${
+                            showNextApprover
+                              ? `
                               <tr>
-                                <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Next Approver
                                 </td>
-                                <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
+                                <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
                                   ${nextApprover ?? "-"}
                                 </td>
 
-                                <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Optional Approver
                                 </td>
 
-                                <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
+                                <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
                                   ${optionalApproverName}
                                 </td>
                               </tr>
                               `
-                         : ""
-                     }
-                          <!-- Row 5: Remarks -->
+                              : ""
+                          }
+
+                       <!-- Row 5: Remarks -->
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC;${
-                              showApprovalRemarks
-                                ? "border-bottom:1px solid..."
-                                : ""
-                            } color: #64748B; font-size: 12px; font-weight: 600;">Remarks</td>
-                            <td colspan="3" style="padding: 8px 10px; background-color: #FFFFFF; ${
-                              showApprovalRemarks
-                                ? "border-bottom:1px solid..."
-                                : ""
-                            } color: #334155; font-size: 12px;">${debitAdvice.remarks ?? "-"}</td>
+                            <td style="padding: 10px 12px; background-color: #F8FAFC; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #64748B; font-size: 12px; font-weight: 600;">Remarks</td>
+                            <td colspan="3" style="padding: 10px 12px; background-color: #FFFFFF; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #334155; font-size: 12px;">${debitAdvice.remarks ?? "-"}</td>
                           </tr>
+
                           <!-- Conditional: Approval Remarks (If Returned) -->
                           ${
                             showApprovalRemarks
                               ? `
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600;">Approval Remarks</td>
-                            <td colspan="3" style="padding: 8px 10px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600;">${approvalRemarks}</td>
+                            <td style="padding: 10px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">Approval Remarks</td>
+                            <td colspan="3" style="padding: 10px 12px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">${approvalRemarks}</td>
                           </tr>
                           `
                               : ""
                           }
                         </table>
-                         
+                          
                         <!-- Section: Items Breakdown -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 36px; border-collapse: collapse;">
                           <thead>
@@ -285,7 +279,7 @@ export class EmailNotificationSenderService {
 
                             <!-- Right: Open in OSH System Button -->
                             <td align="right" valign="bottom">
-                              <a href="https://osh.chookstogoinc.com/" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
+                              <a href="https://qa-osh.chookstogoinc.com/debit-advice-approval" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
                                 Open in OSH System &rarr;
                               </a>
                             </td>
@@ -629,9 +623,9 @@ export class EmailNotificationSenderService {
                           <tr>
 
                           <td align="right">
-
+                          
                           <a
-                          href="https://osh.chookstogoinc.com/"
+                          href="https://qa-osh.chookstogoinc.com/debit-advice-approval"
                           target="_blank"
                           style="
                           display:inline-block;

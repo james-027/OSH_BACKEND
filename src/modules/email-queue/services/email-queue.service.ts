@@ -113,6 +113,13 @@ export class EmailQueueService {
       },
     );
 
+    if (result.affected && result.affected > 0) {
+      try {
+        this.sseEventEmitter.emitUpdateSignal("email-queue", queueId);
+      } catch (err) {
+        this.logger.error("SSE event failed:", err);
+      }
+    }
     if (result.affected !== 1) {
       this.logger.warn(`[QUEUE] queue ${queueId} is already being processed.`);
       return;
@@ -233,6 +240,16 @@ export class EmailQueueService {
         error_message: null,
       },
     );
+
+    // Emit SSE for each updated queue
+    for (const queue of group.queues) {
+      try {
+        this.sseEventEmitter.emitUpdateSignal("email-queue", queue.id);
+      } catch (err) {
+        this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
+      }
+    }
+
     this.logger.warn(
       `[GROUPED EMAIL] Completed ${group.queues.length} queue(s)`,
     );
@@ -410,6 +427,12 @@ export class EmailQueueService {
             manual_execute: 0,
             error_message: null,
           });
+
+          try {
+            this.sseEventEmitter.emitUpdateSignal("email-queue", queue.id);
+          } catch (err) {
+            this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
+          }
 
           continue;
         }
