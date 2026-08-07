@@ -64,10 +64,17 @@ export class OSHJVService {
                         } catch (err) {
                             logger.error("SSE event failed:", err);
                         }
+
                         await this.debitAdviceRepository.update(
                             { document_number: payload[0].Sequence },
                             { status_id: 7 },
                         );
+                        // SSE Events
+                        try {
+                            this.sseEventEmitter.emitCreate("debit-advices", updateDatalogs.id);
+                        } catch (err) {
+                            logger.error("SSE event failed:", err);
+                        }
                     }
                     throw new Error(echoedError);
                 }
@@ -102,6 +109,13 @@ export class OSHJVService {
                             status_id: 7,
                         },
                     );
+
+                    // SSE Events
+                    try {
+                        this.sseEventEmitter.emitCreate("debit-advices", updateDatalogs.id);
+                    } catch (err) {
+                        logger.error("SSE event failed:", err);
+                    }
                 }
                 throw new Error(response.data.error);
             }
@@ -143,6 +157,12 @@ export class OSHJVService {
                             status_id: 7,
                         },
                     );
+                    // SSE Events
+                    try {
+                        this.sseEventEmitter.emitCreate("debit-advices", updateDatalogs.id);
+                    } catch (err) {
+                        logger.error("SSE event failed:", err);
+                    }
 
                 } else {
                     updateDatalogs.jv_docno = "Not Created - JV Creation Failed";
@@ -213,6 +233,12 @@ export class OSHJVService {
                             jv_no: jv_no,
                         },
                     );
+                    // SSE Events
+                    try {
+                        this.sseEventEmitter.emitCreate("debit-advices", updateDatalogs.id);
+                    } catch (err) {
+                        logger.error("SSE event failed:", err);
+                    }
 
                 }
             }
