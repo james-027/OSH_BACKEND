@@ -90,6 +90,8 @@ export class EmailNotificationSenderService {
     showConfirmationRow: boolean;
     showApprovalRemarks: boolean;
   }): string {
+    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval`;
+
     return `  <!DOCTYPE html>
           <html>
           <head>
@@ -148,7 +150,15 @@ export class EmailNotificationSenderService {
                           <!-- Row 1: Document No & Date -->
                           <tr>
                             <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
-                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">${debitAdvice.document_number}</td>
+                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
+                              <a
+                                 href="${approvalUrl}"
+                                target="_blank"
+                                style="color:#2563EB; text-decoration:underline; font-weight:700;"
+                              >
+                                ${debitAdvice.document_number}
+                              </a>
+                            </td>
                             <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
                             <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
                           </tr>
@@ -279,7 +289,7 @@ export class EmailNotificationSenderService {
 
                             <!-- Right: Open in OSH System Button -->
                             <td align="right" valign="bottom">
-                              <a href="https://qa-osh.chookstogoinc.com/debit-advice-approval" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
+                              <a  href="${approvalUrl}" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
                                 Open in OSH System &rarr;
                               </a>
                             </td>
@@ -345,13 +355,23 @@ export class EmailNotificationSenderService {
     showConfirmationRow: boolean;
     showApprovalRemarks: boolean;
   }): string {
+    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval`;
+
     return ` 
                     <!-- Section: Transaction Details (2-Column Grid Layout) -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
                           <!-- Row 1: Document No & Date -->
                           <tr>
                             <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
-                            <td width="30%" style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">${debitAdvice.document_number}</td>
+                           <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
+                             <a
+                                href="${approvalUrl}"
+                                target="_blank"
+                                style="color:#2563EB;text-decoration:underline;font-weight:700;"
+                              >
+                                ${debitAdvice.document_number}
+                              </a>
+                            </td>
                             <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
                             <td width="30%" style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
                           </tr>
@@ -517,6 +537,8 @@ export class EmailNotificationSenderService {
     documents: any[];
     currentStatus: any;
   }) {
+    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval`;
+
     return `  <!DOCTYPE html>
           <html>
           <head>
@@ -624,8 +646,8 @@ export class EmailNotificationSenderService {
 
                           <td align="right">
                           
-                          <a
-                          href="https://qa-osh.chookstogoinc.com/debit-advice-approval"
+                          <a  
+                          href="${approvalUrl}" 
                           target="_blank"
                           style="
                           display:inline-block;

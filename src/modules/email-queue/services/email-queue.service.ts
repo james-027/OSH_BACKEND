@@ -52,6 +52,30 @@ export class EmailQueueService {
       );
       return existing;
     }
+    let recipientTo = null;
+    let recipientCc = null;
+
+    try {
+      const recipient =
+        await this.emailNotificationSenderService.getGroupedApprovalRecipient(
+          dto.transaction_id,
+          dto.trigger_status_id,
+        );
+
+      if (recipient) {
+        recipientTo = recipient.to;
+        recipientCc =
+          Array.isArray(recipient.cc) && recipient.cc.length > 0
+            ? recipient.cc.join(", ")
+            : null;
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to resolve recipients for queue ${dto.document_number}`,
+        err,
+      );
+    }
+
     const queueItem = repository.create({
       document_number: dto.document_number,
       transaction_id: dto.transaction_id,
@@ -64,6 +88,8 @@ export class EmailQueueService {
       max_retry: 5,
       queued_date: new Date(),
       created_by: dto.created_by,
+      recipient_to: recipientTo,
+      recipient_cc: recipientCc,
     });
 
     const saved = await repository.save(queueItem);
@@ -152,35 +178,43 @@ export class EmailQueueService {
       this.logger.log(`Successfully processed Email Queue #${queueId}`);
     } catch (error: any) {
       this.logger.error(`Failed to process Email Queue #${queueId}`, error);
+      await this.handleFailedQueueItem(queueItem, error);
+    }
+  }
 
-      const newRetryCount = queueItem.retry_count + 1;
-      const isFailedMax = newRetryCount >= queueItem.max_retry;
+  private async handleFailedQueueItem(
+    queueItem: EmailQueue,
+    error: any,
+  ): Promise<void> {
+    const newRetryCount = queueItem.retry_count + 1;
+    const isFailedMax = newRetryCount >= queueItem.max_retry;
 
-      // Calculate exponential backoff (e.g., 5m, 10m, 20m, 40m)
-      const nextRetryMinutes = Math.pow(2, newRetryCount) * 5;
-      const nextRetryDate = new Date();
-      nextRetryDate.setMinutes(nextRetryDate.getMinutes() + nextRetryMinutes);
+    // Calculate exponential backoff (e.g., 5m, 10m, 20m, 40m)
+    const nextRetryMinutes = Math.pow(2, newRetryCount) * 5;
+    const nextRetryDate = new Date();
+    nextRetryDate.setMinutes(nextRetryDate.getMinutes() + nextRetryMinutes);
 
-      await this.emailQueueRepository.update(queueId, {
-        retry_count: newRetryCount,
-        error_message: error?.message || String(error),
-        next_retry_date: isFailedMax ? null : nextRetryDate,
-        status_id: isFailedMax ? 30 : 1,
-        worker_name: null,
-        manual_execute: 0,
-        finished_date: isFailedMax ? new Date() : null,
-      });
+    await this.emailQueueRepository.update(queueItem.id, {
+      retry_count: newRetryCount,
+      error_message: error?.message || String(error),
+      next_retry_date: isFailedMax ? null : nextRetryDate,
+      // If you want it to fail immediately on the first error instead of retrying,
+      // change this to just: status_id: 30
+      status_id: isFailedMax ? 30 : 1,
+      worker_name: null,
+      manual_execute: 0,
+      finished_date: isFailedMax ? new Date() : null,
+    });
 
-      try {
-        this.sseEventEmitter.emitUpdateSignal("email-queue", queueId);
-      } catch (err) {
-        this.logger.error("SSE event failed:", err);
-      }
+    try {
+      this.sseEventEmitter.emitUpdateSignal("email-queue", queueItem.id);
+    } catch (err) {
+      this.logger.error("SSE event failed:", err);
     }
   }
 
   private async sendGroupedApprovalEmail(group: {
-    recipient: { to: string };
+    recipient: { to: string; cc?: string[] };
     queues: EmailQueue[];
   }): Promise<void> {
     this.logger.warn("========== GROUPED EMAIL ==========");
@@ -238,6 +272,11 @@ export class EmailQueueService {
         worker_name: null,
         manual_execute: 0,
         error_message: null,
+        recipient_to: group.recipient.to,
+        recipient_cc:
+          Array.isArray(group.recipient.cc) && group.recipient.cc.length > 0
+            ? group.recipient.cc.join(", ")
+            : null,
       },
     );
 
@@ -390,6 +429,27 @@ export class EmailQueueService {
   async processPendingQueue(): Promise<void> {
     this.logger.warn("========== NEW PROCESS PENDING QUEUE ==========");
 
+    // Reset failed queues (status 30) back to pending (status 1) to be retried
+    await this.emailQueueRepository.update(
+      { status_id: 30 },
+      {
+        status_id: 1,
+        retry_count: 0,
+        next_retry_date: new Date(),
+        processing_date: null,
+        worker_name: null,
+        error_message: null,
+        finished_date: null,
+      },
+    );
+
+    // Notify frontend to refresh statuses
+    try {
+      this.sseEventEmitter.emitUpdateSignal("email-queue", 0);
+    } catch (err) {
+      this.logger.error("SSE bulk update event failed:", err);
+    }
+
     const now = new Date();
 
     const queueItems = await this.emailQueueRepository
@@ -413,31 +473,46 @@ export class EmailQueueService {
         if (group.queues.length === 1) {
           const queue = group.queues[0];
 
-          await this.emailNotificationSenderService.processTrigger({
-            moduleId: queue.module_id,
-            triggerStatusId: queue.trigger_status_id,
-            transactionId: queue.transaction_id,
-          });
-
-          await this.emailQueueRepository.update(queue.id, {
-            status_id: 29,
-            processing_date: new Date(),
-            finished_date: new Date(),
-            worker_name: null,
-            manual_execute: 0,
-            error_message: null,
-          });
-
           try {
-            this.sseEventEmitter.emitUpdateSignal("email-queue", queue.id);
-          } catch (err) {
-            this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
+            await this.emailNotificationSenderService.processTrigger({
+              moduleId: queue.module_id,
+              triggerStatusId: queue.trigger_status_id,
+              transactionId: queue.transaction_id,
+            });
+
+            await this.emailQueueRepository.update(queue.id, {
+              status_id: 29,
+              processing_date: new Date(),
+              finished_date: new Date(),
+              worker_name: null,
+              manual_execute: 0,
+              error_message: null,
+            });
+
+            try {
+              this.sseEventEmitter.emitUpdateSignal("email-queue", queue.id);
+            } catch (err) {
+              this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
+            }
+          } catch (error: any) {
+            this.logger.error(
+              `Failed grouped trigger for queue ${queue.id}`,
+              error,
+            );
+            await this.handleFailedQueueItem(queue, error);
           }
 
           continue;
         }
 
-        await this.sendGroupedApprovalEmail(group);
+        try {
+          await this.sendGroupedApprovalEmail(group);
+        } catch (error: any) {
+          this.logger.error(`Failed sendGroupedApprovalEmail for group`, error);
+          for (const q of group.queues) {
+            await this.handleFailedQueueItem(q, error);
+          }
+        }
       }
     }
 

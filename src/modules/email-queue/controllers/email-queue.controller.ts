@@ -1,13 +1,13 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Query,
   UseGuards,
   ParseIntPipe,
 } from "@nestjs/common";
-
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -41,6 +41,36 @@ export class EmailQueueController {
     return {
       success: true,
       message: "Email queued for manual execution.",
+    };
+  }
+
+  @Post("process-pending")
+  @RequirePermissions({
+    module: "EMAIL NOTIFICATION QUEING",
+    action: "EDIT",
+  })
+  async processPending() {
+    // We don't await this so it runs in the background and doesn't block the HTTP request
+    this.emailQueueService.processPendingQueue();
+
+    return {
+      success: true,
+      message:
+        "Pending and failed queues are now processing in the background.",
+    };
+  }
+
+  @Post(":id/retry")
+  @RequirePermissions({
+    module: "EMAIL NOTIFICATION QUEING",
+    action: "EDIT",
+  })
+  async retryFailedEmail(@Param("id", ParseIntPipe) id: number) {
+    await this.emailQueueService.triggerManualExecute(id);
+
+    return {
+      success: true,
+      message: `Manual retry triggered for queue item #${id}`,
     };
   }
 }
