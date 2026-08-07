@@ -22,13 +22,14 @@ import { ApprovalStagesList } from "../../entities/ApprovalStagesList";
 import { User } from "../../entities/User";
 import { EmailNotificationMailService } from "./services/email-notification-mail.service";
 import { DebitAdvice_header } from "src/entities/DebitAdviceHeader";
+import { EmailQueue } from "src/entities/EmailQueue";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       EmailNotificationMatrix,
       EmailNotificationMatrixDetails,
       EmailNotificationMatrixRecipients,
-
+      EmailQueue,
       ApprovalStagesList,
       User,
       DebitAdvice_header,
@@ -51,7 +52,11 @@ import { DebitAdvice_header } from "src/entities/DebitAdviceHeader";
     ActionLogsService,
   ],
 
-  exports: [EmailNotificationMatrixService, EmailNotificationSenderService],
+  exports: [
+    EmailNotificationMatrixService,
+    EmailNotificationSenderService,
+    EmailNotificationMailService,
+  ],
 })
 export class EmailNotificationMatrixModule {
   constructor() {

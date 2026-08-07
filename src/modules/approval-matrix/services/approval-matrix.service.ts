@@ -235,10 +235,16 @@ export class ApprovalMatrixService {
     for (const detailDto of dto.lines) {
       let detail: ApprovalMatrixDetails;
 
-      if (detailDto.id) {
-        detail = await this.approvalMatrixDetailsRepository.findOneOrFail({
-          where: { id: detailDto.id },
+      if (detailDto.id && Number(detailDto.id) > 0) {
+        detail = await this.approvalMatrixDetailsRepository.findOne({
+          where: { id: Number(detailDto.id) },
         });
+
+        if (!detail) {
+          throw new BadRequestException(
+            `Approval Matrix Detail ${detailDto.id} not found.`,
+          );
+        }
 
         detail.approval_title = detailDto.approval_title;
         detail.userid = dto.userid;
@@ -259,15 +265,40 @@ export class ApprovalMatrixService {
           }),
         );
       }
-
       const levelsToUpdate: {
         entity: ApprovalMatrixLevels;
         dto: any;
         index: number;
       }[] = [];
+      // Get all existing levels for this detail
+      const existingLevels = await this.approvalMatrixLevelsRepository.find({
+        where: {
+          line_id: detail.id,
+        },
+      });
 
+      // IDs that came from the frontend
+      const incomingLevelIds = detailDto.approvalmatrixLevel
+        .filter((x) => Number(x.id) > 0)
+        .map((x) => Number(x.id));
+
+      // Delete levels removed from UI
+      for (const level of existingLevels) {
+        if (!incomingLevelIds.includes(level.id)) {
+          await this.approvalMatrixLevelsRepository.delete(level.id);
+        }
+      }
       for (const [index, levelDto] of detailDto.approvalmatrixLevel.entries()) {
-        if (levelDto.id) {
+        console.log("=================================");
+        console.log("DETAIL ID:", detail.id);
+        console.log("LEVEL DTO:", {
+          id: levelDto.id,
+          approval_id: levelDto.approval_id,
+          opt_approval_id: levelDto.opt_approval_id,
+          userid: dto.userid,
+          level: index + 1,
+        });
+        if (levelDto.id && Number(levelDto.id) > 0) {
           const level = await this.approvalMatrixLevelsRepository.findOneOrFail(
             {
               where: { id: levelDto.id },
@@ -299,15 +330,21 @@ export class ApprovalMatrixService {
             index,
           });
         } else {
-          // INSERT NEW LEVEL
+          console.log("INSERTING NEW LEVEL", {
+            line_id: detail.id,
+            approval_id: Number(levelDto.approval_id),
+            opt_approval_id: Number(levelDto.opt_approval_id || 0),
+          });
           await this.approvalMatrixLevelsRepository.save(
             this.approvalMatrixLevelsRepository.create({
               line_id: detail.id,
               level: index + 1,
               approval_id: Number(levelDto.approval_id),
-              opt_approval_id: levelDto.opt_approval_id
-                ? Number(levelDto.opt_approval_id)
-                : null,
+              opt_approval_id:
+                levelDto.opt_approval_id &&
+                Number(levelDto.opt_approval_id) !== 0
+                  ? Number(levelDto.opt_approval_id)
+                  : null,
               approval_title: levelDto.approval_title,
               module: Number(detailDto.module),
               userid: dto.userid,
@@ -331,9 +368,15 @@ export class ApprovalMatrixService {
 
           // PASS 1: Assign dummy negative values to avoid Unique Key conflict
           for (const item of levelsToUpdate) {
+            console.log("UPDATING LEVEL", {
+              levelId: item.entity.id,
+              oldApprovalId: item.entity.approval_id,
+              newApprovalId: Number(item.dto.approval_id),
+            });
             await queryRunner.manager.update(
               ApprovalMatrixLevels,
               item.entity.id,
+
               {
                 approval_id: -item.entity.id,
               },
