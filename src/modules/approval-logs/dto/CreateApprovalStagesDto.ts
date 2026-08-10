@@ -18,4 +18,7 @@ export class CreateApprovalStagesDto {
 
   @IsNumber()
   approval_id: number;
+
+  @IsNumber()
+  requestor_id: number;
 }

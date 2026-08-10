@@ -31,6 +31,9 @@ export class CreateDebitAdviceDto {
     @IsNumber()
     approval: number;
 
+    @IsNumber()
+    requestor_id: number;
+
     @IsArray()
     @ArrayMinSize(1)
     @ValidateNested({ each: true })
@@ -42,6 +45,7 @@ export class CreateDebitAdviceDto {
 
     @IsNumber()
     location_id: number;
+
 
 }
 

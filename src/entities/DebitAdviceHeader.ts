@@ -51,6 +51,8 @@ export class DebitAdvice_header {
     @Column({ nullable: true })
     location_id: number;
 
+    @Column({ default: 0 })
+    requestor_id: number;
 
     @CreateDateColumn({
         type: "timestamp",

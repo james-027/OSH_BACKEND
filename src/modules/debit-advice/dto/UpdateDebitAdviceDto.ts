@@ -31,6 +31,11 @@ export class UpdateDebitAdviceDto {
     @IsNumber()
     approval: number;
 
+
+    @IsNumber()
+    @IsOptional()
+    requestor_id?: number;
+
     @IsArray()
     @ArrayMinSize(1)
     @ValidateNested({ each: true })

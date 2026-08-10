@@ -20,7 +20,7 @@ export class ApprovalLogsService {
 
     @InjectRepository(ApprovalMatrix)
     private approvalMatrixRepository: Repository<ApprovalMatrix>,
-  ) {}
+  ) { }
 
   // Fetch approval logs by debit advice header ID
   async findByHeaderId(transaction_id: number): Promise<any[]> {
@@ -117,7 +117,7 @@ export class ApprovalLogsService {
     const nextCycle = latestStage ? latestStage.approval_cycle + 1 : 1;
     const matrix = await this.approvalMatrixRepository.findOne({
       where: {
-        userid: userId,
+        userid: dto.requestor_id,
         status_id: 1,
       },
 
