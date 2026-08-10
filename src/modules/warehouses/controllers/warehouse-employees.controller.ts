@@ -294,7 +294,7 @@ export class WarehouseEmployeesController {
         // SS (must be assigned to this warehouse's location via employee_locations)
         const ss = findEmp(
           row["ASSIGNED SS EMP. NO."],
-          ["SS", "AH", "BCH", "RH"],
+          ["SS", "AH", "GAH", "BCH", "GBCH", "RH", "GRH"],
           {
             requireLocationId: true,
           },
@@ -305,9 +305,13 @@ export class WarehouseEmployeesController {
           );
 
         // AH (must be assigned to this warehouse's location via employee_locations)
-        const ah = findEmp(row["ASSIGNED AH EMP. NO."], ["AH", "BCH", "RH"], {
-          requireLocationId: true,
-        });
+        const ah = findEmp(
+          row["ASSIGNED AH EMP. NO."],
+          ["AH", "GAH", "BCH", "GBCH", "RH", "GRH"],
+          {
+            requireLocationId: true,
+          },
+        );
         if (!ah)
           throw new Error(
             `Invalid ASSIGNED AH EMP. NO. [${row["ASSIGNED AH EMP. NO."]}] (not found or not assigned to this warehouse's location)`,
@@ -319,8 +323,11 @@ export class WarehouseEmployeesController {
         if (row["ASSIGNED BCH EMP. NO."]) {
           const foundBch = findEmp(row["ASSIGNED BCH EMP. NO."], [
             "AH",
+            "GAH",
             "BCH",
+            "GBCH",
             "RH",
+            "GRH",
           ]);
           if (!foundBch)
             throw new Error(
@@ -333,9 +340,10 @@ export class WarehouseEmployeesController {
         let gbch = null;
         if (row["ASSIGNED GBCH EMP. NO."]) {
           const foundGbch = findEmp(row["ASSIGNED GBCH EMP. NO."], [
-            "AH",
             "BCH",
             "GBCH",
+            "RH",
+            "GRH",
           ]);
           gbch = foundGbch ? foundGbch.id : null;
         }
@@ -343,7 +351,12 @@ export class WarehouseEmployeesController {
         // RH (nullable)
         let rh = null;
         if (row["ASSIGNED RH EMP. NO."]) {
-          const foundRh = findEmp(row["ASSIGNED RH EMP. NO."], ["RH", "BCH"]);
+          const foundRh = findEmp(row["ASSIGNED RH EMP. NO."], [
+            "BCH",
+            "GBCH",
+            "RH",
+            "GRH",
+          ]);
           if (!foundRh)
             throw new Error(
               `Invalid ASSIGNED RH EMP. NO. [${row["ASSIGNED RH EMP. NO."]}]`,
@@ -354,7 +367,12 @@ export class WarehouseEmployeesController {
         // GRH (nullable)
         let grh = null;
         if (row["ASSIGNED GRH EMP. NO."]) {
-          const foundGrh = findEmp(row["ASSIGNED GRH EMP. NO."], ["RH", "GRH"]);
+          const foundGrh = findEmp(row["ASSIGNED GRH EMP. NO."], [
+            "BCH",
+            "GBCH",
+            "RH",
+            "GRH",
+          ]);
           grh = foundGrh ? foundGrh.id : null;
         }
 
