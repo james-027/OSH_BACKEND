@@ -116,6 +116,8 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.module";
+import { EmailQueueModule } from "./modules/email-queue/email-queue.module";
+import { EmailQueue } from "./entities/EmailQueue";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -152,6 +154,7 @@ import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.mod
       ApprovalMatrix,
       ApprovalMatrixDetails,
       ApprovalMatrixLevels,
+      EmailQueue,
     ]),
     // Authentication
     PassportModule,
@@ -223,6 +226,7 @@ import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.mod
     StaffTrainingModule,
     TrainingsModule,
     StaffSalariesModule,
+    EmailQueueModule,
   ],
   providers: [
     EmailService,
