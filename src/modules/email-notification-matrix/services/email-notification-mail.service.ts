@@ -62,22 +62,24 @@ export class EmailNotificationMailService {
 
       console.log("SMTP connection successful.");
 
-       const threadId = `<pending-${options.to.toLowerCase()}@osh.local>`;
+      // Strip commas and spaces to prevent invalid Message-ID headers which cause silent drops
+      const safeThreadString = options.to.replace(/[^a-zA-Z0-9@.]/g, "");
+      const threadId = `<pending-${safeThreadString.toLowerCase()}@osh.local>`;
 
-        const result = await transporter.sendMail({
-          from: `"Email Notification" <${config.smtp_username}>`,
-          to: options.to,
-          cc: options.cc,
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
+      const result = await transporter.sendMail({
+        from: `"Email Notification" <${config.smtp_username}>`,
+        to: options.to,
+        cc: options.cc,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
 
-          headers: {
-            "Message-ID": threadId,
-            "In-Reply-To": threadId,
-            References: threadId,
-          },
-        });
+        headers: {
+          "Message-ID": threadId,
+          "In-Reply-To": threadId,
+          References: threadId,
+        },
+      });
       console.log("========================================");
       console.log("EMAIL SENT SUCCESSFULLY");
       console.log("TO:", options.to);

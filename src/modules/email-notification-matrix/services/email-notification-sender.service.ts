@@ -90,7 +90,7 @@ export class EmailNotificationSenderService {
     showConfirmationRow: boolean;
     showApprovalRemarks: boolean;
   }): string {
-    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval`;
+    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval?docno=${debitAdvice.document_number}`;
 
     return `  <!DOCTYPE html>
           <html>
@@ -355,7 +355,7 @@ export class EmailNotificationSenderService {
     showConfirmationRow: boolean;
     showApprovalRemarks: boolean;
   }): string {
-    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval`;
+    const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval?docno=${debitAdvice.document_number}`;
 
     return ` 
                     <!-- Section: Transaction Details (2-Column Grid Layout) -->
@@ -744,7 +744,39 @@ export class EmailNotificationSenderService {
   public async getGroupedApprovalRecipient(
     transactionId: number,
     triggerStatusId: number,
+    moduleId: number = 34, // Defaults to 34 for Debit Advice grouped emails
   ) {
+    // 1. Check the matrix configuration first
+    const matrix = await this.emailNotificationMatrixRepository.findOne({
+      where: { module: moduleId, status_id: 1 },
+      relations: ["lines", "lines.recipients"],
+    });
+
+    if (matrix) {
+      const trigger = matrix.lines.find(
+        (x) => x.status_id === 1 && x.trigger_status_id === triggerStatusId,
+      );
+
+      // If matrix explicitly says NOT an approval matrix, override and use static recipients
+      if (trigger && trigger.is_approval_matrix === 0) {
+        const manualTo = trigger.recipients.find(
+          (r) => r.recipient_type === "TO",
+        );
+        const manualCc = trigger.recipients
+          .filter((r) => r.recipient_type === "CC")
+          .map((r) => r.email)
+          .filter(Boolean);
+
+        if (manualTo?.email) {
+          return {
+            to: manualTo.email,
+            cc: manualCc,
+          };
+        }
+      }
+    }
+
+    // 2. Fallback to default Approval Logic (is_approval_matrix === 1)
     // Pending Approval
     if (triggerStatusId === 3) {
       return this.getPendingApprovalRecipient(transactionId);
@@ -1092,61 +1124,64 @@ export class EmailNotificationSenderService {
     const makerUser = debitAdvice.createdBy;
     const makerEmail = makerUser?.email;
 
-    if (triggerStatusId === 3) {
-      const recipient = await this.getPendingApprovalRecipient(transactionId);
+    // Proceed with approval stages logic ONLY if configured in the matrix
+    if (trigger.is_approval_matrix === 1) {
+      if (triggerStatusId === 3) {
+        const recipient = await this.getPendingApprovalRecipient(transactionId);
 
-      if (!recipient) {
-        this.logger.error("No pending approval recipient found.");
-        return;
-      }
+        if (!recipient) {
+          this.logger.error("No pending approval recipient found.");
+          return;
+        }
 
-      to = recipient.to;
-      cc = recipient.cc;
-    } else if (triggerStatusId === 7) {
-      // ----------------------------------------------------
-      // STATUS: 7 - Approved Step
-      // ----------------------------------------------------
-      const nextPendingStage = await this.approvalStagesRepository.findOne({
-        where: {
-          transaction_id: transactionId,
-          status_id: 3, // Check if there are remaining pending steps
-        },
-        order: {
-          series: "ASC",
-        },
-      });
+        to = recipient.to;
+        cc = recipient.cc;
+      } else if (triggerStatusId === 7) {
+        // ----------------------------------------------------
+        // STATUS: 7 - Approved Step
+        // ----------------------------------------------------
+        const nextPendingStage = await this.approvalStagesRepository.findOne({
+          where: {
+            transaction_id: transactionId,
+            status_id: 3, // Check if there are remaining pending steps
+          },
+          order: {
+            series: "ASC",
+          },
+        });
 
-      if (nextPendingStage) {
-        // Intermediate approval
-        // Send Approved email ONLY to Maker
-        to = makerEmail!;
+        if (nextPendingStage) {
+          // Intermediate approval
+          // Send Approved email ONLY to Maker
+          to = makerEmail!;
+          cc = [];
+        } else {
+          // Final approval
+          to = makerEmail!;
+          cc = [];
+        }
+      } else if (triggerStatusId === 15) {
+        // ----------------------------------------------------
+        // STATUS: 15 - Returned to Maker
+        // Target TO: Maker (created_by)
+        // ----------------------------------------------------
+        if (!makerEmail) {
+          this.logger.error("Maker email not found.");
+          return;
+        }
+        to = makerEmail;
+      } else if (triggerStatusId === 4) {
+        // ----------------------------------------------------
+        // STATUS: 4 - Posted
+        // Target: Maker
+        // ----------------------------------------------------
+        if (!makerEmail) {
+          this.logger.error("Maker email not found.");
+          return;
+        }
+        to = makerEmail;
         cc = [];
-      } else {
-        // Final approval
-        to = makerEmail!;
-        cc = [];
       }
-    } else if (triggerStatusId === 15) {
-      // ----------------------------------------------------
-      // STATUS: 15 - Returned to Maker
-      // Target TO: Maker (created_by)
-      // ----------------------------------------------------
-      if (!makerEmail) {
-        this.logger.error("Maker email not found.");
-        return;
-      }
-      to = makerEmail;
-    } else if (triggerStatusId === 4) {
-      // ----------------------------------------------------
-      // STATUS: 4 - Posted
-      // Target: Maker
-      // ----------------------------------------------------
-      if (!makerEmail) {
-        this.logger.error("Maker email not found.");
-        return;
-      }
-      to = makerEmail;
-      cc = [];
     }
 
     // ==========================================

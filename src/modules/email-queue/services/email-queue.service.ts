@@ -187,23 +187,17 @@ export class EmailQueueService {
     error: any,
   ): Promise<void> {
     const newRetryCount = queueItem.retry_count + 1;
-    const isFailedMax = newRetryCount >= queueItem.max_retry;
-
-    // Calculate exponential backoff (e.g., 5m, 10m, 20m, 40m)
-    const nextRetryMinutes = Math.pow(2, newRetryCount) * 5;
-    const nextRetryDate = new Date();
-    nextRetryDate.setMinutes(nextRetryDate.getMinutes() + nextRetryMinutes);
 
     await this.emailQueueRepository.update(queueItem.id, {
+      status_id: 30, // FAILED - must wait for manual retry
       retry_count: newRetryCount,
       error_message: error?.message || String(error),
-      next_retry_date: isFailedMax ? null : nextRetryDate,
-      // If you want it to fail immediately on the first error instead of retrying,
-      // change this to just: status_id: 30
-      status_id: isFailedMax ? 30 : 1,
+
+      next_retry_date: null,
+      processing_date: queueItem.processing_date ?? new Date(),
       worker_name: null,
       manual_execute: 0,
-      finished_date: isFailedMax ? new Date() : null,
+      finished_date: new Date(),
     });
 
     try {
@@ -426,22 +420,32 @@ export class EmailQueueService {
     }));
   }
 
-  async processPendingQueue(): Promise<void> {
+  async processPendingQueue(retryFailed = false): Promise<void> {
     this.logger.warn("========== NEW PROCESS PENDING QUEUE ==========");
+    if (retryFailed) {
+      this.logger.warn("[EMAIL QUEUE] Retrying all FAILED queues...");
 
+      await this.emailQueueRepository.update(
+        { status_id: 30 },
+        {
+          status_id: 1,
+          retry_count: 0,
+          next_retry_date: new Date(),
+          processing_date: null,
+          worker_name: null,
+          error_message: null,
+          finished_date: null,
+          manual_execute: 1,
+        },
+      );
+
+      try {
+        this.sseEventEmitter.emitUpdateSignal("email-queue", 0);
+      } catch (err) {
+        this.logger.error("SSE bulk update event failed:", err);
+      }
+    }
     // Reset failed queues (status 30) back to pending (status 1) to be retried
-    await this.emailQueueRepository.update(
-      { status_id: 30 },
-      {
-        status_id: 1,
-        retry_count: 0,
-        next_retry_date: new Date(),
-        processing_date: null,
-        worker_name: null,
-        error_message: null,
-        finished_date: null,
-      },
-    );
 
     // Notify frontend to refresh statuses
     try {

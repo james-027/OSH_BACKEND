@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Query,
+  Body,
   UseGuards,
   ParseIntPipe,
 } from "@nestjs/common";
@@ -49,17 +50,18 @@ export class EmailQueueController {
     module: "EMAIL NOTIFICATION QUEING",
     action: "EDIT",
   })
-  async processPending() {
+  async processPending(@Body() body: { retryFailed?: boolean }) {
     // We don't await this so it runs in the background and doesn't block the HTTP request
-    this.emailQueueService.processPendingQueue();
+    this.emailQueueService.processPendingQueue(body?.retryFailed === true);
 
     return {
       success: true,
       message:
-        "Pending and failed queues are now processing in the background.",
+        body?.retryFailed === true
+          ? "Pending and failed queues are now processing in the background."
+          : "Pending queues are now processing in the background.",
     };
   }
-
   @Post(":id/retry")
   @RequirePermissions({
     module: "EMAIL NOTIFICATION QUEING",
