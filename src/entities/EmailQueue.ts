@@ -78,18 +78,8 @@ export class EmailQueue {
   @JoinColumn({ name: "created_by" })
   creator: User;
 
-  @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: "recipient_user_id" })
-  recipientUser: User;
-
   @UpdateDateColumn({ type: "timestamp" })
   updated_at: Date;
-
-  @Column({
-    type: "bigint",
-    nullable: true,
-  })
-  recipient_user_id: number | null;
 
   @Column({
     type: "text",
