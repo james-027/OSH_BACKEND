@@ -25,7 +25,7 @@ import * as path from "path";
 import { ApprovalMatrixService } from "src/modules/approval-matrix/services/approval-matrix.service";
 import { ApprovalLogsService } from "src/modules/approval-logs/services/approval-logs.service";
 import { EmailQueueService } from "src/modules/email-queue/services/email-queue.service";
-
+import { Module } from "src/entities/Module";
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
 // create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary
 // transformations or validations before returning the response to the controller. Additionally, it will log audit trails for create
@@ -51,6 +51,8 @@ export class DebitAdviceService {
     private ActionLogsService: ActionLogsService,
     @InjectRepository(TransactionAttachment)
     private readonly attachmentRepository: Repository<TransactionAttachment>,
+    @InjectRepository(Module)
+    private moduleRepository: Repository<Module>,
   ) {}
 
   private readonly module_name = "DEBIT ADVICE";
@@ -477,11 +479,26 @@ export class DebitAdviceService {
       // Queue email only when status changes
       if (current_status_id !== reloadedDebitAdvice.status_id) {
         // Pending for Approval -> Approvers
+        // Pending for Approval -> Approvers
         if (reloadedDebitAdvice.status_id === 3) {
+          // Look up module by name
+          const module = await this.moduleRepository.findOne({
+            where: {
+              module_name: this.module_name,
+              status_id: 1,
+            },
+          });
+
+          if (!module) {
+            throw new NotFoundException(
+              `Module '${this.module_name}' not found`,
+            );
+          }
+
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: 34,
+            module_id: module.id,
             trigger_status_id: 3,
             created_by: userId,
             email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,
@@ -489,11 +506,26 @@ export class DebitAdviceService {
         }
 
         // Posted -> Finance Confirmation
+        // Posted -> Finance Confirmation
         if (reloadedDebitAdvice.status_id === 4) {
+          // Look up module by name
+          const module = await this.moduleRepository.findOne({
+            where: {
+              module_name: "FINANCE CONFIRMATION",
+              status_id: 1,
+            },
+          });
+
+          if (!module) {
+            throw new NotFoundException(
+              "Module 'FINANCE CONFIRMATION' not found",
+            );
+          }
+
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: 35,
+            module_id: module.id,
             trigger_status_id: 4,
             created_by: userId,
             email_subject: `[${this.module_name}] FOR FINANCE CONFIRMATION`,
@@ -709,10 +741,22 @@ export class DebitAdviceService {
         });
 
         // Initialize approval stages for this debit advice
+        // Look up module by name
+        const module = await this.moduleRepository.findOne({
+          where: {
+            module_name: this.module_name,
+            status_id: 1,
+          },
+        });
+
+        if (!module) {
+          throw new NotFoundException(`Module '${this.module_name}' not found`);
+        }
+
         await this.approvalLogsService.initialize(
           {
             transaction_id: reloadedDebitAdvice.id,
-            module_id: 34, // DEBIT ADVICES
+            module_id: module.id,
             document_number: reloadedDebitAdvice.document_number,
             transaction_date: reloadedDebitAdvice.transaction_date,
             approval_id: defaultApprovalId,

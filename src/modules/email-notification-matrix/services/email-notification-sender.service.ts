@@ -744,7 +744,7 @@ export class EmailNotificationSenderService {
   public async getGroupedApprovalRecipient(
     transactionId: number,
     triggerStatusId: number,
-    moduleId: number = 34, // Defaults to 34 for Debit Advice grouped emails
+    moduleId: number,
   ) {
     // 1. Check the matrix configuration first
     const matrix = await this.emailNotificationMatrixRepository.findOne({
@@ -1425,11 +1425,13 @@ export class EmailNotificationSenderService {
     to,
     documents,
     triggerStatusId,
+    moduleId,
     isFinalApproved = false,
   }: {
     to: string;
     documents: any[];
     triggerStatusId: number;
+    moduleId: number;
     isFinalApproved?: boolean;
   }): Promise<void> {
     const title =
@@ -1450,15 +1452,20 @@ export class EmailNotificationSenderService {
       currentStatus,
     });
 
+    const module = await this.moduleRepository.findOne({
+      where: { id: moduleId },
+    });
+
+    const moduleName = module?.module_name ?? "System";
+
     await this.emailNotificationMailService.sendMail({
-      moduleId: 34,
+      moduleId,
       to,
       cc: [],
-      subject: `[DEBIT ADVICE] ${currentStatus.label}`,
+      subject: `[${moduleName}] ${currentStatus.label}`,
       html,
       text: "",
     });
-
     this.logger.log(
       `[GROUPED EMAIL] Summary email sent to ${to} (${documents.length} document(s))`,
     );

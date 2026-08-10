@@ -60,8 +60,8 @@ export class EmailQueueService {
         await this.emailNotificationSenderService.getGroupedApprovalRecipient(
           dto.transaction_id,
           dto.trigger_status_id,
+          dto.module_id,
         );
-
       if (recipient) {
         recipientTo = recipient.to;
         recipientCc =
@@ -251,10 +251,10 @@ export class EmailQueueService {
     await this.emailNotificationSenderService.sendApprovalSummaryEmail({
       to: group.recipient.to,
       documents,
-      triggerStatusId: group.queues[0].trigger_status_id,
+      triggerStatusId,
+      moduleId: group.queues[0].module_id,
       isFinalApproved,
     });
-
     this.logger.warn("After sendApprovalSummaryEmail");
 
     await this.emailQueueRepository.update(
@@ -313,6 +313,7 @@ export class EmailQueueService {
         await this.emailNotificationSenderService.getGroupedApprovalRecipient(
           queue.transaction_id,
           queue.trigger_status_id,
+          queue.module_id,
         );
 
       console.log("QUEUE", queue.document_number);
