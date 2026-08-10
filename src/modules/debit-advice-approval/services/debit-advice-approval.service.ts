@@ -21,7 +21,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import logger from "src/config/logger";
 
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
-import { EmailNotificationSenderService } from "src/modules/email-notification-matrix/services/email-notification-sender.service";
+import { EmailQueueService } from "src/modules/email-queue/services/email-queue.service";
 @Injectable()
 export class ApprovalStagesListService {
   constructor(
@@ -35,9 +35,8 @@ export class ApprovalStagesListService {
     private actionLogsService: ActionLogsService,
 
     private sseEventEmitter: SSEEventEmitterHelper,
-
+    private readonly emailQueueService: EmailQueueService,
     private cacheInvalidationService: CacheInvalidationService,
-    private readonly emailNotificationSenderService: EmailNotificationSenderService,
   ) {}
 
   private readonly module_name = "DEBIT ADVICE APPROVAL";
@@ -378,50 +377,53 @@ export class ApprovalStagesListService {
         },
       });
 
-    
-
       if (nextApproval) {
         // 1. Send APPROVED email to Maker (background)
-        this.emailNotificationSenderService
-          .processTrigger({
-            moduleId: approval.module,
-            triggerStatusId: 7,
-            transactionId: approval.transaction_id,
-            documentNumber: approval.document_number,
+        this.emailQueueService
+          .enqueue({
+            document_number: approval.document_number,
+            transaction_id: approval.transaction_id,
+            module_id: approval.module,
+            trigger_status_id: 7,
+            created_by: userId,
+            email_subject: `[Debit Advice] APPROVED`,
           })
           .catch((err) => {
             logger.error(
-              `Approved email failed for ${approval.document_number}`,
+              `Failed to queue email for ${approval.document_number}`,
               err,
             );
           });
-
         // 2. Send PENDING email to Next Approver (background)
-        this.emailNotificationSenderService
-          .processTrigger({
-            moduleId: approval.module,
-            triggerStatusId: 3,
-            transactionId: approval.transaction_id,
-            documentNumber: approval.document_number,
+        this.emailQueueService
+          .enqueue({
+            document_number: approval.document_number,
+            transaction_id: approval.transaction_id,
+            module_id: approval.module,
+            trigger_status_id: 3,
+            created_by: userId,
+            email_subject: `[Debit Advice] PENDING FOR APPROVAL`,
           })
           .catch((err) => {
             logger.error(
-              `Pending email failed for ${approval.document_number}`,
+              `Failed to queue PENDING email for ${approval.document_number}`,
               err,
             );
           });
       } else {
         // Last approver -> FINAL APPROVED email (background)
-        this.emailNotificationSenderService
-          .processTrigger({
-            moduleId: approval.module,
-            triggerStatusId: 7,
-            transactionId: approval.transaction_id,
-            documentNumber: approval.document_number,
+        this.emailQueueService
+          .enqueue({
+            document_number: approval.document_number,
+            transaction_id: approval.transaction_id,
+            module_id: approval.module,
+            trigger_status_id: 7,
+            created_by: userId,
+            email_subject: `[Debit Advice] APPROVED`,
           })
           .catch((err) => {
             logger.error(
-              `Final approval email failed for ${approval.document_number}`,
+              `Failed to queue FINAL APPROVED email for ${approval.document_number}`,
               err,
             );
           });
@@ -430,17 +432,18 @@ export class ApprovalStagesListService {
 
     // Notify maker (background)
     if (status_id === 15) {
-   
-      this.emailNotificationSenderService
-        .processTrigger({
-          moduleId: approval.module,
-          triggerStatusId: 15,
-          transactionId: approval.transaction_id,
-          documentNumber: approval.document_number,
+      this.emailQueueService
+        .enqueue({
+          document_number: approval.document_number,
+          transaction_id: approval.transaction_id,
+          module_id: approval.module,
+          trigger_status_id: 15,
+          created_by: userId,
+          email_subject: `[Debit Advice] RETURNED TO MAKER`,
         })
         .catch((err) => {
           logger.error(
-            `Return to Maker email failed for ${approval.document_number}`,
+            `Failed to queue RETURN TO MAKER email for ${approval.document_number}`,
             err,
           );
         });
@@ -457,6 +460,11 @@ export class ApprovalStagesListService {
 
     approval_remarks?: string,
   ): Promise<any[]> {
+    logger.warn("========== toggleBulkStatus CALLED ==========");
+    logger.warn(`ids=${JSON.stringify(ids)}`);
+    logger.warn(`status_id=${status_id}`);
+
+    console.trace("toggleBulkStatus");
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       throw new BadRequestException("No approval stage IDs provided");
     }
@@ -555,39 +563,55 @@ export class ApprovalStagesListService {
           if (nextApproval) {
             // 1. Send APPROVED email to Maker
             // Send APPROVED email in background
-            this.emailNotificationSenderService
-              .processTrigger({
-                moduleId: approval.module,
-                triggerStatusId: 7,
-                transactionId: approval.transaction_id,
-                documentNumber: approval.document_number,
+            this.emailQueueService
+              .enqueue({
+                document_number: approval.document_number,
+                transaction_id: approval.transaction_id,
+                module_id: approval.module,
+                trigger_status_id: 7,
+                created_by: userId,
+                email_subject: `[Debit Advice] APPROVED - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
-                logger.error("Approved email failed", err);
+                logger.error(
+                  `Failed to queue APPROVED email for ${approval.document_number}`,
+                  err,
+                );
               });
 
             // Send PENDING email in background
-            this.emailNotificationSenderService
-              .processTrigger({
-                moduleId: approval.module,
-                triggerStatusId: 3,
-                transactionId: approval.transaction_id,
-                documentNumber: approval.document_number,
+
+            this.emailQueueService
+              .enqueue({
+                document_number: approval.document_number,
+                transaction_id: approval.transaction_id,
+                module_id: approval.module,
+                trigger_status_id: 3,
+                created_by: userId,
+                email_subject: `[Debit Advice] PENDING FOR APPROVAL - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
-                logger.error("Pending email failed", err);
+                logger.error(
+                  `Failed to queue PENDING email for ${approval.document_number}`,
+                  err,
+                );
               });
           } else {
             // Last approver
-            this.emailNotificationSenderService
-              .processTrigger({
-                moduleId: approval.module,
-                triggerStatusId: 7,
-                transactionId: approval.transaction_id,
-                documentNumber: approval.document_number,
+            this.emailQueueService
+              .enqueue({
+                document_number: approval.document_number,
+                transaction_id: approval.transaction_id,
+                module_id: approval.module,
+                trigger_status_id: 7,
+                created_by: userId,
+                email_subject: `[Debit Advice] FINAL APPROVED - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
-                logger.error("Final approval email failed", err);
+                logger.error(
+                  `Failed to queue FINAL APPROVED email for ${approval.document_number}`,
+                  err,
+                );
               });
           }
         } catch (err) {

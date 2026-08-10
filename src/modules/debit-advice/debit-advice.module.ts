@@ -26,6 +26,7 @@ import { ApprovalMatrixLevels } from "../../entities/ApprovalMatrixLevels";
 import { ApprovalStagesList } from "src/entities/ApprovalStagesList";
 import { ApprovalLogsService } from "../approval-logs/services/approval-logs.service";
 import { EmailNotificationMatrixModule } from "../email-notification-matrix/email-notification-matrix.module";
+import { EmailQueueModule } from "../email-queue/email-queue.module";
 // This is the main module file for the debit advice feature. It imports the necessary entities, controllers, and services related to debit advice.
 @Module({
   imports: [
@@ -44,10 +45,12 @@ import { EmailNotificationMatrixModule } from "../email-notification-matrix/emai
       ApprovalMatrixDetails,
       ApprovalMatrixLevels,
       ApprovalStagesList,
+      
     ]),
     UsersModule,
     SSEModule,
     EmailNotificationMatrixModule,
+    EmailQueueModule
   ],
 
   controllers: [DebitAdviceController],

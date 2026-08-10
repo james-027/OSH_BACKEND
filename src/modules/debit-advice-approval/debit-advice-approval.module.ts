@@ -27,6 +27,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
 
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { EmailNotificationMatrixModule } from "src/modules/email-notification-matrix/email-notification-matrix.module";
+import { EmailQueueModule } from "src/modules/email-queue/email-queue.module";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -47,6 +48,7 @@ import { EmailNotificationMatrixModule } from "src/modules/email-notification-ma
     SSEModule,
     CacheInvalidationModule,
     EmailNotificationMatrixModule,
+    EmailQueueModule,
   ],
 
   controllers: [DebitAdviceApprovalController],
