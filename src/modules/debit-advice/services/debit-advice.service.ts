@@ -80,6 +80,7 @@ export class DebitAdviceService {
                 remarks: item.remarks,
                 location_id: item.location_id,
                 approval: item.approval,
+                requestor_id: item.requestor_id,
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
@@ -123,6 +124,7 @@ export class DebitAdviceService {
                 remarks: item.remarks,
                 location_id: item.location_id,
                 approval: item.approval,
+                requestor_id: item.requestor_id,
                 created_user: item.createdBy
                     ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
                     : null,
@@ -164,6 +166,7 @@ export class DebitAdviceService {
                 remarks: debitAdvice.remarks,
                 location_id: debitAdvice.location_id,
                 approval: debitAdvice.approval,
+                requestor_id: debitAdvice.requestor_id,
                 created_user: debitAdvice.createdBy
                     ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
                     : null,
@@ -234,6 +237,7 @@ export class DebitAdviceService {
                 remarks: createDebitAdviceDto.remarks,
                 location_id: createDebitAdviceDto.location_id,
                 approval: createDebitAdviceDto.approval,
+                requestor_id: createDebitAdviceDto.requestor_id ?? 0,
                 lines: createDebitAdviceDto.line.map((item) => ({
                     ...item,
                     createdBy: { id: userId } as any,
@@ -278,35 +282,35 @@ export class DebitAdviceService {
                     raw_data: JSON.stringify(reloadedDebitAdvice),
                     description: `Created debit advice: ${createDebitAdviceDto.id}`,
                     status_id: reloadedDebitAdvice.status_id,
-                                        },
-                        userId,
-                        );
+                },
+                userId,
+            );
 
-             if (reloadedDebitAdvice.status_id === 3) {
-                    this.emailNotificationSenderService
-                        .processTrigger({
-                            moduleId: 34,
-                            triggerStatusId: 3,
-                            transactionId: reloadedDebitAdvice.id,
-                            documentNumber: reloadedDebitAdvice.document_number,
-                        })
-                        .catch((err) => {
-                            logger.error("Email notification failed", err);
-                        });
-                }
+            if (reloadedDebitAdvice.status_id === 3) {
+                this.emailNotificationSenderService
+                    .processTrigger({
+                        moduleId: 34,
+                        triggerStatusId: 3,
+                        transactionId: reloadedDebitAdvice.id,
+                        documentNumber: reloadedDebitAdvice.document_number,
+                    })
+                    .catch((err) => {
+                        logger.error("Email notification failed", err);
+                    });
+            }
 
-                if (reloadedDebitAdvice.status_id === 4) {
-                    this.emailNotificationSenderService
-                        .processTrigger({
-                            moduleId: 35,
-                            triggerStatusId: 4,
-                            transactionId: reloadedDebitAdvice.id,
-                            documentNumber: reloadedDebitAdvice.document_number,
-                        })
-                        .catch((err) => {
-                            logger.error("Email notification failed", err);
-                        });
-                }
+            if (reloadedDebitAdvice.status_id === 4) {
+                this.emailNotificationSenderService
+                    .processTrigger({
+                        moduleId: 35,
+                        triggerStatusId: 4,
+                        transactionId: reloadedDebitAdvice.id,
+                        documentNumber: reloadedDebitAdvice.document_number,
+                    })
+                    .catch((err) => {
+                        logger.error("Email notification failed", err);
+                    });
+            }
             // return this.responseMapperService.mapEntityToResponse(savedDebitAdvice);
             return {
                 id: reloadedDebitAdvice.id,
@@ -318,6 +322,7 @@ export class DebitAdviceService {
                 jv_no: reloadedDebitAdvice.jv_no,
                 remarks: reloadedDebitAdvice.remarks,
                 approval: reloadedDebitAdvice.approval,
+                requestor_id: reloadedDebitAdvice.requestor_id,
                 location_id: reloadedDebitAdvice.location_id,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
@@ -499,7 +504,7 @@ export class DebitAdviceService {
                 },
                 userId,
             );
-           if (current_status_id !== reloadedDebitAdvice.status_id) {
+            if (current_status_id !== reloadedDebitAdvice.status_id) {
                 this.emailNotificationSenderService
                     .processTrigger({
                         moduleId: 34,
@@ -511,18 +516,18 @@ export class DebitAdviceService {
                         logger.error("Email notification failed", err);
                     });
             }
-              if (reloadedDebitAdvice.status_id === 4) {
-                    this.emailNotificationSenderService
-                        .processTrigger({
-                            moduleId: 35,
-                            triggerStatusId: 4,
-                            transactionId: reloadedDebitAdvice.id,
-                            documentNumber: reloadedDebitAdvice.document_number,
-                        })
-                        .catch((err) => {
-                            logger.error("Email notification failed", err);
-                        });
-                }
+            if (reloadedDebitAdvice.status_id === 4) {
+                this.emailNotificationSenderService
+                    .processTrigger({
+                        moduleId: 35,
+                        triggerStatusId: 4,
+                        transactionId: reloadedDebitAdvice.id,
+                        documentNumber: reloadedDebitAdvice.document_number,
+                    })
+                    .catch((err) => {
+                        logger.error("Email notification failed", err);
+                    });
+            }
             return {
                 id: reloadedDebitAdvice.id,
                 status_id: reloadedDebitAdvice.status_id,
@@ -535,6 +540,7 @@ export class DebitAdviceService {
                 remarks: reloadedDebitAdvice.remarks,
                 approval: reloadedDebitAdvice.approval,
                 location_id: reloadedDebitAdvice.location_id,
+                requestor_id: reloadedDebitAdvice.requestor_id,
                 created_user: reloadedDebitAdvice.createdBy
                     ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
                     : null,
@@ -671,6 +677,7 @@ export class DebitAdviceService {
                         location_id: Number(row["LOCATION"]) ?? 0,
                         approval: defaultApprovalId,
                         createdBy: { id: userId } as any,
+                        requestor_id: userId,
                         line: [],
                     };
                 }
@@ -741,6 +748,7 @@ export class DebitAdviceService {
                         document_number: reloadedDebitAdvice.document_number,
                         transaction_date: reloadedDebitAdvice.transaction_date,
                         approval_id: defaultApprovalId,
+                        requestor_id: reloadedDebitAdvice.requestor_id,
                     },
                     userId,
                 );
