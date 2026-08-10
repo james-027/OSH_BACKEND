@@ -493,7 +493,7 @@ export class DebitAdviceService {
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: 35,
+            module_id: 43,
             trigger_status_id: 4,
             created_by: userId,
             email_subject: `[${this.module_name}] FOR FINANCE CONFIRMATION`,
