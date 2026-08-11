@@ -679,6 +679,7 @@ export class DebitAdviceService {
             location_id: Number(row["LOCATION"]) ?? 0,
             approval: defaultApprovalId,
             createdBy: { id: userId } as any,
+            requestor_id: userId,
             line: [],
           };
         }
