@@ -770,6 +770,18 @@ export class DebitAdviceService {
           },
           userId,
         );
+
+        // Queue email only when status is Pending for Approval
+        if (reloadedDebitAdvice.status_id === 3) {
+          await this.emailQueueService.enqueue({
+            document_number: reloadedDebitAdvice.document_number,
+            transaction_id: reloadedDebitAdvice.id,
+            module_id: module.id,
+            trigger_status_id: 3,
+            created_by: userId,
+            email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,
+          });
+        }
       } catch (err) {
         errors.push({
           row: document.rowNum,
