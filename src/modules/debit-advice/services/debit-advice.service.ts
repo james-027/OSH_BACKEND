@@ -81,6 +81,7 @@ export class DebitAdviceService {
         remarks: item.remarks,
         location_id: item.location_id,
         approval: item.approval,
+        requestor_id: item.requestor_id,
         created_user: item.createdBy
           ? `${item.createdBy.first_name} ${item.createdBy.last_name}`
           : null,
@@ -166,6 +167,7 @@ export class DebitAdviceService {
         remarks: debitAdvice.remarks,
         location_id: debitAdvice.location_id,
         approval: debitAdvice.approval,
+        requestor_id: debitAdvice.requestor_id,
         created_user: debitAdvice.createdBy
           ? `${debitAdvice.createdBy.first_name} ${debitAdvice.createdBy.last_name}`
           : null,
@@ -235,6 +237,7 @@ export class DebitAdviceService {
         remarks: createDebitAdviceDto.remarks,
         location_id: createDebitAdviceDto.location_id,
         approval: createDebitAdviceDto.approval,
+        requestor_id: createDebitAdviceDto.requestor_id ?? 0,
         lines: createDebitAdviceDto.line.map((item) => ({
           ...item,
           createdBy: { id: userId } as any,
@@ -294,6 +297,7 @@ export class DebitAdviceService {
         jv_no: reloadedDebitAdvice.jv_no,
         remarks: reloadedDebitAdvice.remarks,
         approval: reloadedDebitAdvice.approval,
+        requestor_id: reloadedDebitAdvice.requestor_id,
         location_id: reloadedDebitAdvice.location_id,
         created_user: reloadedDebitAdvice.createdBy
           ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
@@ -544,6 +548,7 @@ export class DebitAdviceService {
         remarks: reloadedDebitAdvice.remarks,
         approval: reloadedDebitAdvice.approval,
         location_id: reloadedDebitAdvice.location_id,
+        requestor_id: reloadedDebitAdvice.requestor_id,
         created_user: reloadedDebitAdvice.createdBy
           ? `${reloadedDebitAdvice.createdBy.first_name} ${reloadedDebitAdvice.createdBy.last_name}`
           : null,
@@ -765,6 +770,18 @@ export class DebitAdviceService {
           },
           userId,
         );
+
+        // Queue email only when status is Pending for Approval
+        if (reloadedDebitAdvice.status_id === 3) {
+          await this.emailQueueService.enqueue({
+            document_number: reloadedDebitAdvice.document_number,
+            transaction_id: reloadedDebitAdvice.id,
+            module_id: module.id,
+            trigger_status_id: 3,
+            created_by: userId,
+            email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,
+          });
+        }
       } catch (err) {
         errors.push({
           row: document.rowNum,
