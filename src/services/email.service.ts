@@ -22,6 +22,10 @@ export class EmailService {
         user: process.env.SMTP_USER || "user@example.com",
         pass: process.env.SMTP_PASS || "password",
       },
+      // Enable connection pooling to handle high volumes efficiently (up to 10k/day)
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
     });
   }
 
