@@ -18,6 +18,7 @@ export class EmailService {
       host: smtpHost,
       port: smtpPort,
       secure: isSecure,
+      name: process.env.SMTP_EHLO_NAME || "yourdomain.com",
       auth: {
         user: process.env.SMTP_USER || "user@example.com",
         pass: process.env.SMTP_PASS || "password",
