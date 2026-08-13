@@ -94,10 +94,47 @@ export class EmailNotificationSenderService {
 
     return `  <!DOCTYPE html>
           <html>
-          <head>
+      <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Debit Advice Notification</title>
+            <style>
+              @media only screen and (max-width: 600px) {
+                .mobile-block {
+                  display: block !important;
+                  width: 100% !important;
+                  box-sizing: border-box !important;
+                  border-right: none !important;
+                }
+                .mobile-label {
+                  padding-bottom: 4px !important;
+                  border-bottom: none !important;
+                  padding-top: 16px !important;
+                }
+                .mobile-value {
+                  padding-top: 4px !important;
+                  padding-bottom: 12px !important;
+                }
+                .mobile-scroll {
+                  display: block !important;
+                  width: 100% !important;
+                  overflow-x: auto !important;
+                  -webkit-overflow-scrolling: touch;
+                }
+                .mobile-footer-td {
+                  display: block !important;
+                  width: 100% !important;
+                  text-align: left !important;
+                  margin-bottom: 16px !important;
+                }
+                .mobile-btn {
+                  display: block !important;
+                  text-align: center !important;
+                  width: 100% !important;
+                  box-sizing: border-box !important;
+                }
+              }
+            </style>
           </head>
           <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
 
@@ -145,12 +182,12 @@ export class EmailNotificationSenderService {
                           </tr>
                         </table>
 
-                    <!-- Section: Transaction Details (2-Column Grid Layout) -->
+                   <!-- Section: Transaction Details (2-Column Grid Layout) -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
                           <!-- Row 1: Document No & Date -->
                           <tr>
-                            <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
-                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
+                            <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
                               <a
                                  href="${approvalUrl}"
                                 target="_blank"
@@ -159,16 +196,16 @@ export class EmailNotificationSenderService {
                                 ${debitAdvice.document_number}
                               </a>
                             </td>
-                            <td width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
-                            <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
+                            <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
                           </tr>
 
                           <!-- Row 2: Maker & Status -->
                           <tr>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
                               <span style="display: inline-block; background-color: ${currentStatus.badgeBg}; color: ${currentStatus.badgeText}; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">
                                 ${currentStatus.label}
                               </span>
@@ -180,10 +217,10 @@ export class EmailNotificationSenderService {
                             showConfirmationRow
                               ? `
                           <tr>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
                           </tr>
                           `
                               : ""
@@ -191,10 +228,10 @@ export class EmailNotificationSenderService {
 
                           <!-- Row 3: Approver Info -->
                           <tr>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
-                            <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
                           </tr>
 
                           <!-- Row 4: Next Approver & Optional Approver -->
@@ -202,18 +239,18 @@ export class EmailNotificationSenderService {
                             showNextApprover
                               ? `
                               <tr>
-                                <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Next Approver
                                 </td>
-                                <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
                                   ${nextApprover ?? "-"}
                                 </td>
 
-                                <td style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Optional Approver
                                 </td>
 
-                                <td style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
+                                <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
                                   ${optionalApproverName}
                                 </td>
                               </tr>
@@ -223,8 +260,8 @@ export class EmailNotificationSenderService {
 
                        <!-- Row 5: Remarks -->
                           <tr>
-                            <td style="padding: 10px 12px; background-color: #F8FAFC; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #64748B; font-size: 12px; font-weight: 600;">Remarks</td>
-                            <td colspan="3" style="padding: 10px 12px; background-color: #FFFFFF; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #334155; font-size: 12px;">${debitAdvice.remarks ?? "-"}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #64748B; font-size: 12px; font-weight: 600;">Remarks</td>
+                            <td class="mobile-block mobile-value" colspan="3" style="padding: 10px 12px; background-color: #FFFFFF; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #334155; font-size: 12px;">${debitAdvice.remarks ?? "-"}</td>
                           </tr>
 
                           <!-- Conditional: Approval Remarks (If Returned) -->
@@ -232,8 +269,8 @@ export class EmailNotificationSenderService {
                             showApprovalRemarks
                               ? `
                           <tr>
-                            <td style="padding: 10px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">Approval Remarks</td>
-                            <td colspan="3" style="padding: 10px 12px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">${approvalRemarks}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">Approval Remarks</td>
+                            <td class="mobile-block mobile-value" colspan="3" style="padding: 10px 12px; background-color: #FEF2F2; color: #991B1B; font-size: 12px; font-weight: 600; border-top: 1px solid #FEE2E2;">${approvalRemarks}</td>
                           </tr>
                           `
                               : ""
@@ -274,13 +311,13 @@ export class EmailNotificationSenderService {
                           </tbody>
                         </table>
 
-                      <!-- Total Amount Footer & Action Button -->
+                    <!-- Total Amount Footer & Action Button -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; margin-bottom: 16px;">
                           <tr>
                             <!-- Left: Total Advice Block -->
-                            <td align="left" valign="bottom">
+                            <td class="mobile-footer-td" align="left" valign="bottom">
                               <p style="margin: 0 0 4px 0; font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.8px;">
-                                Total Advice
+                                Total Amount
                               </p>
                               <p style="margin: 0; font-size: 18px; font-weight: 800; color: #0F172A;">
                                 &#8369; ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -288,8 +325,8 @@ export class EmailNotificationSenderService {
                             </td>
 
                             <!-- Right: Open in OSH System Button -->
-                            <td align="right" valign="bottom">
-                              <a  href="${approvalUrl}" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
+                            <td class="mobile-footer-td" align="right" valign="bottom">
+                              <a class="mobile-btn" href="${approvalUrl}" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
                                 Open in OSH System &rarr;
                               </a>
                             </td>
@@ -356,14 +393,13 @@ export class EmailNotificationSenderService {
     showApprovalRemarks: boolean;
   }): string {
     const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval?docno=${debitAdvice.document_number}`;
-
     return ` 
                     <!-- Section: Transaction Details (2-Column Grid Layout) -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
                           <!-- Row 1: Document No & Date -->
                           <tr>
-                            <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
-                           <td width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Document No</td>
+                           <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">
                              <a
                                 href="${approvalUrl}"
                                 target="_blank"
@@ -372,16 +408,16 @@ export class EmailNotificationSenderService {
                                 ${debitAdvice.document_number}
                               </a>
                             </td>
-                            <td width="20%" style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
-                            <td width="30%" style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Transaction Date</td>
+                            <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${this.formatDate(debitAdvice.transaction_date)}</td>
                           </tr>
 
                           <!-- Row 2: Maker & Status -->
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Maker</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.createdBy?.first_name ?? ""} ${debitAdvice.createdBy?.last_name ?? ""}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Status</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0;">
                               <span style="display: inline-block; background-color: ${currentStatus.badgeBg}; color: ${currentStatus.badgeText}; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase;">
                                 ${currentStatus.label}
                               </span>
@@ -393,10 +429,10 @@ export class EmailNotificationSenderService {
                             showConfirmationRow
                               ? `
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed By</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedBy}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Confirmed Date</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${confirmedDate}</td>
                           </tr>
                           `
                               : ""
@@ -404,10 +440,10 @@ export class EmailNotificationSenderService {
 
                           <!-- Row 3: Approver Info -->
                           <tr>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
-                            <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
-                            <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedByLabel}</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${lastApprovedBy}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">${approvedOrReturnedDateLabel}</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${actionDate}</td>
                           </tr>
 
                           <!-- Row 4: Next Approver & Optional Approver -->
@@ -415,18 +451,18 @@ export class EmailNotificationSenderService {
                        showNextApprover
                          ? `
                               <tr>
-                                <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Next Approver
                                 </td>
-                                <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 600;">
                                   ${nextApprover ?? "-"}
                                 </td>
 
-                                <td style="padding: 8px 10px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
+                                <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">
                                   Optional Approver
                                 </td>
 
-                                <td style="padding: 8px 10px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
+                                <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">
                                   ${optionalApproverName}
                                 </td>
                               </tr>
@@ -437,9 +473,9 @@ export class EmailNotificationSenderService {
                          <!-- Row 5: Remarks & Total Amount -->
                             <tr>
 
-                              <td
+                              <td class="mobile-block mobile-label"
                                 style="
-                                  padding:8px 10px;
+                                  padding:10px 12px;
                                   background:#F8FAFC;
                                   color:#64748B;
                                   font-size:12px;
@@ -449,9 +485,9 @@ export class EmailNotificationSenderService {
                                 Remarks
                               </td>
 
-                              <td
+                              <td class="mobile-block mobile-value"
                                 style="
-                                  padding:8px 10px;
+                                  padding:10px 12px;
                                   background:#FFFFFF;
                                   border-right:1px solid #E2E8F0;
                                   color:#334155;
@@ -461,9 +497,9 @@ export class EmailNotificationSenderService {
                                 ${debitAdvice.remarks ?? "-"}
                               </td>
 
-                              <td
+                              <td class="mobile-block mobile-label"
                                 style="
-                                  padding:8px 10px;
+                                  padding:10px 12px;
                                   background:#F8FAFC;
                                   color:#64748B;
                                   font-size:12px;
@@ -473,10 +509,9 @@ export class EmailNotificationSenderService {
                                 Total Amount
                               </td>
 
-                              <td
-                                align="right"
+                              <td class="mobile-block mobile-value"
                                 style="
-                                  padding:8px 10px;
+                                  padding:10px 12px;
                                   background:#FFFFFF;
                                   color:#0F172A;
                                   font-size:12px;
@@ -495,9 +530,9 @@ export class EmailNotificationSenderService {
                             showApprovalRemarks
                               ? `
                          <tr>
-                            <td
+                            <td class="mobile-block mobile-label"
                                 style="
-                                    padding:8px 10px;
+                                    padding:10px 12px;
                                     background:#F8FAFC;
                                     color:#64748B;
                                     font-size:12px;
@@ -508,10 +543,10 @@ export class EmailNotificationSenderService {
                                 Approval Remarks
                             </td>
 
-                            <td
+                            <td class="mobile-block mobile-value"
                                 colspan="3"
                                 style="
-                                    padding:8px 10px;
+                                    padding:10px 12px;
                                     background:#FFFFFF;
                                     color:#DC2626;
                                     font-size:12px;
@@ -526,7 +561,6 @@ export class EmailNotificationSenderService {
                               : ""
                           }
                         </table>
-           
   `;
   }
 
@@ -541,12 +575,49 @@ export class EmailNotificationSenderService {
 
     return `  <!DOCTYPE html>
           <html>
-          <head>
+         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Debit Advice Notification</title>
+            <style>
+              @media only screen and (max-width: 600px) {
+                .mobile-block {
+                  display: block !important;
+                  width: 100% !important;
+                  box-sizing: border-box !important;
+                  border-right: none !important;
+                }
+                .mobile-label {
+                  padding-bottom: 4px !important;
+                  border-bottom: none !important;
+                  padding-top: 16px !important;
+                }
+                .mobile-value {
+                  padding-top: 4px !important;
+                  padding-bottom: 12px !important;
+                }
+                .mobile-scroll {
+                  display: block !important;
+                  width: 100% !important;
+                  overflow-x: auto !important;
+                  -webkit-overflow-scrolling: touch;
+                }
+                .mobile-footer-td {
+                  display: block !important;
+                  width: 100% !important;
+                  text-align: left !important;
+                  margin-bottom: 16px !important;
+                }
+                .mobile-btn {
+                  display: block !important;
+                  text-align: center !important;
+                  width: 100% !important;
+                  box-sizing: border-box !important;
+                }
+              }
+            </style>
           </head>
-          <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+       <body style="margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;">
 
             <!-- Outer Container -->
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F8FAFC; padding: 40px 10px;">
@@ -554,8 +625,7 @@ export class EmailNotificationSenderService {
                 <td align="center">
                   
                   <!-- Main Card -->
-                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 680px; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
-                    
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="min-width: 600px; max-width: 680px; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
                     <!-- Header -->
                     <tr>
                       <td style="background-color: #7BEAD0; padding: 32px 40px; border-bottom: 3px solid #52CDB1;">
@@ -578,39 +648,19 @@ export class EmailNotificationSenderService {
                           <tr>
                           <td style="padding:40px;">
 
-                          <!-- Approval Banner -->
-                          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:16px;">
+                        <!-- Status Alert Banner -->
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 32px;">
                           <tr>
-                          <td style="
-                          background:#FEF3C7;
-                          border-left:4px solid #F59E0B;
-                          padding:18px 20px;
-                          border-radius:0 8px 8px 0;
-                          ">
-
-                          <p style="
-                          margin:0;
-                          font-size:12px;
-                          font-weight:700;
-                          color:#92400E;
-                          text-transform:uppercase;
-                          letter-spacing:.5px;
-                          ">
-                          ${currentStatus.title}
-                          </p>
-
-                          <p style="
-                          margin:8px 0 0;
-                          font-size:15px;
-                          color:#1E293B;
-                          line-height:1.6;
-                          ">
-                          ${currentStatus.message}
-                          </p>
-
-                          </td>
+                            <td style="background-color: ${currentStatus.badgeBg}; border-left: 4px solid ${currentStatus.border}; padding: 18px 20px; border-radius: 0 8px 8px 0;">
+                              <p style="margin: 0 0 6px 0; color: ${currentStatus.badgeText}; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+                                ${currentStatus.title}
+                              </p>
+                              <p style="margin: 0; color: #1E293B; font-size: 15px; font-weight: 600; line-height: 1.4;">
+                               ${currentStatus.message}
+                              </p>
+                            </td>
                           </tr>
-                          </table>
+                        </table>
 
                       ${documents
                         .map((doc) =>
@@ -635,40 +685,15 @@ export class EmailNotificationSenderService {
                           }),
                         )
                         .join("")}
-                          <table
-                          width="100%"
-                          cellpadding="0"
-                          cellspacing="0"
-                          border="0"
-                          style="margin-top:30px;"
-                          >
-                          <tr>
-
-                          <td align="right">
-                          
-                          <a  
-                          href="${approvalUrl}" 
-                          target="_blank"
-                          style="
-                          display:inline-block;
-                          background:#52CDB1;
-                          color:white;
-                          padding:12px 22px;
-                          border-radius:6px;
-                          text-decoration:none;
-                          font-weight:600;
-                          font-size:13px;
-                          "
-                          >
-
-                          Open in OSH System →
-
-                          </a>
-
-                          </td>
-
-                          </tr>
-
+                         <!-- Action Button -->
+                          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; margin-bottom: 16px;">
+                            <tr>
+                              <td class="mobile-footer-td" align="right" valign="bottom">
+                                <a class="mobile-btn" href="${approvalUrl}" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
+                                  Open in OSH System &rarr;
+                                </a>
+                              </td>
+                            </tr>
                           </table>
 
                           </td>
@@ -996,9 +1021,16 @@ export class EmailNotificationSenderService {
     }
 
     // =======================================================
-    // Approved / Final Approved
+    // Approved / Final Approved / Posted
+    //
+    // Trigger Status Legend:
+    // 4 = POSTED
+    // 7 = APPROVED / FINAL APPROVED
+    //
+    // Display the latest approver and approval/action date
+    // for both Approved and Posted notifications.
     // =======================================================
-    if (triggerStatusId === 7 && latestApprovedStage) {
+    if ([4, 7].includes(triggerStatusId) && latestApprovedStage) {
       lastApprovedBy = latestApprovedStage.approver
         ? `${latestApprovedStage.approver.first_name} ${latestApprovedStage.approver.last_name}`
         : "-";
@@ -1354,19 +1386,22 @@ export class EmailNotificationSenderService {
     }
 
     // =======================================================
-    // Approved / Final Approved
-    // =======================================================
-    if (triggerStatusId === 7 && latestApprovedStage) {
+    // Approved / Final Approved / Posted
+    // Status ID:
+    // 4 = POSTED
+    // 7 = APPROVED / FINAL APPROVED
+    if ([4, 7].includes(triggerStatusId) && latestApprovedStage) {
       lastApprovedBy = latestApprovedStage.approver
         ? `${latestApprovedStage.approver.first_name} ${latestApprovedStage.approver.last_name}`
         : "-";
 
       actionDate = this.formatDate(latestApprovedStage.approval_date);
     }
-
     // =======================================================
     // Returned to Maker
     // =======================================================
+
+    // 15 = RETURN TO MAKER
     if (triggerStatusId === 15 && latestReturnedStage) {
       lastApprovedBy = latestReturnedStage.approver
         ? `${latestReturnedStage.approver.first_name} ${latestReturnedStage.approver.last_name}`
@@ -1423,12 +1458,14 @@ export class EmailNotificationSenderService {
   }
   public async sendApprovalSummaryEmail({
     to,
+    cc = [],
     documents,
     triggerStatusId,
     moduleId,
     isFinalApproved = false,
   }: {
     to: string;
+    cc?: string | string[];
     documents: any[];
     triggerStatusId: number;
     moduleId: number;
@@ -1461,7 +1498,7 @@ export class EmailNotificationSenderService {
     await this.emailNotificationMailService.sendMail({
       moduleId,
       to,
-      cc: [],
+      cc,
       subject: `[${moduleName}] ${currentStatus.label}`,
       html,
       text: "",

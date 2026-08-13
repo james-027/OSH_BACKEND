@@ -532,7 +532,7 @@ export class DebitAdviceService {
             module_id: module.id,
             trigger_status_id: 4,
             created_by: userId,
-            email_subject: `[${this.module_name}] FOR FINANCE CONFIRMATION`,
+            email_subject: `[${this.module_name}] POSTED`,
           });
         }
       }

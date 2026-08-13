@@ -24,9 +24,8 @@ import logger from "src/config/logger";
   imports: [
     TypeOrmModule.forFeature([
       EmailQueue,
-
-      UserPermissions,
       AppModule,
+      UserPermissions,
       Action,
       ActionLog,
     ]),
