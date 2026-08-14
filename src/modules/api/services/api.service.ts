@@ -166,7 +166,9 @@ export class ApiService {
     if (
       (endpoint === "store-crew-assignments" ||
         endpoint === "stores" ||
-        endpoint === "suppliers") &&
+        endpoint === "suppliers" ||
+        endpoint === "store-rentals-attachment" ||
+        endpoint === "store-personnels") &&
       Array.isArray(responseData)
     ) {
       logResponse = { count: responseData.length };
