@@ -5,6 +5,8 @@ import { EmailQueue } from "../../../entities/EmailQueue";
 import { CreateEmailQueueDto } from "../dto/create-email-queue.dto";
 import { EmailNotificationSenderService } from "../../email-notification-matrix/services/email-notification-sender.service";
 import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitter.helper";
+import { Module } from "src/entities/Module";
+
 @Injectable()
 export class EmailQueueService {
   private readonly logger = new Logger(EmailQueueService.name);
@@ -12,10 +14,11 @@ export class EmailQueueService {
   constructor(
     @InjectRepository(EmailQueue)
     private readonly emailQueueRepository: Repository<EmailQueue>,
-
     private readonly emailNotificationSenderService: EmailNotificationSenderService,
 
     private readonly sseEventEmitter: SSEEventEmitterHelper,
+    @InjectRepository(Module)
+    private readonly moduleRepository: Repository<Module>,
   ) {}
 
   /**
@@ -118,14 +121,18 @@ export class EmailQueueService {
       return;
     }
 
-    // Handle Pending Approval separately
-    if (
-      Number(queueItem.module_id) === 34 &&
-      Number(queueItem.trigger_status_id) === 3
-    ) {
-      return;
-    }
+    const module = await this.moduleRepository.findOne({
+      where: {
+        id: Number(queueItem.module_id),
+        status_id: 1,
+      },
+    });
 
+    if (!module) {
+      throw new NotFoundException(
+        `Module ID '${queueItem.module_id}' not found`,
+      );
+    }
     // Mark as Processing
     const result = await this.emailQueueRepository.update(
       {
@@ -250,6 +257,7 @@ export class EmailQueueService {
 
     await this.emailNotificationSenderService.sendApprovalSummaryEmail({
       to: group.recipient.to,
+      cc: group.recipient.cc ?? [],
       documents,
       triggerStatusId,
       moduleId: group.queues[0].module_id,
@@ -288,12 +296,26 @@ export class EmailQueueService {
     );
   }
 
-  private async groupQueuesByTrigger(triggerStatusId: number) {
+  private async groupQueuesByTrigger(
+    triggerStatusId: number,
+    moduleId: number,
+  ) {
+    const module = await this.moduleRepository.findOne({
+      where: {
+        id: Number(moduleId),
+        status_id: 1,
+      },
+    });
+
+    if (!module) {
+      throw new NotFoundException(`Module ID '${moduleId}' not found`);
+    }
+
     const queues = await this.emailQueueRepository.find({
       where: {
         status_id: 1,
         trigger_status_id: triggerStatusId,
-        module_id: 34,
+        module_id: module.id,
       },
       order: {
         queued_date: "ASC",
@@ -309,12 +331,15 @@ export class EmailQueueService {
     >();
 
     for (const queue of queues) {
-      const recipient =
-        await this.emailNotificationSenderService.getGroupedApprovalRecipient(
-          queue.transaction_id,
-          queue.trigger_status_id,
-          queue.module_id,
-        );
+      const recipient = {
+        to: queue.recipient_to,
+        cc: queue.recipient_cc
+          ? queue.recipient_cc
+              .split(",")
+              .map((email) => email.trim())
+              .filter(Boolean)
+          : [],
+      };
 
       console.log("QUEUE", queue.document_number);
       console.log("EMAIL:", JSON.stringify(recipient?.to));
@@ -469,10 +494,27 @@ export class EmailQueueService {
       .getMany();
 
     // Process grouped Pending Approval first
-    const groupedTriggers = [3, 4, 7, 15];
+    // Group pending queues dynamically by module_id + trigger_status_id
+    const groupedQueues = new Map<string, EmailQueue[]>();
 
-    for (const trigger of groupedTriggers) {
-      const grouped = await this.groupQueuesByTrigger(trigger);
+    for (const item of queueItems) {
+      const key = `${item.module_id}-${item.trigger_status_id}`;
+
+      if (!groupedQueues.has(key)) {
+        groupedQueues.set(key, []);
+      }
+
+      groupedQueues.get(key)!.push(item);
+    }
+
+    // Process each module + trigger combination
+    for (const [, queues] of groupedQueues.entries()) {
+      const firstQueue = queues[0];
+
+      const grouped = await this.groupQueuesByTrigger(
+        Number(firstQueue.trigger_status_id),
+        Number(firstQueue.module_id),
+      );
 
       for (const [, group] of grouped.entries()) {
         if (group.queues.length === 1) {
@@ -500,44 +542,25 @@ export class EmailQueueService {
               this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
             }
           } catch (error: any) {
-            this.logger.error(
-              `Failed grouped trigger for queue ${queue.id}`,
-              error,
-            );
+            this.logger.error(`Failed processing queue ${queue.id}`, error);
+
             await this.handleFailedQueueItem(queue, error);
           }
 
           continue;
         }
 
+        // Multiple queues = grouped/bulk email
         try {
           await this.sendGroupedApprovalEmail(group);
         } catch (error: any) {
           this.logger.error(`Failed sendGroupedApprovalEmail for group`, error);
-          for (const q of group.queues) {
-            await this.handleFailedQueueItem(q, error);
+
+          for (const queue of group.queues) {
+            await this.handleFailedQueueItem(queue, error);
           }
         }
       }
-    }
-
-    // Process all other queue items normally
-    for (const item of queueItems) {
-      this.logger.warn(
-        `CHECK: ${Number(item.module_id)} / ${Number(item.trigger_status_id)}`,
-      );
-
-      if (
-        Number(item.module_id) === 34 &&
-        [3, 4, 7, 15].includes(Number(item.trigger_status_id))
-      ) {
-        this.logger.warn(`SKIPPING GROUPED QUEUE ${item.id}`);
-        continue;
-      }
-
-      this.logger.warn(`PROCESSING QUEUE ${item.id}`);
-
-      await this.processQueueItem(item.id);
     }
   }
 }
