@@ -131,14 +131,17 @@ export class EmailNotificationMatrixService {
 
       for (const detailDto of dto.lines) {
         // Prevent duplicate recipients (userid) within the same email title row
-        const recipientIds = detailDto.recipients.map((x) => x.userid);
+        const recipientIds = detailDto.recipients
+          .filter(
+            (recipient) => recipient.is_maker !== 1 && recipient.userid != null,
+          )
+          .map((recipient) => recipient.userid);
 
         if (new Set(recipientIds).size !== recipientIds.length) {
           throw new BadRequestException(
             `Duplicate recipient found for "${detailDto.email_title}"`,
           );
         }
-
         const existingTitle =
           await this.emailNotificationMatrixDetailsRepository.findOne({
             where: {
@@ -175,6 +178,8 @@ export class EmailNotificationMatrixService {
               userid: Number(recipientDto.userid),
               email: recipientDto.email ?? null,
               recipient_type: recipientDto.recipient_type ?? "TO",
+              is_maker: recipientDto.is_maker ? 1 : 0,
+              is_cc: recipientDto.is_cc ? 1 : 0,
               module: recipientDto.module
                 ? Number(recipientDto.module)
                 : dto.module,
@@ -284,6 +289,8 @@ export class EmailNotificationMatrixService {
             userid: Number(recipientDto.userid),
             email: recipientDto.email ?? null,
             recipient_type: recipientDto.recipient_type ?? "TO",
+            is_maker: recipientDto.is_maker ? 1 : 0,
+            is_cc: recipientDto.is_cc ? 1 : 0,
             module: recipientDto.module
               ? Number(recipientDto.module)
               : dto.module,
