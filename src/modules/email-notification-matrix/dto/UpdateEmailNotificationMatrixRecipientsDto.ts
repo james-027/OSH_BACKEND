@@ -9,9 +9,10 @@ export class UpdateEmailNotificationMatrixRecipientsDto {
   @IsNumber()
   isdeleted: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  userid: number;
+  userid?: number | null;
 
   @IsOptional()
   @IsString()
@@ -20,6 +21,16 @@ export class UpdateEmailNotificationMatrixRecipientsDto {
   @IsOptional()
   @IsString()
   recipient_type?: "TO" | "CC";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_maker?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_cc?: number;
 
   @IsOptional()
   @Type(() => Number)

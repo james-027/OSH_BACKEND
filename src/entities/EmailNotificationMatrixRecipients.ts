@@ -20,8 +20,11 @@ export class EmailNotificationMatrixRecipients {
   @Column()
   line_id: number;
 
-  @Column()
-  userid: number;
+  @Column({
+    type: "int",
+    nullable: true,
+  })
+  userid: number | null;
 
   @Column({ type: "varchar", length: 255, nullable: true })
   email: string;
@@ -35,6 +38,12 @@ export class EmailNotificationMatrixRecipients {
   // "isapprovalmatrix?" checkbox
   @Column({ type: "tinyint", default: 0 })
   is_approval_matrix: number;
+
+  @Column({ type: "tinyint", default: 0 })
+  is_maker: number;
+
+  @Column({ type: "tinyint", default: 0 })
+  is_cc: number;
 
   @Column({ nullable: true })
   module: number;

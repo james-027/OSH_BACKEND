@@ -347,7 +347,12 @@ export class EmailQueueService {
       if (!recipient) {
         continue;
       }
-      const key = recipient.to.trim().toLowerCase();
+      const ccKey = recipient.cc
+        .map((email) => email.trim().toLowerCase())
+        .sort()
+        .join(",");
+
+      const key = `${recipient.to.trim().toLowerCase()}|${ccKey}`;
 
       if (!grouped.has(key)) {
         grouped.set(key, {
@@ -534,12 +539,16 @@ export class EmailQueueService {
               worker_name: null,
               manual_execute: 0,
               error_message: null,
+
+              // Preserve the recipient that was resolved when the queue was created.
+              recipient_to: queue.recipient_to,
+            recipient_cc: queue.recipient_cc,
             });
 
             try {
               this.sseEventEmitter.emitUpdateSignal("email-queue", queue.id);
             } catch (err) {
-              this.logger.error(`SSE event failed for queue ${queue.id}:`, err);
+              this.logger.error(`SSE event failed for queue ${queue.id}`, err);
             }
           } catch (error: any) {
             this.logger.error(`Failed processing queue ${queue.id}`, error);

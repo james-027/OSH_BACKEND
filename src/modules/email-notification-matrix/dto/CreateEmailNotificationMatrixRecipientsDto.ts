@@ -6,9 +6,10 @@ export class CreateEmailNotificationMatrixRecipientsDto {
   @IsNumber()
   id?: number;
 
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  userid: number;
+  userid?: number | null;
 
   @IsOptional()
   @IsString()
@@ -18,6 +19,17 @@ export class CreateEmailNotificationMatrixRecipientsDto {
   @IsString()
   recipient_type?: "TO" | "CC";
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_maker?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  is_cc?: number;
+
+  @IsOptional()
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

@@ -783,20 +783,59 @@ export class EmailNotificationSenderService {
       );
 
       // If matrix explicitly says NOT an approval matrix, override and use static recipients
-      if (trigger && trigger.is_approval_matrix === 0) {
-        const manualTo = trigger.recipients.find(
-          (r) => r.recipient_type === "TO",
+      if (trigger) {
+        // ==========================================
+        // MATRIX RECIPIENT CONFIGURATION
+        // ==========================================
+
+        // Check if Maker is configured
+        const makerConfigured = trigger.recipients.some(
+          (r) => r.is_maker === 1,
         );
+
+        // Get CC recipients configured with is_cc = 1
         const manualCc = trigger.recipients
-          .filter((r) => r.recipient_type === "CC")
+          .filter((r) => r.is_cc === 1 && r.recipient_type === "CC")
           .map((r) => r.email)
           .filter(Boolean);
 
-        if (manualTo?.email) {
-          return {
-            to: manualTo.email,
-            cc: manualCc,
-          };
+        // ==========================================
+        // is_maker = 1
+        // TO = Transaction created_by email
+        // ==========================================
+        if (makerConfigured) {
+          const debitAdvice = await this.debitAdviceRepository.findOne({
+            where: {
+              id: transactionId,
+            },
+            relations: ["createdBy"],
+          });
+
+          const makerEmail = debitAdvice?.createdBy?.email;
+
+          if (makerEmail) {
+            return {
+              to: makerEmail,
+              cc: manualCc,
+            };
+          }
+        }
+
+        // ==========================================
+        // Normal TO recipient
+        // ==========================================
+        if (trigger.is_approval_matrix === 0) {
+          const manualTo = trigger.recipients.find(
+            (r) =>
+              r.is_maker !== 1 && r.is_cc !== 1 && r.recipient_type === "TO",
+          );
+
+          if (manualTo?.email) {
+            return {
+              to: manualTo.email,
+              cc: manualCc,
+            };
+          }
         }
       }
     }
@@ -1139,9 +1178,18 @@ export class EmailNotificationSenderService {
     }
 
     // Default recipients from Matrix Configuration
-    const manualTo = trigger.recipients.find((r) => r.recipient_type === "TO");
+
+    // Check if Maker is configured as TO
+    const makerConfigured = trigger.recipients.some((r) => r.is_maker === 1);
+
+    // Get normal TO recipient
+    const manualTo = trigger.recipients.find(
+      (r) => r.is_maker !== 1 && r.is_cc !== 1 && r.recipient_type === "TO",
+    );
+
+    // Get CC recipients configured with is_cc = 1
     const manualCc = trigger.recipients
-      .filter((r) => r.recipient_type === "CC")
+      .filter((r) => r.is_cc === 1 && r.recipient_type === "CC")
       .map((r) => r.email)
       .filter(Boolean);
 
@@ -1215,8 +1263,31 @@ export class EmailNotificationSenderService {
         cc = [];
       }
     }
-
     // ==========================================
+    // MATRIX MAKER / CC OVERRIDE
+    // ==========================================
+
+    // If is_maker = 1, TO must always be the transaction Maker
+    if (makerConfigured) {
+      if (!makerEmail) {
+        this.logger.error("Maker email not found.");
+        return;
+      }
+
+      to = makerEmail;
+    }
+
+    // If is_cc = 1, use configured matrix CC recipients.
+    // Otherwise, keep the existing CC from the approval logic.
+    const matrixCc = trigger.recipients
+      .filter((r) => r.is_cc === 1 && r.recipient_type === "CC")
+      .map((r) => r.email)
+      .filter(Boolean);
+
+    if (matrixCc.length > 0) {
+      cc = matrixCc;
+    }
+    //  ==========================================
     // SANITIZATION & DUP-CHECKING
     // ==========================================
     if (!to) {
