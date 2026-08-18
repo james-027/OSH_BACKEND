@@ -228,22 +228,20 @@ export class SupplierSyncService {
       // -----------------------------------------
 
       if (inserts.length > 0) {
+        this.sseEventEmitter.emitCreateSignal("suppliers", 0);
         await this.supplierRepository.save(inserts, {
           chunk: batchSize || 1000,
         });
       }
 
       if (updates.length > 0) {
+        this.sseEventEmitter.emitUpdateSignal("suppliers", 0);
         await this.supplierRepository.save(updates, {
           chunk: batchSize || 1000,
         });
       }
 
       // Emit SSE only after successful database save
-     
-      this.sseEventEmitter.emitCreateSignal("suppliers", 0);
-
-      this.sseEventEmitter.emitUpdateSignal("suppliers", 0);
 
       logger.info(
         `Supplier Updated (${updatedLog.length}):` +
