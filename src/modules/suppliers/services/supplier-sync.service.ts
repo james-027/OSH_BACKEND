@@ -210,12 +210,6 @@ export class SupplierSyncService {
           }
         }
       }
-      if (inserts.length > 0) {
-        this.sseEventEmitter.emitCreateSignal("suppliers", 0);
-      }
-      if (updates.length > 0) {
-        this.sseEventEmitter.emitUpdateSignal("suppliers", 0);
-      }
 
       logger.info(
         `Supplier Updated (${updatedLog.length}):` +
