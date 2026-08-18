@@ -223,12 +223,43 @@ export class SupplierSyncService {
             ? "\n" + updatedLog.map((line) => `  - ${line}`).join("\n")
             : " none"),
       );
+      // -----------------------------------------
+      // STEP 4: Save changes to OSH database
+      // -----------------------------------------
+
+      if (inserts.length > 0) {
+        await this.supplierRepository.save(inserts, {
+          chunk: batchSize || 1000,
+        });
+      }
+
+      if (updates.length > 0) {
+        await this.supplierRepository.save(updates, {
+          chunk: batchSize || 1000,
+        });
+      }
+
+      // Emit SSE only after successful database save
+     
+      this.sseEventEmitter.emitCreateSignal("suppliers", 0);
+
+      this.sseEventEmitter.emitUpdateSignal("suppliers", 0);
+
+      logger.info(
+        `Supplier Updated (${updatedLog.length}):` +
+          (updatedLog.length
+            ? "\n" + updatedLog.map((line) => `  - ${line}`).join("\n")
+            : " none"),
+      );
+
       logger.info(
         `Supplier Inserted (${insertedLog.length}):` +
           (insertedLog.length
             ? "\n" + insertedLog.map((code) => `  - ${code}`).join("\n")
             : " none"),
       );
+
+      return result;
 
       return result;
     } catch (error) {
