@@ -359,7 +359,7 @@ export class TransactionsService {
     return this.findHeaderById(id);
   }
 
-  async toggleBulkStatus(
+  async toggleBulkStatusOld(
     ids: number[],
     status_id: number,
     user_id: number,
@@ -513,6 +513,317 @@ export class TransactionsService {
     }
 
     // Return refreshed header data
+    return this.headerRepo.find({
+      where: { id: In(eligibleIds) },
+      relations: ["location"],
+    });
+  }
+
+  async toggleBulkStatus1(
+    ids: number[],
+    status_id: number,
+    user_id: number,
+    reason?: string,
+  ): Promise<{
+    successfulIds: number[];
+    failedItems: { id: number; trans_number?: string; reason: string }[];
+  }> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException("No transaction IDs provided");
+    }
+
+    // 1. Fetch headers
+    const headers = await this.headerRepo.find({
+      where: { id: In(ids) },
+      relations: ["location"],
+    });
+
+    const failedItems: { id: number; trans_number?: string; reason: string }[] =
+      [];
+    const validHeadersMap = new Map<number, (typeof headers)[0]>();
+
+    // Filter out items already in target status
+    const eligibleHeaders = headers.filter((h) => h.status_id !== status_id);
+
+    // 2. IN-MEMORY VALIDATION (Detect batch duplicates)
+    if (status_id === 4 || status_id === 3) {
+      const seenKeys = new Map<string, { id: number; trans_number?: string }>();
+
+      for (const header of eligibleHeaders) {
+        const key = `${header.location_id}_${header.trans_date}_${header.access_key_id}`;
+        const currentDisplayId = header.trans_number || header.id.toString();
+
+        if (seenKeys.has(key)) {
+          const previous = seenKeys.get(key)!;
+          failedItems.push({
+            id: header.id,
+            trans_number: header.trans_number,
+            reason: `Conflicts with duplicate Transaction #${previous.trans_number || previous.id} in current selection batch.`,
+          });
+        } else {
+          seenKeys.set(key, {
+            id: header.id,
+            trans_number: header.trans_number,
+          });
+          validHeadersMap.set(header.id, header);
+        }
+      }
+    } else {
+      // If status is Cancelled (5), all eligible are valid
+      eligibleHeaders.forEach((h) => validHeadersMap.set(h.id, h));
+    }
+
+    const validHeaders = Array.from(validHeadersMap.values());
+    const validIds = validHeaders.map((h) => h.id);
+
+    if (validIds.length === 0) {
+      return { successfulIds: [], failedItems };
+    }
+
+    // 3. DATABASE VALIDATION (Check against external active DB records)
+    let finalValidHeaders = validHeaders;
+
+    if (status_id === 4 || status_id === 3) {
+      const duplicateCriteria = validHeaders.map((h) => ({
+        location_id: h.location_id,
+        trans_date: h.trans_date,
+        access_key_id: h.access_key_id,
+        status_id: status_id === 4 ? 4 : Not(5),
+        id: Not(In(ids)), // Ignore all input batch IDs
+      }));
+
+      const dbDuplicates = await this.headerRepo.find({
+        where: duplicateCriteria,
+      });
+
+      if (dbDuplicates.length > 0) {
+        // Find matching items and push to failed list
+        const dbDupKeys = new Set(
+          dbDuplicates.map(
+            (d) => `${d.location_id}_${d.trans_date}_${d.access_key_id}`,
+          ),
+        );
+
+        finalValidHeaders = validHeaders.filter((h) => {
+          const key = `${h.location_id}_${h.trans_date}_${h.access_key_id}`;
+          if (dbDupKeys.has(key)) {
+            failedItems.push({
+              id: h.id,
+              trans_number: h.trans_number,
+              reason: `Conflicts with existing active record in the database for date ${formatDateToMonthYear(h.trans_date)}.`,
+            });
+            return false;
+          }
+          return true;
+        });
+      }
+    }
+
+    const finalValidIds = finalValidHeaders.map((h) => h.id);
+
+    if (finalValidIds.length > 0) {
+      // 4. GENERATE TRANSACTION NUMBERS FOR POSTED STATUS
+      const headersNeedingTransNumber = finalValidHeaders.filter(
+        (h) => status_id === 4 && !h.trans_number,
+      );
+
+      for (const header of headersNeedingTransNumber) {
+        const location_abbr = header.location?.location_abbr || "LOC";
+        const trans_date = new Date(header.trans_date);
+
+        const trans_number =
+          await this.commonUtilitiesService.generateTransactionNumber({
+            transaction_type: "INCENTIVES",
+            location_id: header.location_id,
+            vendor_id: 0,
+            access_key_id: header.access_key_id,
+            format: "{abbr}{key}{year}-{seq:4}",
+            reset_per_year: true,
+            currentDate: trans_date,
+            abbr: location_abbr,
+          });
+
+        await this.headerRepo.update(header.id, { trans_number });
+      }
+
+      // 5. BATCH DB UPDATES
+      const headerUpdatePayload: Record<string, any> = {
+        status_id,
+        updated_by: user_id,
+      };
+
+      if (status_id === 5 && reason) headerUpdatePayload.cancel_reason = reason;
+      if (status_id === 3 && reason) headerUpdatePayload.undo_reason = reason;
+
+      await this.headerRepo.update(
+        { id: In(finalValidIds) },
+        headerUpdatePayload,
+      );
+      await this.detailRepo.update(
+        { transaction_header_id: In(finalValidIds) },
+        { status_id },
+      );
+
+      // 6. REAL-TIME SIGNAL
+      try {
+        this.sseEventEmitter.emitUpdateSignal("transactions", 0);
+        this.sseEventEmitter.emitUpdateSignal("dashboard", 0);
+      } catch (err) {
+        logger.error("SSE bulk event failed:", err);
+      }
+    }
+
+    return {
+      successfulIds: finalValidIds,
+      failedItems,
+    };
+  }
+
+  async toggleBulkStatus(
+    ids: number[],
+    status_id: number,
+    user_id: number,
+    reason?: string,
+  ): Promise<any[]> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException("No transaction IDs provided");
+    }
+
+    // 1. Fetch all requested transaction headers
+    const headers = await this.headerRepo.find({
+      where: { id: In(ids) },
+      relations: ["location"],
+    });
+
+    if (headers.length === 0) {
+      throw new BadRequestException(
+        "No valid transactions found for given IDs.",
+      );
+    }
+
+    // Filter out headers already in the target status
+    const eligibleHeaders = headers.filter((h) => h.status_id !== status_id);
+    if (eligibleHeaders.length === 0) {
+      return headers; // Return unchanged if all items are already in target status
+    }
+
+    const eligibleIds = eligibleHeaders.map((h) => h.id);
+    const conflictDetails: string[] = [];
+
+    // 2. VALIDATION CHECKS (Posting = 4, Reverting = 3)
+    if (status_id === 4 || status_id === 3) {
+      // -------------------------------------------------------------
+      // A. IN-MEMORY CHECK: Collect duplicates WITHIN the batch
+      // -------------------------------------------------------------
+      const seenKeys = new Map<string, string>();
+
+      for (const header of eligibleHeaders) {
+        const key = `${header.location_id}_${header.trans_date}_${header.access_key_id}`;
+        const currentDisplay = header.trans_number || `ID ${header.id}`;
+
+        if (seenKeys.has(key)) {
+          const previousDisplay = seenKeys.get(key);
+          conflictDetails.push(
+            `Transaction #${currentDisplay} conflicts with Transaction #${previousDisplay} in your selection (Location: ${header.location?.location_name}, Date: ${formatDateToMonthYear(header.trans_date)}).`,
+          );
+        } else {
+          seenKeys.set(key, currentDisplay);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // B. DATABASE CHECK: Collect duplicates against EXISTING records
+      // -------------------------------------------------------------
+      const duplicateCriteria = eligibleHeaders.map((h) => ({
+        location_id: h.location_id,
+        trans_date: h.trans_date,
+        access_key_id: h.access_key_id,
+        status_id: status_id === 4 ? 4 : Not(5),
+        id: Not(In(eligibleIds)), // Exclude all batch IDs
+      }));
+
+      const dbDuplicates = await this.headerRepo.find({
+        where: duplicateCriteria,
+        relations: ["location"],
+      });
+
+      if (dbDuplicates.length > 0) {
+        for (const dup of dbDuplicates) {
+          const locName =
+            dup.location?.location_name || `Location ID ${dup.location_id}`;
+          let exceptionMessage = `Bulk transaction operation rejected: A transaction already exists for location ${locName} on date ${formatDateToMonthYear(dup.trans_date)}.`;
+          if (status_id === 4) {
+            exceptionMessage += ` (already posted).`;
+          } else if (status_id === 3) {
+            exceptionMessage += ` (not cancelled).`;
+          }
+          conflictDetails.push(exceptionMessage);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // C. THROW EXCEPTION IF ANY CONFLICTS EXIST
+      // -------------------------------------------------------------
+      if (conflictDetails.length > 0) {
+        throw new BadRequestException({
+          message:
+            `Bulk operation rejected due to the following conflicts:\n${conflictDetails.join("\n")}` ||
+            "Bulk operation rejected due to conflicts.",
+          errors: conflictDetails,
+        });
+      }
+    }
+
+    // 3. GENERATE TRANSACTION NUMBERS FOR POSTED STATUS (if missing)
+    const headersNeedingTransNumber = eligibleHeaders.filter(
+      (h) => status_id === 4 && !h.trans_number,
+    );
+
+    for (const header of headersNeedingTransNumber) {
+      const location_abbr = header.location?.location_abbr || "LOC";
+      const trans_date = new Date(header.trans_date);
+
+      const trans_number =
+        await this.commonUtilitiesService.generateTransactionNumber({
+          transaction_type: "INCENTIVES",
+          location_id: header.location_id,
+          vendor_id: 0,
+          access_key_id: header.access_key_id,
+          format: "{abbr}{key}{year}-{seq:4}",
+          reset_per_year: true,
+          currentDate: trans_date,
+          abbr: location_abbr,
+        });
+
+      await this.headerRepo.update(header.id, { trans_number });
+    }
+
+    // 4. BATCH DB UPDATE FOR HEADERS
+    const headerUpdatePayload: Record<string, any> = {
+      status_id,
+      updated_by: user_id,
+    };
+
+    if (status_id === 5 && reason) headerUpdatePayload.cancel_reason = reason;
+    if (status_id === 3 && reason) headerUpdatePayload.undo_reason = reason;
+
+    await this.headerRepo.update({ id: In(eligibleIds) }, headerUpdatePayload);
+
+    // 5. BATCH DB UPDATE FOR DETAILS
+    await this.detailRepo.update(
+      { transaction_header_id: In(eligibleIds) },
+      { status_id },
+    );
+
+    // 6. SSE EMISSION
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", 0);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", 0);
+    } catch (err) {
+      logger.error("SSE bulk event failed:", err);
+    }
+
+    // Return updated records
     return this.headerRepo.find({
       where: { id: In(eligibleIds) },
       relations: ["location"],
