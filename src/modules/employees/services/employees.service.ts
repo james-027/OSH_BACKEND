@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { MoreThanOrEqual, Repository } from "typeorm";
 import { Employee } from "src/entities/Employee";
 import { CreateEmployeeDto } from "../dto/CreateEmployeeDto";
 import { UpdateEmployeeDto } from "../dto/UpdateEmployeeDto";
@@ -36,6 +36,7 @@ export class EmployeesService {
     accessKeyId?: number,
     userId?: number,
     roleId?: number,
+    modified_at?: string,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
@@ -45,8 +46,17 @@ export class EmployeesService {
           roleId,
         );
     }
+    // Build where as a single object so multiple conditions are AND'd (not OR'd)
+    const employeesWhere: any = {};
+    if (accessKeyId !== undefined) {
+      employeesWhere.access_key_id = accessKeyId;
+    }
+    if (modified_at) {
+      // "Modified on or after this timestamp" (incremental sync) — handles full timestamps like "2026-05-10 00:00:00"
+      employeesWhere.modified_at = MoreThanOrEqual(modified_at);
+    }
     const employees = await this.employeesRepository.find({
-      where: accessKeyId !== undefined ? { access_key_id: accessKeyId } : {},
+      where: employeesWhere,
       relations: [
         "employee_locations",
         "employee_locations.location",
