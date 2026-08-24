@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource, Not, In } from "typeorm";
 import { TransactionHeader } from "../../../entities/TransactionHeader";
@@ -357,6 +357,162 @@ export class TransactionsService {
       logger.error("SSE event failed for update:", err);
     }
     return this.findHeaderById(id);
+  }
+
+  async toggleBulkStatus(
+    ids: number[],
+    status_id: number,
+    user_id: number,
+    reason?: string,
+  ): Promise<any[]> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException("No transaction IDs provided");
+    }
+
+    // Process transactions sequentially to ensure atomic validations and number generation
+    for (const id of ids) {
+      const header = await this.headerRepo.findOne({
+        where: { id },
+        relations: ["location"],
+      });
+
+      if (!header) {
+        logger.warn(
+          `Bulk Action: Transaction header ID ${id} not found. Skipping.`,
+        );
+        continue;
+      }
+
+      // Skip if already in target status
+      if (header.status_id === status_id) {
+        continue;
+      }
+
+      const dataToUpdate: Record<string, any> = {
+        status_id,
+        updated_by: user_id,
+      };
+
+      // -------------------------------------------------------------
+      // 1. STATUS-SPECIFIC BUSINESS LOGIC
+      // -------------------------------------------------------------
+
+      // CASE: POSTING TRANSACTIONS (status_id = 4)
+      if (status_id === 4) {
+        // Check for duplicate posted header
+        const duplicate = await this.headerRepo.findOne({
+          where: {
+            location_id: header.location_id,
+            trans_date: header.trans_date,
+            access_key_id: header.access_key_id,
+            status_id: 4,
+            id: Not(id),
+          },
+        });
+
+        if (duplicate) {
+          throw new BadRequestException(
+            `Transaction #${id} cannot be posted. A posted transaction already exists for location ID ${header.location_id} on date ${header.trans_date}.`,
+          );
+        }
+
+        // Generate transaction number if not yet assigned
+        if (!header.trans_number) {
+          const location_abbr = header.location?.location_abbr || "LOC";
+          const trans_date = new Date(header.trans_date);
+
+          const trans_number =
+            await this.commonUtilitiesService.generateTransactionNumber({
+              transaction_type: "INCENTIVES",
+              location_id: header.location_id,
+              vendor_id: 0,
+              access_key_id: header.access_key_id,
+              format: "{abbr}{key}{year}-{seq:4}",
+              reset_per_year: true,
+              currentDate: trans_date,
+              abbr: location_abbr,
+            });
+
+          dataToUpdate.trans_number = trans_number;
+        }
+      }
+
+      // CASE: CANCELLING TRANSACTIONS (status_id = 5)
+      else if (status_id === 5) {
+        if (reason) {
+          dataToUpdate.cancel_reason = reason;
+        }
+      }
+
+      // CASE: REVERTING TRANSACTIONS (status_id = 3)
+      else if (status_id === 3) {
+        // Check for active non-cancelled duplicates
+        const duplicate = await this.headerRepo.findOne({
+          where: {
+            location_id: header.location_id,
+            trans_date: header.trans_date,
+            access_key_id: header.access_key_id,
+            status_id: Not(5),
+            id: Not(id),
+          },
+        });
+
+        if (duplicate) {
+          throw new BadRequestException(
+            `Transaction #${id} cannot be reverted. An active transaction already exists for date ${header.trans_date}.`,
+          );
+        }
+
+        if (reason) {
+          dataToUpdate.undo_reason = reason;
+        }
+      }
+
+      // -------------------------------------------------------------
+      // 2. DATABASE UPDATES
+      // -------------------------------------------------------------
+
+      // Update Header Record
+      await this.headerRepo.update(id, dataToUpdate);
+
+      // Update Related Details (Cascade Status)
+      await this.detailRepo.update(
+        { transaction_header_id: id },
+        { status_id },
+      );
+
+      // -------------------------------------------------------------
+      // 3. AUDIT TRAIL LOGGING
+      // -------------------------------------------------------------
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "transactions",
+          method: "toggleBulkStatus",
+          raw_data: JSON.stringify({ id, status_id, reason }),
+          description: `Bulk updated status of transaction #${id} to status_id ${status_id}${
+            reason ? ` with reason: ${reason}` : ""
+          }`,
+          status_id: 1,
+        },
+        user_id,
+      );
+    }
+
+    // -------------------------------------------------------------
+    // 4. SSE REAL-TIME NOTIFICATIONS
+    // -------------------------------------------------------------
+    try {
+      this.sseEventEmitter.emitUpdateSignal("transactions", 0);
+      this.sseEventEmitter.emitUpdateSignal("dashboard", 0);
+    } catch (err) {
+      logger.error("SSE bulk event failed:", err);
+    }
+
+    // Return all updated headers
+    return this.headerRepo.find({
+      where: { id: In(ids) },
+      relations: ["location"],
+    });
   }
 
   // DETAIL CRUD
