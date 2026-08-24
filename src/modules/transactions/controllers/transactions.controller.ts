@@ -10,13 +10,14 @@ import {
   Req,
   UseGuards,
   Patch,
+  Request,
+  BadRequestException,
 } from "@nestjs/common";
 import { TransactionsService } from "../services/transactions.service";
 import { CreateTransactionHeaderDto } from "../dto/CreateTransactionHeaderDto";
 import { UpdateTransactionHeaderDto } from "../dto/UpdateTransactionHeaderDto";
 import { CreateTransactionDetailDto } from "../dto/CreateTransactionDetailDto";
 import { UpdateTransactionDetailDto } from "../dto/UpdateTransactionDetailDto";
-import { Request } from "express";
 import { JwtAuthGuard } from "src/guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -134,6 +135,25 @@ export class TransactionsController {
   @Delete("details/:id")
   removeDetail(@Param("id") id: number) {
     return this.service.removeDetail(id);
+  }
+
+  @Post("/change-bulk-status")
+  @RequirePermissions({
+    module: "INCENTIVE TRANSACTIONS",
+    action: ["POST", "CANCEL", "REVERT"],
+  })
+  async toggleBulkStatus(
+    @Body() body: { ids: number[]; status_id: number; undo_reason?: string },
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    const { ids, status_id, undo_reason } = body;
+    if (!Array.isArray(ids) || typeof status_id !== "number") {
+      throw new BadRequestException(
+        "Invalid payload: ids and status_id are required.",
+      );
+    }
+    return this.service.toggleBulkStatus(ids, status_id, userId, undo_reason);
   }
 
   @UseGuards(PermissionsGuard)
