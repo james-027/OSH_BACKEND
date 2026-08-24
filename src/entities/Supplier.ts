@@ -54,21 +54,15 @@ export class Supplier {
 
   @Column({
     name: "company",
+    length: 100,
+    nullable: true,
   })
-  company: string;
-
+  company?: string;
   // Foreign key to Status entity
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })
   status!: Status;
 
-  // Foreign key to Company entity
-  @ManyToOne(() => Company)
-  @JoinColumn({
-    name: "company",
-    referencedColumnName: "company_abbr",
-  })
-  companyCode!: Company;
 
   @Column({ default: 1 })
   status_id!: number;

@@ -37,7 +37,7 @@ export class SupplierService {
   async findAll(): Promise<any[]> {
     try {
       const suppliers = await this.supplierRepository.find({
-        relations: ["status", "companyCode"],
+        relations: ["status"],
       });
 
       return suppliers.map((supplier) => ({
@@ -53,7 +53,7 @@ export class SupplierService {
         group_name: supplier.group_name,
         group_code: supplier.group_code,
         taxid: supplier.taxid,
-        company: supplier.companyCode?.company_abbr ?? null,
+        company: supplier.company ?? null,
       }));
     } catch (error) {
       logger.error("Error fetching suppliers:", error);
@@ -67,7 +67,7 @@ export class SupplierService {
     try {
       const supplier = await this.supplierRepository.findOne({
         where: { id },
-        relations: ["status", "companyCode"],
+        relations: ["status"],
       });
 
       if (!supplier) {
@@ -87,7 +87,7 @@ export class SupplierService {
         group_name: supplier.group_name,
         group_code: supplier.group_code,
         taxid: supplier.taxid,
-        company: supplier.companyCode?.company_abbr ?? null,
+        company: supplier.company ?? null,
       };
     } catch (error) {
       logger.error("Error fetching supplier:", error);

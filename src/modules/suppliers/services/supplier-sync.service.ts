@@ -253,7 +253,7 @@ export class SupplierSyncService {
 
       return result;
 
-      return result;
+
     } catch (error) {
       logger.error(
         `Supplier sync failed: ${
