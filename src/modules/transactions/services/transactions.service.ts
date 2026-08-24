@@ -204,7 +204,7 @@ export class TransactionsService {
     });
     if (duplicate) {
       throw new Error(
-        `A transaction already exists for this location, date: ${header.trans_date}, (posted).`,
+        `A transaction already exists for this location, date: ${formatDateToMonthYear(header.trans_date)}, (posted).`,
       );
     }
     const dataToUpdate: any = {
