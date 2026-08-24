@@ -66,8 +66,6 @@ export class SupplierSyncService {
         existingSuppliers.map((item) => [item.supplier_code?.trim(), item]),
       );
 
-
-
       // -----------------------------------------
       // STEP 3: Prepare batch arrays
       // -----------------------------------------
