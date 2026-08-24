@@ -325,7 +325,7 @@ export class TransactionsService {
     });
     if (duplicate) {
       throw new Error(
-        `A transaction already exists for this location, date: ${header.trans_date}, (not cancelled).`,
+        `A transaction already exists for this location, date: ${formatDateToMonthYear(header.trans_date)}, (not cancelled).`,
       );
     }
     // Update header status
