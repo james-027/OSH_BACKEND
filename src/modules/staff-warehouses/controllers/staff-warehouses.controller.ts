@@ -16,6 +16,7 @@ import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffWarehousesService } from "src/modules/staff-warehouses/services/staff-warehouses.service";
 import { CreateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/CreateStaffWarehouseDto";
 import { UpdateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/UpdateStaffWarehouseDto";
+import { Query } from "@nestjs/common";
 
 @Controller("staff-warehouses")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -26,10 +27,15 @@ export class StaffWarehousesController {
 
   @Get()
   @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
-  async findAll(@Request() req) {
+  async findAll(  @Request() req,
+    @Query("approval_status_id") assignStatusId?: string,)  {
     const accessKeyId = req.user.current_access_key;
 
-    return this.staffWarehousesService.findAll(accessKeyId);
+        const parsedApprovalStatusId = assignStatusId
+    ? assignStatusId.split(",").map(Number)
+    : undefined;
+
+    return this.staffWarehousesService.findAll(accessKeyId,parsedApprovalStatusId);
   }
 
   @Get(":id")

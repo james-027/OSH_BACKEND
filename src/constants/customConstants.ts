@@ -42,6 +42,13 @@ export const STATUS_IDS = {
   TEMPORARY_ASSIGNMENT: 26,
 } as const;
 
+
+// ============= POS AVAILABIITY =============
+export const POS_AVAILABILITY_IDS = {
+  WITH_POS: 1,
+  WITHOUT_POS: 2,
+} as const;
+
 export const STATUS_NAMES = {
   [STATUS_IDS.PENDING]: "Pending",
   [STATUS_IDS.FOR_APPROVAL]: "For Approval",

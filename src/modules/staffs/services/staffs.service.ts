@@ -37,6 +37,7 @@ import {
   ACTION_IDS,
   STATUS_IDS,
   NAMING_CONVENTION,
+  POS_AVAILABILITY_IDS,
 } from "src/constants/customConstants";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -554,6 +555,17 @@ export class StaffsService {
     }
   }
 
+  private safeDate = (value: any) => {
+    if (!value || value === "") return null;
+
+    const date = new Date(value);
+
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+
+    return date;
+  };
   async update(
     id: number,
     updateStaffDto: UpdateStaffDto,
@@ -599,31 +611,23 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      const safeDate = (value: any) => {
-        if (!value || value === "") return null;
-
-        const date = new Date(value);
-
-        if (isNaN(date.getTime())) {
-          throw new BadRequestException(`Invalid date: ${value}`);
-        }
-
-        return date;
-      };
-
       const updateData: any = { ...updateStaffDto };
       delete updateData.status_id;
 
-      updateData.hired_date = safeDate(updateData.hired_date);
-      updateData.to_hr_date = safeDate(updateData.to_hr_date);
-      updateData.to_sts_date = safeDate(updateData.to_sts_date);
-      updateData.approved_eprf_date = safeDate(updateData.approved_eprf_date);
-      updateData.req_completion_date = safeDate(updateData.req_completion_date);
-      updateData.actual_deployment_date = safeDate(
+      updateData.hired_date = this.safeDate(updateData.hired_date);
+      updateData.to_hr_date = this.safeDate(updateData.to_hr_date);
+      updateData.to_sts_date = this.safeDate(updateData.to_sts_date);
+      updateData.approved_eprf_date = this.safeDate(
+        updateData.approved_eprf_date,
+      );
+      updateData.req_completion_date = this.safeDate(
+        updateData.req_completion_date,
+      );
+      updateData.actual_deployment_date = this.safeDate(
         updateData.actual_deployment_date,
       );
-      updateData.separated_date = safeDate(updateData.separated_date);
-      updateData.birthday = safeDate(updateData.birthday);
+      updateData.separated_date = this.safeDate(updateData.separated_date);
+      updateData.birthday = this.safeDate(updateData.birthday);
 
       if (updateData.last_name) {
         updateData.last_name = updateData.last_name.toUpperCase();
@@ -860,7 +864,9 @@ export class StaffsService {
         return this.responseMapperService.mapEntityToResponse(staff);
       }
 
-      const effectivityDate = safeDate(updateStaffTransferDto.effectivity_date);
+      const effectivityDate = this.safeDate(
+        updateStaffTransferDto.effectivity_date,
+      );
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -875,8 +881,7 @@ export class StaffsService {
           );
         }
       }
-
-      await this.staffTransfersRepository.save({
+      const result = await this.staffTransfersRepository.save({
         staff_id: staff.id,
         old_vendor_id: staff.vendor_id,
         new_vendor_id: newVendorId,
@@ -885,12 +890,27 @@ export class StaffsService {
         salary_rate: newSalaryRate,
         allowance: newAllowance,
         remarks: transferRemarks,
-        effectivity_date: safeDate(updateStaffTransferDto.effectivity_date),
+        effectivity_date: this.safeDate(
+          updateStaffTransferDto.effectivity_date,
+        ),
         access_key_id: staff.access_key_id,
         status: false,
         created_by: userId,
         updated_by: userId,
       });
+
+      const response = this.responseMapperService.mapEntityToResponse(result);
+
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
 
       return {
         message: "Transfer scheduled successfully.",
@@ -1046,6 +1066,49 @@ export class StaffsService {
             });
 
             updatedStaff.staff_code = generatedStaffCode;
+
+            const activeAssignments = await queryRunner.manager.find(
+              StaffWarehouse,
+              {
+                where: {
+                  staff_id: staff.id,
+                  staff_code: staff.staff_code,
+                },
+              },
+            );
+
+            const currentAssignments = activeAssignments.filter(
+              (x) => !x.end_date && x.location_id === staff.location_id,
+            );
+
+            for (const assignment of currentAssignments) {
+              assignment.end_date = transfer.effectivity_date;
+              assignment.updated_by = transfer.created_by;
+            }
+
+            await queryRunner.manager.save(currentAssignments);
+
+            // Only recreate assignments if only the vendor changed
+            if (!isLocationChanged && isVendorChanged) {
+              const newAssignments = currentAssignments.map((assignment) =>
+                queryRunner.manager.create(StaffWarehouse, {
+                  staff_id: updatedStaff.id,
+                  staff_code: generatedStaffCode,
+                  warehouse_id: assignment.warehouse_id,
+                  location_id: assignment.location_id, // Keep the same location
+                  vendor_id: transfer.new_vendor_id,
+                  effectivity_date: transfer.effectivity_date,
+                  end_date: null,
+                  remarks: assignment.remarks,
+                  status_id: assignment.status_id,
+                  access_key_id: assignment.access_key_id,
+                  created_by: transfer.created_by,
+                  updated_by: transfer.created_by,
+                }),
+              );
+
+              await queryRunner.manager.save(newAssignments);
+            }
           }
 
           await queryRunner.manager.save(StaffHistory, {
@@ -1448,19 +1511,57 @@ export class StaffsService {
 
       const newWarehouseId = updateStaffDeployDto.warehouse_id;
 
-      const staffWarehouse = await this.staffWarehouseRepository.save({
-        staff_id: staff.id,
-        warehouse_id: newWarehouseId,
-        staff_code: staff.staff_code,
-        location_id: staff.location_id,
-        vendor_id: staff.vendor_id,
-        effectivity_date: updateStaffDeployDto.effectivity_date,
-        end_date: updateStaffDeployDto.end_date || null,
-        remarks: updateStaffDeployDto.remarks,
-        created_by: userId,
-        updated_by: userId,
-        access_key_id: accessKeyId,
+      let staffWarehouse = await this.staffWarehouseRepository.findOne({
+        where: {
+          staff_id: staff.id,
+          warehouse_id: newWarehouseId,
+        },
       });
+
+     const warehouse = await this.warehouseRepository.findOne({
+        where: { id: newWarehouseId },
+      });
+
+    const approval_status_id =
+      warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
+        ? STATUS_IDS.FOR_APPROVAL
+        : STATUS_IDS.APPROVED;
+
+
+      if (staffWarehouse) {
+        // Update existing deployment
+        staffWarehouse.staff_code = staff.staff_code;
+        staffWarehouse.location_id = staff.location_id;
+        staffWarehouse.vendor_id = staff.vendor_id;
+        staffWarehouse.effectivity_date = this.safeDate(
+          updateStaffDeployDto.effectivity_date,
+        );
+        staffWarehouse.end_date =
+          this.safeDate(updateStaffDeployDto.end_date) || null;
+        staffWarehouse.remarks = updateStaffDeployDto.remarks;
+        staffWarehouse.updated_by = userId;
+        staffWarehouse.access_key_id = accessKeyId;
+
+        staffWarehouse =
+          await this.staffWarehouseRepository.save(staffWarehouse);
+      } else {
+        // Create new deployment
+        staffWarehouse = await this.staffWarehouseRepository.save(
+          this.staffWarehouseRepository.create({
+            staff_id: staff.id,
+            warehouse_id: newWarehouseId,
+            staff_code: staff.staff_code,
+            location_id: staff.location_id,
+            vendor_id: staff.vendor_id,
+            effectivity_date: updateStaffDeployDto.effectivity_date,
+            end_date: updateStaffDeployDto.end_date || null,
+            remarks: updateStaffDeployDto.remarks,
+            created_by: userId,
+            updated_by: userId,
+            access_key_id: accessKeyId,
+          }),
+        );
+      }
 
       const staffWarehouseDetails = await this.staffWarehouseRepository.findOne(
         {
@@ -1478,6 +1579,7 @@ export class StaffsService {
       if (staffWarehouse) {
         await this.staffsRepository.update(id, {
           assign_status_id: assignStatusId,
+          approval_status_id: approval_status_id,
           warehouse_id: staffWarehouseDetails.warehouse_id,
           effectivity_date: staffWarehouseDetails.effectivity_date,
           updated_by: staffWarehouseDetails.updated_by,
@@ -1517,6 +1619,7 @@ export class StaffsService {
           status_id: updatedStaff.status_id,
           warehouse_id: updatedStaff.warehouse_id,
           effectivity_date: updatedStaff.effectivity_date,
+          approval_status_id: approval_status_id,
           created_by: userId,
           updated_by: userId,
         });
@@ -2387,6 +2490,20 @@ export class StaffsService {
     };
   }
 
+  private formatDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+
+    if (isNaN(date.getTime())) {
+      throw new Error(`Invalid date: ${dateStr}`);
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
   async uploadStaffDeploy(
     file: Express.Multer.File,
     userId: number,
@@ -2404,16 +2521,6 @@ export class StaffsService {
       defval: null,
     });
 
-    const formatDate = (dateStr: string): string => {
-      const date = new Date(dateStr);
-
-      if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date: ${dateStr}`);
-      }
-
-      return date.toISOString().split("T")[0];
-    };
-
     const success = [];
     const errors = [];
 
@@ -2422,12 +2529,7 @@ export class StaffsService {
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = [
-          "Staff Code",
-          "New Store",
-          "Effectivity Date",
-          "End Date",
-        ];
+        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -2497,8 +2599,8 @@ export class StaffsService {
         const dto: UpdateStaffDeployDto = {
           warehouse_id: warehouse.id,
           remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
-          effectivity_date: formatDate(row["Effectivity Date"]),
-          end_date: formatDate(row["End Date"]),
+          effectivity_date: this.formatDate(row["Effectivity Date"]),
+          end_date: row["End Date"] ? this.formatDate(row["End Date"]) : null,
           action: "deploy",
         };
 
@@ -2563,16 +2665,6 @@ export class StaffsService {
       defval: null,
     });
 
-    const formatDate = (dateStr: string): string => {
-      const date = new Date(dateStr);
-
-      if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date: ${dateStr}`);
-      }
-
-      return date.toISOString().split("T")[0];
-    };
-
     const success = [];
     const errors = [];
 
@@ -2581,12 +2673,7 @@ export class StaffsService {
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = [
-          "Staff Code",
-          "New Store",
-          "Effectivity Date",
-          "End Date",
-        ];
+        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -2666,8 +2753,8 @@ export class StaffsService {
         const dto: UpdateStaffDeployDto = {
           warehouse_id: warehouse.id,
           remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
-          effectivity_date: formatDate(row["Effectivity Date"]),
-          end_date: formatDate(row["End Date"]),
+          effectivity_date: this.formatDate(row["Effectivity Date"]),
+          end_date: row["End Date"] ? this.formatDate(row["End Date"]) : null,
           action: "buddyup",
         };
 
@@ -2722,7 +2809,7 @@ export class StaffsService {
       where: {
         location_id: locationId,
       },
-      select: ['id'],
+      select: ["id"],
     });
 
     return warehouses.map((warehouse) => warehouse.id);

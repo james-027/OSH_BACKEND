@@ -14,7 +14,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import { CreateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/CreateStaffWarehouseDto";
 import { UpdateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/UpdateStaffWarehouseDto";
 import logger from "../../../config/logger";
-
+import { In } from "typeorm";
 @Injectable()
 export class StaffWarehousesService {
   private readonly entityName = "StaffWarehouse";
@@ -40,16 +40,23 @@ export class StaffWarehousesService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(accesskeyId?: number): Promise<any[]> {
+  async findAll(accesskeyId?: number,approvalStatusId?:number[]): Promise<any[]> {
     try {
       const where: any = {};
       if (accesskeyId !== undefined) {
         where.access_key_id = accesskeyId;
       }
+
+    if (approvalStatusId?.length) {
+      where.staff = {
+        approval_status_id: In(approvalStatusId),
+      };
+    }
       const records = await this.staffWarehousesRepository.find({
         where,
         relations: this.relationFields,
       });
+
       return this.responseMapperService.mapEntitiesToResponse(records);
     } catch (error) {
       console.error(`Error fetching ${this.entityName}:`, error);

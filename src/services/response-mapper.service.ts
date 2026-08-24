@@ -40,7 +40,7 @@ export class ResponseMapperService {
           "requirementReminders",
           "categoryTypes",
           "accessKey",
-          "staffBrands",
+          "staffWarehouses",
           "staffCategoryTypes",
           "staffVendorSalaries",
           "staffSalaries",
@@ -178,7 +178,7 @@ export class ResponseMapperService {
 
     if (latestVendorSalary) {
       response.vendor_id = latestVendorSalary.vendor_id;
-      response.location_id = latestVendorSalary.location_id;
+      response.vendor_location_id = latestVendorSalary.location_id;
     }
 
     if (latestSalary) {

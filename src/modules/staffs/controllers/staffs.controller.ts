@@ -42,7 +42,7 @@ export class StaffsController {
 async findAll(
   @Request() req,
   @Query("status_id") statusId?: string,
-   @Query("assign_status_id") assignStatusId?: string,
+  @Query("assign_status_id") assignStatusId?: string,
 ) {
   const accessKeyId = req.user.current_access_key;
 
