@@ -256,7 +256,8 @@ export class StaffTrainingService {
         const failedTraining = trainings.find((t) => t.sub_status_id !== 19);
 
         await this.staffRepository.update(staff.id, {
-          status_id: allPassed ? 1 : failedTraining?.sub_status_id,
+          // status_id: allPassed ? 1 : failedTraining?.sub_status_id,
+          assign_status_id: allPassed ? 19 : failedTraining?.sub_status_id,
           updated_by: userId,
         });
 
@@ -527,17 +528,18 @@ export class StaffTrainingService {
           updated_by: userId,
         });
 
-        if (item.sub_status_id === 19) {
-          statusId = 1; // Active
-        } else {
-          statusId = item.sub_status_id;
-        }
+        // if (item.sub_status_id === 19) {
+        //   statusId = 13; // Assignment
+        // } else {
+        //   statusId = item.sub_status_id;
+        // }
 
         const saved =
           await this.staffTrainingsRepository.save(newStaffTraining);
         savedTrainings.push(saved);
         await this.staffRepository.update(staff.id, {
-          status_id: statusId,
+          // status_id: statusId,
+          assign_status_id: item.sub_status_id,
         });
         const training = await this.trainingsRepository.findOne({
           where: { id: item.training_id },

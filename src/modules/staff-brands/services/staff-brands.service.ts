@@ -13,6 +13,8 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import { CreateStaffBrandDto } from "src/modules/staff-brands/dto/CreateStaffBrandDto";
 import { UpdateStaffBrandDto } from "src/modules/staff-brands/dto/UpdateStaffBrandDto";
 import logger from "../../../config/logger";
+import { STATUS_IDS } from "src/constants/customConstants";
+
 
 @Injectable()
 export class StaffBrandsService {
@@ -41,6 +43,10 @@ export class StaffBrandsService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      where.staff = {
+        status_id : STATUS_IDS.ACTIVE
+      };
       const records = await this.staffBrandsRepository.find({
         where,
         relations: this.relationFields,

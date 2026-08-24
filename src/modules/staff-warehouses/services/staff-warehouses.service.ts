@@ -16,11 +16,10 @@ import { CreateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/Create
 import { UpdateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/UpdateStaffWarehouseDto";
 import logger from "../../../config/logger";
 import { In } from "typeorm";
-import { STATUS_IDS, TOGGLE_NAMES } from "src/constants/customConstants";
+import { ACTION_IDS, STATUS_IDS, TOGGLE_NAMES,NAMING_CONVENTION } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { User } from "src/entities/User";
 import { Warehouse } from "src/entities/Warehouse";
-
 @Injectable()
 export class StaffWarehousesService {
   private readonly entityName = "StaffWarehouse";
@@ -69,6 +68,10 @@ export class StaffWarehousesService {
       if (warehouseId?.length) {
         where.warehouse_id = In(warehouseId);
       }
+
+        where.staff = {
+        status_id: STATUS_IDS.ACTIVE,
+      };
 
       const records = await this.staffWarehousesRepository.find({
         where,
@@ -305,7 +308,7 @@ export class StaffWarehousesService {
       const newStatusName = newStatusId === 1 ? "ACTIVE" : "INACTIVE";
 
       await this.staffWarehousesRepository.update(id, {
-        status_id: newStatusId,
+        approval_status_id: STATUS_IDS.INACTIVE,
       } as any);
 
       const updatedRecord = await this.staffWarehousesRepository.findOne({
@@ -328,6 +331,20 @@ export class StaffWarehousesService {
         },
         userId,
       );
+            // Action Log
+            try {
+              await this.ActionLogsService.logAction({
+                module_name: this.module_name, // use your actual module name
+                ref_id: updatedRecord.id,
+                action_id: ACTION_IDS.DEACTIVATE,
+                description: `Deactivated staff ${updatedRecord.staff_code ?? ""}`,
+                raw_data: JSON.stringify(updatedRecord),
+                created_by: userId, 
+              });
+            } catch (err) {
+              logger.error("Action log failed for create:", err);
+              // Don't throw - action log failure shouldn't block creation
+            }
 
       const response =
         this.responseMapperService.mapEntityToResponse(updatedRecord);
@@ -446,7 +463,7 @@ export class StaffWarehousesService {
 
     if (!record) {
       throw new NotFoundException(
-        `Staff warehouse not found for staff code ${staffCode} and warehouse ${warehouseId}`,
+        `No ${NAMING_CONVENTION.WAREHOUSE} Assigned to Staff`,
       );
     }
 

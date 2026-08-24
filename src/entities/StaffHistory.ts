@@ -103,6 +103,18 @@ export class StaffHistory {
   @Column({ type: "date", nullable: true })
   effectivity_date: Date;
 
+  @Column({ type: "date", nullable: true })
+  deactivate_effectivity_date: Date;
+
+  @Column({ type: "date", nullable: true })
+  activate_effectivity_date: Date;
+
+  @Column({nullable:true})
+  approval_status_id: number;
+  
+  @JoinColumn({ name: "approval_status_id" })
+  approvalStatus: Status;
+
   @Column({ nullable: true })
   access_key_id: number;
 
@@ -117,6 +129,16 @@ export class StaffHistory {
 
   @Column({ type: "varchar", nullable: true})
   email!: string | null;
+
+
+  @Column({nullable:true})
+  reason_status_id: number;
+  
+  @Column({ length: 255, nullable: true })
+  reason_remarks: string;
+
+  @JoinColumn({ name: "reason_status_id" })
+  reasonStatus: Status;
 
   @CreateDateColumn({
     type: "timestamp",

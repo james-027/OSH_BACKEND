@@ -40,9 +40,8 @@ export const STATUS_IDS = {
   TERMINATED: 18,
   WITH_ASSIGNMENT: 21,
   TEMPORARY_ASSIGNMENT: 26,
+  REJECTED: 15,
 } as const;
-
-
 
 // ============= POS AVAILABIITY =============
 export const POS_AVAILABILITY_IDS = {
