@@ -369,138 +369,142 @@ export class TransactionsService {
       throw new BadRequestException("No transaction IDs provided");
     }
 
-    // Process transactions sequentially to ensure atomic validations and number generation
-    for (const id of ids) {
-      const header = await this.headerRepo.findOne({
-        where: { id },
-        relations: ["location"],
-      });
+    // 1. FETCH ALL HEADERS IN A SINGLE QUERY
+    const headers = await this.headerRepo.find({
+      where: { id: In(ids) },
+      relations: ["location"],
+    });
 
-      if (!header) {
-        logger.warn(
-          `Bulk Action: Transaction header ID ${id} not found. Skipping.`,
-        );
-        continue;
-      }
-
-      // Skip if already in target status
-      if (header.status_id === status_id) {
-        continue;
-      }
-
-      const dataToUpdate: Record<string, any> = {
-        status_id,
-        updated_by: user_id,
-      };
-
-      // -------------------------------------------------------------
-      // 1. STATUS-SPECIFIC BUSINESS LOGIC
-      // -------------------------------------------------------------
-
-      // CASE: POSTING TRANSACTIONS (status_id = 4)
-      if (status_id === 4) {
-        // Check for duplicate posted header
-        const duplicate = await this.headerRepo.findOne({
-          where: {
-            location_id: header.location_id,
-            trans_date: header.trans_date,
-            access_key_id: header.access_key_id,
-            status_id: 4,
-            id: Not(id),
-          },
-        });
-
-        if (duplicate) {
-          throw new BadRequestException(
-            `Transaction #${id} cannot be posted. A posted transaction already exists for location ID ${header.location_id} on date ${header.trans_date}.`,
-          );
-        }
-
-        // Generate transaction number if not yet assigned
-        if (!header.trans_number) {
-          const location_abbr = header.location?.location_abbr || "LOC";
-          const trans_date = new Date(header.trans_date);
-
-          const trans_number =
-            await this.commonUtilitiesService.generateTransactionNumber({
-              transaction_type: "INCENTIVES",
-              location_id: header.location_id,
-              vendor_id: 0,
-              access_key_id: header.access_key_id,
-              format: "{abbr}{key}{year}-{seq:4}",
-              reset_per_year: true,
-              currentDate: trans_date,
-              abbr: location_abbr,
-            });
-
-          dataToUpdate.trans_number = trans_number;
-        }
-      }
-
-      // CASE: CANCELLING TRANSACTIONS (status_id = 5)
-      else if (status_id === 5) {
-        if (reason) {
-          dataToUpdate.cancel_reason = reason;
-        }
-      }
-
-      // CASE: REVERTING TRANSACTIONS (status_id = 3)
-      else if (status_id === 3) {
-        // Check for active non-cancelled duplicates
-        const duplicate = await this.headerRepo.findOne({
-          where: {
-            location_id: header.location_id,
-            trans_date: header.trans_date,
-            access_key_id: header.access_key_id,
-            status_id: Not(5),
-            id: Not(id),
-          },
-        });
-
-        if (duplicate) {
-          throw new BadRequestException(
-            `Transaction #${id} cannot be reverted. An active transaction already exists for date ${header.trans_date}.`,
-          );
-        }
-
-        if (reason) {
-          dataToUpdate.undo_reason = reason;
-        }
-      }
-
-      // -------------------------------------------------------------
-      // 2. DATABASE UPDATES
-      // -------------------------------------------------------------
-
-      // Update Header Record
-      await this.headerRepo.update(id, dataToUpdate);
-
-      // Update Related Details (Cascade Status)
-      await this.detailRepo.update(
-        { transaction_header_id: id },
-        { status_id },
-      );
-
-      // -------------------------------------------------------------
-      // 3. AUDIT TRAIL LOGGING
-      // -------------------------------------------------------------
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "transactions",
-          method: "toggleBulkStatus",
-          raw_data: JSON.stringify({ id, status_id, reason }),
-          description: `Bulk updated status of transaction #${id} to status_id ${status_id}${
-            reason ? ` with reason: ${reason}` : ""
-          }`,
-          status_id: 1,
-        },
-        user_id,
+    if (headers.length === 0) {
+      throw new BadRequestException(
+        "No valid transactions found for given IDs",
       );
     }
 
-    // -------------------------------------------------------------
-    // 4. SSE REAL-TIME NOTIFICATIONS
-    // -------------------------------------------------------------
+    // Filter out records that are already in the target status
+    const eligibleHeaders = headers.filter((h) => h.status_id !== status_id);
+    if (eligibleHeaders.length === 0) {
+      return headers; // Return unchanged if all were already in target status
+    }
+
+    const eligibleIds = eligibleHeaders.map((h) => h.id);
+
+    // 2. VALIDATION CHECKS (Status 4 - Posted & Status 3 - Reverted)
+    if (status_id === 4 || status_id === 3) {
+      // -------------------------------------------------------------
+      // A. IN-MEMORY CHECK: Prevent duplicates WITHIN the batch itself
+      // -------------------------------------------------------------
+      // Store key -> user-facing identifier string (trans_number or fallback ID)
+      const seenKeys = new Map<string, string>();
+
+      for (const header of eligibleHeaders) {
+        // Create a unique composite key for location + date + key
+        const key = `${header.location_id}_${header.trans_date}_${header.access_key_id}`;
+
+        // Resolve user-facing display label: trans_number if set, otherwise ID
+        const currentDisplayId = header.trans_number || header.id.toString();
+
+        if (seenKeys.has(key)) {
+          const previousDisplayId = seenKeys.get(key);
+          throw new BadRequestException(
+            `Bulk operation rejected: Transaction #${currentDisplayId} and Transaction #${previousDisplayId} in your selection belong to the same location, date (${formatDateToMonthYear(
+              header.trans_date,
+            )}), and access key. You cannot activate both at the same time.`,
+          );
+        }
+
+        // Map the composite key to the formatted string representation
+        seenKeys.set(key, currentDisplayId);
+      }
+
+      // -------------------------------------------------------------
+      // B. DATABASE CHECK: Prevent duplicates against EXISTING DB records
+      // -------------------------------------------------------------
+      const duplicateCriteria = eligibleHeaders.map((h) => ({
+        location_id: h.location_id,
+        trans_date: h.trans_date,
+        access_key_id: h.access_key_id,
+        status_id: status_id === 4 ? 4 : Not(5),
+        id: Not(In(eligibleIds)), // Exclude current batch items
+      }));
+
+      const duplicates = await this.headerRepo.find({
+        where: duplicateCriteria,
+        relations: ["location"],
+      });
+
+      if (duplicates.length > 0) {
+        let exceptionMessage = `Bulk transaction operation rejected: A transaction already exists for location ${duplicates[0].location?.location_name || duplicates[0].location_id} on date ${formatDateToMonthYear(duplicates[0].trans_date)}.`;
+        if (status_id === 4) {
+          exceptionMessage += ` (already posted).`;
+        } else if (status_id === 3) {
+          exceptionMessage += ` (not cancelled).`;
+        }
+        throw new BadRequestException(exceptionMessage);
+      }
+    }
+
+    // 3. PROCESS SPECIAL LOGIC (e.g., Transaction Number Generation for Posted Status)
+    const headersNeedingTransNumber = eligibleHeaders.filter(
+      (h) => status_id === 4 && !h.trans_number,
+    );
+
+    // Update trans_number individually ONLY for records that need generation
+    for (const header of headersNeedingTransNumber) {
+      const location_abbr = header.location?.location_abbr || "LOC";
+      const trans_date = new Date(header.trans_date);
+
+      const trans_number =
+        await this.commonUtilitiesService.generateTransactionNumber({
+          transaction_type: "INCENTIVES",
+          location_id: header.location_id,
+          vendor_id: 0,
+          access_key_id: header.access_key_id,
+          format: "{abbr}{key}{year}-{seq:4}",
+          reset_per_year: true,
+          currentDate: trans_date,
+          abbr: location_abbr,
+        });
+
+      // Individual update for auto-numbered headers
+      await this.headerRepo.update(header.id, { trans_number });
+    }
+
+    // 4. BATCH UPDATE HEADERS (Single Query)
+    const headerUpdatePayload: Record<string, any> = {
+      status_id,
+      updated_by: user_id,
+    };
+
+    if (status_id === 5 && reason) {
+      headerUpdatePayload.cancel_reason = reason;
+    } else if (status_id === 3 && reason) {
+      headerUpdatePayload.undo_reason = reason;
+    }
+
+    await this.headerRepo.update({ id: In(eligibleIds) }, headerUpdatePayload);
+
+    // 5. BATCH UPDATE DETAILS (Single Query)
+    await this.detailRepo.update(
+      { transaction_header_id: In(eligibleIds) },
+      { status_id },
+    );
+
+    // 6. BATCH AUDIT TRAIL INSERTION
+    const auditEntries = eligibleIds.map((id) => ({
+      service: "transactions",
+      method: "toggleBulkStatus",
+      raw_data: JSON.stringify({ id, status_id, reason }),
+      description: `Bulk updated status of transaction #${id} to status_id ${status_id}${
+        reason ? ` with reason: ${reason}` : ""
+      }`,
+      status_id: 1,
+      created_by: user_id,
+    }));
+
+    await this.userAuditTrailCreateService.bulkCreate(auditEntries, user_id);
+
+    // 7. SINGLE REAL-TIME SSE EMISSION
     try {
       this.sseEventEmitter.emitUpdateSignal("transactions", 0);
       this.sseEventEmitter.emitUpdateSignal("dashboard", 0);
@@ -508,9 +512,9 @@ export class TransactionsService {
       logger.error("SSE bulk event failed:", err);
     }
 
-    // Return all updated headers
+    // Return refreshed header data
     return this.headerRepo.find({
-      where: { id: In(ids) },
+      where: { id: In(eligibleIds) },
       relations: ["location"],
     });
   }
