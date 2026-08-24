@@ -53,6 +53,21 @@ export class Staff {
   @Column()
   position_id: number;
 
+  @Column({ length: 255, nullable: true })
+  reason_remarks: string;
+
+  @Column({nullable:true})
+  reason_status_id: number;
+
+  @JoinColumn({ name: "reason_status_id" })
+  reasonStatus: Status;
+
+  @Column({nullable:true})
+  approval_status_id: number;
+  
+  @JoinColumn({ name: "approval_status_id" })
+  approvalStatus: Status;
+
   @Column({ type: "varchar", nullable: true })
   email!: string | null;
 
@@ -116,6 +131,12 @@ export class Staff {
   @Column({ type: "date", nullable: true })
   effectivity_date: Date;
 
+  @Column({ type: "date", nullable: true })
+  deactivate_effectivity_date: Date;
+
+  @Column({ type: "date", nullable: true })
+  activate_effectivity_date: Date;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",
@@ -144,6 +165,7 @@ export class Staff {
   })
   @JoinColumn({ name: "assign_status_id" })
   assignmentStatus: Status;
+
 
   @ManyToOne(() => User, {
     eager: false,

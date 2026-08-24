@@ -40,6 +40,13 @@ export const STATUS_IDS = {
   TERMINATED: 18,
   WITH_ASSIGNMENT: 21,
   TEMPORARY_ASSIGNMENT: 26,
+  REJECTED: 15,
+} as const;
+
+// ============= POS AVAILABIITY =============
+export const POS_AVAILABILITY_IDS = {
+  WITH_POS: 1,
+  WITHOUT_POS: 2,
 } as const;
 
 export const STATUS_NAMES = {
@@ -56,6 +63,7 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.PENDING]: "Back to Pending", // Toggle action name
   [STATUS_IDS.FOR_APPROVAL]: "For Approval",
   [STATUS_IDS.APPROVED]: "Approved",
+  [STATUS_IDS.INACTIVE]: "Inactive",
 } as const;
 
 // ============= WAREHOUSE REM STATUS =============

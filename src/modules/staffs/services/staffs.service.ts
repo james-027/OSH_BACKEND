@@ -14,6 +14,8 @@ import {
   CheckStaffDto,
   CreateStaffDto,
   RevertStaffDto,
+  ApprovalStaffDto,
+  RejectStaffDto,
 } from "src/modules/staffs/dto/CreateStaffDto";
 import { UpdateStaffDto } from "src/modules/staffs/dto/UpdateStaffDto";
 import { UpdateStaffTransferDto } from "src/modules/staffs/dto/UpdateStaffTransferDto";
@@ -34,16 +36,23 @@ import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import {
-  MODULE_IDS,
-  ACTION_IDS,
   STATUS_IDS,
   NAMING_CONVENTION,
+  POS_AVAILABILITY_IDS,
+  ACTION_IDS,
+  TOGGLE_NAMES,
 } from "src/constants/customConstants";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffTraining } from "src/entities/StaffTrainings";
+import { AccessKey } from "src/entities/AccessKey";
 import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
+import { Warehouse } from "src/entities/Warehouse";
+import { Not } from "typeorm";
+import * as XLSX from "xlsx";
+import { throws } from "assert";
+
 @Injectable()
 export class StaffsService {
   constructor(
@@ -75,8 +84,12 @@ export class StaffsService {
     private readonly staffTransfersRepository: Repository<StaffTransfers>,
     @InjectRepository(StaffWarehouse)
     private readonly staffWarehouseRepository: Repository<StaffWarehouse>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(StaffTraining)
     private readonly staffTrainingsRepository: Repository<StaffTraining>,
+    @InjectRepository(AccessKey)
+    private readonly accessKeysRepository: Repository<AccessKey>,
     @InjectRepository(Training)
     private readonly trainingsRepository: Repository<Training>,
     private actionLogsService: ActionLogsService,
@@ -100,12 +113,16 @@ export class StaffsService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      if (statusId && statusId.length > 0) {
+        where.status_id = In(statusId);
+      }
+
       if (assignStatusId && assignStatusId.length > 0) {
         where.assign_status_id = In(assignStatusId);
-      } else if (statusId && statusId.length > 0) {
-        where.status_id = In(statusId);
-        where.assign_status_id = 13;
+        where.status_id = STATUS_IDS.ACTIVE;
       }
+
       const staffs = await this.staffsRepository.find({
         where,
         relations: [
@@ -276,6 +293,34 @@ export class StaffsService {
         );
       }
 
+      const existingTin = await this.staffsRepository.findOne({
+        where: { tin: createStaffDto.tin },
+      });
+      const existingSSS = await this.staffsRepository.findOne({
+        where: { sss_number: createStaffDto.sss_number },
+      });
+      const existingPagibig = await this.staffsRepository.findOne({
+        where: { pagibig_number: createStaffDto.pagibig_number },
+      });
+
+      if (existingTin) {
+        throw new BadRequestException(
+          `Staff with TIN '${createStaffDto.tin}' already exists`,
+        );
+      }
+
+      if (existingSSS) {
+        throw new BadRequestException(
+          `Staff with SSS Number '${createStaffDto.sss_number}' already exists`,
+        );
+      }
+
+      if (existingPagibig) {
+        throw new BadRequestException(
+          `Staff with PagIBIG Number '${createStaffDto.pagibig_number}' already exists`,
+        );
+      }
+
       const newStaff = this.staffsRepository.create({
         staff_code: createStaffDto.staff_code
           ? createStaffDto.staff_code.toUpperCase()
@@ -288,7 +333,7 @@ export class StaffsService {
         location_id: createStaffDto.location_id,
         email: createStaffDto.email,
         vendor_id: createStaffDto.vendor_id,
-        assign_status_id: 13,
+        assign_status_id: 20,
         position_id: createStaffDto.position_id,
         access_key_id: accessKeyId,
         sss_number: createStaffDto.sss_number || null,
@@ -322,12 +367,13 @@ export class StaffsService {
         contact_number: createStaffDto.contact_number || null,
         overall_remarks: createStaffDto.overall_remarks || null,
         store_request: createStaffDto.store_request || null,
-        status_id: 20,
+        status_id: 1, // Default to Active
         created_by: userId,
         updated_by: userId,
       });
 
       const savedStaff = await this.staffsRepository.save(newStaff);
+
       await this.staffHistoriesRepository.save({
         staff_id: savedStaff.id,
         staff_code: savedStaff.staff_code,
@@ -520,6 +566,38 @@ export class StaffsService {
     }
   }
 
+  private safeDate = (value: any) => {
+    if (!value || value === "") return null;
+
+    const date = new Date(value);
+
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+
+    return date;
+  };
+
+  private async getApprovalStatusId(warehouseId: number): Promise<number> {
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+      select: {
+        id: true,
+        pos_availability_id: true,
+      },
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException(
+        `Warehouse with ID ${warehouseId} not found.`,
+      );
+    }
+
+    return warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
+      ? STATUS_IDS.FOR_APPROVAL
+      : STATUS_IDS.APPROVED;
+  }
+
   async update(
     id: number,
     updateStaffDto: UpdateStaffDto,
@@ -565,31 +643,23 @@ export class StaffsService {
         throw new BadRequestException("Authenticated user not found");
       }
 
-      const safeDate = (value: any) => {
-        if (!value || value === "") return null;
-
-        const date = new Date(value);
-
-        if (isNaN(date.getTime())) {
-          throw new BadRequestException(`Invalid date: ${value}`);
-        }
-
-        return date;
-      };
-
       const updateData: any = { ...updateStaffDto };
       delete updateData.status_id;
 
-      updateData.hired_date = safeDate(updateData.hired_date);
-      updateData.to_hr_date = safeDate(updateData.to_hr_date);
-      updateData.to_sts_date = safeDate(updateData.to_sts_date);
-      updateData.approved_eprf_date = safeDate(updateData.approved_eprf_date);
-      updateData.req_completion_date = safeDate(updateData.req_completion_date);
-      updateData.actual_deployment_date = safeDate(
+      updateData.hired_date = this.safeDate(updateData.hired_date);
+      updateData.to_hr_date = this.safeDate(updateData.to_hr_date);
+      updateData.to_sts_date = this.safeDate(updateData.to_sts_date);
+      updateData.approved_eprf_date = this.safeDate(
+        updateData.approved_eprf_date,
+      );
+      updateData.req_completion_date = this.safeDate(
+        updateData.req_completion_date,
+      );
+      updateData.actual_deployment_date = this.safeDate(
         updateData.actual_deployment_date,
       );
-      updateData.separated_date = safeDate(updateData.separated_date);
-      updateData.birthday = safeDate(updateData.birthday);
+      updateData.separated_date = this.safeDate(updateData.separated_date);
+      updateData.birthday = this.safeDate(updateData.birthday);
 
       if (updateData.last_name) {
         updateData.last_name = updateData.last_name.toUpperCase();
@@ -826,7 +896,9 @@ export class StaffsService {
         return this.responseMapperService.mapEntityToResponse(staff);
       }
 
-      const effectivityDate = safeDate(updateStaffTransferDto.effectivity_date);
+      const effectivityDate = this.safeDate(
+        updateStaffTransferDto.effectivity_date,
+      );
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -841,8 +913,7 @@ export class StaffsService {
           );
         }
       }
-
-      await this.staffTransfersRepository.save({
+      const result = await this.staffTransfersRepository.save({
         staff_id: staff.id,
         old_vendor_id: staff.vendor_id,
         new_vendor_id: newVendorId,
@@ -851,12 +922,27 @@ export class StaffsService {
         salary_rate: newSalaryRate,
         allowance: newAllowance,
         remarks: transferRemarks,
-        effectivity_date: safeDate(updateStaffTransferDto.effectivity_date),
+        effectivity_date: this.safeDate(
+          updateStaffTransferDto.effectivity_date,
+        ),
         access_key_id: staff.access_key_id,
         status: false,
         created_by: userId,
         updated_by: userId,
       });
+
+      const response = this.responseMapperService.mapEntityToResponse(result);
+
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
 
       return {
         message: "Transfer scheduled successfully.",
@@ -898,11 +984,27 @@ export class StaffsService {
         await queryRunner.startTransaction();
 
         try {
-          const effectivityDate = new Date(transfer.effectivity_date)
-            .toISOString()
-            .split("T")[0];
+          const effectivityDate = new Date(transfer.effectivity_date);
+          effectivityDate.setHours(0, 0, 0, 0);
 
-          const today = new Date().toISOString().split("T")[0];
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          if (transfer.approval_status_id === STATUS_IDS.FOR_APPROVAL) {
+            logger.warn(
+              `Transfer ${transfer.id} skipped. Approval status is FOR APPROVAL.`,
+            );
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
+
+          if (transfer.approval_status_id === STATUS_IDS.REJECTED) {
+            logger.warn(
+              `Transfer ${transfer.id} skipped. Approval status is REJECTED.`,
+            );
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
 
           if (effectivityDate > today) {
             logger.warn(
@@ -984,35 +1086,115 @@ export class StaffsService {
 
           let generatedStaffCode: string | null = null;
 
-          if (isVendorChanged || isLocationChanged) {
-            const serviceProviderCode = vendor.service_provider_code ?? "";
+          // if (isVendorChanged || isLocationChanged) {
+          const serviceProviderCode = vendor.service_provider_code ?? "";
 
-            const locationCode = location.location_code ?? "";
+          const locationCode = location.location_code ?? "";
 
-            const prefix = `${serviceProviderCode}${locationCode}`;
+          const prefix = `${serviceProviderCode}${locationCode}`;
 
-            const trans_number =
-              await this.commonUtilitiesService.generateTransactionNumber({
-                transaction_type: `STAFF CODE ${locationCode}`,
-                vendor_id: transfer.new_vendor_id,
-                location_id: transfer.new_location_id,
-                access_key_id: transfer.access_key_id,
-                format: "D{abbr}{key}{year}-{seq:6}",
-                reset_per_year: false,
-                currentDate: new Date(),
-                abbr: vendor.service_provider_code ?? "",
-              });
-
-            const series = trans_number.match(/\d+$/)?.[0];
-
-            generatedStaffCode = `${prefix}-${series}`;
-
-            await queryRunner.manager.update(Staff, updatedStaff.id, {
-              staff_code: generatedStaffCode,
+          const trans_number =
+            await this.commonUtilitiesService.generateTransactionNumber({
+              transaction_type: `STAFF CODE ${locationCode}`,
+              vendor_id: transfer.new_vendor_id,
+              location_id: transfer.new_location_id,
+              access_key_id: transfer.access_key_id,
+              format: "D{abbr}{key}{year}-{seq:6}",
+              reset_per_year: false,
+              currentDate: new Date(),
+              abbr: vendor.service_provider_code ?? "",
             });
 
-            updatedStaff.staff_code = generatedStaffCode;
+          const series = trans_number.match(/\d+$/)?.[0];
+
+          generatedStaffCode = `${prefix}-${series}`;
+
+          await queryRunner.manager.update(Staff, updatedStaff.id, {
+            staff_code: generatedStaffCode,
+          });
+
+          updatedStaff.staff_code = generatedStaffCode;
+
+          const activeAssignments = await queryRunner.manager.find(
+            StaffWarehouse,
+            {
+              where: {
+                staff_id: staff.id,
+                staff_code: staff.staff_code,
+              },
+            },
+          );
+
+          const currentAssignments = activeAssignments.filter(
+            (x) => !x.end_date && x.location_id === staff.location_id,
+          );
+
+          for (const assignment of currentAssignments) {
+            assignment.end_date = transfer.effectivity_date;
+            assignment.approval_status_id = STATUS_IDS.INACTIVE;
+            assignment.updated_by = transfer.created_by;
           }
+
+          await queryRunner.manager.save(currentAssignments);
+
+          // Only recreate assignments if only the vendor changed
+          if (!isLocationChanged && isVendorChanged) {
+            const newAssignments = await Promise.all(
+              currentAssignments.map(async (assignment) => {
+                const approval_status_id = await this.getApprovalStatusId(
+                  assignment.warehouse_id,
+                );
+
+                return queryRunner.manager.create(StaffWarehouse, {
+                  staff_id: updatedStaff.id,
+                  staff_code: generatedStaffCode,
+                  warehouse_id: assignment.warehouse_id,
+                  location_id: assignment.location_id,
+                  vendor_id: transfer.new_vendor_id,
+                  effectivity_date: transfer.effectivity_date,
+                  end_date: null,
+                  remarks: assignment.remarks,
+                  status_id: assignment.status_id,
+                  approval_status_id,
+                  access_key_id: assignment.access_key_id,
+                  created_by: transfer.created_by,
+                  updated_by: transfer.created_by,
+                });
+              }),
+            );
+
+            const savedAssignments =
+              await queryRunner.manager.save(newAssignments);
+
+            for (const staffWarehouseDetails of savedAssignments) {
+              try {
+                const staffWarehouseActionId =
+                  staffWarehouseDetails.approval_status_id ===
+                  STATUS_IDS.FOR_APPROVAL
+                    ? ACTION_IDS.ACTIVATE
+                    : ACTION_IDS.APPROVE;
+
+                await this.actionLogsService.logAction({
+                  action_id: staffWarehouseActionId,
+                  ref_id: staffWarehouseDetails.id,
+                  module_name: "STAFF WAREHOUSES",
+                  description:
+                    staffWarehouseActionId === ACTION_IDS.APPROVE
+                      ? "Approved"
+                      : "For Approval",
+                  raw_data: JSON.stringify({
+                    id: staffWarehouseDetails.id,
+                    approval_status_id:
+                      staffWarehouseDetails.approval_status_id,
+                  }),
+                  created_by: transfer.created_by,
+                });
+              } catch (err) {
+                logger.error("Action log failed for staff deploy:", err);
+              }
+            }
+          }
+          // }
 
           await queryRunner.manager.save(StaffHistory, {
             staff_id: updatedStaff.id,
@@ -1275,7 +1457,7 @@ export class StaffsService {
       const newStatusName = "Revert";
 
       await this.staffsRepository.update(id, {
-        status_id: newStatusId,
+        assign_status_id: newStatusId,
         remarks: revertStaffDto.remarks,
       });
 
@@ -1414,19 +1596,58 @@ export class StaffsService {
 
       const newWarehouseId = updateStaffDeployDto.warehouse_id;
 
-      const staffWarehouse = await this.staffWarehouseRepository.save({
-        staff_id: staff.id,
-        warehouse_id: newWarehouseId,
-        staff_code: staff.staff_code,
-        location_id: staff.location_id,
-        vendor_id: staff.vendor_id,
-        effectivity_date: updateStaffDeployDto.effectivity_date,
-        end_date: updateStaffDeployDto.end_date || null,
-        remarks: updateStaffDeployDto.remarks,
-        created_by: userId,
-        updated_by: userId,
-        access_key_id: accessKeyId,
+      let staffWarehouse = await this.staffWarehouseRepository.findOne({
+        where: {
+          staff_id: staff.id,
+          warehouse_id: newWarehouseId,
+        },
       });
+
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: newWarehouseId },
+      });
+
+      const approval_status_id =
+        warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
+          ? STATUS_IDS.FOR_APPROVAL
+          : STATUS_IDS.APPROVED;
+
+      if (staffWarehouse) {
+        // Update existing deployment
+        staffWarehouse.staff_code = staff.staff_code;
+        staffWarehouse.location_id = staff.location_id;
+        staffWarehouse.vendor_id = staff.vendor_id;
+        staffWarehouse.approval_status_id = approval_status_id;
+        staffWarehouse.effectivity_date = this.safeDate(
+          updateStaffDeployDto.effectivity_date,
+        );
+        staffWarehouse.end_date =
+          this.safeDate(updateStaffDeployDto.end_date) || null;
+        staffWarehouse.remarks = updateStaffDeployDto.remarks;
+        staffWarehouse.updated_by = userId;
+        staffWarehouse.access_key_id = accessKeyId;
+
+        staffWarehouse =
+          await this.staffWarehouseRepository.save(staffWarehouse);
+      } else {
+        // Create new deployment
+        staffWarehouse = await this.staffWarehouseRepository.save(
+          this.staffWarehouseRepository.create({
+            staff_id: staff.id,
+            warehouse_id: newWarehouseId,
+            staff_code: staff.staff_code,
+            location_id: staff.location_id,
+            vendor_id: staff.vendor_id,
+            approval_status_id: approval_status_id,
+            effectivity_date: updateStaffDeployDto.effectivity_date,
+            end_date: updateStaffDeployDto.end_date || null,
+            remarks: updateStaffDeployDto.remarks,
+            created_by: userId,
+            updated_by: userId,
+            access_key_id: accessKeyId,
+          }),
+        );
+      }
 
       const staffWarehouseDetails = await this.staffWarehouseRepository.findOne(
         {
@@ -1488,6 +1709,11 @@ export class StaffsService {
         });
       }
 
+      const staffWarehouseAction_id =
+        approval_status_id === STATUS_IDS.FOR_APPROVAL
+          ? ACTION_IDS.ACTIVATE
+          : ACTION_IDS.APPROVE;
+
       await this.userAuditTrailCreateService.create(
         {
           service: "StaffsService",
@@ -1510,8 +1736,20 @@ export class StaffsService {
           }),
           created_by: userId,
         });
+
+        await this.actionLogsService.logAction({
+          action_id: staffWarehouseAction_id,
+          ref_id: staffWarehouseDetails.id,
+          module_name: "STAFF WAREHOUSES", // ✅ Self-documenting
+          description:
+            staffWarehouseAction_id === ACTION_IDS.APPROVE
+              ? "Approved"
+              : "For Approval",
+          raw_data: JSON.stringify({ id, approval_status_id }),
+          created_by: userId,
+        });
       } catch (err) {
-        logger.error("Action log failed for staffTransfer:", err);
+        logger.error("Action log failed for staff deploy:", err);
       }
 
       const response =
@@ -1535,7 +1773,7 @@ export class StaffsService {
       ) {
         throw error;
       }
-      throw new Error("Failed to process staff transfer");
+      throw new Error("Failed to process staff deploy");
     }
   }
 
@@ -1551,8 +1789,7 @@ export class StaffsService {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
     const rows = XLSX.utils.sheet_to_json(sheet, {
-      raw: false,
-      dateNF: "yyyy-mm-dd",
+      raw: true,
       defval: null,
     });
 
@@ -1697,6 +1934,117 @@ export class StaffsService {
           });
         }
 
+        const TIN = String(row["TIN"] || "").trim();
+        const SSS = String(row["SSS Number"] || "").trim();
+        const PAGIBIG = String(row["PAGIBIG Number"] || "").trim();
+        const EMAIL = String(row["Email"] || "").trim();
+
+        if (!EMAIL) {
+          errors.push({
+            row: i + 2,
+            error: "Email is required.",
+          });
+          continue;
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(EMAIL)) {
+          errors.push({
+            row: i + 2,
+            error: `Invalid email format: '${EMAIL}'.`,
+          });
+          continue;
+        }
+
+        if (!SSS) {
+          errors.push({
+            row: i + 2,
+            error: "SSS Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{10}$/.test(SSS)) {
+          errors.push({
+            row: i + 2,
+            error: "SSS Number must be exactly 10 digits.",
+          });
+          continue;
+        }
+
+        if (!TIN) {
+          errors.push({
+            row: i + 2,
+            error: "TIN Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{9}$/.test(TIN)) {
+          errors.push({
+            row: i + 2,
+            error: "TIN Number must be exactly 9 digits.",
+          });
+          continue;
+        }
+
+        if (!PAGIBIG) {
+          errors.push({
+            row: i + 2,
+            error: "PAGIBIG Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{12}$/.test(PAGIBIG)) {
+          errors.push({
+            row: i + 2,
+            error: "PAGIBIG Number must be exactly 9 digits.",
+          });
+          continue;
+        }
+
+        const existingTin = await this.staffsRepository.findOne({
+          where: { tin: TIN },
+        });
+        const existingSSS = await this.staffsRepository.findOne({
+          where: { sss_number: SSS },
+        });
+        const existingPagibig = await this.staffsRepository.findOne({
+          where: { pagibig_number: PAGIBIG },
+        });
+        const existingEmail = await this.staffsRepository.findOne({
+          where: { email: EMAIL },
+        });
+
+        if (existingTin && existingTin.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `TIN '${TIN}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingSSS && existingSSS.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `SSS '${SSS}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingPagibig && existingPagibig.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `PAGIBIG '${PAGIBIG}' already exists for another staff`,
+          });
+          continue;
+        }
+        if (existingEmail && existingEmail.id !== existingRecord?.id) {
+          errors.push({
+            row: i + 2,
+            error: `EMAIL '${EMAIL}' already exists for another staff`,
+          });
+          continue;
+        }
+
         let savedStaff;
         let savedStaffBrand;
         let savedStaffCategoryType;
@@ -1709,7 +2057,7 @@ export class StaffsService {
           existingRecord.last_name = lastName;
           existingRecord.email = row["Email"];
           existingRecord.middle_name = middleName;
-          existingRecord.birthday = parseExcelDate(row["Birthday"]);
+          existingRecord.birthday = this.formatDateToString(row["Birthday"]);
           existingRecord.location_id = location.id;
           existingRecord.vendor_id = vendor.id;
           existingRecord.position_id = position.id;
@@ -1719,17 +2067,25 @@ export class StaffsService {
           existingRecord.tin = row["TIN"];
           existingRecord.pagibig_number = row["PAGIBIG Number"];
           existingRecord.remarks = row["Remarks"];
-          existingRecord.hired_date = parseExcelDate(row["Hired Date"]);
-          existingRecord.to_hr_date = parseExcelDate(row["To HR Date"]);
-          existingRecord.separated_date = parseExcelDate(row["Seperated Date"]);
-          existingRecord.to_sts_date = parseExcelDate(row["To STS Date"]);
-          existingRecord.approved_eprf_date = parseExcelDate(
+          existingRecord.hired_date = this.formatDateToString(
+            row["Hired Date"],
+          );
+          existingRecord.to_hr_date = this.formatDateToString(
+            row["To HR Date"],
+          );
+          existingRecord.separated_date = this.formatDateToString(
+            row["Seperated Date"],
+          );
+          existingRecord.to_sts_date = this.formatDateToString(
+            row["To STS Date"],
+          );
+          existingRecord.approved_eprf_date = this.formatDateToString(
             row["Approved EPRF Date"],
           );
-          existingRecord.req_completion_date = parseExcelDate(
+          existingRecord.req_completion_date = this.formatDateToString(
             row["Req Completion Date"],
           );
-          existingRecord.actual_deployment_date = parseExcelDate(
+          existingRecord.actual_deployment_date = this.formatDateToString(
             row["Actual Deployment Date"],
           );
           existingRecord.overall_remarks = row["Overall Remarks"];
@@ -1842,23 +2198,27 @@ export class StaffsService {
             vendor_id: vendor.id,
             position_id: position.id,
             access_key_id: accessKeyId,
-            assign_status_id: 13,
+            assign_status_id: 20,
             store_request: row["Store Request"],
-            sss_number: row["SSS Number"],
-            tin: row["TIN"],
-            pagibig_number: row["PAGIBIG Number"],
+            sss_number: SSS,
+            tin: TIN,
+            pagibig_number: PAGIBIG,
             remarks: row["Remarks"],
-            hired_date: parseExcelDate(row["Hired Date"]),
-            to_hr_date: parseExcelDate(row["To HR Date"]),
-            separated_date: parseExcelDate(row["Seperated Date"]),
-            to_sts_date: parseExcelDate(row["To STS Date"]),
-            approved_eprf_date: parseExcelDate(row["Approved EPRF Date"]),
-            req_completion_date: parseExcelDate(row["Req Completion Date"]),
-            actual_deployment_date: parseExcelDate(
+            hired_date: this.formatDateToString(row["Hired Date"]),
+            to_hr_date: this.formatDateToString(row["To HR Date"]),
+            separated_date: this.formatDateToString(row["Seperated Date"]),
+            to_sts_date: this.formatDateToString(row["To STS Date"]),
+            approved_eprf_date: this.formatDateToString(
+              row["Approved EPRF Date"],
+            ),
+            req_completion_date: this.formatDateToString(
+              row["Req Completion Date"],
+            ),
+            actual_deployment_date: this.formatDateToString(
               row["Actual Deployment Date"],
             ),
             overall_remarks: row["Overall Remarks"],
-            status_id: 20,
+            status_id: 1,
             created_by: userId,
             updated_by: userId,
           });
@@ -2034,29 +2394,579 @@ export class StaffsService {
     };
   }
 
-  async checkExistingStaff(dto: CheckStaffDto) {
-    const firstName = dto.first_name.toUpperCase().trim();
-    const lastName = dto.last_name.trim();
-    const middleName = (dto.middle_name || "").toUpperCase().trim();
+  private formatDateToString(date: Date | string | number): string | null {
+    if (!date) return null;
 
-    const whereCondition: any = {
-      first_name: firstName,
-      last_name: lastName,
-    };
+    if (typeof date === "number") {
+      const parsed = XLSX.SSF.parse_date_code(date);
 
-    if (middleName) {
-      whereCondition.middle_name = middleName;
+      if (!parsed) return null;
+
+      return `${parsed.y}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
     }
 
-    const existingRecord = await this.staffsRepository.findOne({
-      where: whereCondition,
+    // dd/MM/yyyy
+    if (typeof date === "string") {
+      const value = date.trim();
+
+      const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+      if (match) {
+        const [, day, month, year] = match;
+        return `${year}-${month}-${day}`;
+      }
+
+      const parsed = new Date(value);
+
+      if (!isNaN(parsed.getTime())) {
+        return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      }
+
+      return null;
+    }
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  async uploadStaffTransfer(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+    roleId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
     });
 
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = [
+          "Staff Code",
+          "New Agency",
+          "New Location",
+          "Allowance",
+          "Salary Rate",
+          "Effectivity Date",
+        ];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const location = await this.locationRepository.findOne({
+          where: { location_name: row["New Location"] },
+        });
+
+        let allowedLocationIds: number[] | undefined = undefined;
+
+        if (userId && roleId) {
+          allowedLocationIds =
+            await this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+            );
+        }
+
+        if (!location) {
+          errors.push({
+            row: i + 2,
+            error: `Location '${row["New Location"]}' not found`,
+          });
+          continue;
+        }
+
+        if (allowedLocationIds && !allowedLocationIds.includes(location.id)) {
+          errors.push({
+            row: i + 2,
+            error: `You are not permitted to transfer staff to location '${row["New Location"]}'.`,
+          });
+          continue;
+        }
+
+        const vendor = await this.vendorRepository.findOne({
+          where: { service_provider_name: row["New Agency"] },
+        });
+
+        if (!vendor) {
+          errors.push({
+            row: i + 2,
+            error: `Vendor '${row["New Agency"]}' not found`,
+          });
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
+        const dto: UpdateStaffTransferDto = {
+          vendor_id: vendor.id,
+          location_id: location.id,
+          salary_rate: Number(row["Salary Rate"]),
+          allowance: Number(row["Allowance"]),
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: row["Effectivity Date"],
+        };
+
+        const result = await this.staffTransfer(existingRecord.id, dto, userId);
+        success.push({
+          row: i + 2,
+          action: "Staff Transfer Updated",
+          data: {
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
+            location: {
+              location_name: location.location_name,
+            },
+            vendor: {
+              service_provider_name: vendor.service_provider_name,
+            },
+            salary_rate: dto.salary_rate,
+            allowance: dto.allowance,
+            effectivity_date: dto.effectivity_date,
+            remarks: dto.remarks,
+          },
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
     return {
-      exists: !!existingRecord,
-      staff: existingRecord,
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
     };
   }
+
+  private formatDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+
+    if (isNaN(date.getTime())) {
+      throw new Error(`Invalid date: ${dateStr}`);
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  async uploadStaffDeploy(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
+    });
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
+
+        let allowedWarehouseIds: number[] | undefined = undefined;
+
+        if (userId) {
+          allowedWarehouseIds = await this.getStaffAllowedWarehouseIds(
+            existingRecord.location_id,
+          );
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["New Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["New Store"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedWarehouseIds &&
+          !allowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `${existingRecord.staff_code} is not allowed to be transferred to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
+        const dto: UpdateStaffDeployDto = {
+          warehouse_id: warehouse.id,
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: this.formatDate(row["Effectivity Date"]),
+          end_date: row["End Date"] ? this.formatDate(row["End Date"]) : null,
+          action: "deploy",
+        };
+
+        const result = await this.staffDeploy(
+          existingRecord.id,
+          dto,
+          userId,
+          accessKeyId,
+        );
+        success.push({
+          row: i + 2,
+          action: "updated",
+          message: "Staff Deploy Updated",
+          data: {
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
+            warehouse: {
+              warehouse_name: warehouse.warehouse_name,
+            },
+            effectivity_date: dto.effectivity_date,
+            end_date: dto.end_date,
+          },
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
+    };
+  }
+
+  async uploadStaffBuddyUp(
+    file: Express.Multer.File,
+    userId: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
+
+    const workbook = XLSX.readFile(file.path);
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      raw: false,
+      dateNF: "yyyy-mm-dd",
+      defval: null,
+    });
+
+    const success = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+
+      try {
+        // REQUIRED FIELD VALIDATION
+        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
+
+        const missingFields = requiredFields.filter(
+          (field) =>
+            row[field] === null ||
+            row[field] === undefined ||
+            String(row[field]).trim() === "",
+        );
+
+        if (missingFields.length > 0) {
+          errors.push({
+            row: i + 2,
+            error: `Missing required field(s): ${missingFields.join(", ")}`,
+          });
+
+          continue;
+        }
+
+        const staffCode = row["Staff Code"]?.toString().trim();
+
+        let existingRecord = null;
+
+        existingRecord = await this.staffsRepository.findOne({
+          where: {
+            staff_code: staffCode,
+          },
+        });
+
+        let allowedWarehouseIds: number[] | undefined = undefined;
+
+        if (userId) {
+          allowedWarehouseIds = await this.getStaffAllowedWarehouseIds(
+            existingRecord.location_id,
+          );
+        }
+
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { warehouse_name: row["New Store"] },
+        });
+
+        if (!warehouse) {
+          errors.push({
+            row: i + 2,
+            error: `Warehouse '${row["New Store"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedWarehouseIds &&
+          !allowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `${existingRecord.staff_code} is not allowed to be transferred to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
+        const isBuddyUp =
+          existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
+        if (!isBuddyUp) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' is already deployed`,
+          });
+          continue;
+        }
+
+        const dto: UpdateStaffDeployDto = {
+          warehouse_id: warehouse.id,
+          remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
+          effectivity_date: this.formatDate(row["Effectivity Date"]),
+          end_date: row["End Date"] ? this.formatDate(row["End Date"]) : null,
+          action: "buddyup",
+        };
+
+        const result = await this.staffDeploy(
+          existingRecord.id,
+          dto,
+          userId,
+          accessKeyId,
+        );
+        success.push({
+          row: i + 2,
+          action: "updated",
+          message: "Staff Buddy Up Updated",
+          data: {
+            staff_name: `${existingRecord.first_name} ${existingRecord.last_name}`,
+            warehouse: {
+              warehouse_name: warehouse.warehouse_name,
+            },
+            effectivity_date: dto.effectivity_date,
+            end_date: dto.end_date,
+          },
+        });
+      } catch (error) {
+        errors.push({
+          row: i + 2,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      inserted_count: success.filter((s) => s.action === "inserted").length,
+      updated_count: success.filter((s) => s.action === "updated").length,
+
+      inserted_row_numbers: success
+        .filter((s) => s.action === "inserted")
+        .map((s) => s.row),
+
+      updated_row_numbers: success
+        .filter((s) => s.action === "updated")
+        .map((s) => s.row),
+
+      success,
+      errors,
+    };
+  }
+
+  private async getStaffAllowedWarehouseIds(
+    locationId: number,
+  ): Promise<number[]> {
+    const warehouses = await this.warehouseRepository.find({
+      where: {
+        location_id: locationId,
+      },
+      select: ["id"],
+    });
+
+    return warehouses.map((warehouse) => warehouse.id);
+  }
+
+  async checkExistingStaff(dto: CheckStaffDto) {
+    const firstName = dto.first_name.toUpperCase().trim();
+    const lastName = dto.last_name.toUpperCase().trim();
+    const middleName = (dto.middle_name || "").toUpperCase().trim();
+
+    const existingStaff = await this.staffsRepository.findOne({
+      where: [
+        {
+          first_name: firstName,
+          last_name: lastName,
+          ...(middleName && { middle_name: middleName }),
+        },
+        ...(dto.sss_number ? [{ sss_number: dto.sss_number.trim() }] : []),
+        ...(dto.tin ? [{ tin: dto.tin.trim() }] : []),
+        ...(dto.pagibig_number
+          ? [{ pagibig_number: dto.pagibig_number.trim() }]
+          : []),
+      ],
+    });
+
+    if (!existingStaff) {
+      return {
+        exists: false,
+      };
+    }
+
+    const dbFirstName = (existingStaff.first_name || "").toUpperCase().trim();
+    const dbLastName = (existingStaff.last_name || "").toUpperCase().trim();
+    const dbMiddleName = (existingStaff.middle_name || "").toUpperCase().trim();
+
+    return {
+      exists: true,
+      duplicate: {
+        staff:
+          dbFirstName === firstName &&
+          dbLastName === lastName &&
+          (middleName ? dbMiddleName === middleName : true),
+
+        sss_number:
+          dto.sss_number && existingStaff.sss_number === dto.sss_number.trim(),
+
+        tin: dto.tin && existingStaff.tin === dto.tin.trim(),
+
+        pagibig_number:
+          dto.pagibig_number &&
+          existingStaff.pagibig_number === dto.pagibig_number.trim(),
+      },
+      staff: existingStaff,
+    };
+  }
+
   async findOneHistory(ref_id: number) {
     // const module_id = MODULE_IDS.STAFFS;
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
@@ -2115,6 +3025,11 @@ export class StaffsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -2129,6 +3044,996 @@ export class StaffsService {
       }
 
       throw new Error("Failed to process staff transfer");
+    }
+  }
+
+  async toggleBulkStatusRequest(
+    ids: number[],
+    reason_status_id: number,
+    userId: number,
+    remarks?: string,
+    effectivity_date?: string,
+    accessKeyId?: number,
+  ): Promise<any[]> {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException("No staff  IDs provided");
+    }
+
+    const isForApproval = this.accessKeyForApproval(accessKeyId);
+
+    const approvalStatusId = isForApproval
+      ? STATUS_IDS.FOR_APPROVAL
+      : STATUS_IDS.APPROVED;
+
+    // Bulk update
+    await this.staffsRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        reason_status_id: reason_status_id,
+        approval_status_id: approvalStatusId,
+        reason_remarks: remarks,
+        deactivate_effectivity_date: this.safeDate(effectivity_date),
+        updated_by: userId,
+      })
+      .whereInIds(ids)
+      .execute();
+
+    const newStatusName = TOGGLE_NAMES[STATUS_IDS.FOR_APPROVAL];
+
+    const action_id =
+      await this.actionLogsService.get_action_id_from_status(approvalStatusId);
+
+    for (const id of ids) {
+      await this.actionLogsService.logAction({
+        action_id: action_id,
+        ref_id: id,
+        module_name: this.module_name,
+        description: `${newStatusName} ${remarks ? `. Remarks: ${remarks}` : ""}.`,
+        raw_data: JSON.stringify({ id, reason_status_id }),
+        created_by: userId,
+      });
+    }
+
+    // Audit Trail
+    await this.userAuditTrailCreateService.create(
+      {
+        service: "StaffWarehousesService",
+        method: "toggleBulkStatus",
+        raw_data: JSON.stringify({
+          ids,
+          reason_status_id,
+          remarks,
+        }),
+        description: `Bulk changed status for Staff IDs [${ids.join(
+          ", ",
+        )}] to status ${reason_status_id}`,
+        status_id: STATUS_IDS.ACTIVE,
+      },
+      userId,
+    );
+
+    // Retrieve updated records
+    const updatedRecords = await Promise.all(ids.map((id) => this.findOne(id)));
+
+    // Create history records
+    for (const staff of updatedRecords) {
+      if (!staff) {
+        continue;
+      }
+
+      await this.staffHistoriesRepository.save({
+        staff_id: staff.id,
+        staff_code: staff.staff_code,
+        last_name: staff.last_name,
+        first_name: staff.first_name,
+        email: staff.email,
+        middle_name: staff.middle_name,
+        location_id: staff.location_id,
+        vendor_id: staff.vendor_id,
+        assign_status_id: staff.assign_status_id,
+        position_id: staff.position_id,
+        access_key_id: staff.access_key_id,
+        sss_number: staff.sss_number,
+        pagibig_number: staff.pagibig_number,
+        tin: staff.tin,
+        remarks: staff.remarks,
+        overall_remarks: staff.overall_remarks,
+        store_request: staff.store_request,
+        hired_date: staff.hired_date,
+        to_hr_date: staff.to_hr_date,
+        to_sts_date: staff.to_sts_date,
+        approved_eprf_date: staff.approved_eprf_date,
+        req_completion_date: staff.req_completion_date,
+        actual_deployment_date: staff.actual_deployment_date,
+        separated_date: staff.separated_date,
+        birthday: staff.birthday,
+        contact_number: staff.contact_number,
+        reason_status_id: reason_status_id,
+        reason_remarks: remarks,
+        approval_status_id: approvalStatusId,
+        deactivate_effectivity_date: this.safeDate(effectivity_date),
+        status_id: staff.status_id,
+        created_by: userId,
+        updated_by: userId,
+      });
+    }
+
+    // Emit SSE for each updated record
+    for (const record of updatedRecords) {
+      const response = this.responseMapperService.mapEntityToResponse(record);
+
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+    }
+
+    return updatedRecords;
+  }
+
+  async staffForRequestActivate(
+    id: number,
+    updateStaffTransferDto: UpdateStaffTransferDto,
+    userId: number,
+    accessKeyId: number,
+  ): Promise<any> {
+    try {
+      const isForApproval = this.accessKeyForApproval(accessKeyId);
+
+      const approvalStatusId = isForApproval
+        ? STATUS_IDS.FOR_APPROVAL
+        : STATUS_IDS.APPROVED;
+
+      const staff = await this.staffsRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+        ],
+      });
+
+      if (!staff) {
+        throw new NotFoundException(`Staff with ID ${id} not found`);
+      }
+
+      const effectivityDate = this.safeDate(
+        updateStaffTransferDto.effectivity_date,
+      );
+
+      await this.staffsRepository.update(staff.id, {
+        approval_status_id: approvalStatusId,
+        activate_effectivity_date: effectivityDate,
+        updated_by: userId,
+      });
+
+      await this.staffHistoriesRepository.save({
+        staff_id: staff.id,
+        staff_code: staff.staff_code,
+        last_name: staff.last_name,
+        first_name: staff.first_name,
+        email: staff.email,
+        middle_name: staff.middle_name,
+        location_id: staff.location_id,
+        vendor_id: staff.vendor_id,
+        assign_status_id: staff.assign_status_id,
+        position_id: staff.position_id,
+        access_key_id: staff.access_key_id,
+        sss_number: staff.sss_number,
+        pagibig_number: staff.pagibig_number,
+        tin: staff.tin,
+        remarks: staff.remarks,
+        overall_remarks: staff.overall_remarks,
+        store_request: staff.store_request,
+        hired_date: staff.hired_date,
+        to_hr_date: staff.to_hr_date,
+        to_sts_date: staff.to_sts_date,
+        approved_eprf_date: staff.approved_eprf_date,
+        req_completion_date: staff.req_completion_date,
+        actual_deployment_date: staff.actual_deployment_date,
+        separated_date: staff.separated_date,
+        birthday: staff.birthday,
+        contact_number: staff.contact_number,
+        reason_status_id: staff.reason_status_id,
+        reason_remarks: staff.remarks,
+        approval_status_id: staff.approval_status_id,
+        deactivate_effectivity_date: staff.deactivate_effectivity_date,
+        activate_effectivity_date: effectivityDate,
+        status_id: staff.status_id,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      const newVendorId = updateStaffTransferDto.vendor_id;
+      const newLocationId = updateStaffTransferDto.location_id;
+      const newSalaryRate = updateStaffTransferDto.salary_rate;
+      const newAllowance = updateStaffTransferDto.allowance;
+      const transferRemarks = updateStaffTransferDto.remarks;
+
+      const isVendorChanged = staff.vendor_id !== newVendorId;
+      const isLocationChanged = staff.location_id !== newLocationId;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (effectivityDate) {
+        const selectedDate = new Date(effectivityDate);
+        selectedDate.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+          throw new BadRequestException(
+            "Effectivity date cannot be earlier than today.",
+          );
+        }
+      }
+      const result = await this.staffTransfersRepository.save({
+        staff_id: staff.id,
+        old_vendor_id: staff.vendor_id,
+        new_vendor_id: newVendorId,
+        old_location_id: staff.location_id,
+        new_location_id: newLocationId,
+        salary_rate: newSalaryRate,
+        allowance: newAllowance,
+        remarks: transferRemarks,
+        effectivity_date: this.safeDate(
+          updateStaffTransferDto.effectivity_date,
+        ),
+        access_key_id: staff.access_key_id,
+        approval_status_id: approvalStatusId,
+        status: false,
+        created_by: userId,
+        updated_by: userId,
+      });
+
+      const isCurrentlyActive = staff.status_id === STATUS_IDS.ACTIVE;
+
+      const rawEffectivityDate = isCurrentlyActive
+        ? staff.deactivate_effectivity_date
+        : staff.effectivity_date;
+
+      const actionType = isCurrentlyActive ? "deactivation" : "activation";
+
+      try {
+        await this.actionLogsService.logAction({
+          module_name: this.module_name,
+          ref_id: staff.id,
+          action_id: ACTION_IDS.ACTIVATE,
+          description: `Staff Request ${actionType} For ${staff.first_name} ${staff.last_name}`,
+          raw_data: JSON.stringify({
+            scheduled_status_change: true,
+            effectivity_date: rawEffectivityDate,
+          }),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for scheduled status update:", err);
+      }
+
+      const response = this.responseMapperService.mapEntityToResponse(result);
+
+      try {
+        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+        this.sseEventEmitter.emitUpdate(
+          "staff_warehouses",
+          response.id,
+          response,
+        );
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return {
+        message: "Successfully Request Activation.",
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error("Failed to process staff transfer");
+    }
+  }
+
+  private isChangeStatusRunning = false;
+
+  async processScheduleApprovedChangeStatus(): Promise<void> {
+    if (this.isChangeStatusRunning) {
+      return;
+    }
+
+    this.isChangeStatusRunning = true;
+
+    try {
+      // Fetch records where approval status is APPROVED and status is either ACTIVE or INACTIVE
+      const pendingStatusUpdates = await this.staffsRepository.find({
+        where: [
+          {
+            approval_status_id: STATUS_IDS.APPROVED,
+            status_id: STATUS_IDS.ACTIVE,
+          },
+          {
+            approval_status_id: STATUS_IDS.APPROVED,
+            status_id: STATUS_IDS.INACTIVE,
+          },
+        ],
+      });
+
+      logger.info(
+        `Pending status updates found: ${pendingStatusUpdates.length}`,
+      );
+
+      for (const record of pendingStatusUpdates) {
+        const queryRunner =
+          this.staffsRepository.manager.connection.createQueryRunner();
+
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+          const isCurrentlyActive = record.status_id === STATUS_IDS.ACTIVE;
+
+          const rawEffectivityDate = isCurrentlyActive
+            ? record.deactivate_effectivity_date
+            : record.activate_effectivity_date;
+
+          const actionType = isCurrentlyActive ? "deactivation" : "activation";
+
+          const newStatusId =
+            record.status_id === STATUS_IDS.ACTIVE
+              ? STATUS_IDS.INACTIVE
+              : STATUS_IDS.ACTIVE;
+
+          if (!rawEffectivityDate) {
+            logger.warn(
+              `Staff ${record.id} skipped. No ${actionType} effectivity date found.`,
+            );
+
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
+
+          const effectivityDate = new Date(rawEffectivityDate);
+          const today = new Date();
+
+          effectivityDate.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+
+          if (effectivityDate > today) {
+            logger.info(
+              `Staff ${record.id} ${actionType} skipped. ` +
+                `Effectivity date: ${rawEffectivityDate}, ` +
+                `Today: ${today.toLocaleDateString("en-CA")}`,
+            );
+
+            await queryRunner.rollbackTransaction();
+            continue;
+          }
+
+          await queryRunner.manager.update(Staff, record.id, {
+            status_id: newStatusId,
+            approval_status_id: STATUS_IDS.ACTIVE,
+            updated_by: record.created_by,
+          });
+
+          const savedStaff = await queryRunner.manager.findOne(Staff, {
+            where: { id: record.id },
+            relations: [
+              "status",
+              "assignmentStatus",
+              "createdBy",
+              "updatedBy",
+              "location",
+              "vendor",
+              "position",
+            ],
+          });
+
+          if (!savedStaff) {
+            throw new Error(`Failed to retrieve staff ${record.id}`);
+          }
+
+          const savedHistory = await queryRunner.manager.save(StaffHistory, {
+            staff_id: savedStaff.id,
+            staff_code: savedStaff.staff_code,
+            last_name: savedStaff.last_name,
+            first_name: savedStaff.first_name,
+            email: savedStaff.email,
+            middle_name: savedStaff.middle_name,
+            location_id: savedStaff.location_id,
+            vendor_id: savedStaff.vendor_id,
+            assign_status_id: savedStaff.assign_status_id,
+            position_id: savedStaff.position_id,
+            access_key_id: savedStaff.access_key_id,
+            sss_number: savedStaff.sss_number,
+            pagibig_number: savedStaff.pagibig_number,
+            tin: savedStaff.tin,
+            remarks: savedStaff.remarks,
+            overall_remarks: savedStaff.overall_remarks,
+            store_request: savedStaff.store_request,
+            hired_date: savedStaff.hired_date,
+            to_hr_date: savedStaff.to_hr_date,
+            to_sts_date: savedStaff.to_sts_date,
+            approved_eprf_date: savedStaff.approved_eprf_date,
+            req_completion_date: savedStaff.req_completion_date,
+            actual_deployment_date: savedStaff.actual_deployment_date,
+            separated_date: savedStaff.separated_date,
+            birthday: savedStaff.birthday,
+            contact_number: savedStaff.contact_number,
+
+            status_id: savedStaff.status_id,
+            effectivity_date: savedStaff.effectivity_date,
+            deactivate_effectivity_date: savedStaff.deactivate_effectivity_date,
+
+            reason_status_id: savedStaff.reason_status_id,
+            reason_remarks: savedStaff.reason_remarks,
+
+            approval_status_id: savedStaff.approval_status_id,
+
+            created_by: savedStaff.created_by,
+            updated_by: savedStaff.updated_by,
+          });
+
+          await this.userAuditTrailCreateService.create(
+            {
+              service: "StaffsService",
+              method: "processScheduleApprovedChangeStatus",
+              raw_data: JSON.stringify(savedStaff),
+              description:
+                `Staff ${actionType} executed for ${savedStaff.id} - ` +
+                `${savedStaff.first_name} ${savedStaff.last_name}`,
+              status_id: 1,
+            },
+            record.created_by,
+          );
+
+          await queryRunner.commitTransaction();
+
+          try {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: savedStaff.id,
+              action_id: ACTION_IDS.APPROVE,
+              description: `Approved Staff ${actionType} ${savedStaff.first_name} ${savedStaff.last_name}`,
+              raw_data: JSON.stringify({
+                scheduled_status_change: true,
+                old_status_id: record.status_id,
+                new_status_id: newStatusId,
+                effectivity_date: rawEffectivityDate,
+              }),
+              created_by: record.created_by,
+            });
+          } catch (err) {
+            logger.error("Action log failed for scheduled status update:", err);
+          }
+          const response =
+            this.responseMapperService.mapEntityToResponse(savedStaff);
+
+          try {
+            this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+
+            this.sseEventEmitter.emitUpdate(
+              "staff_vendor_salaries",
+              response.id,
+              response,
+            );
+
+            this.sseEventEmitter.emitUpdate(
+              "staff_transfers",
+              response.id,
+              response,
+            );
+
+            logger.info(`SSE events emitted for staff ${savedStaff.id}.`);
+          } catch (err) {
+            logger.error(`SSE event failed for scheduled status update:`, err);
+          }
+        } catch (err: any) {
+          await queryRunner.rollbackTransaction();
+
+          logger.error(
+            `Scheduled status update failed. Record ID: ${record.id}`,
+          );
+          logger.error(`Error Message: ${err?.message}`);
+          logger.error(`Error Stack: ${err?.stack}`);
+        } finally {
+          await queryRunner.release();
+
+          logger.info(`QueryRunner released for record ${record.id}`);
+        }
+      }
+    } catch (err: any) {
+      logger.error(`processScheduleChangeStatus failed: ${err?.message}`);
+      logger.error(err?.stack);
+    } finally {
+      this.isChangeStatusRunning = false;
+    }
+  }
+
+  private accessKeyForApproval = async (value: any): Promise<boolean> => {
+    if (!value || value === "") return false;
+
+    const accessKey = await this.accessKeysRepository.findOne({
+      where: { id: value },
+      relations: ["company"],
+    });
+
+    if (!accessKey) {
+      return false;
+    }
+
+    return accessKey.company?.company_abbr === "CTGI";
+  };
+
+  async findStaffForApproval(
+    accessKeyId?: number,
+    statusId?: number[],
+    approvalStatusId?: number[],
+  ): Promise<any[]> {
+    try {
+      const where: any = {};
+
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
+
+      if (approvalStatusId && approvalStatusId.length > 0) {
+        where.approval_status_id = In(approvalStatusId);
+        where.status_id = statusId;
+      }
+
+      const staffs = await this.staffsRepository.find({
+        where,
+        relations: [
+          "status",
+          "assignmentStatus",
+          "createdBy",
+          "updatedBy",
+          "location",
+          "vendor",
+          "position",
+          "accessKey",
+          "staffBrands",
+          "staffCategoryTypes",
+          "staffVendorSalaries",
+          "staffSalaries",
+          "staffTransfers",
+        ],
+        order: {
+          modified_at: "DESC",
+        },
+      });
+
+      const allTrainings = await this.trainingsRepository.find({
+        where: { status_id: 1 },
+        order: { training_order: "ASC" },
+      });
+
+      const staffTrainings = await this.staffTrainingsRepository.find({
+        relations: ["training"],
+      });
+
+      const trainingMap = new Map<number, any[]>();
+
+      for (const t of staffTrainings) {
+        const key = t.staff_id;
+        if (!trainingMap.has(key)) trainingMap.set(key, []);
+        trainingMap.get(key)!.push(t);
+      }
+
+      const result = staffs.map((staff) => {
+        const trainings = trainingMap.get(staff.id) || [];
+
+        const totalActiveTrainings = allTrainings.length;
+
+        const hasTraining = trainings.length > 0;
+
+        const passedTrainings = trainings.filter((t) => {
+          const trainingMeta = allTrainings.find(
+            (at) => Number(at.id) === Number(t.training_id),
+          );
+
+          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+          return t.ratings !== "" && Number(t.ratings) >= passingRate;
+        });
+
+        const failedTrainings = trainings.filter((t) => {
+          const trainingMeta = allTrainings.find(
+            (at) => Number(at.id) === Number(t.training_id),
+          );
+
+          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+
+          return t.ratings !== "" && Number(t.ratings) < passingRate;
+        });
+
+        const isSingleTraining = totalActiveTrainings === 1;
+
+        const allPassed =
+          hasTraining &&
+          passedTrainings.length === totalActiveTrainings &&
+          totalActiveTrainings > 0;
+
+        let canPost = false;
+
+        if (!hasTraining) {
+          canPost = false;
+        } else if (isSingleTraining) {
+          canPost = failedTrainings.length > 0;
+        } else if (allPassed) {
+          canPost = true;
+        } else {
+          canPost = failedTrainings.length > 0;
+        }
+
+        return {
+          ...this.responseMapperService.mapEntityToResponse(staff),
+          canPost,
+        };
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Error fetching staffs:", error);
+      throw new Error("Failed to fetch staffs");
+    }
+  }
+
+  async approvalStaff(
+    approvalStaffDto: ApprovalStaffDto,
+    userId: number,
+  ): Promise<any[]> {
+    try {
+      const { staff_ids } = approvalStaffDto;
+
+      const results: any[] = [];
+
+      for (const id of staff_ids) {
+        const staff = await this.staffsRepository.findOne({
+          where: { id },
+          relations: [
+            "status",
+            "assignmentStatus",
+            "createdBy",
+            "updatedBy",
+            "location",
+            "vendor",
+            "position",
+          ],
+        });
+
+        if (!staff) {
+          throw new NotFoundException(`Staff with ID ${id} not found`);
+        }
+
+        const newStatusName = "Deactivation";
+        const newStatusId = STATUS_IDS.APPROVED;
+
+        await this.staffsRepository.update(id, {
+          approval_status_id: newStatusId,
+        });
+
+        const latestStaffTransfer = await this.staffTransfersRepository.findOne(
+          {
+            where: {
+              staff_id: id,
+            },
+            order: {
+              created_at: "DESC",
+            },
+          },
+        );
+
+        if (latestStaffTransfer) {
+          await this.staffTransfersRepository.update(latestStaffTransfer.id, {
+            approval_status_id: newStatusId,
+          });
+
+          logger.info(
+            `Latest staff transfer ${latestStaffTransfer.id} for staff ${id} ` +
+              `updated to approval status ${newStatusId}`,
+          );
+        }
+
+        const updatedStaff = await this.staffsRepository.findOne({
+          where: { id },
+          relations: [
+            "status",
+            "assignmentStatus",
+            "createdBy",
+            "updatedBy",
+            "location",
+            "vendor",
+            "position",
+          ],
+        });
+
+        if (!updatedStaff) {
+          throw new Error(`Failed to retrieve updated staff with ID ${id}`);
+        }
+
+        await this.staffHistoriesRepository.save({
+          staff_id: updatedStaff.id,
+
+          staff_code: updatedStaff.staff_code,
+          last_name: updatedStaff.last_name,
+          first_name: updatedStaff.first_name,
+          middle_name: updatedStaff.middle_name,
+          email: updatedStaff.email,
+          location_id: updatedStaff.location_id,
+          vendor_id: updatedStaff.vendor_id,
+          assign_status_id: updatedStaff.assign_status_id,
+          position_id: updatedStaff.position_id,
+          access_key_id: updatedStaff.access_key_id,
+          sss_number: updatedStaff.sss_number,
+          pagibig_number: updatedStaff.pagibig_number,
+          tin: updatedStaff.tin,
+          remarks: updatedStaff.remarks,
+          overall_remarks: updatedStaff.overall_remarks,
+          store_request: updatedStaff.store_request,
+          hired_date: updatedStaff.hired_date,
+          to_hr_date: updatedStaff.to_hr_date,
+          to_sts_date: updatedStaff.to_sts_date,
+          approved_eprf_date: updatedStaff.approved_eprf_date,
+          req_completion_date: updatedStaff.req_completion_date,
+          actual_deployment_date: updatedStaff.actual_deployment_date,
+          separated_date: updatedStaff.separated_date,
+          birthday: updatedStaff.birthday,
+          contact_number: updatedStaff.contact_number,
+          status_id: updatedStaff.status_id,
+          reason_remarks: updatedStaff.reason_remarks,
+          deactivate_effectivity_date: updatedStaff.deactivate_effectivity_date,
+          reason_status_id: updatedStaff.reason_status_id,
+          activate_effectivity_date: updatedStaff.activate_effectivity_date,
+          approval_status_id: updatedStaff.approval_status_id,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffsService",
+            method: "approvalStaff",
+            raw_data: JSON.stringify(updatedStaff),
+            description: `Approved deactivation for staff ${id} - ${updatedStaff.first_name} ${updatedStaff.last_name}`,
+            status_id: 1,
+          },
+          userId,
+        );
+
+        // Action log
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: updatedStaff.id,
+            action_id: ACTION_IDS.DEACTIVATE,
+            description: `Approved deactivation for staff ${updatedStaff.first_name} ${updatedStaff.last_name}. Remarks: ${
+              updatedStaff.remarks || "No remarks provided"
+            }`,
+            raw_data: JSON.stringify({
+              id: updatedStaff.id,
+              old_approval_status: staff.approval_status_id,
+              new_approval_status: newStatusId,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(`Action log failed for staff ${updatedStaff.id}:`, err);
+        }
+
+        const response =
+          this.responseMapperService.mapEntityToResponse(updatedStaff);
+
+        // SSE
+        try {
+          this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+          this.sseEventEmitter.emitUpdate(
+            "staff_warehouses",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error(`SSE event failed for staff ${updatedStaff.id}:`, err);
+        }
+
+        results.push(response);
+      }
+
+      return results;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to approve staff:", error);
+
+      throw new Error("Failed to approve staff");
+    }
+  }
+
+  async rejectStaff(
+    rejectStaffDto: RejectStaffDto,
+    userId: number,
+  ): Promise<any[]> {
+    try {
+      const { staff_ids, status_id, remarks } = rejectStaffDto;
+
+      const results: any[] = [];
+
+      for (const id of staff_ids) {
+        const staff = await this.staffsRepository.findOne({
+          where: { id },
+          relations: [
+            "status",
+            "assignmentStatus",
+            "createdBy",
+            "updatedBy",
+            "location",
+            "vendor",
+            "position",
+          ],
+        });
+
+        if (!staff) {
+          throw new NotFoundException(`Staff with ID ${id} not found`);
+        }
+
+        const newStatusName = "Deactivation";
+
+        await this.staffsRepository.update(id, {
+          approval_status_id: status_id,
+        });
+
+        const latestStaffTransfer = await this.staffTransfersRepository.findOne(
+          {
+            where: {
+              staff_id: id,
+            },
+            order: {
+              created_at: "DESC",
+            },
+          },
+        );
+
+        if (latestStaffTransfer) {
+          await this.staffTransfersRepository.update(latestStaffTransfer.id, {
+            approval_status_id: status_id,
+            status: true,
+          });
+
+          logger.info(
+            `Latest staff transfer ${latestStaffTransfer.id} for staff ${id} ` +
+              `updated to approval status ${status_id}`,
+          );
+        }
+
+        const updatedStaff = await this.staffsRepository.findOne({
+          where: { id },
+          relations: [
+            "status",
+            "assignmentStatus",
+            "createdBy",
+            "updatedBy",
+            "location",
+            "vendor",
+            "position",
+          ],
+        });
+
+        if (!updatedStaff) {
+          throw new Error(`Failed to retrieve updated staff with ID ${id}`);
+        }
+
+        await this.staffHistoriesRepository.save({
+          staff_id: updatedStaff.id,
+
+          staff_code: updatedStaff.staff_code,
+          last_name: updatedStaff.last_name,
+          first_name: updatedStaff.first_name,
+          middle_name: updatedStaff.middle_name,
+          email: updatedStaff.email,
+          location_id: updatedStaff.location_id,
+          vendor_id: updatedStaff.vendor_id,
+          assign_status_id: updatedStaff.assign_status_id,
+          position_id: updatedStaff.position_id,
+          access_key_id: updatedStaff.access_key_id,
+          sss_number: updatedStaff.sss_number,
+          pagibig_number: updatedStaff.pagibig_number,
+          tin: updatedStaff.tin,
+          remarks: updatedStaff.remarks,
+          overall_remarks: updatedStaff.overall_remarks,
+          store_request: updatedStaff.store_request,
+          hired_date: updatedStaff.hired_date,
+          to_hr_date: updatedStaff.to_hr_date,
+          to_sts_date: updatedStaff.to_sts_date,
+          approved_eprf_date: updatedStaff.approved_eprf_date,
+          req_completion_date: updatedStaff.req_completion_date,
+          actual_deployment_date: updatedStaff.actual_deployment_date,
+          separated_date: updatedStaff.separated_date,
+          birthday: updatedStaff.birthday,
+          contact_number: updatedStaff.contact_number,
+          status_id: updatedStaff.status_id,
+          reason_remarks: updatedStaff.reason_remarks,
+          deactivate_effectivity_date: updatedStaff.deactivate_effectivity_date,
+          reason_status_id: updatedStaff.reason_status_id,
+          activate_effectivity_date: updatedStaff.activate_effectivity_date,
+          approval_status_id: updatedStaff.approval_status_id,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        // Audit trail
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffsService",
+            method: "approvalStaff",
+            raw_data: JSON.stringify(updatedStaff),
+            description: `Approved deactivation for staff ${id} - ${updatedStaff.first_name} ${updatedStaff.last_name}`,
+            status_id: 1,
+          },
+          userId,
+        );
+
+        // Action log
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: updatedStaff.id,
+            action_id: ACTION_IDS.REVERT,
+            description: `Revert deactivation for staff ${updatedStaff.first_name} ${updatedStaff.last_name}. Remarks: ${remarks}`,
+            raw_data: JSON.stringify({
+              id: updatedStaff.id,
+              old_approval_status: staff.approval_status_id,
+              new_approval_status: status_id,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(`Action log failed for staff ${updatedStaff.id}:`, err);
+        }
+
+        const response =
+          this.responseMapperService.mapEntityToResponse(updatedStaff);
+
+        // SSE
+        try {
+          this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+          this.sseEventEmitter.emitUpdate(
+            "staff_warehouses",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error(`SSE event failed for staff ${updatedStaff.id}:`, err);
+        }
+
+        results.push(response);
+      }
+
+      return results;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to approve staff:", error);
+
+      throw new Error("Failed to approve staff");
     }
   }
 }

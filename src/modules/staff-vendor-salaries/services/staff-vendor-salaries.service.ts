@@ -14,7 +14,7 @@ import { UpdateStaffVendorSalaryDto } from "src/modules/staff-vendor-salaries/dt
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-
+import {STATUS_IDS } from "src/constants/customConstants";
 @Injectable()
 export class StaffVendorSalariesService {
   constructor(
@@ -32,6 +32,11 @@ export class StaffVendorSalariesService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      where.staff = {
+        status_id: STATUS_IDS.ACTIVE,
+      };
+
       const staffVendorSalaries = await this.staffVendorSalariesRepository.find(
         {
           where,

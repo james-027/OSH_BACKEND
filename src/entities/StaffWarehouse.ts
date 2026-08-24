@@ -56,6 +56,10 @@ export class StaffWarehouse {
   @Column({ nullable: true })
   access_key_id: number;
 
+
+  @Column({nullable:true})
+  approval_status_id: number;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",
@@ -76,6 +80,14 @@ export class StaffWarehouse {
   })
   @JoinColumn({ name: "status_id" })
   status: Status;
+
+  @ManyToOne(() => Status, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "approval_status_id" })
+  approvalStatus: Status;
 
   @ManyToOne(() => User, {
     eager: false,

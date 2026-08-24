@@ -13,6 +13,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import { CreateStaffCategoryTypeDto } from "src/modules/staff-category-types/dto/CreateStaffCategoryTypeDto";
 import { UpdateStaffCategoryTypeDto } from "src/modules/staff-category-types/dto/UpdateStaffCategoryTypeDto";
 import logger from "../../../config/logger";
+import { STATUS_IDS } from "src/constants/customConstants";
 
 @Injectable()
 export class StaffCategoryTypesService {
@@ -41,6 +42,10 @@ export class StaffCategoryTypesService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      where.staff = {
+        status_id: STATUS_IDS.ACTIVE,
+      };
       const records = await this.staffCategoryTypesRepository.find({
         where,
         relations: this.relationFields,

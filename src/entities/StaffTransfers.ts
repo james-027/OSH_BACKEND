@@ -11,6 +11,7 @@ import { Vendor } from "./Vendor";
 import { Location } from "./Location";
 import { User } from "./User";
 import { Staff } from "./Staff";
+import { Status } from "./Status";
 import { AccessKey } from "./AccessKey";
 
 @Entity("staff_transfers")
@@ -51,7 +52,11 @@ export class StaffTransfers {
   })
   status: boolean;
 
-
+  @Column({nullable:true})
+  approval_status_id: number;
+    
+  @JoinColumn({ name: "approval_status_id" })
+  approvalStatus: Status;
 
   @Column()
   access_key_id: number;

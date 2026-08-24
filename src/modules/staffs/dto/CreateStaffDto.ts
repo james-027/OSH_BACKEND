@@ -4,6 +4,8 @@ import {
   IsInt,
   IsOptional,
   IsNumber,
+  isInt,
+  IsArray,
 } from "class-validator";
 
 export class CreateStaffDto {
@@ -134,6 +136,19 @@ export class CheckStaffDto {
 
   @IsString()
   last_name: string;
+
+  @IsString()
+  pagibig_number: string;
+
+  @IsString()
+  tin: string;
+
+  @IsString()
+  sss_number: string;
+  
+  @IsString()
+  @IsOptional()
+  email: string;
 }
 
 
@@ -144,3 +159,28 @@ export class RevertStaffDto {
   @IsString()
   remarks: string;
 }
+
+
+export class ApprovalStaffDto {
+
+  @IsArray()
+  @IsInt({ each: true })
+  staff_ids!: number[];
+
+}
+
+export class RejectStaffDto {
+
+  @IsArray()
+  @IsInt({ each: true })
+  staff_ids!: number[];
+
+  @IsInt()
+  status_id: number;
+
+  @IsString()
+  remarks: string;
+
+}
+
+

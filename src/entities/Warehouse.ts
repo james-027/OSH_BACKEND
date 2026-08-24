@@ -17,6 +17,7 @@ import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 import { WarehouseRequirement } from "./WarehouseRequirement";
 import { ReqTransactionHeader } from "./ReqTransactionHeader";
+import { PosAvailability } from "./PosAvailability";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -64,6 +65,9 @@ export class Warehouse {
   @Column({ default: 8 })
   rem_status_id: number;
 
+  @Column({nullable:true})
+  pos_availability_id: number;
+
   @CreateDateColumn({ type: "timestamp" })
   created_at: Date;
 
@@ -73,6 +77,10 @@ export class Warehouse {
   @ManyToOne(() => WarehouseType, { eager: false })
   @JoinColumn({ name: "warehouse_type_id" })
   warehouseType: WarehouseType;
+
+  @ManyToOne(() => PosAvailability, { eager: false })
+  @JoinColumn({ name: "pos_availability_id" })
+  posAvailability: PosAvailability;
 
   @ManyToOne(() => Location, { eager: false })
   @JoinColumn({ name: "location_id" })

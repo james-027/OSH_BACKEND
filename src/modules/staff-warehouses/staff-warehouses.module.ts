@@ -12,19 +12,25 @@ import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { ActionsModule } from "../actions/actions.module";
+import { User } from "src/entities/User";
+import { Warehouse } from "src/entities/Warehouse";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       StaffWarehouse,
       Staff,
+      User,
       UserAuditTrail,
       UserPermissions,
       AppModule,
       Action,
+      Warehouse
     ]),
     UsersModule,
     SSEModule,
+    ActionsModule
   ],
   controllers: [StaffWarehousesController],
   providers: [

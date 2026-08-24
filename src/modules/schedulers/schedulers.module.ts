@@ -9,6 +9,7 @@ import { SalesBudgetTransactionsDwhScheduler } from "src/schedulers/sales-budget
 import { OSHJVPostingScheduler } from "src/schedulers/debit-advice-jv-posting.scheduler";
 import { DebitAdviceModule } from "../debit-advice/debit-advice.module";
 import { StaffTransferScheduler } from "src/schedulers/staff-transfer.scheduler";
+import { StaffDeactivationSchedule } from "src/schedulers/staff-deactivation.scheduler";
 import { StaffsModule } from "../staffs/staffs.module";
 @Module({
   imports: [WarehousesModule, ItemsModule, TransactionsModule, DebitAdviceModule,StaffsModule],
@@ -18,7 +19,8 @@ import { StaffsModule } from "../staffs/staffs.module";
     SalesTransactionsDwhScheduler,
     SalesBudgetTransactionsDwhScheduler,
     OSHJVPostingScheduler,
-    StaffTransferScheduler
+    StaffTransferScheduler,
+    StaffDeactivationSchedule,
   ],
   exports: [
     WarehouseDwhScheduler,
@@ -26,7 +28,8 @@ import { StaffsModule } from "../staffs/staffs.module";
     SalesTransactionsDwhScheduler,
     SalesBudgetTransactionsDwhScheduler,
     OSHJVPostingScheduler,
-    StaffTransferScheduler
+    StaffTransferScheduler,
+    StaffDeactivationSchedule,
   ],
 })
 export class SchedulersModule { }
