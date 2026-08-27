@@ -41,6 +41,6 @@ import { GLAccountSyncService } from "./services/glaccount-sync.service";
     GLAccountSyncService,
   ],
 
-  exports: [GlAccountsService],
+  exports: [GlAccountsService, GLAccountSyncService],
 })
 export class GlAccountsModule {}

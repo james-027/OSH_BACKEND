@@ -40,6 +40,6 @@ import { ResponseMapperService } from "../../services/response-mapper.service";
     ProfitcenterScheduler,
   ],
 
-  exports: [ProfitcenterService],
+  exports: [ProfitcenterService, ProfitcenterSyncService],
 })
 export class ProfitcenterModule {}

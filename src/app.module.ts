@@ -118,6 +118,8 @@ import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.module";
 import { EmailQueueModule } from "./modules/email-queue/email-queue.module";
 import { EmailQueue } from "./entities/EmailQueue";
+import { MasterDataSyncModule } from "./modules/master-data-sync/master-data-sync.module";
+import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -155,6 +157,7 @@ import { EmailQueue } from "./entities/EmailQueue";
       ApprovalMatrixDetails,
       ApprovalMatrixLevels,
       EmailQueue,
+      MasterDataSyncLog,
     ]),
     // Authentication
     PassportModule,
@@ -227,6 +230,7 @@ import { EmailQueue } from "./entities/EmailQueue";
     TrainingsModule,
     StaffSalariesModule,
     EmailQueueModule,
+    MasterDataSyncModule,
   ],
   providers: [
     EmailService,
