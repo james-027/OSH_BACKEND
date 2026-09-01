@@ -40,6 +40,6 @@ import { DebitAdviceCategoryScheduler } from "src/schedulers/debit-advice-catego
     DebitAdviceCategoryScheduler,
   ],
 
-  exports: [DebitAdviceCategoryService],
+  exports: [DebitAdviceCategoryService, DebitAdviceCategorySyncService],
 })
 export class DebitAdviceCategoryModule {}

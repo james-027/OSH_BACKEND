@@ -42,6 +42,6 @@ import { DebitAdviceGlAccountScheduler } from "src/schedulers/debit-advice-glacc
     DebitAdviceGlAccountScheduler,
   ],
 
-  exports: [DebitAdviceGlAccountService],
+  exports: [DebitAdviceGlAccountService, DebitAdviceGlAccountSyncService],
 })
 export class DebitAdviceGlAccountModule {}
