@@ -74,6 +74,7 @@ export class TransactionsService {
         "updated_by_user",
         "details",
       ],
+      order: { trans_date: "DESC", id: "DESC" },
     });
     return headers.map((header) => ({
       header: {
