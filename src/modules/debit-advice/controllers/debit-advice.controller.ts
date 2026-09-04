@@ -1,30 +1,30 @@
 import {
-    Controller,
-    Get,
-    Post,
-    Put,
-    Delete,
-    Body,
-    Param,
-    UseGuards,
-    Request,
-    ParseIntPipe,
-    UploadedFile,
-    UseInterceptors,
-    BadRequestException,
-    Res,
-    NotFoundException,
-    Query,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+  ParseIntPipe,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
+  Res,
+  NotFoundException,
+  Query,
 } from "@nestjs/common";
 import {
-    FileInterceptor,
-    diskStorage,
-    UploadedFile as FileType,
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
 } from "../../../adapters";
 import {
-    excelFileFilter,
-    FILE_SIZE_LIMITS,
-    generateTimestampFilename,
+  excelFileFilter,
+  FILE_SIZE_LIMITS,
+  generateTimestampFilename,
 } from "src/utils/file-upload.utils";
 import * as fs from "fs";
 import * as path from "path";
@@ -45,229 +45,262 @@ import { Response } from 'express';
 @Controller("debit-advices")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class DebitAdviceController {
-    constructor(
-        private readonly debitAdviceService: DebitAdviceService,
-        private readonly oshjvService: OSHJVService,
+  constructor(
+    private readonly debitAdviceService: DebitAdviceService,
+    private readonly oshjvService: OSHJVService,
     ) { }
-    @Get()
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Get()
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "VIEW"
-    })
-    async findAll(@Request() req) {
-        return this.debitAdviceService.findAll();
-    }
+  })
+  async findAll(@Request() req) {
+    return this.debitAdviceService.findAll();
+  }
 
-    @Get("confirmation")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Get("confirmation")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "VIEW"
-    })
-    async findAllConfirmation(@Request() req) {
-        return this.debitAdviceService.findAllConfirmation();
-    }
+  })
+  async findAllConfirmation(@Request() req) {
+    return this.debitAdviceService.findAllConfirmation();
+  }
 
-    @Get("pagination")
-    async Getbypagination(
-        @Query("page") page = 1,
-        @Query("pageSize") pageSize = 5,
-        @Query("search") search = "",
-        @Query("statusid") statusId = "",
-        @Request() req: any,
-    ) {
-        const userId = req.user.id;
-        const roleId = req.user.role_id;
+  @Get("pagination")
+  async Getbypagination(
+    @Query("page") page = 1,
+    @Query("pageSize") pageSize = 5,
+    @Query("search") search = "",
+    @Query("statusid") statusId = "",
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
 
-        return this.debitAdviceService.GetbysearchAndPages(
-            Number(page),
-            Number(pageSize),
-            search,
-            statusId,
-            userId,
+    return this.debitAdviceService.GetbysearchAndPages(
+      Number(page),
+      Number(pageSize),
+      search,
+      statusId,
+      userId,
             roleId
-        );
-    }
+    );
+  }
 
     @Post('create-jv')
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
-    })
+  })
     async postToOSHJV(
         @Request() req,
         @Body() payload: any) {
-        const userId = req.user.id;
-        return this.oshjvService.postToOSHJV(payload, userId);
-    }
+    const userId = req.user.id;
+    return this.oshjvService.postToOSHJV(payload, userId);
+  }
 
-    @Get(":id")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Get(":id")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "VIEW"
-    })
-    async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
-        return this.debitAdviceService.findOne(id);
-    }
+  })
+  async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    return this.debitAdviceService.findOne(id);
+  }
 
 
-    @Get("history/:ref_id")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Get("history/:ref_id")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "VIEW"
-    })
+  })
     async findOneHistory(@Param("ref_id", ParseIntPipe) ref_id: number, @Request() req) {
-        return this.debitAdviceService.findOneHistory(ref_id);
-    }
+    return this.debitAdviceService.findOneHistory(ref_id);
+  }
 
-    @Post()
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Post()
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
-    })
-    // @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+  })
+  // @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
     async create(@Body() createDebitAdviceDto: CreateDebitAdviceDto, @Request() req) {
-        const userId = req.user.id;
-        const accessKeyId = req.user?.current_access_key;
-        const docno = req.user?.document_number;
-        const roleId = req.user?.role_id;
+    const userId = req.user.id;
+    const accessKeyId = req.user?.current_access_key;
+    const docno = req.user?.document_number;
+    const roleId = req.user?.role_id;
         return this.debitAdviceService.create(createDebitAdviceDto, userId, accessKeyId, docno, roleId);
-    }
+  }
 
 
-    @Put(":docno")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Put(":docno")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "EDIT"
-    })
-    // @RequirePermissions({ module: "DEBIT ADVICE", action: "EDIT" })
-    async update(
-        @Param("docno") docno: string,
-        @Body() updateDebitAdviceDto: UpdateDebitAdviceDto,
-        @Request() req,
-    ) {
-        const userId = req.user.id;
-        const accessKeyId = req.user?.current_access_key;
+  })
+  // @RequirePermissions({ module: "DEBIT ADVICE", action: "EDIT" })
+  async update(
+    @Param("docno") docno: string,
+    @Body() updateDebitAdviceDto: UpdateDebitAdviceDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    const accessKeyId = req.user?.current_access_key;
         return this.debitAdviceService.update(docno, updateDebitAdviceDto, userId, accessKeyId,);
-    }
+  }
 
-    @Delete(":docno")
-    // @RequirePermissions({ module: "DEBIT ADVICE", action: "DELETE" })
-    async delete(@Param("docno") docno: string, @Request() req) {
-        const userId = req.user.id;
-        return this.debitAdviceService.delete(docno, userId);
-    }
+  @Delete(":docno")
+  // @RequirePermissions({ module: "DEBIT ADVICE", action: "DELETE" })
+  async delete(@Param("docno") docno: string, @Request() req) {
+    const userId = req.user.id;
+    return this.debitAdviceService.delete(docno, userId);
+  }
 
-    @Post("upload-excel")
-    @UseInterceptors(
-        FileInterceptor("file", {
-            storage: diskStorage({
-                destination: "./uploads/debit-advice-upload",
-                filename: generateTimestampFilename,
-            }),
-            fileFilter: excelFileFilter,
-            limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
-        }),
-    )
-    @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+  @Post("upload-excel")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/debit-advice-upload",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
+    }),
+  )
+  @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
     async uploadExcelDebitAdvices(@UploadedFile() file: FileType, @Request() req) {
-        if (!file)
-            throw new BadRequestException("No file uploaded or invalid file type.");
+    if (!file)
+      throw new BadRequestException("No file uploaded or invalid file type.");
 
-        const userId = req.user.id;
-        const roleId = req.user.role_id;
-        const accessKeyId = req.user.current_access_key;
-        const result = await this.debitAdviceService.uploadExcelDebitAdvices(
-            file.path,
-            userId,
-            roleId,
-            accessKeyId,
-        );
-        return result;
-    }
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+    const result = await this.debitAdviceService.uploadExcelDebitAdvices(
+      file.path,
+      userId,
+      roleId,
+      accessKeyId,
+    );
+    return result;
+  }
+// Sakes Collection and Inventory
+  @Post("upload-sales-debit-advices")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/debit-advice-upload",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+    }),
+  )
+  @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+  async uploadExcelSalesDebitAdvices(
+    @UploadedFile() file: FileType,
+    @Request() req,
+  ) {
+    if (!file)
+      throw new BadRequestException("No file uploaded or invalid file type.");
 
-    @Get("document-posting-logs")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+
+    const result = await this.debitAdviceService.uploadExcelSalesDebitAdvices(
+      file.path,
+      userId,
+      roleId,
+      accessKeyId,
+    );
+
+    return result;
+  }
+
+  @Get("document-posting-logs")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
-    })
-    async document_posting_log(@Request() req) {
-        return this.oshjvService.ShowDocumentPostingLogs();
-    }
+  })
+  async document_posting_log(@Request() req) {
+    return this.oshjvService.ShowDocumentPostingLogs();
+  }
 
-    @Post("document-posting-logs/create")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Post("document-posting-logs/create")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
-    })
-    async createDocumentPostingLog(@Body() payload: any[], @Request() req) {
-        const userId = req.user.id;
-        return this.oshjvService.createDocumentPostingLog(payload, userId);
-    }
+  })
+  async createDocumentPostingLog(@Body() payload: any[], @Request() req) {
+    const userId = req.user.id;
+    return this.oshjvService.createDocumentPostingLog(payload, userId);
+  }
 
 
 
-    @Post(":docno/upload-attachment")
-    @RequirePermissions({
-        module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+  @Post(":docno/upload-attachment")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
-    })
-    @UseInterceptors(
-        FileInterceptor("file", {
-            storage: diskStorage({
-                destination: (req, file, cb) => {
+  })
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
 
 
-                    const docno = req.params.docno;
+          const docno = req.params.docno;
 
-                    const uploadPath = path.join(
-                        process.cwd(),
-                        "uploads",
-                        "attachment",
-                        "debit-advices",
-                        docno,
-                    );
+          const uploadPath = path.join(
+            process.cwd(),
+            "uploads",
+            "attachment",
+            "debit-advices",
+            docno,
+          );
 
 
 
-                    if (!fs.existsSync(uploadPath)) {
-                        fs.mkdirSync(uploadPath, {
-                            recursive: true,
-                        });
-                    }
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, {
+              recursive: true,
+            });
+          }
 
-                    cb(null, uploadPath);
-                },
+          cb(null, uploadPath);
+        },
 
-                filename: (req, file, cb) => {
+        filename: (req, file, cb) => {
                     cb(
                         null,
                         `${Date.now()}-${file.originalname}`,
                     );
-                },
-            }),
-            fileFilter: attachmentFileFilter,
-            limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
-        }),
-    )
-    @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+        },
+      }),
+      fileFilter: attachmentFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB }, // 8MB
+    }),
+  )
+  @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
     async uploadAttachment(@UploadedFile() file: Express.Multer.File, @Request() req) {
-        if (!file) {
+    if (!file) {
             throw new BadRequestException(
                 "No file uploaded or invalid file type.",
             );
-        }
-
-        const docno = req.params.docno;
-        const userId = req.user.id;
-
-        return this.debitAdviceService.saveAttachment(
-            "DEBIT ADVICE",
-            0,
-            docno,
-            file,
-            userId,
-        );
     }
+
+    const docno = req.params.docno;
+    const userId = req.user.id;
+
+    return this.debitAdviceService.saveAttachment(
+      "DEBIT ADVICE",
+      0,
+      docno,
+      file,
+      userId,
+    );
+  }
 
 
 
@@ -280,8 +313,8 @@ export class DebitAdviceController {
             await this.debitAdviceService.findAttachment(docno);
 
 
-        return attachments;
-    }
+    return attachments;
+  }
 
 
     @Delete('attachment/:id')
@@ -289,13 +322,13 @@ export class DebitAdviceController {
         @Param('id') id: string,
         @Request() req,
     ) {
-        const userId = req.user.id;
-        const result = await this.debitAdviceService.deleteAttachment(id, userId);
+    const userId = req.user.id;
+    const result = await this.debitAdviceService.deleteAttachment(id, userId);
 
-        return {
+    return {
             message: 'Attachment deleted successfully',
-            data: result,
-        };
-    }
+      data: result,
+    };
+  }
 
 }
