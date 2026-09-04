@@ -26,6 +26,9 @@ import { ApprovalMatrixService } from "src/modules/approval-matrix/services/appr
 import { ApprovalLogsService } from "src/modules/approval-logs/services/approval-logs.service";
 import { EmailQueueService } from "src/modules/email-queue/services/email-queue.service";
 import { Module } from "src/entities/Module";
+import { OSHJVService } from "./jv-creation.service";
+import { Supplier } from "src/entities/Supplier";
+import { GLAccounts } from "src/entities/GLAccounts";
 // This is for the main service file for debit advice. It will contain the business logic for handling debit advice operations such as
 // create, read, update, and delete. The service will interact with the database through the repository and also handle any necessary
 // transformations or validations before returning the response to the controller. Additionally, it will log audit trails for create
@@ -37,6 +40,7 @@ export class DebitAdviceService {
     private readonly emailQueueService: EmailQueueService,
     private readonly approvalMatrixService: ApprovalMatrixService,
     private readonly approvalLogsService: ApprovalLogsService,
+    private readonly oshJvService: OSHJVService,
     @InjectRepository(DebitAdvice_header)
     private debitAdviceRepository: Repository<DebitAdvice_header>,
     @InjectRepository(DebitAdviceLine)
@@ -53,6 +57,10 @@ export class DebitAdviceService {
     private readonly attachmentRepository: Repository<TransactionAttachment>,
     @InjectRepository(Module)
     private moduleRepository: Repository<Module>,
+    @InjectRepository(Supplier)
+    private supplierRepository: Repository<Supplier>,
+    @InjectRepository(GLAccounts)
+    private glAccountRepository: Repository<GLAccounts>,
   ) {}
 
   private readonly module_name = "DEBIT ADVICE";
@@ -811,7 +819,776 @@ export class DebitAdviceService {
       success,
     };
   }
+  /// Sakes Collection and Inventory/ Sales Collection & Inventory Upload
+  async uploadExcelSalesDebitAdvices(
+    filePath: string,
+    userId: number,
+    roleId?: number,
+    accessKeyId?: number,
+  ) {
+    const XLSX = require("xlsx");
 
+    const workbook = XLSX.read(fs.readFileSync(filePath), {
+      type: "buffer",
+    });
+
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet, {
+      defval: null,
+    });
+    const getExcelValue = (row: any, columnName: string) => {
+      const actualKey = Object.keys(row).find(
+        (key) => key.trim().toUpperCase() === columnName.trim().toUpperCase(),
+      );
+
+      return actualKey ? row[actualKey] : null;
+    };
+    const inserted_row_numbers: number[] = [];
+    const created_documents: any[] = [];
+    const updated_row_numbers: number[] = [];
+    const errors: { row: number; error: string }[] = [];
+    const success: any[] = [];
+
+    let inserted_count = 0;
+    let updated_count = 0;
+
+    const groupedDocuments: Record<string, any> = {};
+
+    // Same filter the frontend applies: active matrix lines belonging to this user.
+    const approvalMatrices = await this.approvalMatrixService.findAll();
+
+    const userApprovalLines = approvalMatrices.flatMap(
+      (matrix: any) =>
+        matrix.lines?.filter(
+          (line: any) => Number(line.userid) === userId && line.status_id === 1,
+        ) ?? [],
+    );
+
+    // The line id used as the `approval` value on each document (0 = none).
+    const defaultApprovalId = userApprovalLines[0]?.id ?? 0;
+
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+
+      try {
+        /*
+         * New Sales & Collections template:
+         *
+         * Sequence
+         * GL
+         * Type
+         * Location
+         * Transaction Date
+         * Profitcenter
+         * Remarks
+         * Amount
+         */
+
+        const sequence = getExcelValue(row, "SEQUENCE");
+        const type = getExcelValue(row, "TYPE");
+        const gl = getExcelValue(row, "GL");
+        const location = getExcelValue(row, "LOCATION");
+        const transactionDate = getExcelValue(row, "TRANSACTION DATE");
+        const profitcenter = getExcelValue(row, "PROFITCENTER");
+        const remarks = getExcelValue(row, "REMARKS") ?? "";
+        const amountValue = getExcelValue(row, "AMOUNT");
+        const amount = Number(amountValue);
+
+        /*
+         * SEQUENCE
+         */
+        if (
+          sequence === null ||
+          sequence === undefined ||
+          String(sequence).trim() === ""
+        ) {
+          errors.push({
+            row: index + 2,
+            error: "Sequence is required",
+          });
+          continue;
+        }
+
+        /*
+         * TYPE
+         *
+         * Type is an identifier used only to determine
+         * which Debit Advice the row belongs to.
+         *
+         * It is NOT saved to DebitAdviceGLItems.
+         */
+        if (type === null || type === undefined || String(type).trim() === "") {
+          errors.push({
+            row: index + 2,
+            error: "Type is required",
+          });
+          continue;
+        }
+
+        const normalizedType = String(type).trim().toUpperCase();
+
+        if (normalizedType !== "GL" && normalizedType !== "SUPPLIER") {
+          errors.push({
+            row: index + 2,
+            error: "Type must be either GL or Supplier",
+          });
+          continue;
+        }
+
+        /*
+         * GL
+         */
+        if (gl === null || gl === undefined || String(gl).trim() === "") {
+          errors.push({
+            row: index + 2,
+            error: "GL is required",
+          });
+          continue;
+        }
+
+        /*
+         * LOCATION
+         *
+         * The frontend converts the Location name
+         * into the corresponding Location master-data ID
+         * before uploading the Excel file.
+         *
+         * Example:
+         * BACOLOD -> 5
+         */
+        if (
+          location === null ||
+          location === undefined ||
+          String(location).trim() === ""
+        ) {
+          errors.push({
+            row: index + 2,
+            error: "Location is required",
+          });
+          continue;
+        }
+
+        const locationId = Number(location);
+
+        if (isNaN(locationId) || locationId <= 0) {
+          errors.push({
+            row: index + 2,
+            error: `Invalid Location "${location}"`,
+          });
+          continue;
+        }
+
+        /*
+         * TRANSACTION DATE
+         */
+        if (
+          transactionDate === null ||
+          transactionDate === undefined ||
+          String(transactionDate).trim() === ""
+        ) {
+          errors.push({
+            row: index + 2,
+            error: "Transaction Date is required",
+          });
+          continue;
+        }
+
+        /*
+         * PROFITCENTER
+         *
+         * Profitcenter is required only for GL type.
+         *
+         * TYPE = GL
+         *   → Profitcenter is required
+         *
+         * TYPE = SUPPLIER
+         *   → Profitcenter is optional / not required
+         */
+        if (
+          normalizedType === "GL" &&
+          (profitcenter === null ||
+            profitcenter === undefined ||
+            String(profitcenter).trim() === "")
+        ) {
+          errors.push({
+            row: index + 2,
+            error: "Profitcenter is required for GL type",
+          });
+          continue;
+        }
+        /*
+         * AMOUNT
+         */
+        if (
+          amountValue === null ||
+          amountValue === undefined ||
+          String(amountValue).trim() === ""
+        ) {
+          errors.push({
+            row: index + 2,
+            error: "Amount is required",
+          });
+          continue;
+        }
+
+        if (isNaN(amount)) {
+          errors.push({
+            row: index + 2,
+            error: "Invalid Amount",
+          });
+          continue;
+        }
+
+        /*
+         * SEQUENCE
+         *
+         * All rows with the same SEQUENCE belong
+         * to the same Debit Advice document.
+         *
+         * TYPE does not determine the document.
+         *
+         * Example:
+         *
+         * 1 + GL
+         * 1 + Supplier
+         *       ↓
+         * Same Debit Advice
+         */
+        const documentKey = String(sequence).trim();
+
+        /*
+         * All rows with the same SEQUENCE belong
+         * to ONE Debit Advice document.
+         *
+         * TYPE does NOT determine the document.
+         */
+        if (!groupedDocuments[documentKey]) {
+          groupedDocuments[documentKey] = {
+            id: 0,
+            document_number: "0",
+            transaction_date: formatExcelDate(transactionDate),
+            status_id: 4,
+            quarter: 1,
+            remarks: "",
+            location_id: locationId,
+            approval: 0,
+            createdBy: { id: userId } as any,
+            requestor_id: userId,
+
+            // Temporary collections.
+            // All rows are connected by SEQUENCE.
+            supplierRows: [],
+            glRows: [],
+            sourceRows: [],
+            line: [],
+          };
+        }
+
+        /*
+         * TYPE determines where the generic GL column is stored.
+         *
+         * TYPE = SUPPLIER
+         *   → GL column becomes debit_advice_line.vendor_code
+         *
+         * TYPE = GL
+         *   → GL column becomes debit_advice_gl_items.gl_code
+         *
+         * SEQUENCE still determines the Debit Advice document.
+         */
+
+        /*
+         * Store rows temporarily under the same SEQUENCE.
+         *
+         * TYPE determines what the GL column represents:
+         *
+         * SUPPLIER
+         *   GL column = Supplier/Vendor Code
+         *
+         * GL
+         *   GL column = GL Code
+         *
+         * SEQUENCE is the connection between them.
+         *
+         * We do NOT connect based on Excel row order.
+         */
+        /*
+         * Store Supplier and GL rows separately under the same SEQUENCE.
+         *
+         * SEQUENCE = connection between Supplier and GL.
+         *
+         * Supplier:
+         *   GL column -> vendor_code
+         *
+         * GL:
+         *   GL column -> gl_code
+         *   Profitcenter -> profitcenter_code
+         */
+        const identifier = String(gl).trim();
+
+        groupedDocuments[documentKey].sourceRows.push({
+          rowNumber: index + 2,
+          SEQUENCE: sequence,
+          GL: identifier,
+          Type: normalizedType === "SUPPLIER" ? "Supplier" : "GL",
+          LOCATION: location,
+          "TRANSACTION DATE": formatExcelDate(transactionDate),
+          Profitcenter:
+            normalizedType === "GL" ? String(profitcenter ?? "").trim() : "",
+          Remarks: remarks,
+          Amount: amount,
+        });
+
+        if (normalizedType === "SUPPLIER") {
+          const supplierCode = identifier;
+
+          const supplier = await this.supplierRepository.findOne({
+            where: {
+              supplier_code: supplierCode,
+            },
+          });
+
+          if (!supplier) {
+            errors.push({
+              row: index + 2,
+              error: `Supplier code "${supplierCode}" does not exist in master data`,
+            });
+            continue;
+          }
+
+          groupedDocuments[documentKey].supplierRows.push({
+            vendor_code: supplier.supplier_code,
+            vendor_name: supplier.supplier_name || "-",
+            category: "-",
+            amount,
+            particulars: remarks,
+          });
+        }
+
+        if (normalizedType === "GL") {
+          const glCode = identifier;
+
+          const glAccount = await this.glAccountRepository.findOne({
+            where: {
+              gl_code: glCode,
+            },
+          });
+
+          if (!glAccount) {
+            errors.push({
+              row: index + 2,
+              error: `GL code "${glCode}" does not exist in master data`,
+            });
+            continue;
+          }
+
+          groupedDocuments[documentKey].glRows.push({
+            gl_code: glAccount.gl_code,
+            gl_name: glAccount.gl_name || "-",
+            profitcenter_code: String(profitcenter ?? "").trim(),
+            amount,
+            Remarks: remarks || "-",
+          });
+        }
+      } catch (err) {
+        errors.push({
+          row: index + 2,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    /*
+     * BUILD DEBIT ADVICE LINES
+     *
+     * At this point all Excel rows have already been read.
+     *
+     * SEQUENCE connects:
+     *
+     *   Supplier row
+     *        +
+     *   GL rows
+     *        ↓
+     *   ONE Debit Advice Line
+     *
+     * This makes the upload independent of Excel row order.
+     */
+    for (const documentKey of Object.keys(groupedDocuments)) {
+      const document = groupedDocuments[documentKey];
+
+      const supplierRows = document.supplierRows ?? [];
+      const glRows = document.glRows ?? [];
+
+      /*
+       * Each SEQUENCE must have a Supplier row.
+       *
+       * The Supplier becomes debit_advice_line.
+       */
+      if (supplierRows.length === 0) {
+        errors.push({
+          row: 0,
+          error: `No Supplier row found for SEQUENCE ${documentKey}`,
+        });
+
+        delete groupedDocuments[documentKey];
+        continue;
+      }
+
+      /*
+       * A SEQUENCE represents one Debit Advice.
+       * The current template expects one Supplier
+       * connected to its GL rows.
+       */
+      if (supplierRows.length > 1) {
+        errors.push({
+          row: 0,
+          error: `Multiple Supplier rows found for SEQUENCE ${documentKey}. Only one Supplier row is allowed per SEQUENCE.`,
+        });
+
+        delete groupedDocuments[documentKey];
+        continue;
+      }
+
+      const supplier = supplierRows[0];
+
+      /*
+       * Supplier → debit_advice_line
+       *
+       * GL → debit_advice_gl_items
+       */
+      document.line = [
+        {
+          vendor_code: supplier.vendor_code,
+          vendor_name: supplier.vendor_name,
+          category: supplier.category,
+          amount: supplier.amount,
+          particulars: supplier.particulars,
+
+          /*
+           * Every GL row belonging to the same
+           * SEQUENCE becomes a GL Item.
+           */
+          glItems: glRows.map((glItem: any) => ({
+            gl_code: glItem.gl_code,
+            gl_name: glItem.gl_name,
+            profitcenter_code: glItem.profitcenter_code,
+            amount: glItem.amount,
+            Remarks: glItem.Remarks,
+          })),
+        },
+      ];
+
+      /*
+       * Temporary properties are no longer needed
+       * by create().
+       */
+      delete document.supplierRows;
+      delete document.glRows;
+    }
+    /*
+     * SAVE DOCUMENTS
+     *
+     * Process Debit Advice documents in batches of 1,000.
+     * Each SEQUENCE remains one complete Debit Advice + JV.
+     */
+    // ============================================
+    // STOP ENTIRE UPLOAD IF ANY VALIDATION ERROR
+    // EXISTS
+    // ============================================
+    if (errors.length > 0) {
+      return {
+        inserted_count: 0,
+        updated_count: 0,
+        inserted_row_numbers: [],
+        updated_row_numbers: [],
+        errors,
+        success: [],
+        created_documents: [],
+      };
+    }
+    const documentKeys = Object.keys(groupedDocuments);
+    const BATCH_SIZE = 1000;
+
+    for (
+      let batchStart = 0;
+      batchStart < documentKeys.length;
+      batchStart += BATCH_SIZE
+    ) {
+      const documentBatch = documentKeys.slice(
+        batchStart,
+        batchStart + BATCH_SIZE,
+      );
+
+      const currentBatchNumber = Math.floor(batchStart / BATCH_SIZE) + 1;
+
+      const totalBatchCount = Math.ceil(documentKeys.length / BATCH_SIZE);
+
+      console.log(
+        `Processing Sales Upload batch ${currentBatchNumber}/${totalBatchCount} ` +
+          `(${documentBatch.length} documents)`,
+      );
+
+      const CONCURRENCY = 20;
+
+      for (
+        let startIndex = 0;
+        startIndex < documentBatch.length;
+        startIndex += CONCURRENCY
+      ) {
+        const concurrentDocuments = documentBatch.slice(
+          startIndex,
+          startIndex + CONCURRENCY,
+        );
+
+        await Promise.all(
+          concurrentDocuments.map(async (documentKey) => {
+            const document = groupedDocuments[documentKey];
+
+            try {
+              const createdDebitAdvice = await this.create(
+                document,
+                userId,
+                accessKeyId,
+                document.document_number,
+              );
+
+              inserted_count++;
+
+              /*
+               * Ensure Sales & Collections GL rows are persisted.
+               *
+               * Supplier data is stored in debit_advice_line.
+               * GL data is stored in debit_advice_gl_items.
+               *
+               * SEQUENCE has already connected the Supplier + GL rows
+               * into the same Debit Advice before this point.
+               */
+              const savedLines = await this.debitAdviceLineRepository.find({
+                where: {
+                  header_id: createdDebitAdvice.id,
+                },
+              });
+
+              for (const documentLine of document.line ?? []) {
+                const savedLine = savedLines.find(
+                  (line) =>
+                    String(line.vendor_code) ===
+                    String(documentLine.vendor_code),
+                );
+
+                if (!savedLine) {
+                  throw new BadRequestException(
+                    `Debit Advice line not found for vendor ${documentLine.vendor_code}`,
+                  );
+                }
+
+                for (const glItem of documentLine.glItems ?? []) {
+                  /*
+                   * Prevent duplicate GL item creation if the
+                   * create() method already persisted it.
+                   */
+                  const existingGLItem =
+                    await this.debitAdviceGLItemsRepository.findOne({
+                      where: {
+                        line_id: savedLine.id,
+                        gl_code: glItem.gl_code,
+                        profitcenter_code: glItem.profitcenter_code,
+                        amount: glItem.amount,
+                        ref_docno: createdDebitAdvice.document_number,
+                      },
+                    });
+
+                  if (!existingGLItem) {
+                    await this.debitAdviceGLItemsRepository.save({
+                      line_id: savedLine.id,
+                      ref_docno: createdDebitAdvice.document_number,
+                      gl_code: glItem.gl_code,
+                      profitcenter_code: glItem.profitcenter_code,
+                      amount: glItem.amount,
+                      Remarks: glItem.Remarks || "-",
+                      createdBy: { id: userId } as any,
+                    });
+                  }
+                }
+              }
+
+              /*
+               * Reload relations after save.
+               */
+              const reloadedDebitAdvice =
+                await this.debitAdviceRepository.findOne({
+                  where: {
+                    id: createdDebitAdvice.id,
+                  },
+                  relations: ["status", "createdBy", "lines", "lines.glItems"],
+                });
+
+              if (!reloadedDebitAdvice) {
+                throw new NotFoundException(
+                  `Debit Advice ${createdDebitAdvice.id} not found`,
+                );
+              }
+
+              // ============================================
+              // CREATE JV PAYLOAD FOR POSTING LOG ONLY
+              // DO NOT POST TO BOS HERE
+              // ============================================
+
+              const jvPayload =
+                (reloadedDebitAdvice.lines as any[])?.flatMap(
+                  (lineItem: any) => {
+                    const formattedDate = new Date(
+                      reloadedDebitAdvice.transaction_date,
+                    ).toLocaleDateString("en-US");
+
+                    const supplierLine = {
+                      Sequence: reloadedDebitAdvice.document_number,
+                      "Document Series": "VP",
+                      "Posting Date": formattedDate,
+                      "Document Date": formattedDate,
+                      "Reference 1": reloadedDebitAdvice.document_number || "",
+                      Remarks: reloadedDebitAdvice.remarks || "",
+                      Type: "Supplier",
+                      GL: lineItem.vendor_code,
+                      Debit: Number(lineItem.amount || 0),
+                      Credit: 0,
+                      "Profit Center": "",
+                      Project: "",
+                      "LC Number": "",
+                      "PN Number": "",
+                      "Reference Type": "",
+                      "Reference No": "",
+                      VATCode: "",
+                      ChangeARGL: "",
+                      TaxType: "",
+                      TaxFor: "",
+                      WTaxCode: "",
+                      WTaxRate: "",
+                      TaxableAmount: 0,
+                      TaxableVATAmount: 0,
+                      SupplierNo: "",
+                      SupplierName: "",
+                      LineRemarks: lineItem.particulars || "",
+                      CounterDate: "",
+                      Bank: "",
+                      BankAccountNo: "",
+                      CheckedBy: "",
+                      ApprovedBy: "",
+                      ReceivableAcct: "",
+                      AdvancesARType: "",
+                      AcrualYN: "N",
+                      Reversed: "",
+                    };
+
+                    const glLines = (lineItem.glItems || []).map((gl: any) => ({
+                      Sequence: reloadedDebitAdvice.document_number,
+                      "Document Series": "VP",
+                      "Posting Date": formattedDate,
+                      "Document Date": formattedDate,
+                      "Reference 1": reloadedDebitAdvice.document_number || "",
+                      Remarks:
+                        gl.remarks ||
+                        gl.Remarks ||
+                        reloadedDebitAdvice.remarks ||
+                        "",
+                      Type: "GL",
+                      GL: gl.gl_code,
+                      Debit: 0,
+                      Credit: Number(gl.amount || 0),
+                      "Profit Center": gl.profitcenter_code || "",
+                      Project: "",
+                      "LC Number": "",
+                      "PN Number": "",
+                      "Reference Type": "",
+                      "Reference No": "",
+                      VATCode: "",
+                      ChangeARGL: "",
+                      TaxType: "",
+                      TaxFor: "",
+                      WTaxCode: "",
+                      WTaxRate: "",
+                      TaxableAmount: 0,
+                      TaxableVATAmount: 0,
+                      SupplierNo: "",
+                      SupplierName: "",
+                      LineRemarks: gl.remarks || gl.Remarks || "",
+                      CounterDate: "",
+                      Bank: "",
+                      BankAccountNo: "",
+                      CheckedBy: "",
+                      ApprovedBy: "",
+                      ReceivableAcct: "",
+                      AdvancesARType: "",
+                      AcrualYN: "N",
+                      Reversed: "",
+                    }));
+
+                    return [supplierLine, ...glLines];
+                  },
+                ) || [];
+
+              // ============================================
+              // INSERT PENDING DOCUMENT POSTING LOG
+              // NO JV POSTING HERE
+              // ============================================
+
+              await this.oshJvService.createDocumentPostingLog(
+                jvPayload,
+                userId,
+              );
+
+              created_documents.push(reloadedDebitAdvice);
+
+              // ============================================
+              // FINAL SUCCESS
+              // ============================================
+              success.push({
+                __rowNum__: inserted_count,
+                SEQUENCE: documentKey,
+                DESTRIPTION: `Successfully inserted document with SEQUENCE ${documentKey}`,
+                "TRANSACTION DATE": createdDebitAdvice.Transaction_date,
+                AMOUNT: document.line?.[0]?.amount ?? 0,
+                REASON: document.line?.[0]?.particulars ?? "",
+                ID: createdDebitAdvice.id,
+                DOCUMENT_NUMBER: createdDebitAdvice.document_number,
+                STATUS_NAME: createdDebitAdvice.status_name,
+                STATUS: "Inserted",
+                id: createdDebitAdvice.id,
+              });
+            } catch (err) {
+              errors.push({
+                row: 0,
+                error: `Failed saving ${documentKey}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              });
+            }
+          }),
+        );
+      }
+    }
+
+    /*
+     * SSE Events
+     */
+    if (inserted_count > 0 || updated_count > 0) {
+      try {
+        this.sseEventEmitter.emitCreateSignal("debit-advices", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+    }
+
+    return {
+      inserted_count,
+      updated_count,
+      inserted_row_numbers,
+      updated_row_numbers,
+      errors,
+      success,
+      created_documents,
+    };
+  }
   /**
    * Get allowed location IDs based on user and role
    * Reusable helper to avoid redundant code across multiple methods
