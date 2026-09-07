@@ -47,13 +47,12 @@ export class ResponseMapperService {
           "training",
           "subStatus",
           "staffTransfers",
+          "scheduleHeader"
         ].includes(key)
       ) {
-        if (typeof entity[key] !== "object" || entity[key] === null) {
+        if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
           response[key] = entity[key];
-        } else if (key === "created_at" || key === "modified_at") {
-          response[key] = entity[key];
-        }
+        } 
       }
     }
 
@@ -152,6 +151,7 @@ export class ResponseMapperService {
       ? [...entity.staffSalaries].sort((a, b) => b.id - a.id)[0]
       : null;
 
+    if (entity.staffTransfers && typeof entity.staffTransfers === "object") {
       const pendingTransfers =
         entity.staffTransfers
           ?.filter((transfer) => transfer.status === false)
@@ -164,6 +164,8 @@ export class ResponseMapperService {
         effectivity_date: transfer.effectivity_date,
         status: transfer.status,
       }));
+
+    }
 
     if (latestBrand) {
       response.brand_id = latestBrand.brand_id;
@@ -210,6 +212,11 @@ export class ResponseMapperService {
     // Map sub status relation
     if (entity.subStatus && typeof entity.subStatus === "object") {
       response.sub_status_name = entity.subStatus.status_name || null;
+    }
+        // Map Schedule Header relation
+    if (entity.scheduleHeader && typeof entity.scheduleHeader === "object") {
+      response.schedule_entry_no = entity.scheduleHeader.entry_no || null;
+      response.schedule_date = entity.scheduleHeader.schedule_date || null;
     }
 
     // Map accessKey relation

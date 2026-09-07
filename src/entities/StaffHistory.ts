@@ -55,13 +55,19 @@ export class StaffHistory {
   @Column()
   position_id: number;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ type: "boolean", default: false })
+  is_institutional: boolean;
+
+  @Column({ length: 50, nullable: true })
   sss_number: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 50, nullable: true })
   pagibig_number: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 50, nullable: true })
+  phil_health_number: string;
+
+  @Column({ length: 50, nullable: true })
   tin: string;
 
   @Column({ type: "text", nullable: true })

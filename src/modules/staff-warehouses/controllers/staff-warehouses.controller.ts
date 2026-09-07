@@ -27,7 +27,7 @@ export class StaffWarehousesController {
   ) {}
 
   @Get()
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "VIEW" })
   async findAll(  @Request() req,
     @Query("approval_status_id") assignStatusId?: string,
     @Query("warehouse_id") warehouseId?: string,
@@ -47,7 +47,7 @@ export class StaffWarehousesController {
   }
 
     @Post("/change-bulk-status")
-    @RequirePermissions({ module: "STAFF WAREHOUSES", action: ["POST", "APPROVE"] })
+    @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: ["POST", "APPROVE"] })
     async toggleBulkStatus(
       @Body() body: { ids: number[]; approval_status_id: number; undo_reason?: string },
       @Request() req,
@@ -68,13 +68,13 @@ export class StaffWarehousesController {
     }
 
   @Get(":id")
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.staffWarehousesService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "ADD" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "ADD" })
   async create(
     @Body() createStaffWarehouseDto: CreateStaffWarehouseDto,
     @Request() req,
@@ -85,7 +85,7 @@ export class StaffWarehousesController {
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "EDIT" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateStaffWarehouseDto: UpdateStaffWarehouseDto,
@@ -100,7 +100,7 @@ export class StaffWarehousesController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "ACTIVATE" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "ACTIVATE" })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -110,7 +110,7 @@ export class StaffWarehousesController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "DEACTIVATE" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "DEACTIVATE" })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -120,7 +120,7 @@ export class StaffWarehousesController {
   }
 
   @Get("history/:id")
-  @RequirePermissions({ module: "STAFF WAREHOUSES", action: "VIEW" })
+  @RequirePermissions({ module: "STAFF STORE ASSIGNMENTS", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
     return this.staffWarehousesService.findOneHistory(id);
   }

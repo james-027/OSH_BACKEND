@@ -97,6 +97,11 @@ import { StaffTransfers } from "../entities/StaffTransfers";
 import { EmailQueue } from "../entities/EmailQueue";
 import { PosAvailability } from "../entities/PosAvailability";
 import { MasterDataSyncLog } from "../entities/MasterDataSyncLog";
+import { ScheduleHeader } from "../entities/ScheduleHeader";
+import { ScheduleDetail } from "../entities/ScheduleDetails";
+import { ScheduleHeaderHistory } from "../entities/ScheduleHeaderHistory";
+import { WorkingDay } from "../entities/WorkingDay";
+
 // All entities in one place for easy maintenance
 export const entities = [
   User,
@@ -196,6 +201,10 @@ export const entities = [
   EmailQueue,
   PosAvailability,
   MasterDataSyncLog,
+  ScheduleHeader,
+  ScheduleDetail,
+  ScheduleHeaderHistory,
+  WorkingDay
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

@@ -41,6 +41,8 @@ export const STATUS_IDS = {
   WITH_ASSIGNMENT: 21,
   TEMPORARY_ASSIGNMENT: 26,
   REJECTED: 15,
+  TRAINEE : 20,
+  POSTED : 4,
 } as const;
 
 // ============= POS AVAILABIITY =============

@@ -74,6 +74,18 @@ export class Warehouse {
   @UpdateDateColumn({ type: "timestamp" })
   modified_at: Date;
 
+  @Column({ type: "date", nullable: true })
+  start_operation: Date;
+
+  @Column({ type: "date", nullable: true })
+  end_operation: Date;
+
+  @Column({ type: "time", nullable: true })
+  starting_time: string;
+
+  @Column({ type: "time", nullable: true })
+  ending_time: string;
+
   @ManyToOne(() => WarehouseType, { eager: false })
   @JoinColumn({ name: "warehouse_type_id" })
   warehouseType: WarehouseType;

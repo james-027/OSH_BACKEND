@@ -3,52 +3,55 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
-import { Staff } from "./Staff";
+import { ScheduleDetail } from "./ScheduleDetails";
 
-import { Training } from "./Training";
-import { Warehouse } from "./Warehouse";
-import { Employee } from "./Employee";
-
-@Entity("staff_trainings")
-export class StaffTraining {
+@Entity("schedule_headers")
+export class ScheduleHeader {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  staff_id: number;
-
-  @Column({ type: "varchar", length: 255, nullable:true })
-  staff_code: string;
+  @Column({ type: "date", nullable: true })
+  schedule_date: Date;
 
   @Column()
-  training_id: number;
+  entry_no: number;
+
+  @Column({ type: "text", nullable: true })
+  reason: string;
 
   @Column({ nullable: true })
-  warehouse_id?: number | null;
+  attendance_status_id: number;
 
-  @Column()
-  employee_id: number;
+  @Column({ nullable: true })
+  attendance_updated_by: number;
 
-  @Column()
-  ratings: number;
+  @Column({ type: "text", nullable: true })
+  attendance_reason: string;
 
-  @Column()
-  sub_status_id: number;
+  @Column({ nullable: true })
+  payroll_updated_by: number;
 
-  @Column({ type: "date", nullable: true })
-  training_start_date: Date;
+  @Column({
+    type: "timestamp",
+    nullable:true
+  })
+  attendance_ts: Date;
 
-  @Column({ type: "date", nullable: true })
-  training_end_date: Date;
+  @Column({
+    type: "timestamp",
+    nullable:true
+  })
+  payroll_ts: Date;
 
-  @Column({ length: 255, nullable: true })
-  remarks: string;
+  @Column({ nullable: true })
+  shifting_day: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -85,8 +88,8 @@ export class StaffTraining {
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
-  @JoinColumn({ name: "sub_status_id" })
-  subStatus: Status;
+  @JoinColumn({ name: "attendance_status_id" })
+  attendanceStatus: Status;
 
   @ManyToOne(() => User, {
     eager: false,
@@ -95,6 +98,21 @@ export class StaffTraining {
   })
   @JoinColumn({ name: "created_by" })
   createdBy: User;
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "attendance_updated_by" })
+  attendanceUpdated: User;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "payroll_updated_by" })
+  payrollUpdated: User;
 
   @ManyToOne(() => User, {
     eager: false,
@@ -104,35 +122,9 @@ export class StaffTraining {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-  @ManyToOne(() => Staff, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
+  @OneToMany(() => ScheduleDetail, (detail) => detail.scheduleHeader, {
+    cascade: true,
   })
-  @JoinColumn({ name: "staff_id" })
-  staff: Staff;
-
-  @ManyToOne(() => Training, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "training_id" })
-  training: Training;
-
-  @ManyToOne(() => Warehouse, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "warehouse_id" })
-  warehouse: Warehouse;
-
-  @ManyToOne(() => Employee, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "employee_id" })
-  employee: Employee;
+  details: ScheduleDetail[];
+  
 }

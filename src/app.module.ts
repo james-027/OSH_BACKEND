@@ -116,6 +116,7 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.module";
+import { StaffSchedulingModule } from "./modules/staff-scheduling/staff-scheduling.module";
 import { EmailQueueModule } from "./modules/email-queue/email-queue.module";
 import { EmailQueue } from "./entities/EmailQueue";
 import { MasterDataSyncModule } from "./modules/master-data-sync/master-data-sync.module";
@@ -229,6 +230,7 @@ import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
     StaffTrainingModule,
     TrainingsModule,
     StaffSalariesModule,
+    StaffSchedulingModule,
     EmailQueueModule,
     MasterDataSyncModule,
   ],

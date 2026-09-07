@@ -49,7 +49,7 @@ export class StaffWarehousesService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  private readonly module_name = "STAFF WAREHOUSES";
+  private readonly module_name = "STAFF STORE ASSIGNMENTS";
 
   async findAll(
     accesskeyId?: number,
