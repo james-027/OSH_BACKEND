@@ -84,7 +84,8 @@ export interface SavedFileInfo {
 }
 
 export class FileUploadHandler {
-  private static readonly MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
+  private static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  private static readonly COMPRESSION_QUALITY = 80;
   private static readonly ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
   private static readonly ALLOWED_MIME_TYPES = [
     "image/jpeg",
@@ -394,18 +395,20 @@ export class FileUploadHandler {
         if (ext === "png") {
           // PNG: reduce quality and colors, write directly to disk
           sharpTransform = sharpTransform.png({
-            quality: 75,
-            compressionLevel: 9,
+            quality: this.COMPRESSION_QUALITY,
+            compressionLevel: 6,
           });
         } else if (ext === "jpg" || ext === "jpeg") {
           // JPEG: reduce quality, write directly to disk
           sharpTransform = sharpTransform.jpeg({
-            quality: 70,
+            quality: this.COMPRESSION_QUALITY,
             progressive: true,
           });
         } else if (ext === "gif" || ext === "webp") {
           // GIF/WebP: convert to webp, write directly to disk
-          sharpTransform = sharpTransform.toFormat("webp", { quality: 75 });
+          sharpTransform = sharpTransform.toFormat("webp", {
+            quality: this.COMPRESSION_QUALITY,
+          });
         }
 
         // Stream compression directly to disk (NO intermediate buffer)
