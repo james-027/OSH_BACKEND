@@ -88,7 +88,19 @@ export class DebitAdviceController {
     );
   }
 
-    @Post('create-jv')
+  @Post("bulk")
+  @RequirePermissions({
+    module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
+    action: "VIEW",
+  })
+  async findBulk(@Body() body: { ids: number[] }, @Request() req) {
+    if (!Array.isArray(body?.ids) || body.ids.length === 0) {
+      throw new BadRequestException("No debit advice IDs provided.");
+    }
+
+    return this.debitAdviceService.findBulk(body.ids);
+  }
+  @Post("create-jv")
   @RequirePermissions({
     module: ["DEBIT ADVICE", "FINANCE CONFIRMATION"],
         action: "ADD"
@@ -184,7 +196,40 @@ export class DebitAdviceController {
     );
     return result;
   }
-// Sakes Collection and Inventory
+
+  @Post("upload-excel-aprvl")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/debit-advice-upload",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: excelFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+    }),
+  )
+  @RequirePermissions({ module: "DEBIT ADVICE", action: "ADD" })
+  async uploadExcelDebitAdvices_aprvl(
+    @UploadedFile() file: FileType,
+    @Request() req,
+  ) {
+    if (!file)
+      throw new BadRequestException("No file uploaded or invalid file type.");
+
+    const userId = req.user.id;
+    const roleId = req.user.role_id;
+    const accessKeyId = req.user.current_access_key;
+
+    const result = await this.debitAdviceService.uploadExcelDebitAdvices_aprvl(
+      file.path,
+      userId,
+      roleId,
+      accessKeyId,
+    );
+
+    return result;
+  }
+  // Sakes Collection and Inventory
   @Post("upload-sales-debit-advices")
   @UseInterceptors(
     FileInterceptor("file", {
