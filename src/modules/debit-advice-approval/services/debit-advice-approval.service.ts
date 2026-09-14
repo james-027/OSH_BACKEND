@@ -141,6 +141,127 @@ export class ApprovalStagesListService {
     }));
   }
 
+  async getBySearchAndPages(
+    page: number,
+    pageSize: number,
+    search: string,
+    statusId: number | string,
+    userId: number,
+  ) {
+    const query = this.approvalStagesListRepository
+      .createQueryBuilder("approval")
+      .leftJoinAndSelect("approval.debitAdvice", "debitAdvice")
+      .leftJoinAndSelect("approval.status", "status")
+      .leftJoinAndSelect("approval.approver", "approver")
+      .leftJoinAndSelect("approval.optionalApprover", "optionalApprover")
+      .leftJoinAndSelect("approval.createdBy", "createdBy")
+      .leftJoinAndSelect("approval.updatedBy", "updatedBy")
+
+      .where(
+        "(approval.approverid = :userId OR approval.approverid_opt = :userId)",
+        { userId },
+      ).andWhere(`
+      approval.approval_cycle = (
+        SELECT MAX(sub.approval_cycle)
+        FROM approval_stageslist sub
+        WHERE sub.transaction_id = approval.transaction_id
+      )
+    `).andWhere(`
+      (
+        (
+          approval.status_id IN (7,15)
+          AND approval.updated_by = :userId
+        )
+        OR
+        (
+          approval.status_id = 3
+          AND approval.series = (
+            SELECT MIN(sub.series)
+            FROM approval_stageslist sub
+            WHERE sub.transaction_id = approval.transaction_id
+            AND sub.status_id = 3
+          )
+        )
+      )
+    `);
+
+    if (search?.trim()) {
+      query.andWhere(
+        `
+    (
+      approval.document_number LIKE :search
+      OR createdBy.first_name LIKE :search
+      OR createdBy.last_name LIKE :search
+      OR EXISTS (
+        SELECT 1
+        FROM debit_advice_line dal
+        WHERE dal.header_id = debitAdvice.id
+        AND dal.vendor_code LIKE :search
+      )
+    )
+    `,
+        {
+          search: `%${search.trim()}%`,
+        },
+      );
+    }
+
+    if (statusId) {
+      query.andWhere("approval.status_id = :statusId", {
+        statusId: Number(statusId),
+      });
+    }
+
+    query.orderBy("approval.id", "DESC");
+
+    const selectionApprovals = await query
+      .clone()
+      .select(["approval.id", "approval.transaction_id"])
+      .getMany();
+
+    query.skip((page - 1) * pageSize);
+    query.take(pageSize);
+
+    const [approvals, totalCount] = await query.getManyAndCount();
+
+    return {
+      items: approvals.map((approval) => ({
+        id: approval.id,
+        transaction_id: approval.transaction_id,
+        document_number: approval.document_number,
+        transaction_date: approval.transaction_date,
+        series: approval.series,
+        approverid: approval.approverid,
+        approver_name: approval.approver
+          ? `${approval.approver.first_name} ${approval.approver.last_name}`
+          : null,
+        approverid_opt: approval.approverid_opt,
+        optional_approver_name: approval.optionalApprover
+          ? `${approval.optionalApprover.first_name} ${approval.optionalApprover.last_name}`
+          : null,
+        approval_date: approval.approval_date,
+        approval_remarks: approval.approval_remarks,
+        status_id: approval.status_id,
+        status_name: approval.status ? approval.status.status_name : null,
+        created_at: approval.created_at,
+        updated_at: approval.updated_at,
+        created_by: approval.createdBy
+          ? `${approval.createdBy.first_name} ${approval.createdBy.last_name}`
+          : null,
+        updated_by: approval.updatedBy
+          ? `${approval.updatedBy.first_name} ${approval.updatedBy.last_name}`
+          : null,
+      })),
+      selectionItems: selectionApprovals.map((approval) => ({
+        id: approval.id,
+        transaction_id: approval.transaction_id,
+      })),
+      totalCount,
+      page,
+      pageSize,
+    };
+  }
+
   async findOne(id: number): Promise<any> {
     const approval = await this.approvalStagesListRepository.findOne({
       where: { id },

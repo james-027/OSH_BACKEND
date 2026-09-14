@@ -11,7 +11,9 @@ import {
   UseGuards,
   Request,
   BadRequestException,
+  Query,
 } from "@nestjs/common";
+
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
@@ -36,6 +38,30 @@ export class DebitAdviceApprovalController {
 
     return this.approvalStagesListService.findAll(userId);
   }
+
+  @Get("pagination")
+  @RequirePermissions({
+    module: "DEBIT ADVICE APPROVAL",
+    action: "VIEW",
+  })
+  async getByPagination(
+    @Query("page") page = 1,
+    @Query("pageSize") pageSize = 5,
+    @Query("search") search = "",
+    @Query("statusid") statusId = "",
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+
+    return this.approvalStagesListService.getBySearchAndPages(
+      Number(page),
+      Number(pageSize),
+      search,
+      statusId,
+      userId,
+    );
+  }
+
   @Get(":id")
   @RequirePermissions({
     module: "DEBIT ADVICE APPROVAL",
