@@ -84,7 +84,7 @@ export interface SavedFileInfo {
 }
 
 export class FileUploadHandler {
-  private static readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  private static readonly MAX_FILE_SIZE = 12 * 1024 * 1024; // 12MB
   private static readonly COMPRESSION_QUALITY = 80;
   private static readonly ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"];
   private static readonly ALLOWED_MIME_TYPES = [
