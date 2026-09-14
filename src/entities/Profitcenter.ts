@@ -9,7 +9,6 @@ import {
 } from "typeorm";
 
 import { Status } from "./Status";
-import { Company } from "./Company";
 
 @Entity("profitcenters")
 export class Profitcenter {
@@ -47,13 +46,7 @@ export class Profitcenter {
   })
   business_center: string;
 
-  // Foreign key to Company entity
-  @ManyToOne(() => Company)
-  @JoinColumn({
-    name: "company",
-    referencedColumnName: "company_abbr",
-  })
-  companyCode!: Company;
+
 
   // Foreign key to Status entity
   @ManyToOne(() => Status)
