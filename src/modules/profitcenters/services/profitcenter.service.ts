@@ -49,7 +49,7 @@ export class ProfitcenterService {
   async findAll(): Promise<any[]> {
     try {
       const profitcenters = await this.profitcenterRepository.find({
-        relations: ["status", "companyCode"],
+        relations: ["status"],
       });
 
       return profitcenters.map((profitcenter) => ({
@@ -58,7 +58,7 @@ export class ProfitcenterService {
         profitcenter_name: profitcenter.profitcenter_name,
         old_code: profitcenter.old_code,
         business_center: profitcenter.business_center,
-        company: profitcenter.companyCode?.company_abbr ?? null,
+        company: profitcenter.company ?? null,
         status_id: profitcenter.status_id,
         status_name: profitcenter.status?.status_name ?? null,
         created_at: profitcenter.created_at,
@@ -77,8 +77,7 @@ export class ProfitcenterService {
     try {
       const profitcenter = await this.profitcenterRepository.findOne({
         where: { id },
-
-        relations: ["status", "companyCode"],
+        relations: ["status"],
       });
 
       if (!profitcenter) {
@@ -91,7 +90,7 @@ export class ProfitcenterService {
         profitcenter_name: profitcenter.profitcenter_name,
         old_code: profitcenter.old_code,
         business_center: profitcenter.business_center,
-        company: profitcenter.companyCode?.company_abbr ?? null,
+        company: profitcenter.company ?? null,
         status_id: profitcenter.status_id,
         status_name: profitcenter.status?.status_name ?? null,
         created_at: profitcenter.created_at,

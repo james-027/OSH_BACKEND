@@ -8,7 +8,6 @@ import {
   JoinColumn,
 } from "typeorm";
 import { Status } from "./Status";
-import { Company } from "./Company";
 @Entity("debit_advice_categories")
 export class DebitAdviceCategory {
   @PrimaryGeneratedColumn()
@@ -41,13 +40,7 @@ export class DebitAdviceCategory {
   })
   company: string;
 
-  // Foreign key to Company entity
-  @ManyToOne(() => Company)
-  @JoinColumn({
-    name: "company",
-    referencedColumnName: "company_abbr",
-  })
-  companyCode!: Company;
+
 
   // Foreign key to Status entity
   @ManyToOne(() => Status)
