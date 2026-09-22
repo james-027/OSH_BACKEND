@@ -1117,11 +1117,6 @@ export class DebitAdviceService {
             createdBy: { id: userId } as any,
             requestor_id: userId,
 
-            // Temporary collections.
-            // All rows are connected by SEQUENCE.
-            supplierRows: [],
-            glRows: [],
-            sourceRows: [],
             line: [],
           };
         }
@@ -1167,19 +1162,6 @@ export class DebitAdviceService {
          */
         const identifier = String(gl).trim();
 
-        groupedDocuments[documentKey].sourceRows.push({
-          rowNumber: index + 2,
-          SEQUENCE: sequence,
-          GL: identifier,
-          Type: normalizedType === "SUPPLIER" ? "Supplier" : "GL",
-          LOCATION: location,
-          "TRANSACTION DATE": formatExcelDate(transactionDate),
-          Profitcenter:
-            normalizedType === "GL" ? String(profitcenter ?? "").trim() : "",
-          Remarks: remarks,
-          Amount: amount,
-        });
-
         if (normalizedType === "SUPPLIER") {
           const supplierCode = identifier;
 
@@ -1197,12 +1179,14 @@ export class DebitAdviceService {
             continue;
           }
 
-          groupedDocuments[documentKey].supplierRows.push({
+          // Push directly to line array. Future GLs will be added to this supplier's glItems.
+          groupedDocuments[documentKey].line.push({
             vendor_code: supplier.supplier_code,
             vendor_name: supplier.supplier_name || "-",
             category: "-",
             amount,
             particulars: remarks,
+            glItems: [],
           });
         }
 
@@ -1223,7 +1207,17 @@ export class DebitAdviceService {
             continue;
           }
 
-          groupedDocuments[documentKey].glRows.push({
+          const currentLines = groupedDocuments[documentKey].line;
+          if (currentLines.length === 0) {
+            errors.push({
+              row: index + 2,
+              error: `GL row found before any Supplier row for SEQUENCE ${documentKey}. Please place the Supplier row immediately before its GL rows.`,
+            });
+            continue;
+          }
+
+          // Add this GL to the most recently read Supplier line in this sequence
+          currentLines[currentLines.length - 1].glItems.push({
             gl_code: glAccount.gl_code,
             gl_name: glAccount.gl_name || "-",
             profitcenter_code: String(profitcenter ?? "").trim(),
@@ -1239,91 +1233,21 @@ export class DebitAdviceService {
       }
     }
     /*
-     * BUILD DEBIT ADVICE LINES
+     * VALIDATE DEBIT ADVICE LINES
      *
-     * At this point all Excel rows have already been read.
-     *
-     * SEQUENCE connects:
-     *
-     *   Supplier row
-     *        +
-     *   GL rows
-     *        ↓
-     *   ONE Debit Advice Line
-     *
-     * This makes the upload independent of Excel row order.
+     * Ensure each sequence has at least one valid Supplier line populated.
      */
     for (const documentKey of Object.keys(groupedDocuments)) {
       const document = groupedDocuments[documentKey];
 
-      const supplierRows = document.supplierRows ?? [];
-      const glRows = document.glRows ?? [];
-
-      /*
-       * Each SEQUENCE must have a Supplier row.
-       *
-       * The Supplier becomes debit_advice_line.
-       */
-      if (supplierRows.length === 0) {
+      if (!document.line || document.line.length === 0) {
         errors.push({
           row: 0,
           error: `No Supplier row found for SEQUENCE ${documentKey}`,
         });
 
         delete groupedDocuments[documentKey];
-        continue;
       }
-
-      /*
-       * A SEQUENCE represents one Debit Advice.
-       * The current template expects one Supplier
-       * connected to its GL rows.
-       */
-      if (supplierRows.length > 1) {
-        errors.push({
-          row: 0,
-          error: `Multiple Supplier rows found for SEQUENCE ${documentKey}. Only one Supplier row is allowed per SEQUENCE.`,
-        });
-
-        delete groupedDocuments[documentKey];
-        continue;
-      }
-
-      const supplier = supplierRows[0];
-
-      /*
-       * Supplier → debit_advice_line
-       *
-       * GL → debit_advice_gl_items
-       */
-      document.line = [
-        {
-          vendor_code: supplier.vendor_code,
-          vendor_name: supplier.vendor_name,
-          category: supplier.category,
-          amount: supplier.amount,
-          particulars: supplier.particulars,
-
-          /*
-           * Every GL row belonging to the same
-           * SEQUENCE becomes a GL Item.
-           */
-          glItems: glRows.map((glItem: any) => ({
-            gl_code: glItem.gl_code,
-            gl_name: glItem.gl_name,
-            profitcenter_code: glItem.profitcenter_code,
-            amount: glItem.amount,
-            Remarks: glItem.Remarks,
-          })),
-        },
-      ];
-
-      /*
-       * Temporary properties are no longer needed
-       * by create().
-       */
-      delete document.supplierRows;
-      delete document.glRows;
     }
     /*
      * SAVE DOCUMENTS
@@ -1887,11 +1811,6 @@ export class DebitAdviceService {
             createdBy: { id: userId } as any,
             requestor_id: userId,
 
-            // Temporary collections.
-            // All rows are connected by SEQUENCE.
-            supplierRows: [],
-            glRows: [],
-            sourceRows: [],
             line: [],
           };
         }
@@ -1937,19 +1856,6 @@ export class DebitAdviceService {
          */
         const identifier = String(gl).trim();
 
-        groupedDocuments[documentKey].sourceRows.push({
-          rowNumber: index + 2,
-          SEQUENCE: sequence,
-          GL: identifier,
-          Type: normalizedType === "SUPPLIER" ? "Supplier" : "GL",
-          LOCATION: location,
-          "TRANSACTION DATE": formatExcelDate(transactionDate),
-          Profitcenter:
-            normalizedType === "GL" ? String(profitcenter ?? "").trim() : "",
-          Remarks: remarks,
-          Amount: amount,
-        });
-
         if (normalizedType === "SUPPLIER") {
           const supplierCode = identifier;
 
@@ -1967,12 +1873,14 @@ export class DebitAdviceService {
             continue;
           }
 
-          groupedDocuments[documentKey].supplierRows.push({
+          // Push directly to line array. Future GLs will be added to this supplier's glItems.
+          groupedDocuments[documentKey].line.push({
             vendor_code: supplier.supplier_code,
             vendor_name: supplier.supplier_name || "-",
             category: "-",
             amount,
             particulars: remarks,
+            glItems: [],
           });
         }
 
@@ -1993,7 +1901,17 @@ export class DebitAdviceService {
             continue;
           }
 
-          groupedDocuments[documentKey].glRows.push({
+          const currentLines = groupedDocuments[documentKey].line;
+          if (currentLines.length === 0) {
+            errors.push({
+              row: index + 2,
+              error: `GL row found before any Supplier row for SEQUENCE ${documentKey}. Please place the Supplier row immediately before its GL rows.`,
+            });
+            continue;
+          }
+
+          // Add this GL to the most recently read Supplier line in this sequence
+          currentLines[currentLines.length - 1].glItems.push({
             gl_code: glAccount.gl_code,
             gl_name: glAccount.gl_name || "-",
             profitcenter_code: String(profitcenter ?? "").trim(),
@@ -2009,91 +1927,21 @@ export class DebitAdviceService {
       }
     }
     /*
-     * BUILD DEBIT ADVICE LINES
+     * VALIDATE DEBIT ADVICE LINES
      *
-     * At this point all Excel rows have already been read.
-     *
-     * SEQUENCE connects:
-     *
-     *   Supplier row
-     *        +
-     *   GL rows
-     *        ↓
-     *   ONE Debit Advice Line
-     *
-     * This makes the upload independent of Excel row order.
+     * Ensure each sequence has at least one valid Supplier line populated.
      */
     for (const documentKey of Object.keys(groupedDocuments)) {
       const document = groupedDocuments[documentKey];
 
-      const supplierRows = document.supplierRows ?? [];
-      const glRows = document.glRows ?? [];
-
-      /*
-       * Each SEQUENCE must have a Supplier row.
-       *
-       * The Supplier becomes debit_advice_line.
-       */
-      if (supplierRows.length === 0) {
+      if (!document.line || document.line.length === 0) {
         errors.push({
           row: 0,
           error: `No Supplier row found for SEQUENCE ${documentKey}`,
         });
 
         delete groupedDocuments[documentKey];
-        continue;
       }
-
-      /*
-       * A SEQUENCE represents one Debit Advice.
-       * The current template expects one Supplier
-       * connected to its GL rows.
-       */
-      if (supplierRows.length > 1) {
-        errors.push({
-          row: 0,
-          error: `Multiple Supplier rows found for SEQUENCE ${documentKey}. Only one Supplier row is allowed per SEQUENCE.`,
-        });
-
-        delete groupedDocuments[documentKey];
-        continue;
-      }
-
-      const supplier = supplierRows[0];
-
-      /*
-       * Supplier → debit_advice_line
-       *
-       * GL → debit_advice_gl_items
-       */
-      document.line = [
-        {
-          vendor_code: supplier.vendor_code,
-          vendor_name: supplier.vendor_name,
-          category: supplier.category,
-          amount: supplier.amount,
-          particulars: supplier.particulars,
-
-          /*
-           * Every GL row belonging to the same
-           * SEQUENCE becomes a GL Item.
-           */
-          glItems: glRows.map((glItem: any) => ({
-            gl_code: glItem.gl_code,
-            gl_name: glItem.gl_name,
-            profitcenter_code: glItem.profitcenter_code,
-            amount: glItem.amount,
-            Remarks: glItem.Remarks,
-          })),
-        },
-      ];
-
-      /*
-       * Temporary properties are no longer needed
-       * by create().
-       */
-      delete document.supplierRows;
-      delete document.glRows;
     }
     /*
      * SAVE DOCUMENTS
