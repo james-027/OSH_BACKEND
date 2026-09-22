@@ -1103,6 +1103,7 @@ export class ReqTransactionHeadersService {
     end_date?: string, // Type 2 single-warehouse: dates from payload
     supplier_id?: number, // Type 2 (Rental): supplier ID
     contract_amount?: number, // Type 2 (Rental): contract amount
+    remarks?: string, // Optional remarks for transaction header
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1238,7 +1239,7 @@ export class ReqTransactionHeadersService {
               warehouse_id: warehouse.id,
               requirement_id: requirement.id,
               trans_date: calculatedTransDate,
-              trans_remarks: null,
+              trans_remarks: remarks || null,
               trans_due_status_id: transDueStatusId,
               created_by: userId,
               access_key_id: accessKeyId,
@@ -1655,7 +1656,7 @@ export class ReqTransactionHeadersService {
               warehouse_id: warehouse.id,
               requirement_id: requirement.id,
               trans_date: today,
-              trans_remarks: null,
+              trans_remarks: remarks || null,
               trans_due_status_id: 1, // Active
               created_by: userId,
               access_key_id: accessKeyId,
@@ -2075,6 +2076,7 @@ export class ReqTransactionHeadersService {
           isSingleWarehouseType2 ? createDto.end_date : undefined,
           createDto.supplier_id,
           createDto.contract_amount,
+          createDto.remarks,
         );
 
         // Merge results from type-specific processing
