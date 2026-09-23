@@ -235,6 +235,7 @@ export class WarehouseEmployeesService {
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
         : null,
+      assigned_ss_email: rec.assignedSs ? rec.assignedSs.employee_email : null,
       assigned_ah: rec.assigned_ah,
       assigned_ah_emp_no: rec.assignedAh
         ? rec.assignedAh.employee_number
@@ -242,12 +243,16 @@ export class WarehouseEmployeesService {
       assigned_ah_name: rec.assignedAh
         ? `${rec.assignedAh.employee_first_name} ${rec.assignedAh.employee_last_name}`
         : null,
+      assigned_ah_email: rec.assignedAh ? rec.assignedAh.employee_email : null,
       assigned_bch: rec.assigned_bch,
       assigned_bch_emp_no: rec.assignedBch
         ? rec.assignedBch.employee_number
         : null,
       assigned_bch_name: rec.assignedBch
         ? `${rec.assignedBch.employee_first_name} ${rec.assignedBch.employee_last_name}`
+        : null,
+      assigned_bch_email: rec.assignedBch
+        ? rec.assignedBch.employee_email
         : null,
       assigned_gbch: rec.assigned_gbch,
       assigned_gbch_emp_no: rec.assignedGbch
@@ -256,6 +261,9 @@ export class WarehouseEmployeesService {
       assigned_gbch_name: rec.assignedGbch
         ? `${rec.assignedGbch.employee_first_name} ${rec.assignedGbch.employee_last_name}`
         : null,
+      assigned_gbch_email: rec.assignedGbch
+        ? rec.assignedGbch.employee_email
+        : null,
       assigned_rh: rec.assigned_rh,
       assigned_rh_emp_no: rec.assignedRh
         ? rec.assignedRh.employee_number
@@ -263,12 +271,16 @@ export class WarehouseEmployeesService {
       assigned_rh_name: rec.assignedRh
         ? `${rec.assignedRh.employee_first_name} ${rec.assignedRh.employee_last_name}`
         : null,
+      assigned_rh_email: rec.assignedRh ? rec.assignedRh.employee_email : null,
       assigned_grh: rec.assigned_grh,
       assigned_grh_emp_no: rec.assignedGrh
         ? rec.assignedGrh.employee_number
         : null,
       assigned_grh_name: rec.assignedGrh
         ? `${rec.assignedGrh.employee_first_name} ${rec.assignedGrh.employee_last_name}`
+        : null,
+      assigned_grh_email: rec.assignedGrh
+        ? rec.assignedGrh.employee_email
         : null,
       status_id: rec.status_id,
       status_name: rec.status ? rec.status.status_name : null,

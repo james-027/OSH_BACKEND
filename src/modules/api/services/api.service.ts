@@ -20,6 +20,7 @@ import {
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
 import { QA_PORT } from "src/constants/customConstants";
+import { EmployeesService } from "src/modules/employees/services/employees.service";
 
 @Injectable()
 export class ApiService {
@@ -48,6 +49,7 @@ export class ApiService {
     private reqTransactionDetailRepository: Repository<ReqTransactionDetail>,
     private commonUtilitiesService: CommonUtilitiesService,
     private warehouseEmployeesService: WarehouseEmployeesService,
+    private employeeService: EmployeesService,
   ) {}
 
   async validateApiKey(apiKey: string): Promise<ApiKey> {
@@ -166,7 +168,9 @@ export class ApiService {
     if (
       (endpoint === "store-crew-assignments" ||
         endpoint === "stores" ||
-        endpoint === "suppliers") &&
+        endpoint === "suppliers" ||
+        endpoint === "store-rentals-attachment" ||
+        endpoint === "store-personnels") &&
       Array.isArray(responseData)
     ) {
       logResponse = { count: responseData.length };
@@ -430,7 +434,9 @@ export class ApiService {
               DATE_FORMAT(b.tsModified, '%Y-%m-%d %H:%i:%s') AS crew_ts_modified,
               d.status AS assignment_status,
               e.asgnStat AS assignment_status_flag,
-              f.status AS crew_status
+              f.status AS crew_status,
+              g.agencyDesc AS agency_name,
+              g.agencyCode AS agency_code
             FROM
               crew_outlet a
               INNER JOIN crew b ON a.crewID = b.crewID
@@ -438,6 +444,7 @@ export class ApiService {
               INNER JOIN status d ON a.statusID = d.statusID
               INNER JOIN asgnstatus e ON a.asgnStatID = e.asgnStatID
               INNER JOIN status f ON b.statusID = f.statusID
+              INNER JOIN agency g ON b.agencyID = g.agencyID
             WHERE
               ${whereClauses.join(" AND ")}
               ORDER BY a.crewCode, a.tsCreated
@@ -467,6 +474,8 @@ export class ApiService {
                 crew_ts_created: row.crew_ts_created,
                 crew_ts_modified: row.crew_ts_modified,
                 crew_status: row.crew_status,
+                agency_name: row.agency_name,
+                agency_code: row.agency_code,
               });
             }
 
@@ -744,6 +753,96 @@ export class ApiService {
             assignment_date,
             modified_at || undefined,
           );
+
+        case "personnels":
+          const personnel_modified_at = queryParams.modified_at ?? "";
+
+          return await this.employeeService.findAll(
+            1,
+            null,
+            null,
+            personnel_modified_at || undefined,
+          );
+
+        case "bc-personnels":
+          // 1. Extract at i-validate ang parameters
+          const bc_assignment_date = queryParams.assignment_date;
+          const bc_modified_at = queryParams.modified_at ?? "";
+
+          if (!bc_assignment_date) {
+            throw new HttpException(
+              "assignment_date is required",
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+
+          // 2. Kunin ang raw personnel data galing sa service
+          const bcPersonnels = await this.warehouseEmployeesService.findAll(
+            1,
+            null,
+            null,
+            bc_assignment_date,
+            bc_modified_at || undefined,
+          );
+
+          // Define ng listahan ng roles
+          const roles = ["ss", "ah", "bch", "gbch", "rh", "grh"];
+
+          // 3. I-group ang data per location at per role
+          const groupedByLocation = bcPersonnels.reduce(
+            (acc, currentItem) => {
+              const locationKey = currentItem.location_name || "UNASSIGNED";
+
+              // Kapag wala pa ang location sa accumulator, i-initialize ito
+              if (!acc[locationKey]) {
+                acc[locationKey] = {
+                  status_id: currentItem.status_id,
+                  status_name: currentItem.status_name,
+                  assignment_date: currentItem.assignment_date,
+                  // created_at: currentItem.created_at,
+                  // created_by: currentItem.created_by,
+                  // updated_by: currentItem.updated_by,
+                  // modified_at: currentItem.modified_at,
+                  // created_user: currentItem.created_user,
+                  // updated_user: currentItem.updated_user,
+                  // Initialize arrays para sa bawat role
+                  ss: [],
+                  ah: [],
+                  bch: [],
+                  gbch: [],
+                  rh: [],
+                  grh: [],
+                };
+              }
+
+              // I-loop ang bawat role para i-extract ang personnel details
+              roles.forEach((role) => {
+                const empNo = currentItem[`assigned_${role}_emp_no`];
+
+                // Kung may valid na emp_no para sa role na ito
+                if (empNo) {
+                  const roleArray = acc[locationKey][role];
+
+                  // Check kung naroon na ang employee para maiwasan ang duplicate
+                  const exists = roleArray.some((emp) => emp.emp_no === empNo);
+
+                  if (!exists) {
+                    roleArray.push({
+                      id: currentItem[`assigned_${role}`],
+                      emp_no: empNo,
+                      name: currentItem[`assigned_${role}_name`],
+                      email: currentItem[`assigned_${role}_email`],
+                    });
+                  }
+                }
+              });
+
+              return acc;
+            },
+            {} as Record<string, any>,
+          );
+
+          return groupedByLocation;
 
         default:
           throw new HttpException(

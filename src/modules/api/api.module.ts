@@ -20,6 +20,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { UsersModule } from "../users/users.module";
 import { WarehousesModule } from "../warehouses/warehouses.module";
+import { EmployeesModule } from "../employees/employees.module";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { WarehousesModule } from "../warehouses/warehouses.module";
     ]),
     UsersModule,
     WarehousesModule,
+    EmployeesModule,
   ],
   controllers: [ApiController],
   providers: [ApiService, ApiKeyGuard, CommonUtilitiesService],

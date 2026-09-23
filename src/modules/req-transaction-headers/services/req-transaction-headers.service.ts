@@ -32,6 +32,7 @@ import { FileUploadHandler } from "src/utils/file-upload.utils";
 import { RequirementRemindersService } from "../../requirements/services/requirement-reminders.service";
 import { ReqTransactionDue } from "src/entities/ReqTransactionDue";
 import { ReqTransactionDetail } from "src/entities/ReqTransactionDetail";
+import { Supplier } from "src/entities/Supplier";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
@@ -65,6 +66,8 @@ export class ReqTransactionHeadersService {
     private requirementRemindersRepository: Repository<RequirementReminder>,
     @InjectRepository(SyncLog)
     private syncLogRepository: Repository<SyncLog>,
+    @InjectRepository(Supplier)
+    private supplierRepository: Repository<Supplier>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private cacheInvalidationService: CacheInvalidationService,
@@ -944,16 +947,22 @@ export class ReqTransactionHeadersService {
    *   - 50000123-SRLC-2026-01-01_2026-12-31 (copy).pdf
    *   - 50000123-SRLC-2026-01-01_2026-12-31 (anything_inside).pdf
    *
+   * For mass upload (multi-warehouse mode), the format also includes supplier_code and contract_amount:
+   *   warehouse_ifs-supplier_code-YYYY-MM-DD_YYYY-MM-DD-contract_amount[optional (...)].ext
+   *   Example: 50000123-SUP001-2026-01-01_2026-12-31-150000.00.pdf
+   *
    * Optional duplicate counter can have any text inside parentheses: (2), (copy), (etc), (backup_v1), etc.
    * Text outside parentheses after date range will be rejected.
    *
-   * Returns: { valid, warehouse_ifs, start_date, end_date, error }
+   * Returns: { valid, warehouse_ifs, start_date, end_date, supplier_code?, contract_amount?, error }
    */
   private parseType2Filename(filename: string): {
     valid: boolean;
     warehouse_ifs?: string;
     start_date?: string;
     end_date?: string;
+    supplier_code?: string;
+    contract_amount?: number;
     error?: string;
   } {
     try {
@@ -962,56 +971,111 @@ export class ReqTransactionHeadersService {
         FileUploadHandler.normalizeFilenameForSave(filename);
       const withoutExt = cleanedFilename.replace(/\.[^/.]+$/, "");
 
-      // Format: warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text_here)]
+      // New format (mass upload): warehouse_ifs-requirement_abbr-supplier_code-YYYY-MM-DD_YYYY-MM-DD-contract_amount[optional (any_text)]
       // Regex breakdown:
-      // ^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})  <- base format (required)
+      // ^([^-]+)-([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})-([\d.]+)  <- base: wh_ifs, abbr, supp_code, dates, amount
       // (?:\s*\([^)]*\))?  <- optional: spaces + "(" + any chars except ")" + ")"
       // $  <- end of string (nothing else allowed)
-      const regex =
+      const newRegex =
+        /^([^-]+)-([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})-([\d.]+)(?:\s*\([^)]*\))?$/;
+      const newMatch = withoutExt.match(newRegex);
+
+      if (newMatch) {
+        // New format matched — includes requirement_abbr, supplier_code, and contract_amount
+        const warehouse_ifs = newMatch[1];
+        // const requirement_abbr = newMatch[2]; // Captured but not used
+        const supplier_code = newMatch[3];
+        const start_date = newMatch[4];
+        const end_date = newMatch[5];
+        const contract_amount = parseFloat(newMatch[6]);
+
+        // Validate dates
+        if (!isValidCalendarDate(start_date)) {
+          return {
+            valid: false,
+            error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
+          };
+        }
+        if (!isValidCalendarDate(end_date)) {
+          return {
+            valid: false,
+            error: `Invalid end date: '${end_date}' (not a valid calendar date)`,
+          };
+        }
+        if (start_date > end_date) {
+          return {
+            valid: false,
+            error: "Start date must be before or equal to end date",
+          };
+        }
+        if (isNaN(contract_amount) || contract_amount < 0) {
+          return {
+            valid: false,
+            error: `Invalid contract amount: '${newMatch[6]}'`,
+          };
+        }
+        // Reject values with multiple dots (e.g. "20900.98.00")
+        const amountStr = newMatch[6];
+        if ((amountStr.match(/\./g) || []).length > 1) {
+          return {
+            valid: false,
+            error: `Invalid contract amount format: '${amountStr}' (multiple decimal points)`,
+          };
+        }
+
+        return {
+          valid: true,
+          warehouse_ifs,
+          supplier_code,
+          start_date,
+          end_date,
+          contract_amount,
+        };
+      }
+
+      // Fallback: old format — warehouse_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text)]
+      const oldRegex =
         /^([^-]+)-([^-]+)-(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?$/;
-      const match = withoutExt.match(regex);
+      const oldMatch = withoutExt.match(oldRegex);
 
-      if (!match) {
+      if (oldMatch) {
+        const warehouse_ifs = oldMatch[1];
+        // const requirement_abbr = oldMatch[2]; // Captured but not used
+        const start_date = oldMatch[3];
+        const end_date = oldMatch[4];
+
+        if (!isValidCalendarDate(start_date)) {
+          return {
+            valid: false,
+            error: `Invalid start date: '${start_date}' (not a valid calendar date)`,
+          };
+        }
+        if (!isValidCalendarDate(end_date)) {
+          return {
+            valid: false,
+            error: `Invalid end date: '${end_date}' (not a valid calendar date)`,
+          };
+        }
+        if (start_date > end_date) {
+          return {
+            valid: false,
+            error: "Start date must be before or equal to end date",
+          };
+        }
+
         return {
-          valid: false,
-          error:
-            "Invalid format. Expected: store_ifs-requirement_abbr-YYYY-MM-DD_YYYY-MM-DD[optional (any_text)].ext | Examples: 50000123-SRLC-2026-01-01_2026-12-31.pdf OR 50000123-SRLC-2026-01-01_2026-12-31 (2).pdf",
+          valid: true,
+          warehouse_ifs,
+          start_date,
+          end_date,
         };
       }
 
-      const warehouse_ifs = match[1];
-      // const requirement_abbr = match[2]; // Captured but not used
-      const start_date = match[3];
-      const end_date = match[4];
-
-      // Validate dates are actual valid calendar dates (e.g., reject 2026-11-31)
-      if (!isValidCalendarDate(start_date)) {
-        return {
-          valid: false,
-          error: `Invalid start date: '${start_date}' (not a valid calendar date, e.g., November only has 30 days)`,
-        };
-      }
-
-      if (!isValidCalendarDate(end_date)) {
-        return {
-          valid: false,
-          error: `Invalid end date: '${end_date}' (not a valid calendar date, e.g., November only has 30 days)`,
-        };
-      }
-
-      // Validate start_date <= end_date (using string comparison works for YYYY-MM-DD format)
-      if (start_date > end_date) {
-        return {
-          valid: false,
-          error: "Start date must be before or equal to end date",
-        };
-      }
-
+      // Neither format matched
       return {
-        valid: true,
-        warehouse_ifs,
-        start_date,
-        end_date,
+        valid: false,
+        error:
+          "Invalid format. Expected (mass upload): store_ifs-requirement_abbr-supplier_code-YYYY-MM-DD_YYYY-MM-DD-amount.ext | Or (single): store_ifs-abbr-YYYY-MM-DD_YYYY-MM-DD.ext | Examples: 50000123-SRLC-SUP001-2026-01-01_2026-12-31-150000.00.pdf OR 50000123-SRLC-2026-01-01_2026-12-31.pdf",
       };
     } catch (err) {
       return {
@@ -1039,6 +1103,7 @@ export class ReqTransactionHeadersService {
     end_date?: string, // Type 2 single-warehouse: dates from payload
     supplier_id?: number, // Type 2 (Rental): supplier ID
     contract_amount?: number, // Type 2 (Rental): contract amount
+    remarks?: string, // Optional remarks for transaction header
   ): Promise<{
     successResults: any[];
     errors: any[];
@@ -1174,7 +1239,7 @@ export class ReqTransactionHeadersService {
               warehouse_id: warehouse.id,
               requirement_id: requirement.id,
               trans_date: calculatedTransDate,
-              trans_remarks: null,
+              trans_remarks: remarks || null,
               trans_due_status_id: transDueStatusId,
               created_by: userId,
               access_key_id: accessKeyId,
@@ -1353,20 +1418,26 @@ export class ReqTransactionHeadersService {
         try {
           // Dates from payload (single-warehouse) or fallback to filename parsing
           const hasPayloadDates = !!(start_date && end_date);
-          // Extract rental dates from files (should be same for all files in this batch)
+          // Extract rental info (dates + optional supplier/contract) from files
           const rentalDates: Map<
             string,
-            { start_date: string; end_date: string }
+            {
+              start_date: string;
+              end_date: string;
+              supplier_code?: string;
+              contract_amount?: number;
+            }
           > = new Map();
 
           for (const file of files) {
             if (hasPayloadDates) {
-              // Single-warehouse: dates provided from frontend, accept any filename
+              // Single-warehouse: dates & supplier/contract from payload
               rentalDates.set(file.filename, {
                 start_date: start_date!,
                 end_date: end_date!,
               });
             } else {
+              // Multi-warehouse: extract dates & supplier/contract from filename
               const parseResult = this.parseType2Filename(file.filename);
 
               if (!parseResult.valid) {
@@ -1381,6 +1452,8 @@ export class ReqTransactionHeadersService {
               rentalDates.set(file.filename, {
                 start_date: parseResult.start_date,
                 end_date: parseResult.end_date,
+                supplier_code: parseResult.supplier_code,
+                contract_amount: parseResult.contract_amount,
               });
             }
           }
@@ -1418,7 +1491,36 @@ export class ReqTransactionHeadersService {
               continue;
             }
 
-            const { start_date, end_date } = rentalInfo;
+            const {
+              start_date,
+              end_date,
+              supplier_code: fileSupplierCode,
+              contract_amount: fileContractAmount,
+            } = rentalInfo;
+
+            // Resolve supplier_id and contract_amount per warehouse:
+            //   - Single-warehouse mode: use payload params (supplier_id / contract_amount)
+            //   - Multi-warehouse mode: extract from filename (supplier_code / contract_amount)
+            let effectiveSupplierId: number | undefined = supplier_id;
+            let effectiveContractAmount: number | undefined = contract_amount;
+
+            if (!hasPayloadDates && fileSupplierCode) {
+              // Multi-warehouse: look up supplier by supplier_code from filename
+              const supplierEntity = await this.supplierRepository.findOne({
+                where: { supplier_code: fileSupplierCode },
+              });
+              if (!supplierEntity) {
+                errors.push({
+                  warehouse_name: `${warehouse.warehouse_ifs} - ${warehouse.warehouse_name}`,
+                  file: firstFile.filename,
+                  reason: `Supplier not found for code: ${fileSupplierCode}`,
+                  field: "supplier_code",
+                });
+                continue;
+              }
+              effectiveSupplierId = supplierEntity.id;
+              effectiveContractAmount = fileContractAmount;
+            }
 
             // Check if active rental already exists
             const existingReq = await queryRunner.manager.findOne(
@@ -1487,8 +1589,12 @@ export class ReqTransactionHeadersService {
               status_id: 1,
               access_key_id: accessKeyId,
               created_by: userId,
-              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
-              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
+              ...(effectiveSupplierId !== undefined && {
+                supplier_id: effectiveSupplierId,
+              }), // Include supplier for Type 2 (Rental)
+              ...(effectiveContractAmount !== undefined && {
+                contract_amount: effectiveContractAmount,
+              }), // Include contract amount for Type 2 (Rental)
             });
 
             const savedRental = await queryRunner.manager.save(newRental);
@@ -1550,15 +1656,19 @@ export class ReqTransactionHeadersService {
               warehouse_id: warehouse.id,
               requirement_id: requirement.id,
               trans_date: today,
-              trans_remarks: null,
+              trans_remarks: remarks || null,
               trans_due_status_id: 1, // Active
               created_by: userId,
               access_key_id: accessKeyId,
               status_id: 1,
               trans_number,
               location_id,
-              ...(supplier_id !== undefined && { supplier_id }), // Include supplier for Type 2 (Rental)
-              ...(contract_amount !== undefined && { contract_amount }), // Include contract amount for Type 2 (Rental)
+              ...(effectiveSupplierId !== undefined && {
+                supplier_id: effectiveSupplierId,
+              }), // Include supplier for Type 2 (Rental)
+              ...(effectiveContractAmount !== undefined && {
+                contract_amount: effectiveContractAmount,
+              }), // Include contract amount for Type 2 (Rental)
             };
 
             const headerRecord = queryRunner.manager.create(
@@ -1805,22 +1915,29 @@ export class ReqTransactionHeadersService {
       }
 
       //* Step 1.5: Validate conditional fields for requirement_type_id = 2 (Rental)
+      //* Single-warehouse mode (payload has dates): supplier/contract come from payload — require them
+      //* Multi-warehouse mode (dates from filename): supplier/contract come from filename — not required in payload
       if (requirement.requirement_type_id === 2) {
-        if (
-          createDto.supplier_id === undefined ||
-          createDto.supplier_id === null
-        ) {
-          throw new BadRequestException(
-            "supplier_id is required for requirement type 2 (Store Rental)",
-          );
-        }
-        if (
-          createDto.contract_amount === undefined ||
-          createDto.contract_amount === null
-        ) {
-          throw new BadRequestException(
-            "contract_amount is required for requirement type 2 (Store Rental)",
-          );
+        const isSingleWarehouseType2 =
+          createDto.start_date && createDto.end_date;
+
+        if (isSingleWarehouseType2) {
+          if (
+            createDto.supplier_id === undefined ||
+            createDto.supplier_id === null
+          ) {
+            throw new BadRequestException(
+              "supplier_id is required for requirement type 2 (Store Rental)",
+            );
+          }
+          if (
+            createDto.contract_amount === undefined ||
+            createDto.contract_amount === null
+          ) {
+            throw new BadRequestException(
+              "contract_amount is required for requirement type 2 (Store Rental)",
+            );
+          }
         }
       }
 
@@ -1959,6 +2076,7 @@ export class ReqTransactionHeadersService {
           isSingleWarehouseType2 ? createDto.end_date : undefined,
           createDto.supplier_id,
           createDto.contract_amount,
+          createDto.remarks,
         );
 
         // Merge results from type-specific processing

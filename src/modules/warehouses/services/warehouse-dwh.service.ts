@@ -30,7 +30,7 @@ export class WarehouseDwhService {
   }> {
     const sourceConn = await getCtgiSemsConnection();
     const [rows] = await sourceConn.execute(
-      `SELECT outletIFS, outletCode, outletDesc, brnID, ownID, address, status FROM outlets where status < 7`,
+      `SELECT outletIFS, outletCode, outletDesc, brnID, ownID, address, posAvailability, status FROM outlets where status < 7`,
     );
     let inserted = 0;
     let failed = 0;
@@ -127,6 +127,10 @@ export class WarehouseDwhService {
                 existing.rem_status_id = row.remStatusId;
                 needsUpdate = true;
               }
+              if (existing.pos_availability_id !== row.posAvailability) {
+                existing.pos_availability_id = row.posAvailability;
+                needsUpdate = true;
+              }
               if (needsUpdate) {
                 existing.access_key_id = accessKeyId;
                 await this.warehouseRepository.save(existing);
@@ -154,6 +158,10 @@ export class WarehouseDwhService {
               existing.rem_status_id = row.remStatusId;
               needsUpdate = true;
             }
+            if (existing.pos_availability_id !== row.posAvailability) {
+              existing.pos_availability_id = row.posAvailability;
+              needsUpdate = true;
+            }
             if (needsUpdate) {
               existing.access_key_id = accessKeyId;
               await this.warehouseRepository.save(existing);
@@ -172,6 +180,7 @@ export class WarehouseDwhService {
             status_id: 1,
             rem_status_id: row.remStatusId,
             warehouse_type_id: 1,
+            pos_availability_id: row.posAvailability,
             access_key_id: accessKeyId,
           });
           await this.warehouseRepository.save(warehouse);
