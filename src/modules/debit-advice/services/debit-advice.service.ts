@@ -1327,54 +1327,6 @@ export class DebitAdviceService {
                * SEQUENCE has already connected the Supplier + GL rows
                * into the same Debit Advice before this point.
                */
-              const savedLines = await this.debitAdviceLineRepository.find({
-                where: {
-                  header_id: createdDebitAdvice.id,
-                },
-              });
-
-              for (const documentLine of document.line ?? []) {
-                const savedLine = savedLines.find(
-                  (line) =>
-                    String(line.vendor_code) ===
-                    String(documentLine.vendor_code),
-                );
-
-                if (!savedLine) {
-                  throw new BadRequestException(
-                    `Debit Advice line not found for vendor ${documentLine.vendor_code}`,
-                  );
-                }
-
-                for (const glItem of documentLine.glItems ?? []) {
-                  /*
-                   * Prevent duplicate GL item creation if the
-                   * create() method already persisted it.
-                   */
-                  const existingGLItem =
-                    await this.debitAdviceGLItemsRepository.findOne({
-                      where: {
-                        line_id: savedLine.id,
-                        gl_code: glItem.gl_code,
-                        profitcenter_code: glItem.profitcenter_code,
-                        amount: glItem.amount,
-                        ref_docno: createdDebitAdvice.document_number,
-                      },
-                    });
-
-                  if (!existingGLItem) {
-                    await this.debitAdviceGLItemsRepository.save({
-                      line_id: savedLine.id,
-                      ref_docno: createdDebitAdvice.document_number,
-                      gl_code: glItem.gl_code,
-                      profitcenter_code: glItem.profitcenter_code,
-                      amount: glItem.amount,
-                      Remarks: glItem.Remarks || "-",
-                      createdBy: { id: userId } as any,
-                    });
-                  }
-                }
-              }
 
               /*
                * Reload relations after save.
@@ -2019,54 +1971,6 @@ export class DebitAdviceService {
                * SEQUENCE has already connected the Supplier + GL rows
                * into the same Debit Advice before this point.
                */
-              const savedLines = await this.debitAdviceLineRepository.find({
-                where: {
-                  header_id: createdDebitAdvice.id,
-                },
-              });
-
-              for (const documentLine of document.line ?? []) {
-                const savedLine = savedLines.find(
-                  (line) =>
-                    String(line.vendor_code) ===
-                    String(documentLine.vendor_code),
-                );
-
-                if (!savedLine) {
-                  throw new BadRequestException(
-                    `Debit Advice line not found for vendor ${documentLine.vendor_code}`,
-                  );
-                }
-
-                for (const glItem of documentLine.glItems ?? []) {
-                  /*
-                   * Prevent duplicate GL item creation if the
-                   * create() method already persisted it.
-                   */
-                  const existingGLItem =
-                    await this.debitAdviceGLItemsRepository.findOne({
-                      where: {
-                        line_id: savedLine.id,
-                        gl_code: glItem.gl_code,
-                        profitcenter_code: glItem.profitcenter_code,
-                        amount: glItem.amount,
-                        ref_docno: createdDebitAdvice.document_number,
-                      },
-                    });
-
-                  if (!existingGLItem) {
-                    await this.debitAdviceGLItemsRepository.save({
-                      line_id: savedLine.id,
-                      ref_docno: createdDebitAdvice.document_number,
-                      gl_code: glItem.gl_code,
-                      profitcenter_code: glItem.profitcenter_code,
-                      amount: glItem.amount,
-                      Remarks: glItem.Remarks || "-",
-                      createdBy: { id: userId } as any,
-                    });
-                  }
-                }
-              }
 
               /*
                * Reload relations after save.
