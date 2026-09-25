@@ -931,6 +931,15 @@ export class DebitAdviceService {
         const gl = getExcelValue(row, "GL");
         const location = getExcelValue(row, "LOCATION");
         const transactionDate = getExcelValue(row, "TRANSACTION DATE");
+        const normalizedTransactionDate = formatExcelDate(transactionDate);
+
+        if (!normalizedTransactionDate) {
+          errors.push({
+            row: index + 2,
+            error: "Invalid Transaction Date",
+          });
+          continue;
+        }
         const profitcenter = getExcelValue(row, "PROFITCENTER");
         const remarks = getExcelValue(row, "REMARKS") ?? "";
         const amountValue = getExcelValue(row, "AMOUNT");
@@ -1108,7 +1117,7 @@ export class DebitAdviceService {
           groupedDocuments[documentKey] = {
             id: 0,
             document_number: "0",
-            transaction_date: formatExcelDate(transactionDate),
+            transaction_date: normalizedTransactionDate,
             status_id: 4,
             quarter: 1,
             remarks: "",
@@ -1222,7 +1231,7 @@ export class DebitAdviceService {
             gl_name: glAccount.gl_name || "-",
             profitcenter_code: String(profitcenter ?? "").trim(),
             amount,
-            Remarks: remarks || "-",
+            Remarks: remarks,
           });
         }
       } catch (err) {
@@ -1343,6 +1352,43 @@ export class DebitAdviceService {
                 throw new NotFoundException(
                   `Debit Advice ${createdDebitAdvice.id} not found`,
                 );
+              }
+
+              /*
+               * Explicitly persist Excel Remarks to debit_advice_gl_items.
+               *
+               * Match the uploaded GL item to the saved GL item using
+               * GL code + Profitcenter + Amount instead of array position.
+               */
+              for (const sourceLine of document.line ?? []) {
+                const savedLine = reloadedDebitAdvice.lines?.find(
+                  (line: any) =>
+                    String(line.vendor_code).trim() ===
+                    String(sourceLine.vendor_code).trim(),
+                );
+
+                if (!savedLine) {
+                  continue;
+                }
+
+                for (const sourceGL of sourceLine.glItems ?? []) {
+                  const savedGL = (savedLine.glItems ?? []).find(
+                    (gl: any) =>
+                      String(gl.gl_code).trim() ===
+                        String(sourceGL.gl_code).trim() &&
+                      String(gl.profitcenter_code).trim() ===
+                        String(sourceGL.profitcenter_code).trim() &&
+                      Number(gl.amount) === Number(sourceGL.amount),
+                  );
+
+                  if (!savedGL) {
+                    continue;
+                  }
+
+                  savedGL.Remarks = String(sourceGL.Remarks ?? "").trim();
+
+                  await this.debitAdviceGLItemsRepository.save(savedGL);
+                }
               }
 
               // ============================================
@@ -1577,6 +1623,15 @@ export class DebitAdviceService {
         const gl = getExcelValue(row, "GL");
         const location = getExcelValue(row, "LOCATION");
         const transactionDate = getExcelValue(row, "TRANSACTION DATE");
+        const normalizedTransactionDate = formatExcelDate(transactionDate);
+
+        if (!normalizedTransactionDate) {
+          errors.push({
+            row: index + 2,
+            error: "Invalid Transaction Date",
+          });
+          continue;
+        }
         const profitcenter = getExcelValue(row, "PROFITCENTER");
         const remarks = getExcelValue(row, "REMARKS") ?? "";
         const amountValue = getExcelValue(row, "AMOUNT");
@@ -1754,7 +1809,7 @@ export class DebitAdviceService {
           groupedDocuments[documentKey] = {
             id: 0,
             document_number: "0",
-            transaction_date: formatExcelDate(transactionDate),
+            transaction_date: normalizedTransactionDate,
             status_id: 3,
             quarter: 1,
             remarks: "",
@@ -1987,6 +2042,89 @@ export class DebitAdviceService {
                 throw new NotFoundException(
                   `Debit Advice ${createdDebitAdvice.id} not found`,
                 );
+              }
+
+              /*
+               * Explicitly persist Excel Remarks to debit_advice_gl_items.
+               *
+               * Match the uploaded GL item to the saved GL item using
+               * GL code + Profitcenter + Amount instead of array position.
+               */
+              for (const sourceLine of document.line ?? []) {
+                const savedLine = reloadedDebitAdvice.lines?.find(
+                  (line: any) =>
+                    String(line.vendor_code).trim() ===
+                    String(sourceLine.vendor_code).trim(),
+                );
+
+                if (!savedLine) {
+                  continue;
+                }
+
+                for (const sourceGL of sourceLine.glItems ?? []) {
+                  const savedGL = (savedLine.glItems ?? []).find(
+                    (gl: any) =>
+                      String(gl.gl_code).trim() ===
+                        String(sourceGL.gl_code).trim() &&
+                      String(gl.profitcenter_code).trim() ===
+                        String(sourceGL.profitcenter_code).trim() &&
+                      Number(gl.amount) === Number(sourceGL.amount),
+                  );
+
+                  if (!savedGL) {
+                    continue;
+                  }
+
+                  const remarksToSave = String(sourceGL.Remarks ?? "").trim();
+
+                  console.log(
+                    "========== GL ITEM DATABASE SAVE DEBUG ==========",
+                  );
+                  console.log("Debit Advice ID:", reloadedDebitAdvice.id);
+                  console.log("Vendor Code:", savedLine.vendor_code);
+                  console.log("GL Code:", savedGL.gl_code);
+                  console.log("Profitcenter:", savedGL.profitcenter_code);
+                  console.log("Amount:", savedGL.amount);
+                  console.log("Source Remarks:", sourceGL.Remarks);
+                  console.log("Remarks To Save:", remarksToSave);
+                  console.log("Remarks Length:", remarksToSave.length);
+                  console.log("Existing DB Remarks:", savedGL.Remarks);
+
+                  savedGL.Remarks = remarksToSave;
+                  console.log("Final savedGL.Remarks:", savedGL.Remarks);
+
+                  const savedGLItem =
+                    await this.debitAdviceGLItemsRepository.save(savedGL);
+
+                  console.log("========== AFTER DATABASE SAVE ==========");
+                  console.log("Saved GL Item ID:", savedGLItem.id);
+                  console.log("Saved GL Code:", savedGLItem.gl_code);
+                  console.log("Saved GL Remarks:", savedGLItem.Remarks);
+                  console.log(
+                    "Saved GL Remarks Length:",
+                    String(savedGLItem.Remarks ?? "").length,
+                  );
+                  const verifyGLItem =
+                    await this.debitAdviceGLItemsRepository.findOne({
+                      where: {
+                        id: savedGLItem.id,
+                      },
+                    });
+
+                  console.log("========== DATABASE VERIFY ==========");
+                  console.log("GL Item ID:", verifyGLItem?.id);
+                  console.log("DB GL Code:", verifyGLItem?.gl_code);
+                  console.log(
+                    "DB Profitcenter:",
+                    verifyGLItem?.profitcenter_code,
+                  );
+                  console.log("DB Amount:", verifyGLItem?.amount);
+                  console.log("DB Remarks:", verifyGLItem?.Remarks);
+                  console.log(
+                    "DB Remarks Length:",
+                    String(verifyGLItem?.Remarks ?? "").length,
+                  );
+                }
               }
               // ============================================
               // INITIALIZE APPROVAL STAGES
@@ -2384,7 +2522,19 @@ const formatExcelDate = (excelDate: any) => {
   }
 
   // Excel serial number
-  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+  if (typeof excelDate === "number") {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
 
-  return jsDate.toISOString().split("T")[0];
+    const calculatedDate = new Date(
+      excelEpoch.getTime() + excelDate * 24 * 60 * 60 * 1000,
+    );
+
+    const year = calculatedDate.getUTCFullYear();
+    const month = String(calculatedDate.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(calculatedDate.getUTCDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
 };
