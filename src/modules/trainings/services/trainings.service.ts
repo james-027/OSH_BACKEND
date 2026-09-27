@@ -30,9 +30,9 @@ export class TrainingService {
 
     try {
       const where: any = {};
-      if (accessKeyId !== undefined) {
-        where.access_key_id = accessKeyId;
-      }
+      // if (accessKeyId !== undefined) {
+      //   where.access_key_id = accessKeyId;
+      // }
 
       const trainings = await this.trainingsRepository.find({
         where,

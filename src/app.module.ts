@@ -121,6 +121,10 @@ import { EmailQueueModule } from "./modules/email-queue/email-queue.module";
 import { EmailQueue } from "./entities/EmailQueue";
 import { MasterDataSyncModule } from "./modules/master-data-sync/master-data-sync.module";
 import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
+import { DigitalWorkspaceModule } from "./modules/digital-workspace-integration/digital-workspace.module";
+import { StaffAttendanceModule } from "./modules/staff-attendance/staff-attendance.module";
+import { WorkingDaysModule } from "./modules/working-days/working-days.module";
+import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -233,6 +237,10 @@ import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
     StaffSchedulingModule,
     EmailQueueModule,
     MasterDataSyncModule,
+    StaffAttendanceModule,
+    DigitalWorkspaceModule,
+    WorkingDaysModule,
+    StaffPayrollModule
   ],
   providers: [
     EmailService,

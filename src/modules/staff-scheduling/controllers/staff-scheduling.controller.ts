@@ -20,6 +20,8 @@ import { RequirePermissions } from "src/decorators/permissions.decorator";
 import { StaffSchedulingService } from "src/modules/staff-scheduling/services/staff-scheduling.service";
 import { CreateScheduleHeaderDto } from "src/modules/staff-scheduling/dto/CreateStaffSchedulingDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-scheduling/dto/UpdateStaffSchedulingDto";
+import { StaffScheduleReportFilterDto } from "src/modules/staff-scheduling/dto/StaffScheduleReportFilterDto";
+
 import {
   FileInterceptor,
   diskStorage,
@@ -41,11 +43,12 @@ export class StaffSchedulingController {
 
   @Get()
   @RequirePermissions({ module: "STAFF SCHEDULING", action: "VIEW" })
-  async findAll(@Query("status_id") statusId?: string) {
+  async findAll(@Query("status_id") statusId?: string, @Request() req?: any,) {
     const parsedStatusId = statusId
       ? statusId.split(",").map(Number)
       : undefined;
-    return this.staffSchedulingService.findAll(parsedStatusId);
+    const accessKeyId = req?.user?.current_access_key;
+    return this.staffSchedulingService.findAll(parsedStatusId, accessKeyId);
   }
 
   // Placed before :id to prevent collision
@@ -181,6 +184,37 @@ async uploadExcel(
       id,
       updateScheduleDto,
       userId,
+    );
+  }
+
+  @Get("reports/schedules")
+  async getScheduleReport(
+    @Query() filter: StaffScheduleReportFilterDto,
+    @Request() req?: any,
+  ): Promise<any[]> {
+    const accessKeyId = req?.user?.current_access_key;
+
+      const locationIds = filter.location_ids
+    ? filter.location_ids
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => !isNaN(id))
+    : undefined;
+
+      const vendorIds = filter.vendor_ids
+    ? filter.vendor_ids
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => !isNaN(id))
+    : undefined;
+
+    return this.staffSchedulingService.generateReportScheduleDetails(
+      filter.schedule_header_id,
+      accessKeyId,
+      filter.date_from,
+      filter.date_to,
+      locationIds,
+      vendorIds
     );
   }
 }

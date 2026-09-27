@@ -384,6 +384,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: savedStaff.id,
+        old_dws_code: savedStaff.old_dws_code,
+        old_dws_id: savedStaff.old_dws_id,
         staff_code: savedStaff.staff_code,
         last_name: savedStaff.last_name,
         first_name: savedStaff.first_name,
@@ -453,19 +455,28 @@ export class StaffsService {
       const savedStaffVendorSalary =
         await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
 
-      const newStaffSalary = this.staffSalaryRepository.create({
-        staff_id: savedStaff.id,
-        staff_vendor_id: newStaffVendorSalary.id,
-        allowance: createStaffDto.allowance,
-        salary_rate: createStaffDto.salary_rate,
-        access_key_id: accessKeyId,
-        status_id: 1,
-        created_by: userId,
-        updated_by: userId,
-      });
+      let savedStaffSalary: StaffSalary | null = null;
 
-      const savedStaffSalary =
-        await this.staffSalaryRepository.save(newStaffSalary);
+      if (
+        (createStaffDto.allowance !== undefined &&
+          createStaffDto.allowance !== null) ||
+        (createStaffDto.salary_rate !== undefined &&
+          createStaffDto.salary_rate !== null)
+      ) {
+        const newStaffSalary = this.staffSalaryRepository.create({
+          staff_id: savedStaff.id,
+          staff_vendor_id: newStaffVendorSalary.id,
+          allowance: createStaffDto.allowance,
+          salary_rate: createStaffDto.salary_rate,
+          access_key_id: accessKeyId,
+          status_id: 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        const savedStaffSalary =
+          await this.staffSalaryRepository.save(newStaffSalary);
+      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -697,6 +708,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
@@ -1498,7 +1511,8 @@ export class StaffsService {
 
       const staffHistory = this.staffHistoriesRepository.save({
         staff_id: updatedStaff.id,
-
+        old_dws_code: updatedStaff.old_dws_code,
+        old_dws_id: updatedStaff.old_dws_id,
         staff_code: updatedStaff.staff_code,
         last_name: updatedStaff.last_name,
         first_name: updatedStaff.first_name,
@@ -1697,8 +1711,11 @@ export class StaffsService {
           where: { id },
         });
 
+
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -1866,18 +1883,12 @@ export class StaffsService {
           continue;
         }
 
-        const normalizeValue = (value: any): string => {
-          return String(value || "")
-            .trim()
-            .toUpperCase()
-            .replace(/\s+/g, "");
-        };
 
-        const locationValue = normalizeValue(row["Location"]);
-        const positionValue = normalizeValue(row["Position"]);
-        const vendorValue = normalizeValue(row["Vendor"]);
-        const brandValue = normalizeValue(row["Brand"]);
-        const categoryTypeValue = normalizeValue(row["Category Type"]);
+        const locationValue = this.normalizeValue(row["Location"]);
+        const positionValue = this.normalizeValue(row["Position"]);
+        const vendorValue = this.normalizeValue(row["Vendor"]);
+        const brandValue = this.normalizeValue(row["Brand"]);
+        const categoryTypeValue = this.normalizeValue(row["Category Type"]);
 
         const location = await this.locationRepository
           .createQueryBuilder("location")
@@ -1959,6 +1970,8 @@ export class StaffsService {
         const lastName = row["Last Name"].toUpperCase().trim();
         const middleName = (row["Middle Name"] || "").toUpperCase().trim();
         const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsCode = row["DWS Code"]?.toString().trim();
+        const dwsId = row["DWS ID"];
 
         const isInstitutional = this.parseExcelBoolean(row["Is Institutional"]);
 
@@ -2132,13 +2145,6 @@ export class StaffsService {
           });
           continue;
         }
-        if (existingEmail && existingEmail.id !== existingRecord?.id) {
-          errors.push({
-            row: i + 2,
-            error: `EMAIL '${EMAIL}' already exists for another staff`,
-          });
-          continue;
-        }
 
         let savedStaff;
         let savedStaffBrand;
@@ -2161,6 +2167,8 @@ export class StaffsService {
           existingRecord.store_request = row["Store Request"];
           existingRecord.sss_number = row["SSS Number"];
           existingRecord.tin = row["TIN"];
+          existingRecord.old_dws_code = dwsCode;
+          existingRecord.old_dws_id = dwsId;
           existingRecord.pagibig_number = row["PAGIBIG Number"];
           existingRecord.phil_health_number = row["Phil Health Number"];
           existingRecord.remarks = row["Remarks"];
@@ -2307,6 +2315,8 @@ export class StaffsService {
             to_hr_date: this.formatDateToString(row["To HR Date"]),
             separated_date: this.formatDateToString(row["Seperated Date"]),
             to_sts_date: this.formatDateToString(row["To STS Date"]),
+            old_dws_code: dwsCode,
+            old_dws_id: dwsId,
             approved_eprf_date: this.formatDateToString(
               row["Approved EPRF Date"],
             ),
@@ -2554,7 +2564,7 @@ export class StaffsService {
       try {
         // REQUIRED FIELD VALIDATION
         const requiredFields = [
-          "Staff Code",
+          // "Staff Code",
           "New Agency",
           "New Location",
           "Allowance",
@@ -2578,10 +2588,16 @@ export class StaffsService {
           continue;
         }
 
-        const location = await this.locationRepository.findOne({
-          where: { location_name: row["New Location"] },
-        });
+        const locationValue = this.normalizeValue(row["New Location"]);
 
+        const location = await this.locationRepository
+          .createQueryBuilder("location")
+          .where(
+            "REPLACE(UPPER(location.location_name), ' ', '') = :value",
+            { value: locationValue },
+          )
+          .getOne();
+   
         let allowedLocationIds: number[] | undefined = undefined;
 
         if (userId && roleId) {
@@ -2608,32 +2624,51 @@ export class StaffsService {
           continue;
         }
 
-        const vendor = await this.vendorRepository.findOne({
-          where: { service_provider_name: row["New Agency"] },
-        });
+
+        const vendorValue = this.normalizeValue(row["New Agency"]);
+
+        const vendor = await this.vendorRepository
+          .createQueryBuilder("vendor")
+          .where(
+            "REPLACE(UPPER(vendor.service_provider_name), ' ', '') = :value",
+            { value: vendorValue },
+          )
+          .getOne();
+
+
 
         if (!vendor) {
           errors.push({
             row: i + 2,
-            error: `Vendor '${row["New Agency"]}' not found`,
+            error: `Agency '${row["New Agency"]}' not found`,
           });
           continue;
         }
 
-        const staffCode = row["Staff Code"]?.toString().trim();
+        const staffCode = row["Staff Code"];
+        const dwsCode = row["DWS Code"];
 
         let existingRecord = null;
 
-        existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: staffCode,
-          },
-        });
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+        } else if (dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
+
 
         if (!existingRecord) {
           errors.push({
             row: i + 2,
-            error: `Staff with Staff Code '${staffCode}' not found`,
+            error: `Staff not found`,
           });
           continue;
         }
@@ -2753,7 +2788,7 @@ export class StaffsService {
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
+        const requiredFields = ["New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -2772,19 +2807,28 @@ export class StaffsService {
         }
 
         const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsCode = row["DWS Code"]?.toString().trim();
 
         let existingRecord = null;
 
-        existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: staffCode,
-          },
-        });
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+        } else if (dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
 
         if (!existingRecord) {
           errors.push({
             row: i + 2,
-            error: `Staff with Staff Code '${staffCode}' not found`,
+            error: `Staff Not found`,
           });
           continue;
         }
@@ -2834,6 +2878,7 @@ export class StaffsService {
           userId,
           accessKeyId,
         );
+
         try {
           await this.actionLogsService.logAction({
             module_name: this.module_name,
@@ -3320,6 +3365,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
@@ -3415,6 +3462,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
@@ -3969,7 +4018,8 @@ export class StaffsService {
 
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
-
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -4149,7 +4199,8 @@ export class StaffsService {
 
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
-
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -4252,4 +4303,12 @@ export class StaffsService {
       throw new Error("Failed to approve staff");
     }
   }
+
+  private normalizeValue = (value: any): string => {
+          return String(value || "")
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, "");
+        };
+
 }

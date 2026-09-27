@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In, Not } from "typeorm";
+import { Repository, DataSource, In, Not, EntityManager } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -13,16 +13,26 @@ import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { Staff } from "src/entities/Staff";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { CreateSchedulingDetailDto } from "src/modules/staff-scheduling/dto/CreateStaffSchedulingDto";
+import { CreateActualLogsHeaderDto } from "src/modules/staff-scheduling/dto/CreateActualLogsHeaderDto";
+import { CreateActualLogsDetailDto } from "src/modules/staff-scheduling/dto/CreateActualLogsDetailDto";
 import { CreateScheduleHeaderDto } from "src/modules/staff-scheduling/dto/CreateStaffSchedulingDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-scheduling/dto/UpdateStaffSchedulingDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  ACTION_IDS,
+  WORKING_DAY_IDS,
+  ACCESS_PROCESS,
+  ACCESS_KEY_IDS,
+  LOGS_TYPE_ID,
+} from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
 import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
+import { RegularHoliday } from "src/entities/RegularHoliday";
 
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -31,11 +41,23 @@ const customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(utc);
 dayjs.extend(customParseFormat);
 
+import { HttpService } from "@nestjs/axios";
+import { firstValueFrom } from "rxjs";
+import { ActualLogsHeader } from "src/entities/ActualLogsHeader";
+import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { LogsType } from "src/entities/LogsType";
+import { PayrollDetails } from "src/entities/PayrollDetails";
+import { StaffSalary } from "src/entities/StaffSalary";
+import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { SssConfigs } from "src/entities/SssConfig";
+
 @Injectable()
 export class StaffSchedulingService {
   constructor(
     @InjectRepository(ScheduleDetail)
     private scheduleDetailRepository: Repository<ScheduleDetail>,
+    @InjectRepository(LogsType)
+    private logsTypeRepository: Repository<LogsType>,
     @InjectRepository(ScheduleHeader)
     private scheduleHeaderRepository: Repository<ScheduleHeader>,
     @InjectRepository(Warehouse)
@@ -44,20 +66,32 @@ export class StaffSchedulingService {
     private staffWarehouseRepository: Repository<StaffWarehouse>,
     @InjectRepository(Staff)
     private staffRepository: Repository<Staff>,
+    @InjectRepository(PayrollDetails)
+    private payrollDetailRepository: Repository<PayrollDetails>,
+    @InjectRepository(StaffSalary)
+    private staffSalaryRepository: Repository<StaffSalary>,
+    @InjectRepository(StaffVendorSalary)
+    private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
+    @InjectRepository(SssConfigs)
+    private sssConfigRepository: Repository<SssConfigs>,
     private usersService: UsersService,
     private actionLogsService: ActionLogsService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private readonly dataSource: DataSource,
+    private readonly httpService: HttpService,
   ) {}
 
   private readonly module_name = "STAFF SCHEDULING";
-  async findAll(statusId?: number[]): Promise<any[]> {
+  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
     try {
       const where: any = {};
       if (statusId !== undefined) {
         where.status_id = statusId;
+      }
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
       }
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
         where,
@@ -105,6 +139,12 @@ export class StaffSchedulingService {
         where.schedule_header_id = scheduleHeaderId;
       }
 
+      if (accessKeyId !== undefined) {
+        where.scheduleHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
+
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,
         relations: [
@@ -116,12 +156,12 @@ export class StaffSchedulingService {
           "status",
           "createdBy",
           "updatedBy",
+          "actualLogsDetail"
         ],
         order: {
           id: "ASC",
         },
       });
-
       return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
@@ -168,9 +208,14 @@ export class StaffSchedulingService {
         throw new BadRequestException("Authenticated user not found");
       }
 
+      // ============================================================
+      // GET STAFF IDS
+      // ============================================================
+
       const staffIds = [
         ...new Set(createScheduleDto.details.map((detail) => detail.staff_id)),
       ];
+
       const staffList = await this.staffRepository.find({
         where: {
           id: In(staffIds),
@@ -181,7 +226,10 @@ export class StaffSchedulingService {
         staffList.map((staff) => [staff.id, staff]),
       );
 
-      // Verify all staff IDs exist
+      // ============================================================
+      // VERIFY ALL STAFF IDS EXIST
+      // ============================================================
+
       for (const detail of createScheduleDto.details) {
         if (!staffMap.has(detail.staff_id)) {
           throw new BadRequestException(
@@ -190,6 +238,29 @@ export class StaffSchedulingService {
         }
       }
 
+      // ============================================================
+      // VALIDATE STAFF LOCATION
+      // ============================================================
+
+      for (const detail of createScheduleDto.details) {
+        const staff = staffMap.get(detail.staff_id);
+
+        if (!staff?.location_id) {
+          const staffName =
+            staff?.first_name && staff?.last_name
+              ? `${staff.first_name} ${staff.last_name}`
+              : staff?.staff_code || `Staff ${detail.staff_id}`;
+
+          throw new BadRequestException(
+            `Location is not assigned to staff ${staffName}.`,
+          );
+        }
+      }
+
+      // ============================================================
+      // GET EXISTING SCHEDULES
+      // ============================================================
+
       const existingSchedules = await this.scheduleDetailRepository.find({
         where: {
           staff_id: In(staffIds),
@@ -197,9 +268,12 @@ export class StaffSchedulingService {
             status_id: Not(STATUS_IDS.CANCELLED),
           },
         },
-
         relations: ["scheduleHeader", "warehouse"],
       });
+
+      // ============================================================
+      // CHECK EXISTING SCHEDULE CONFLICTS
+      // ============================================================
 
       for (
         let lineIndex = 0;
@@ -211,7 +285,9 @@ export class StaffSchedulingService {
         const requestedStart = new Date(detail.duty_start_time);
         const requestedEnd = new Date(detail.duty_end_time);
 
-        // Validate requested duty time
+        // ----------------------------------------------------------
+        // VALIDATE DUTY TIME
+        // ----------------------------------------------------------
 
         if (isNaN(requestedStart.getTime()) || isNaN(requestedEnd.getTime())) {
           const staff = staffMap.get(detail.staff_id);
@@ -238,16 +314,21 @@ export class StaffSchedulingService {
           );
         }
 
-        // Get existing schedules for this staff
+        // ----------------------------------------------------------
+        // GET EXISTING SCHEDULES FOR THIS STAFF
+        // ----------------------------------------------------------
 
         const staffExistingSchedules = existingSchedules.filter(
           (existing) => existing.staff_id === detail.staff_id,
         );
 
-        // Check actual duty date/time overlap
+        // ----------------------------------------------------------
+        // CHECK ACTUAL DUTY DATE/TIME OVERLAP
+        // ----------------------------------------------------------
 
         for (const existing of staffExistingSchedules) {
           const existingStart = new Date(existing.duty_start_time);
+
           const existingEnd = new Date(existing.duty_end_time);
 
           if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) {
@@ -276,16 +357,15 @@ export class StaffSchedulingService {
               existing.schedule_header_id ||
               existing.id;
 
-            // Use the ACTUAL existing duty date
             const formattedDate = dayjs(existing.duty_start_time).format(
               "MM/DD/YYYY",
             );
 
             const formattedTimeRange = `${dayjs(
               existing.duty_start_time,
-            ).format("MM/DD/YYYY hh:mm A")} - ${dayjs(
+            ).format("MM/DD/YYYY HH:mm")} - ${dayjs(
               existing.duty_end_time,
-            ).format("MM/DD/YYYY hh:mm A")}`;
+            ).format("MM/DD/YYYY HH:mm")}`;
 
             throw new BadRequestException(
               JSON.stringify({
@@ -308,10 +388,15 @@ export class StaffSchedulingService {
         }
       }
 
+      // ============================================================
+      // CHECK INTERNAL PAYLOAD CONFLICTS
+      // ============================================================
+
       for (let i = 0; i < createScheduleDto.details.length; i++) {
         const currentDetail = createScheduleDto.details[i];
 
         const currentStart = new Date(currentDetail.duty_start_time);
+
         const currentEnd = new Date(currentDetail.duty_end_time);
 
         if (isNaN(currentStart.getTime()) || isNaN(currentEnd.getTime())) {
@@ -327,6 +412,7 @@ export class StaffSchedulingService {
           }
 
           const nextStart = new Date(nextDetail.duty_start_time);
+
           const nextEnd = new Date(nextDetail.duty_end_time);
 
           if (isNaN(nextStart.getTime()) || isNaN(nextEnd.getTime())) {
@@ -351,31 +437,22 @@ export class StaffSchedulingService {
 
             const formattedTimeRange = `${dayjs(
               currentDetail.duty_start_time,
-            ).format("MM/DD/YYYY hh:mm A")} - ${dayjs(
+            ).format("MM/DD/YYYY HH:mm")} - ${dayjs(
               currentDetail.duty_end_time,
-            ).format("MM/DD/YYYY hh:mm A")}`;
+            ).format("MM/DD/YYYY HH:mm")}`;
 
             throw new BadRequestException(
               JSON.stringify({
                 type: "SCHEDULE_CONFLICT",
-
                 title: "Conflict of Duty Hours",
-
                 subtitle:
                   "Multiple schedule entries for the same staff have overlapping duty hours.",
-
                 outlet: `Excel Row #${i + 3} & Row #${j + 3}`,
-
                 crew: staffName,
-
                 schedule_no: "New Entry",
-
                 scheduled_date: formattedDate,
-
                 scheduled_time: formattedTimeRange,
-
                 error_line: j + 1,
-
                 message:
                   `Conflict of Duty Hours: Multiple schedule entries ` +
                   `for ${staffName} have overlapping duty hours.`,
@@ -385,101 +462,374 @@ export class StaffSchedulingService {
         }
       }
 
-      const savedHeader =
+      // ============================================================
+      // AUTO ENROLL / AUTO SYNC CHECK
+      // ============================================================
+
+      const isAutoEnrollSchedule =
+        ACCESS_PROCESS.AUTO_ENROLL_SCHEDULE.includes(accessKeyId);
+
+      const statusID = isAutoEnrollSchedule
+        ? STATUS_IDS.POSTED
+        : STATUS_IDS.PENDING;
+
+      // ============================================================
+      // GROUP DETAILS BY STAFF LOCATION
+      // ============================================================
+
+      const detailsByLocation = new Map<
+        number,
+        typeof createScheduleDto.details
+      >();
+
+      for (const detail of createScheduleDto.details) {
+        const staff = staffMap.get(detail.staff_id);
+
+        const locationId = staff.location_id;
+
+        if (!detailsByLocation.has(locationId)) {
+          detailsByLocation.set(locationId, []);
+        }
+
+        detailsByLocation.get(locationId)!.push(detail);
+      }
+
+      // ============================================================
+      // TRANSACTION
+      // ============================================================
+
+      const savedHeaders =
         await this.scheduleHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
-            const entryCount = createScheduleDto.details?.length || 0;
+            const createdHeaders: ScheduleHeader[] = [];
 
-            const newScheduleHeader = transactionalEntityManager.create(
-              ScheduleHeader,
+            // ========================================================
+            // SCHEDULE DATE / WORKING DAY
+            // ========================================================
+
+            const scheduleDate = new Date(createScheduleDto.schedule_date);
+
+            const regularHoliday = await transactionalEntityManager.findOne(
+              RegularHoliday,
               {
-                schedule_date: createScheduleDto.schedule_date,
-                entry_no: entryCount,
-                reason: createScheduleDto.reason,
-                shifting_day: createScheduleDto.shifting_day,
-                status_id: STATUS_IDS.PENDING,
-                access_key_id: accessKeyId,
-                created_by: userId,
-                updated_by: userId,
+                where: {
+                  regular_holiday_date: scheduleDate,
+                },
               },
             );
 
-            const savedHeaderRecord = await transactionalEntityManager.save(
-              ScheduleHeader,
-              newScheduleHeader,
-            );
+            const workingDayId = regularHoliday
+              ? WORKING_DAY_IDS.HOLIDAY
+              : WORKING_DAY_IDS.REGULAR;
 
-      const scheduleHeaderHistory =
-        transactionalEntityManager.create(ScheduleHeaderHistory, {
-          schedule_header_id: savedHeaderRecord.id,
-          schedule_date: savedHeaderRecord.schedule_date,
-          entry_no: savedHeaderRecord.entry_no,
-          reason: savedHeaderRecord.reason,
-          shifting_day: savedHeaderRecord.shifting_day,
-          status_id: savedHeaderRecord.status_id,
-          created_by: userId,
-          updated_by: userId,
-        });
+            // ========================================================
+            // PROCESS EACH LOCATION
+            // ========================================================
 
-      await transactionalEntityManager.save(
-        ScheduleHeaderHistory,
-        scheduleHeaderHistory,
-      );
+            for (const [
+              locationId,
+              locationDetails,
+            ] of detailsByLocation.entries()) {
+              // ======================================================
+              // CREATE SCHEDULE HEADER FOR THIS LOCATION
+              // ======================================================
 
+              const entryCount = locationDetails.length;
 
-            const detailsToSave = createScheduleDto.details.map((detail) => {
-              const staff = staffMap.get(detail.staff_id);
+              const newScheduleHeader = transactionalEntityManager.create(
+                ScheduleHeader,
+                {
+                  schedule_date: createScheduleDto.schedule_date,
+                  entry_no: entryCount,
+                  shifting_day: createScheduleDto.shifting_day,
+                  status_id: statusID,
+                  attendance_status_id: isAutoEnrollSchedule
+                    ? STATUS_IDS.VALIDATED
+                    : null,
+                  attendance_ts: isAutoEnrollSchedule ? new Date() : null,
+                  access_key_id: accessKeyId,
+                  created_by: userId,
+                  updated_by: userId,
+                },
+              );
 
-              return transactionalEntityManager.create(ScheduleDetail, {
-                schedule_header_id: savedHeaderRecord.id,
-                staff_id: detail.staff_id,
-                pos_logs_id: detail.pos_logs_id,
-                staff_code: staff.staff_code || staff.code,
-                vendor_id: staff.vendor_id,
-                location_id: staff.location_id,
-                warehouse_id: detail.warehouse_id,
-                remarks: detail.remarks,
-                duty_start_time: detail.duty_start_time,
-                duty_end_time: detail.duty_end_time,
-                operational_start_time: detail.operational_start_time,
-                operational_end_time: detail.operational_end_time,
-                diff_outlet: detail.diff_outlet,
-                add_ot: detail.add_ot,
-                starting_time: detail.starting_time,
-                ending_time: detail.ending_time,
-                working_day_id: detail.working_day_id,
-                status_id: STATUS_IDS.ACTIVE,
-                access_key_id: accessKeyId,
-                created_by: userId,
-                updated_by: userId,
-              });
-            });
+              const savedHeaderRecord = await transactionalEntityManager.save(
+                ScheduleHeader,
+                newScheduleHeader,
+              );
 
-            await transactionalEntityManager.save(
-              ScheduleDetail,
-              detailsToSave,
-            );
+              createdHeaders.push(savedHeaderRecord);
 
-            return savedHeaderRecord;
+              // ======================================================
+              // CREATE SCHEDULE HEADER HISTORY
+              // ======================================================
+
+              await this.createScheduleHeaderHistory(
+                transactionalEntityManager,
+                savedHeaderRecord,
+                userId,
+              );
+
+              // ======================================================
+              // ACTUAL LOGS HEADER
+              //
+              // ONE ACTUAL LOGS HEADER PER LOCATION
+              // ======================================================
+
+              let savedActualLogsHeader: ActualLogsHeader | null = null;
+
+              let logsType: any = null;
+
+              if (isAutoEnrollSchedule) {
+                logsType = await this.logsTypeRepository.findOne({
+                  where: {
+                    id: LOGS_TYPE_ID.CC_FETCH,
+                  },
+                });
+
+                const actualLogsHeaderDto: CreateActualLogsHeaderDto = {
+                  tagging: logsType.description,
+                  logs_type_id: LOGS_TYPE_ID.CC_FETCH,
+                  created_by: userId,
+                  updated_by: userId,
+                  access_key_id: accessKeyId,
+                  status_id: STATUS_IDS.ACTIVE
+                };
+
+                const actualLogsHeader = transactionalEntityManager.create(
+                  ActualLogsHeader,
+                  actualLogsHeaderDto,
+                );
+
+                savedActualLogsHeader = await transactionalEntityManager.save(
+                  ActualLogsHeader,
+                  actualLogsHeader,
+                );
+              }
+
+              // ======================================================
+              // TRACK STAFF ALREADY ADDED
+              // ======================================================
+
+              const staffAlreadyAdded = new Set<number>();
+
+              // ======================================================
+              // CREATE DETAILS FOR THIS LOCATION
+              // ======================================================
+
+              const detailsToSave: ScheduleDetail[] = [];
+
+              for (const detail of locationDetails) {
+                const staff = staffMap.get(detail.staff_id);
+
+                const requestedStart = new Date(detail.duty_start_time);
+
+                const requestedEnd = new Date(detail.duty_end_time);
+
+                // ==================================================
+                // NIGHT SHIFT
+                // ==================================================
+
+                const isNightShift = this.checkIfNightShift(
+                  requestedEnd,
+                  scheduleDate,
+                  requestedStart,
+                );
+
+                // ==================================================
+                // CHECK MULTIPLE DUTY
+
+                const hasExistingDuty = await this.checkDutyCount(
+                  transactionalEntityManager,
+                  detail.staff_id,
+                  scheduleDate,
+                );
+
+                const multipleDuty =
+                  hasExistingDuty || staffAlreadyAdded.has(detail.staff_id)
+                    ? 1
+                    : 0;
+
+                // ACTUAL LOGS DETAIL
+
+                let savedActualLogsDetail: ActualLogsDetail | null = null;
+
+                if (isAutoEnrollSchedule && savedActualLogsHeader) {
+                  
+               let actualLogsDetailDto: CreateActualLogsDetailDto;
+
+                  try {
+                    actualLogsDetailDto = {
+                      staff_id: detail.staff_id,
+                      staff_code: staff.staff_code || staff.code,
+                      remarks: detail.remarks || "Auto-synced from DWS log",
+                      warehouse_id: detail.warehouse_id,
+                      location_id: staff.location_id,
+                      service_provider_id: staff.vendor_id,
+                      access_key_id: accessKeyId,
+                      logs_date: createScheduleDto.schedule_date,
+                      status_id:STATUS_IDS.ACTIVE,
+                      orig_time_in: detail.orig_time_in
+                        ? new Date(detail.orig_time_in).toISOString()
+                        : undefined,
+                      orig_time_out: detail.orig_time_out
+                        ? new Date(detail.orig_time_out).toISOString()
+                        : undefined,
+                      orig_break_in: detail.orig_break_in
+                        ? new Date(detail.orig_break_in).toISOString()
+                        : undefined,
+                      orig_break_out: detail.orig_break_out
+                        ? new Date(detail.orig_break_out).toISOString()
+                        : undefined,
+                      time_in: detail.just_time_in
+                        ? new Date(detail.just_time_in).toISOString()
+                        : undefined,
+
+                      time_out: detail.just_time_out
+                        ? new Date(detail.just_time_out).toISOString()
+                        : undefined,
+
+                      break_in: detail.just_break_in
+                        ? new Date(detail.just_break_in).toISOString()
+                        : undefined,
+
+                      break_out: detail.just_break_out
+                        ? new Date(detail.just_break_out).toISOString()
+                        : undefined,
+                      overtime_in: detail.overtime_in
+                        ? new Date(detail.overtime_in).toISOString()
+                        : undefined,
+                        
+                      overtime_out: detail.overtime_out
+                        ? new Date(detail.overtime_out).toISOString()
+                        : undefined,
+                      regular: detail.regular,
+                      break_hours: detail.break_hours,
+                      overtime: detail.overtime,
+                      twh: detail.twh,
+                      working_hours: detail.twh ?? 0,
+                      is_night_shift: isNightShift,
+                      created_by: userId,
+                      updated_by: userId,
+                    };
+                  } catch (error: any) {
+                    throw error;
+                  }
+
+                  const actualLogsDetail = transactionalEntityManager.create(
+                    ActualLogsDetail,
+                    {
+                      ...actualLogsDetailDto,
+                      // ACTUAL LOGS HEADER
+                      actual_header_id: savedActualLogsHeader.id,
+                    },
+                  );
+
+                  savedActualLogsDetail = await transactionalEntityManager.save(
+                    ActualLogsDetail,
+                    actualLogsDetail,
+                  );
+                }
+                // CREATE SCHEDULE DETAIL
+                const scheduleDetail = transactionalEntityManager.create(
+                  ScheduleDetail,
+                  {
+                    schedule_header_id: savedHeaderRecord.id,
+                    staff_id: detail.staff_id,
+                    actual_logs_detail_id: savedActualLogsDetail
+                      ? savedActualLogsDetail.id
+                      : null,
+                    staff_code: staff.staff_code || staff.code,
+                    vendor_id: staff.vendor_id,
+                    location_id: staff.location_id,
+                    warehouse_id: detail.warehouse_id,
+                    remarks: detail.remarks,
+                    duty_start_time: detail.duty_start_time,
+                    duty_end_time: detail.duty_end_time,
+                    planned_duty_start_time: detail.duty_start_time,
+                    planned_duty_end_time: detail.duty_end_time,
+                    operational_start_time: detail.operational_start_time,
+                    operational_end_time: detail.operational_end_time,
+                    diff_outlet: detail.diff_outlet,
+                    add_ot: detail.add_ot,
+                    working_day_id: workingDayId,
+                    is_night_shift: isNightShift,
+                    multiple_duty: multipleDuty,
+                    status_id: STATUS_IDS.ACTIVE,
+                    attendance_status_id:STATUS_IDS.VALIDATED,
+                    access_key_id: accessKeyId,
+                    // ==========================================
+                    // DWS ACTUAL TIME DATA
+                    // ==========================================
+                    // ...(isAutoEnrollSchedule && {
+                    //   overtime_in: detail.overtime_in
+                    //     ? new Date(detail.overtime_in)
+                    //     : null,
+                    //   overtime_out: detail.overtime_out
+                    //     ? new Date(detail.overtime_out)
+                    //     : null,
+                    //   regular: detail.regular,
+                    //   break_hours: detail.break_hours,
+                    //   overtime: detail.overtime,
+                    //   twh: detail.twh,
+                    // }),
+                    created_by: userId,
+                    updated_by: userId,
+                  },
+                );
+
+                detailsToSave.push(scheduleDetail);
+
+                staffAlreadyAdded.add(detail.staff_id);
+              }
+
+              // ======================================================
+              // SAVE DETAILS FOR THIS LOCATION
+              // ======================================================
+
+              await transactionalEntityManager.save(
+                ScheduleDetail,
+                detailsToSave,
+              );
+            }
+
+            return createdHeaders;
           },
         );
+
+      // ============================================================
+      // USER AUDIT TRAIL
+      // ============================================================
 
       await this.userAuditTrailCreateService.create(
         {
           service: "StaffSchedulingService",
+
           method: "create",
-          raw_data: JSON.stringify(savedHeader),
-          description: `Created schedule entry with ${savedHeader.entry_no} details`,
+
+          raw_data: JSON.stringify(savedHeaders),
+
+          description:
+            `Created ${savedHeaders.length} schedule ` +
+            `header(s) grouped by staff location`,
+
           status_id: 1,
         },
         userId,
       );
 
-      const scheduleWithRelations = await this.scheduleHeaderRepository.findOne(
-        {
+      // ============================================================
+      // GET CREATED SCHEDULES WITH RELATIONS
+      // ============================================================
+
+      const scheduleWithRelations: ScheduleHeader[] = [];
+
+      for (const savedHeader of savedHeaders) {
+        const schedule = await this.scheduleHeaderRepository.findOne({
           where: {
             id: savedHeader.id,
           },
+
           relations: [
             "status",
             "createdBy",
@@ -491,43 +841,75 @@ export class StaffSchedulingService {
             "details.warehouse",
             "details.status",
           ],
-        },
-      );
-
-      if (!scheduleWithRelations) {
-        throw new Error("Failed to retrieve created staff schedule");
-      }
-
-      try {
-        await this.actionLogsService.logAction({
-          module_name: this.module_name,
-          ref_id: savedHeader.id,
-          action_id: ACTION_IDS.ADD,
-          description: `Add Schedule`,
-          raw_data: JSON.stringify({
-            savedHeader,
-          }),
-          created_by: userId,
         });
-      } catch (err) {
-        logger.error("Action log failed for Create Schedule:", err);
+
+        if (schedule) {
+          scheduleWithRelations.push(schedule);
+        }
       }
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        scheduleWithRelations,
+      if (scheduleWithRelations.length !== savedHeaders.length) {
+        throw new Error("Failed to retrieve all created staff schedules");
+      }
+
+      // ============================================================
+      // ACTION LOG
+      // ============================================================
+
+      for (const savedHeader of savedHeaders) {
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+
+            ref_id: savedHeader.id,
+
+            action_id: ACTION_IDS.ADD,
+
+            description: `Add Schedule`,
+
+            raw_data: JSON.stringify({
+              savedHeader,
+            }),
+
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(
+            `Action log failed for Schedule Header ${savedHeader.id}:`,
+            err,
+          );
+        }
+      }
+
+      // ============================================================
+      // RESPONSE
+      // ============================================================
+
+      const responses = scheduleWithRelations.map((schedule) =>
+        this.responseMapperService.mapEntityToResponse(schedule),
       );
 
-      try {
-        this.sseEventEmitter.emitCreate(
-          "staff_scheduling",
-          response.id,
-          response,
-        );
-      } catch (err) {
-        logger.error("SSE event failed:", err);
+      // ============================================================
+      // SSE
+      // ============================================================
+
+      for (const response of responses) {
+        try {
+          this.sseEventEmitter.emitCreate(
+            "staff_scheduling",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error(`SSE event failed for Schedule ${response.id}:`, err);
+        }
       }
 
-      return response;
+      // ============================================================
+      // RETURN
+      // ============================================================
+
+      return responses;
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -537,6 +919,7 @@ export class StaffSchedulingService {
       }
 
       logger.error("Failed to create staff scheduling:", error);
+
       throw new Error("Failed to create staff scheduling");
     }
   }
@@ -807,9 +1190,16 @@ export class StaffSchedulingService {
             }
             existingHeader.updated_by = userId;
             existingHeader.modified_at = new Date();
+
             const savedHeaderRecord = await transactionalEntityManager.save(
               ScheduleHeader,
               existingHeader,
+            );
+
+            await this.createScheduleHeaderHistory(
+              transactionalEntityManager,
+              savedHeaderRecord,
+              userId,
             );
 
             const incomingDetailIds = details
@@ -828,26 +1218,41 @@ export class StaffSchedulingService {
               );
             }
 
-            const detailsToSave = details.map((detail) => {
-              const staff = staffMap.get(detail.staff_id);
-              if (detail.id) {
-                return transactionalEntityManager.create(ScheduleDetail, {
-                  id: Number(detail.id),
-                  schedule_header_id: savedHeaderRecord.id,
-                  staff_id: detail.staff_id,
-                  staff_code: staff.staff_code || staff.code,
-                  vendor_id: staff.vendor_id,
-                  location_id: staff.location_id,
-                  warehouse_id: detail.warehouse_id,
-                  remarks: detail.remarks,
-                  duty_start_time: detail.duty_start_time,
-                  duty_end_time: detail.duty_end_time,
-                  status_id: STATUS_IDS.ACTIVE,
-                  updated_by: userId,
-                });
-              }
+            const detailsToSave: ScheduleDetail[] = [];
 
-              return transactionalEntityManager.create(ScheduleDetail, {
+            const staffAlreadyAdded = new Set<number>();
+
+            for (const detail of details) {
+              const staff = staffMap.get(detail.staff_id);
+
+              const requestedStart = new Date(detail.duty_start_time);
+              const requestedEnd = new Date(detail.duty_end_time);
+
+              const isNightShift = this.checkIfNightShift(
+                requestedEnd,
+                scheduleDateValue,
+                requestedStart,
+              );
+
+              // Check if this staff already has another duty
+              // on the same schedule date, excluding this schedule
+              // currently being updated.
+              const hasExistingDuty = await this.checkDutyCount(
+                transactionalEntityManager,
+                detail.staff_id,
+                scheduleDateValue,
+                id,
+              );
+
+              // If another schedule already exists for this staff,
+              // OR this staff already appeared earlier in this update,
+              // mark this as multiple duty.
+              const multipleDuty =
+                hasExistingDuty || staffAlreadyAdded.has(detail.staff_id)
+                  ? 1
+                  : 0;
+
+              const scheduleDetailData = {
                 schedule_header_id: savedHeaderRecord.id,
                 staff_id: detail.staff_id,
                 staff_code: staff.staff_code || staff.code,
@@ -859,11 +1264,40 @@ export class StaffSchedulingService {
                 duty_end_time: detail.duty_end_time,
                 starting_time: detail.starting_time,
                 ending_time: detail.ending_time,
+
+                // Old schedule logic
+                is_night_shift: isNightShift,
+                multiple_duty: multipleDuty,
+
                 status_id: STATUS_IDS.ACTIVE,
-                created_by: userId,
                 updated_by: userId,
-              });
-            });
+              };
+
+              let scheduleDetail: ScheduleDetail;
+
+              if (detail.id) {
+                scheduleDetail = transactionalEntityManager.create(
+                  ScheduleDetail,
+                  {
+                    id: Number(detail.id),
+                    ...scheduleDetailData,
+                  },
+                );
+              } else {
+                scheduleDetail = transactionalEntityManager.create(
+                  ScheduleDetail,
+                  {
+                    ...scheduleDetailData,
+                    created_by: userId,
+                  },
+                );
+              }
+
+              detailsToSave.push(scheduleDetail);
+
+              // Remember that this staff has already appeared
+              staffAlreadyAdded.add(detail.staff_id);
+            }
 
             await transactionalEntityManager.save(
               ScheduleDetail,
@@ -933,6 +1367,12 @@ export class StaffSchedulingService {
           response.id,
           response,
         );
+
+        this.sseEventEmitter.emitUpdate(
+          "staff_attendance",
+          response.id,
+          response,
+        );
       } catch (err) {
         logger.error("SSE update event failed:", err);
       }
@@ -984,27 +1424,59 @@ export class StaffSchedulingService {
         );
       }
 
-      await this.scheduleHeaderRepository.update(
-        {
-          id: In(scheduleIds),
-        },
-        {
-          status_id: STATUS_IDS.POSTED,
-          attendance_status_id: STATUS_IDS.PENDING,
-          updated_by: userId,
-          modified_at: new Date(),
+
+      const updatedScheduleHeaders =
+      await this.scheduleHeaderRepository.manager.transaction(
+        async (transactionalEntityManager) => {
+          // Update Schedule Headers
+          await transactionalEntityManager.update(
+            ScheduleHeader,
+            {
+              id: In(scheduleIds),
+            },
+            {
+              status_id: STATUS_IDS.POSTED,
+              attendance_status_id: STATUS_IDS.PENDING,
+              updated_by: userId,
+              modified_at: new Date(),
+            },
+          );
+
+          // Update related Schedule Details
+          await transactionalEntityManager.update(
+            ScheduleDetail,
+            {
+              schedule_header_id: In(scheduleIds),
+            },
+            {
+              attendance_status_id: STATUS_IDS.PENDING,
+              updated_by: userId,
+              modified_at: new Date(),
+            },
+          );
+
+          const updatedHeaders = await transactionalEntityManager.find(
+            ScheduleHeader,
+            {
+              where: {
+                id: In(scheduleIds),
+              },
+              relations: ["status", "createdBy", "updatedBy"],
+            },
+          );
+
+          for (const schedule of updatedHeaders) {
+            await this.createScheduleHeaderHistory(
+              transactionalEntityManager,
+              schedule,
+              userId,
+            );
+          }
+
+          return updatedHeaders;
         },
       );
 
-      // Retrieve updated schedules
-      const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
-        where: {
-          id: In(scheduleIds),
-        },
-        relations: ["status", "createdBy", "updatedBy"],
-      });
-
-      // Audit trail
       await this.userAuditTrailCreateService.create(
         {
           service: "Staff Scheduling Services",
@@ -1035,7 +1507,6 @@ export class StaffSchedulingService {
         logger.error("Action log failed for Post Schedule:", err);
       }
 
-      // SSE Events
       for (const response of responses) {
         try {
           this.sseEventEmitter.emitUpdate(
@@ -1043,8 +1514,9 @@ export class StaffSchedulingService {
             response.id,
             response,
           );
+
           this.sseEventEmitter.emitUpdate(
-            "staff_attedance",
+            "staff_attendance",
             response.id,
             response,
           );
@@ -1100,34 +1572,62 @@ export class StaffSchedulingService {
         );
       }
 
-      await this.scheduleHeaderRepository.update(
-        {
-          id: In(scheduleIds),
-        },
-        {
-          status_id: STATUS_IDS.PENDING,
-          attendance_status_id: null,
-          reason: updateScheduleDto.reason,
-          updated_by: userId,
-          modified_at: new Date(),
-        },
-      );
+      const updatedScheduleHeaders =
+        await this.scheduleHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            await transactionalEntityManager.update(
+              ScheduleHeader,
+              {
+                id: In(scheduleIds),
+              },
+              {
+                status_id: STATUS_IDS.PENDING,
+                attendance_status_id: null,
+                reason: updateScheduleDto.reason,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
 
-      // Retrieve updated schedules
-      const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
-        where: {
-          id: In(scheduleIds),
-        },
-        relations: ["status", "createdBy", "updatedBy"],
-      });
+                  await transactionalEntityManager.update(
+                  ScheduleDetail,
+                  {
+                    schedule_header_id: In(scheduleIds),
+                  },
+                  {
+                    cron_computed: false,
+                  },
+                );
 
-      // Audit trail
+
+            const updatedHeaders = await transactionalEntityManager.find(
+              ScheduleHeader,
+              {
+                where: {
+                  id: In(scheduleIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
+
+            for (const schedule of updatedHeaders) {
+              await this.createScheduleHeaderHistory(
+                transactionalEntityManager,
+                schedule,
+                userId,
+              );
+            }
+
+            return updatedHeaders;
+          },
+        );
+
       await this.userAuditTrailCreateService.create(
         {
           service: "Staff Scheduling Services",
-          method: "postSchedule",
+          method: "revertSchedule",
           raw_data: JSON.stringify(updatedScheduleHeaders),
-          description: `Posted Schedule Headers: ${scheduleIds.join(", ")}`,
+          description: `Reverted Schedule Headers: ${scheduleIds.join(", ")}`,
           status_id: 1,
         },
         userId,
@@ -1149,10 +1649,9 @@ export class StaffSchedulingService {
           });
         }
       } catch (err) {
-        logger.error("Action log failed for Post Schedule:", err);
+        logger.error("Action log failed for Revert Schedule:", err);
       }
 
-      // SSE Events
       for (const response of responses) {
         try {
           this.sseEventEmitter.emitUpdate(
@@ -1212,34 +1711,51 @@ export class StaffSchedulingService {
         );
       }
 
-      await this.scheduleHeaderRepository.update(
-        {
-          id: In(scheduleIds),
-        },
-        {
-          status_id: STATUS_IDS.CANCELLED,
-          attendance_status_id: null,
-          reason: updateScheduleDto.reason,
-          updated_by: userId,
-          modified_at: new Date(),
-        },
-      );
+      const updatedScheduleHeaders =
+        await this.scheduleHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            await transactionalEntityManager.update(
+              ScheduleHeader,
+              {
+                id: In(scheduleIds),
+              },
+              {
+                status_id: STATUS_IDS.CANCELLED,
+                attendance_status_id: null,
+                reason: updateScheduleDto.reason,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
 
-      // Retrieve updated schedules
-      const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
-        where: {
-          id: In(scheduleIds),
-        },
-        relations: ["status", "createdBy", "updatedBy"],
-      });
+            const updatedHeaders = await transactionalEntityManager.find(
+              ScheduleHeader,
+              {
+                where: {
+                  id: In(scheduleIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
 
-      // Audit trail
+            for (const schedule of updatedHeaders) {
+              await this.createScheduleHeaderHistory(
+                transactionalEntityManager,
+                schedule,
+                userId,
+              );
+            }
+
+            return updatedHeaders;
+          },
+        );
+
       await this.userAuditTrailCreateService.create(
         {
           service: "Staff Scheduling Services",
           method: "cancelSchedule",
           raw_data: JSON.stringify(updatedScheduleHeaders),
-          description: `Posted Schedule Headers: ${scheduleIds.join(", ")}`,
+          description: `Cancelled Schedule Headers: ${scheduleIds.join(", ")}`,
           status_id: 1,
         },
         userId,
@@ -1264,7 +1780,6 @@ export class StaffSchedulingService {
         logger.error("Action log failed for Cancel Schedule:", err);
       }
 
-      // SSE Events
       for (const response of responses) {
         try {
           this.sseEventEmitter.emitUpdate(
@@ -1306,6 +1821,7 @@ export class StaffSchedulingService {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
     const headers = [
+      "ifs_code",
       "store",
       "staff_code",
       "staff_name",
@@ -1339,6 +1855,7 @@ export class StaffSchedulingService {
     }
 
     const requiredFields = [
+      "ifs_code",
       "store",
       "staff_code",
       "staff_name",
@@ -1398,10 +1915,14 @@ export class StaffSchedulingService {
     const warehouseNames = [
       ...new Set(rows.map((row) => String(row.store).trim())),
     ];
+    const ifsCodes = [
+      ...new Set(rows.map((row) => String(row.ifs_code).trim())),
+    ];
 
     const warehouseList = await this.warehouseRepository.find({
       where: {
         warehouse_name: In(warehouseNames),
+        warehouse_ifs: In(ifsCodes),
       },
     });
 
@@ -1416,7 +1937,9 @@ export class StaffSchedulingService {
       const row = rows[i];
 
       const warehouseName = String(row.store).trim();
-      const warehouse = warehouseMap.get(warehouseName);
+
+      const ifsCode = String(row.ifs_code).trim();
+      const warehouse = warehouseMap.get(ifsCode);
 
       if (!warehouse) {
         errors.push({
@@ -1580,7 +2103,7 @@ export class StaffSchedulingService {
         starting_time: null,
         ending_time: null,
         working_day_id: row.working_day,
-        pos_logs_id: null,
+        actual_logs_detail_id: null,
       });
 
       // Remember which Excel row created this detail
@@ -1855,4 +2378,1264 @@ export class StaffSchedulingService {
 
     return resultDate;
   }
+
+  private checkIfNightShift(
+    endTime: Date,
+    scheduleDate: Date,
+    startTime: Date,
+  ): number {
+    const schedDate = dayjs(scheduleDate).format("YYYY-MM-DD");
+
+    const start = dayjs(startTime);
+    const end = dayjs(endTime);
+
+    const nightShiftTrigger = dayjs(`${schedDate} 17:00:00`);
+    const nightShiftStart = dayjs(`${schedDate} 22:00:00`);
+
+    const midnightShiftStart = dayjs(`${schedDate} 00:00:00`);
+    const nightShiftEnd = dayjs(`${schedDate} 06:00:00`);
+
+    const firstShiftStart = dayjs(`${schedDate} 06:00:00`);
+    const firstShiftEnd = dayjs(`${schedDate} 14:00:00`);
+
+    const secondShiftStart = dayjs(`${schedDate} 14:00:00`);
+    const secondShiftEnd = dayjs(`${schedDate} 22:00:00`);
+
+    // 1 = NIGHT SHIFT
+    if (
+      (start.isSame(nightShiftTrigger) || start.isAfter(nightShiftTrigger)) &&
+      end.isAfter(nightShiftStart)
+    ) {
+      return 1;
+    }
+
+    // 00:00 - 05:59
+    else if (
+      (start.isSame(midnightShiftStart) || start.isAfter(midnightShiftStart)) &&
+      start.isBefore(nightShiftEnd)
+    ) {
+      if (end.isSame(firstShiftEnd) || end.isAfter(firstShiftEnd)) {
+        // 2 = EARLY FIRST SHIFT
+        return 2;
+      }
+
+      // 1 = NIGHT SHIFT
+      return 1;
+    }
+
+    // 06:00 - 13:59
+    else if (
+      (start.isSame(firstShiftStart) || start.isAfter(firstShiftStart)) &&
+      start.isBefore(firstShiftEnd)
+    ) {
+      return 2;
+    }
+
+    // 14:00 - 22:00
+    else if (
+      (start.isSame(secondShiftStart) || start.isAfter(secondShiftStart)) &&
+      (start.isSame(secondShiftEnd) || start.isBefore(secondShiftEnd))
+    ) {
+      // 3 = SECOND SHIFT
+      return 3;
+    }
+
+    return 0;
+  }
+
+  private async checkDutyCount(
+    transactionalEntityManager: EntityManager,
+    staffId: number,
+    scheduleDate: Date,
+    excludeScheduleHeaderId?: number,
+  ): Promise<boolean> {
+    const query = transactionalEntityManager
+      .getRepository(ScheduleDetail)
+      .createQueryBuilder("detail")
+      .innerJoin("detail.scheduleHeader", "header")
+      .where("detail.staff_id = :staffId", { staffId })
+      .andWhere("header.schedule_date = :scheduleDate", { scheduleDate })
+      .andWhere("header.status_id != :cancelledStatusId", {
+        cancelledStatusId: STATUS_IDS.CANCELLED,
+      });
+
+    if (excludeScheduleHeaderId) {
+      query.andWhere("header.id != :excludeScheduleHeaderId", {
+        excludeScheduleHeaderId,
+      });
+    }
+
+    const existingRecord = await query.getOne();
+
+    return !!existingRecord;
+  }
+
+
+async syncDwsSchedulesByDate(
+  scheduleDateStr: string,
+  userId: number = 1,
+): Promise<any> {
+  const url = process.env.DWS_FST_API_URL
+
+  const response = await firstValueFrom(
+    this.httpService.post(
+      url,
+      { date: scheduleDateStr },
+      {
+        headers: {
+          "x-api-key": process.env.DWS_API_KEY,
+          "Content-Type": "application/json",
+        },
+      },
+    ),
+  );
+
+  const apiRecords: any[] = response.data;
+
+  if (!Array.isArray(apiRecords) || apiRecords.length === 0) {
+    logger.warn(
+      `[StaffSchedulingService] No records returned from DWS for date: ${scheduleDateStr}`,
+    );
+
+    return null;
+  }
+
+  /*
+   * ============================================================
+   * 1. GET STAFF FROM DWS CREW_ID
+   * ============================================================
+   */
+
+  const staffIds = [
+    ...new Set(
+      apiRecords
+        .map((record) => Number(record["CREW_ID"]))
+        .filter((id) => !isNaN(id) && id > 0),
+    ),
+  ];
+
+  if (staffIds.length === 0) {
+    logger.warn(
+      `[StaffSchedulingService] No valid CREW_ID found from DWS for date: ${scheduleDateStr}`,
+    );
+
+    return null;
+  }
+
+  const staffs = await this.staffRepository.find({
+    where: staffIds.map((id) => ({
+      old_dws_id: id,
+    })),
+    relations: ["status"],
+  });
+
+  /*
+   * Map DWS CREW_ID -> Staff
+   */
+  const staffMap = new Map<number, Staff>();
+
+  staffs.forEach((staff) => {
+    if (staff.old_dws_id) {
+      staffMap.set(staff.old_dws_id, staff);
+    }
+  });
+
+  /*
+   * ============================================================
+   * 2. PROCESS EACH DWS RECORD
+   * ============================================================
+   */
+
+  const details: CreateSchedulingDetailDto[] = [];
+
+  for (const record of apiRecords) {
+    const crewId = Number(record["CREW_ID"]);
+
+    /*
+     * ----------------------------------------------------------
+     * Get schedule date first because the StaffWarehouse
+     * assignment must be effective for this date.
+     * ----------------------------------------------------------
+     */
+    const dutyDate = record["SCHEDULE_DATE"] || scheduleDateStr;
+
+    /*
+     * ----------------------------------------------------------
+     * VALIDATION #1
+     * Staff must exist
+     * ----------------------------------------------------------
+     */
+    const staff = staffMap.get(crewId);
+
+    if (!staff) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: Staff not found. CREW_ID=${crewId}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * VALIDATION #2
+     * Staff must be ACTIVE
+     * ----------------------------------------------------------
+     */
+    if (staff.status_id !== STATUS_IDS.ACTIVE) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: Staff is not ACTIVE. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STATUS_ID=${staff.status_id}`,
+      );
+
+      continue;
+    }
+
+    const staffWarehouse = await this.staffWarehouseRepository.findOne({
+      where: {
+        staff_id: staff.id,
+        status_id: STATUS_IDS.ACTIVE,
+        approval_status_id: STATUS_IDS.APPROVED,
+      },
+      order: {
+        effectivity_date: "DESC",
+      },
+    });
+
+    if (!staffWarehouse) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: No active/approved StaffWarehouse assignment found. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * ============================================================
+     * 4. VALIDATE EFFECTIVITY DATE
+     * ============================================================
+     *
+     * Valid when:
+     *
+     * effectivity_date <= schedule date
+     *
+     * AND
+     *
+     * end_date IS NULL
+     * OR
+     * end_date >= schedule date
+     */
+
+    const scheduleDate = dayjs(dutyDate).startOf("day");
+
+    const effectivityDate = staffWarehouse.effectivity_date
+      ? dayjs(staffWarehouse.effectivity_date).startOf("day")
+      : null;
+
+    const endDate = staffWarehouse.end_date
+      ? dayjs(staffWarehouse.end_date).startOf("day")
+      : null;
+
+    /*
+     * Effectivity date is required.
+     */
+    if (!effectivityDate) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse has no effectivity date. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * Schedule date must not be before effectivity date.
+     */
+    if (scheduleDate.isBefore(effectivityDate)) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse assignment is not yet effective. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, EFFECTIVITY_DATE=${staffWarehouse.effectivity_date}, SCHEDULE_DATE=${dutyDate}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * If there is an end date, schedule date must not be
+     * after the end date.
+     */
+    if (endDate && scheduleDate.isAfter(endDate)) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse assignment already ended. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, END_DATE=${staffWarehouse.end_date}, SCHEDULE_DATE=${dutyDate}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * ============================================================
+     * 5. VALIDATE PROPER ASSIGNMENT
+     * ============================================================
+     */
+
+    if (!staffWarehouse.warehouse_id) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse has no warehouse assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+      );
+
+      continue;
+    }
+
+    if (!staffWarehouse.location_id) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse has no location assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+      );
+
+      continue;
+    }
+
+    if (!staffWarehouse.vendor_id) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: StaffWarehouse has no vendor assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * ============================================================
+     * 6. PARSE DUTY TIME
+     * ============================================================
+     */
+
+    const startTime = this.parseDwsDateTime(
+      dutyDate,
+      record["SCHEDULE_START_TIME"] || record["TIME_IN"],
+    );
+
+    let endTime = this.parseDwsDateTime(
+      dutyDate,
+      record["SCHEDULE_END_TIME"] || record["TIME_OUT"],
+    );
+
+    if (!startTime || !endTime) {
+      logger.warn(
+        `[StaffSchedulingService] Skipping DWS record #${
+          record["NO"] || ""
+        }: Invalid duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+      );
+
+      continue;
+    }
+
+    /*
+     * ============================================================
+     * 7. OVERNIGHT SHIFT ADJUSTMENT
+     * ============================================================
+     */
+
+    if (
+      dayjs(endTime).isBefore(dayjs(startTime)) ||
+      dayjs(endTime).isSame(dayjs(startTime))
+    ) {
+      endTime = dayjs(endTime).add(1, "day").toDate();
+    }
+
+    /*
+     * ============================================================
+     * 8. PARSE ACTUAL DWS TIME LOGS
+     * ============================================================
+     */
+
+    const time_in = this.parseDwsDateTime(
+      dutyDate,
+      record["TIME_IN"],
+    );
+
+    let time_out = this.parseDwsDateTime(
+      dutyDate,
+      record["TIME_OUT"],
+    );
+
+    let breakStart = this.parseDwsDateTime(
+      dutyDate,
+      record["BREAK_IN"],
+    );
+
+    let breakEnd = this.parseDwsDateTime(
+      dutyDate,
+      record["BREAK_OUT"],
+    );
+
+    let overtimeIn = this.parseDwsDateTime(
+      dutyDate,
+      record["OVERTIME_IN"],
+    );
+
+    let overtimeOut = this.parseDwsDateTime(
+      dutyDate,
+      record["OVERTIME_OUT"],
+    );
+
+    /*
+     * ============================================================
+     * 8.1 KEEP ORIGINAL DWS VALUES
+     * ============================================================
+     *
+     * These values MUST NOT be changed.
+     *
+     * orig_* = exact values received from DWS
+     */
+
+    const origTimeIn = time_in;
+    const origTimeOut = time_out;
+    const origBreakIn = breakStart;
+    const origBreakOut = breakEnd;
+
+    /*
+     * ============================================================
+     * 8.2 OVERNIGHT ACTUAL TIME ADJUSTMENT
+     * ============================================================
+     *
+     * Example:
+     *
+     * SCHEDULE_DATE       = 2026-09-16
+     * SCHEDULE_START_TIME = 11:00 PM
+     * SCHEDULE_END_TIME   = 08:00 AM
+     *
+     * TIME_IN             = 11:11 PM
+     * TIME_OUT            = 06:41 AM
+     *
+     * Expected:
+     *
+     * TIME_IN  = 2026-09-16 11:11 PM
+     * TIME_OUT = 2026-09-17 06:41 AM
+     */
+
+    const isOvernightShift =
+      dayjs(endTime).date() !== dayjs(startTime).date();
+
+    if (isOvernightShift) {
+      const adjustIfNextDay = (value: Date | null): Date | null => {
+        if (!value) {
+          return null;
+        }
+
+        const parsed = dayjs(value);
+
+        /*
+         * If the actual time is earlier than the scheduled
+         * start time, it belongs to the following day.
+         */
+        if (parsed.isBefore(dayjs(startTime))) {
+          return parsed.add(1, "day").toDate();
+        }
+
+        return value;
+      };
+
+      time_out = adjustIfNextDay(time_out);
+      breakStart = adjustIfNextDay(breakStart);
+      breakEnd = adjustIfNextDay(breakEnd);
+      overtimeIn = adjustIfNextDay(overtimeIn);
+      overtimeOut = adjustIfNextDay(overtimeOut);
+    }
+
+    /*
+     * ============================================================
+     * 8.3 VALIDATE ACTUAL WORKING HOURS
+     * ============================================================
+     *
+     * RULE:
+     *
+     * 1. If TIME_IN or TIME_OUT is missing:
+     *    No adjustment.
+     *
+     * 2. If duration is 8 hours or less:
+     *    just_* = orig_*
+     *
+     * 3. If duration is MORE THAN 8 hours AND there is
+     *    NO COMPLETE BREAK:
+     *    Deduct 1 hour from just_time_out only.
+     *
+     * 4. If a complete BREAK_IN and BREAK_OUT exists:
+     *    No automatic deduction.
+     *
+     * IMPORTANT:
+     * orig_* always remains the original DWS value.
+     */
+
+    if (time_in && time_out) {
+      const durationMinutes = dayjs(time_out).diff(
+        dayjs(time_in),
+        "minute",
+      );
+
+      const hasCompleteBreak =
+        !!breakStart && !!breakEnd;
+
+      /*
+       * More than 8 hours without a complete break.
+       */
+      if (
+        durationMinutes > 9 * 60 &&
+        !hasCompleteBreak
+      ) {
+        time_out = dayjs(time_out)
+          .subtract(1, "hour")
+          .toDate();
+
+        logger.warn(
+          `[StaffSchedulingService] Automatically deducted 1 hour due to work duration exceeding 8 hours without a complete break. ` +
+            `CREW_ID=${crewId}, ` +
+            `STAFF_ID=${staff.id}, ` +
+            `ORIG_TIME_IN=${origTimeIn?.toISOString() || "NULL"}, ` +
+            `ORIG_TIME_OUT=${origTimeOut?.toISOString() || "NULL"}, ` +
+            `ADJUSTED_TIME_OUT=${time_out.toISOString()}, ` +
+            `BREAK_IN=${origBreakIn?.toISOString() || "NULL"}, ` +
+            `BREAK_OUT=${origBreakOut?.toISOString() || "NULL"}`,
+        );
+      }
+    }
+
+    /*
+     * ============================================================
+     * 9. PARSE HOURS
+     * ============================================================
+     */
+
+    const regularHours = record["REGULAR_HOURS"]
+      ? Number(record["REGULAR_HOURS"])
+      : 0;
+
+    const breakHours = record["BREAK_HOURS"]
+      ? Number(record["BREAK_HOURS"])
+      : 0;
+
+    const overtimeHours = record["OVERTIME_HOURS"]
+      ? Number(record["OVERTIME_HOURS"])
+      : 0;
+
+    const twh = record["NO_OF_HOURS"]
+      ? Number(record["NO_OF_HOURS"])
+      : 0;
+
+    /*
+     * ============================================================
+     * 10. CREATE SCHEDULING DETAIL
+     * ============================================================
+     */
+
+    details.push({
+      staff_id: staff.id,
+
+      warehouse_id: staffWarehouse.warehouse_id,
+      location_id: staffWarehouse.location_id,
+      vendor_id: staffWarehouse.vendor_id,
+
+      duty_start_time: startTime.toISOString(),
+      duty_end_time: endTime.toISOString(),
+
+      just_time_in: time_in
+        ? time_in.toISOString()
+        : undefined,
+
+      just_time_out: time_out
+        ? time_out.toISOString()
+        : undefined,
+
+      just_break_in: breakStart
+        ? breakStart.toISOString()
+        : undefined,
+
+      just_break_out: breakEnd
+        ? breakEnd.toISOString()
+        : undefined,
+
+      /*
+       * ========================================================
+       * ORIGINAL DWS VALUES
+       * ========================================================
+       *
+       * These ALWAYS contain the original values received
+       * from DWS before any automatic adjustment.
+       */
+
+      orig_time_in: origTimeIn
+        ? origTimeIn.toISOString()
+        : undefined,
+
+      orig_time_out: origTimeOut
+        ? origTimeOut.toISOString()
+        : undefined,
+
+      orig_break_in: origBreakIn
+        ? origBreakIn.toISOString()
+        : undefined,
+
+      orig_break_out: origBreakOut
+        ? origBreakOut.toISOString()
+        : undefined,
+
+      overtime_in: overtimeIn
+        ? overtimeIn.toISOString()
+        : undefined,
+
+      overtime_out: overtimeOut
+        ? overtimeOut.toISOString()
+        : undefined,
+
+      regular: regularHours,
+      break_hours: breakHours,
+      overtime: overtimeHours,
+      twh: twh,
+
+      remarks: `Auto-synced from DWS log #${record["NO"] || ""}`,
+    });
+
+
+  }
+
+  /*
+   * ============================================================
+   * 11. NO VALID DETAILS
+   * ============================================================
+   */
+
+  if (details.length === 0) {
+    logger.warn(
+      `[StaffSchedulingService] No valid detail rows to process for date: ${scheduleDateStr}`,
+    );
+
+    return null;
+  }
+
+  /*
+   * ============================================================
+   * 12. FILTER INTERNAL STAFF SCHEDULE COLLISIONS
+   * ============================================================
+   */
+
+  const safeDetails =
+    this.filterInternalScheduleCollisions(details);
+
+  if (safeDetails.length === 0) {
+    logger.warn(
+      `[StaffSchedulingService] All DWS detail rows were removed because of internal schedule collisions. Date: ${scheduleDateStr}`,
+    );
+
+    return null;
+  }
+
+  /*
+   * ============================================================
+   * 13. CREATE HEADER
+   * ============================================================
+   */
+
+  const headerDto: CreateScheduleHeaderDto = {
+    schedule_date: scheduleDateStr,
+    entry_no: safeDetails.length,
+    reason: "DWS Daily Automated Sync",
+    shifting_day: 1,
+    details: safeDetails,
+  };
+
+  /*
+   * ============================================================
+   * 14. AUTO-ENROLL ACCESS KEY
+   * ============================================================
+   */
+
+  const accessKeyId =
+    ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS;
+
+  /*
+   * ============================================================
+   * 15. REUSE EXISTING TRANSACTIONAL CREATE
+   * ============================================================
+   */
+
+  return await this.create(
+    headerDto,
+    userId,
+    accessKeyId,
+  );
+}
+
+  private filterInternalScheduleCollisions(
+    details: CreateSchedulingDetailDto[],
+  ): CreateSchedulingDetailDto[] {
+    const accepted: CreateSchedulingDetailDto[] = [];
+
+    for (const item of details) {
+      const itemStart = new Date(item.duty_start_time).getTime();
+      const itemEnd = new Date(item.duty_end_time).getTime();
+
+      const hasConflict = accepted.some((existing) => {
+        if (existing.staff_id !== item.staff_id) return false;
+        const existStart = new Date(existing.duty_start_time).getTime();
+        const existEnd = new Date(existing.duty_end_time).getTime();
+        return itemStart < existEnd && itemEnd > existStart;
+      });
+
+      if (!hasConflict) {
+        accepted.push(item);
+      }
+    }
+
+    return accepted;
+  }
+
+  private parseDwsDateTime(
+    dateStr: string,
+    timeStr: string,
+    nextDayIfEarlier: boolean = false,
+    referenceTimeStr?: string,
+  ): Date | null {
+    if (!dateStr || !timeStr) return null;
+
+    const date = String(dateStr).trim();
+    const time = String(timeStr).trim();
+
+    const parsed = dayjs(
+      `${date} ${time}`,
+      "YYYY-MM-DD hh:mm A",
+      true,
+    );
+
+    if (!parsed.isValid()) {
+      return null;
+    }
+
+    // For overnight schedules:
+    // If the actual time is earlier than the schedule start time,
+    // it belongs to the following day.
+    if (nextDayIfEarlier && referenceTimeStr) {
+      const reference = dayjs(
+        `${date} ${String(referenceTimeStr).trim()}`,
+        "YYYY-MM-DD hh:mm A",
+        true,
+      );
+
+      if (reference.isValid() && parsed.isBefore(reference)) {
+        return parsed.add(1, "day").toDate();
+      }
+    }
+
+    return parsed.toDate();
+  }
+
+  private async createScheduleHeaderHistory(
+    transactionalEntityManager: any,
+    scheduleHeader: ScheduleHeader,
+    userId: number,
+  ): Promise<void> {
+    const scheduleHeaderHistory = transactionalEntityManager.create(
+      ScheduleHeaderHistory,
+      {
+        schedule_header_id: scheduleHeader.id,
+        schedule_date: scheduleHeader.schedule_date,
+        entry_no: scheduleHeader.entry_no,
+        shifting_day: scheduleHeader.shifting_day,
+        attendance_status_id: scheduleHeader.attendance_status_id,
+        attendance_ts: scheduleHeader.attendance_ts,
+        status_id: scheduleHeader.status_id,
+        access_key_id: scheduleHeader.access_key_id,
+        created_by: userId,
+        updated_by: userId,
+      },
+    );
+
+    await transactionalEntityManager.save(
+      ScheduleHeaderHistory,
+      scheduleHeaderHistory,
+    );
+  }
+
+  // async generateReportScheduleDetails(
+  //   scheduleHeaderId?: number,
+  //   accessKeyId?: number,
+  //   dateFrom?: string,
+  //   dateTo?: string,
+  //   locationIds?: number[],
+  //   vendorIds?: number[],
+  // ): Promise<any[]> {
+  //   try {
+  //     const query = this.scheduleDetailRepository
+  //       .createQueryBuilder("scheduleDetail")
+
+  //       .leftJoinAndSelect("scheduleDetail.scheduleHeader", "scheduleHeader")
+
+  //       .leftJoinAndSelect("scheduleDetail.staff", "staff")
+
+  //       .leftJoinAndSelect("scheduleDetail.vendor", "vendor")
+
+  //       .leftJoinAndSelect("scheduleDetail.location", "location")
+
+  //       .leftJoinAndSelect("scheduleDetail.warehouse", "warehouse")
+
+  //       .leftJoinAndSelect("scheduleDetail.status", "status")
+
+  //       .leftJoinAndSelect("scheduleDetail.workingDays", "workingDay")
+
+  //       .leftJoinAndSelect("scheduleDetail.createdBy", "createdBy")
+
+  //       .leftJoinAndSelect("scheduleDetail.updatedBy", "updatedBy");
+
+  //     // ============================================================
+  //     // EXCLUDE CANCELLED SCHEDULES
+  //     // ============================================================
+
+  //     query.andWhere("scheduleHeader.status_id != :cancelledStatus", {
+  //       cancelledStatus: STATUS_IDS.CANCELLED,
+  //     });
+
+  //     // ============================================================
+  //     // SCHEDULE HEADER FILTER
+  //     // ============================================================
+
+  //     if (scheduleHeaderId !== undefined) {
+  //       query.andWhere(
+  //         "scheduleDetail.schedule_header_id = :scheduleHeaderId",
+  //         {
+  //           scheduleHeaderId,
+  //         },
+  //       );
+  //     }
+
+  //     // ACCESS KEY FILTER
+
+  //     if (accessKeyId !== undefined) {
+  //       query.andWhere("scheduleHeader.access_key_id = :accessKeyId", {
+  //         accessKeyId,
+  //       });
+  //     }
+
+  //     if (dateFrom !== undefined) {
+  //       query.andWhere("DATE(scheduleHeader.schedule_date) >= :dateFrom", {
+  //         dateFrom,
+  //       });
+  //     }
+
+  //     // ============================================================
+  //     // DATE TO
+  //     // Uses schedule_header.schedule_date
+  //     // ============================================================
+
+  //     if (dateTo !== undefined) {
+  //       query.andWhere("DATE(scheduleHeader.schedule_date) <= :dateTo", {
+  //         dateTo,
+  //       });
+  //     }
+
+  //     // ============================================================
+  //     // LOCATION FILTER
+  //     // Uses schedule_detail.location_id
+  //     // ============================================================
+
+  //     if (locationIds !== undefined) {
+  //       query.andWhere("scheduleDetail.location_id IN (:...locationIds)", {
+  //         locationIds,
+  //       });
+  //     }
+
+  //     // ============================================================
+  //     // AGENCY FILTER
+  //     // Uses schedule_detail.vendor_id
+  //     // ============================================================
+
+  //     if (vendorIds !== undefined) {
+  //       query.andWhere("scheduleDetail.vendor_id IN (:...vendorIds)", {
+  //         vendorIds,
+  //       });
+  //     }
+
+  //     // ============================================================
+  //     // ORDER
+  //     // ============================================================
+  //     query
+  //       .orderBy("scheduleHeader.schedule_date", "ASC")
+  //       .addOrderBy("warehouse.warehouse_name", "ASC")
+  //       .addOrderBy("scheduleDetail.location_id", "ASC")
+  //       .addOrderBy("scheduleDetail.id", "ASC");
+
+  //     // ============================================================
+  //     // EXECUTE QUERY
+  //     // ============================================================
+
+  //     const scheduleDetails = await query.getMany();
+
+  //     // ============================================================
+  //     // MAP RESPONSE
+  //     // ============================================================
+
+  //     const response =
+  //       this.responseMapperService.mapEntitiesToResponse(scheduleDetails);
+
+  //     return response;
+  //   } catch (error) {
+  //     throw new Error("Failed to fetch staff schedule report");
+  //   }
+  // }
+
+async generateReportScheduleDetails(
+  payrollHeaderId?: number,
+  accessKeyId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  locationIds?: number[],
+  vendorIds?: number[],
+): Promise<any[]> {
+  try {
+    const query = this.payrollDetailRepository
+      .createQueryBuilder("payrollDetail")
+      .leftJoinAndSelect("payrollDetail.payrollHeader", "payrollHeader")
+      .leftJoinAndSelect("payrollDetail.staff", "staff")
+      .leftJoinAndSelect("payrollDetail.vendor", "vendor")
+      .leftJoinAndSelect("payrollDetail.location", "location")
+      .leftJoinAndSelect("payrollDetail.warehouse", "warehouse")
+      .leftJoinAndSelect("payrollDetail.status", "status")
+      .leftJoinAndSelect("payrollDetail.workingDays", "workingDay")
+      .leftJoinAndSelect("payrollDetail.createdBy", "createdBy")
+      .leftJoinAndSelect("payrollDetail.updatedBy", "updatedBy");
+
+    query.andWhere("payrollHeader.status_id = :postedStatus", {
+      postedStatus: STATUS_IDS.POSTED,
+    });
+
+    if (payrollHeaderId !== undefined) {
+      query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
+        payrollHeaderId,
+      });
+    }
+
+    if (accessKeyId !== undefined) {
+      query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
+        accessKeyId,
+      });
+    }
+
+    if (dateFrom !== undefined) {
+      query.andWhere("DATE(payrollHeader.payroll_date_from) >= :dateFrom", {
+        dateFrom,
+      });
+    }
+
+    if (dateTo !== undefined) {
+      query.andWhere("DATE(payrollHeader.payroll_date_to) <= :dateTo", {
+        dateTo,
+      });
+    }
+
+    if (locationIds !== undefined && locationIds.length > 0) {
+      query.andWhere("payrollDetail.location_id IN (:...locationIds)", {
+        locationIds,
+      });
+    }
+
+    if (vendorIds !== undefined && vendorIds.length > 0) {
+      query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
+        vendorIds,
+      });
+    }
+
+    query
+      .orderBy("payrollHeader.payroll_date_from", "ASC")
+      .addOrderBy("warehouse.warehouse_name", "ASC")
+      .addOrderBy("payrollDetail.location_id", "ASC")
+      .addOrderBy("payrollDetail.id", "ASC");
+
+    const payrollDetails = await query.getMany();
+
+    if (!payrollDetails.length) {
+      return [];
+    }
+
+    const staffIds = [
+      ...new Set(
+        payrollDetails
+          .map((detail) => detail.staff_id)
+          .filter((id) => id !== null && id !== undefined),
+      ),
+    ];
+
+    const accessKeyIdFromPayroll =
+      payrollDetails[0]?.payrollHeader?.access_key_id;
+
+    const staffSalaries = await this.staffSalaryRepository.find({
+      where: {
+        staff_id: In(staffIds),
+        access_key_id: accessKeyIdFromPayroll,
+        status_id: STATUS_IDS.ACTIVE,
+      },
+    });
+
+    const salaryMap = new Map(
+      staffSalaries.map((salary) => [
+        salary.staff_id,
+        Number(salary.salary_rate) || 0,
+      ]),
+    );
+
+    const staffVendorSalaries = await this.staffVendorSalaryRepository.find({
+      where: {
+        staff_id: In(staffIds),
+        access_key_id: accessKeyIdFromPayroll,
+        status_id: STATUS_IDS.ACTIVE,
+      },
+    });
+
+    const staffVendorMap = new Map(
+      staffVendorSalaries.map((staffVendor) => [
+        `${staffVendor.staff_id}-${staffVendor.vendor_id}-${staffVendor.location_id}`,
+        staffVendor,
+      ]),
+    );
+
+    const sssConfigs = await this.sssConfigRepository.find();
+
+    const staffSummaryMap = new Map<
+      number,
+      {
+        regular_day: number;
+        special_holiday: number;
+        regular_holiday: number;
+      }
+    >();
+
+    for (const detail of payrollDetails) {
+      const staffId = detail.staff_id;
+
+      if (!staffId) {
+        continue;
+      }
+
+      if (!staffSummaryMap.has(staffId)) {
+        staffSummaryMap.set(staffId, {
+          regular_day: 0,
+          special_holiday: 0,
+          regular_holiday: 0,
+        });
+      }
+
+      const summary = staffSummaryMap.get(staffId)!;
+      const regular = Number(detail.regular) || 0;
+
+      if (detail.working_day_id === 1) {
+        summary.regular_day += regular;
+      }
+
+      if (detail.working_day_id === 2) {
+        summary.regular_holiday += regular;
+      }
+
+      if (detail.working_day_id === 3) {
+        summary.special_holiday += regular;
+      }
+    }
+
+    return payrollDetails.map((detail) => {
+      const salaryRate = salaryMap.get(detail.staff_id) ?? 0;
+      const hourRate = salaryRate / 8;
+
+      const regularAmount = Number(detail.regular_amount) || 0;
+      const overtimeAmount = Number(detail.overtime_amount) || 0;
+      const grossPay = regularAmount + overtimeAmount;
+
+      const staffSummary = staffSummaryMap.get(detail.staff_id) ?? {
+        regular_day: 0,
+        special_holiday: 0,
+        regular_holiday: 0,
+      };
+
+      const regularDay = staffSummary.regular_day;
+      const specialHoliday = staffSummary.special_holiday;
+      const regularHoliday = staffSummary.regular_holiday;
+
+      // Exact hours worked sum
+      const totalHoursWorked = regularDay + specialHoliday + regularHoliday;
+
+      // Unrounded days for calculation accuracy
+      const totalDayWorkFraction = totalHoursWorked / 8;
+
+      // Whole number display
+      const totalDayWorkWhole = Math.round(totalDayWorkFraction);
+
+      const thirteenMonthPay = (hourRate * totalHoursWorked) / 12;
+
+      // 1. SSS Calculation
+      const lookupValue = salaryRate * 26;
+      const sssConfig = sssConfigs.find((config) => {
+        const rangeFrom = Number(config.range_from) || 0;
+        const rangeTo = Number(config.range_to) || 0;
+        return lookupValue >= rangeFrom && lookupValue <= rangeTo;
+      });
+
+      const withMpfEc = Number(sssConfig?.with_mpf_ec) || 0;
+      const sampleMpf = withMpfEc / 26;
+      const sssShare = sampleMpf * totalDayWorkFraction;
+
+      // 2. Pag-IBIG Calculation
+      const staffVendorKey = `${detail.staff_id}-${detail.vendor_id}-${detail.location_id}`;
+      const staffVendor = staffVendorMap.get(staffVendorKey);
+
+      const pagibigNumberPerc = Number(staffVendor?.pagibig_number_perc) || 0;
+      const philHealthContriPerc = Number(staffVendor?.phil_health_contri_perc) || 0;
+
+      // Formula: ROUND(200 / 26, 2) * (Total Hours / 8)
+      const pagibigDailyRate = Math.round((pagibigNumberPerc / 26) * 100) / 100;
+      const pagIbigShare = pagibigDailyRate * totalDayWorkFraction;
+
+      // 3. PhilHealth Calculation
+      // Formula: ROUND((SalaryRate * (Perc / 100)) / 2, 2) * (Total Hours / 8)
+      const philHealthDailyRate =
+        Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) / 100;
+      const philHealthShare = philHealthDailyRate * totalDayWorkFraction;
+
+      // 4. Vendor Billing Calculations
+      const vendorAsfField = Number(detail.vendor?.asf) || 0;
+      const vendorVatField = Number(detail.vendor?.vat) || 0;
+      const vendorTaxField = Number(detail.vendor?.tax) || 0;
+      const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
+      const dutyCount = 1; // 1 duty shift per row detail record
+
+      const totalPayroll = grossPay;
+      const asf = totalPayroll * vendorAsfField;
+      const totalAsf = totalPayroll + asf;
+      const allowance = warehouseAllowance * dutyCount;
+      const totalAllowance = totalAsf + allowance;
+      const vat = totalAllowance * vendorVatField;
+      const totalWithVat = totalAllowance + vat;
+      const tax = totalAllowance * vendorTaxField;
+      const netOfTax = totalWithVat - tax;
+      const totalBilling = netOfTax;
+
+      return {
+        id: detail.id,
+        payroll_header_id: detail.payroll_header_id,
+        schedule_detail_id: detail.schedule_detail_id,
+
+        staff_id: detail.staff_id,
+        staff_code: detail.staff?.staff_code ?? null,
+        staff_name: detail.staff
+          ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
+          : null,
+
+        salary_rate: salaryRate.toFixed(2),
+        hour_rate: hourRate.toFixed(2),
+
+        vendor_id: detail.vendor_id,
+        location_id: detail.location_id,
+        warehouse_id: detail.warehouse_id,
+
+        warehouse_ifs: detail.warehouse?.warehouse_name ?? null,
+
+        duty_start_time: detail.duty_start_time,
+        duty_end_time: detail.duty_end_time,
+
+        planned_duty_start_time: detail.planned_duty_start_time,
+        planned_duty_end_time: detail.planned_duty_end_time,
+
+        just_time_in: detail.just_time_in,
+        overtime_in: detail.overtime_in,
+        overtime_out: detail.overtime_out,
+        just_time_out: detail.just_time_out,
+
+        just_break_out: detail.just_break_out,
+        just_break_in: detail.just_break_in,
+
+        actual_time_in: detail.actual_time_in,
+        actual_time_out: detail.actual_time_out,
+
+        actual_break_in: detail.actual_break_in,
+        actual_break_out: detail.actual_break_out,
+
+        add_ot: detail.add_ot,
+
+        working_day_id: detail.working_day_id,
+        status_id: detail.status_id,
+        attendance_status_id: detail.attendance_status_id,
+
+        created_by: detail.created_by,
+        updated_by: detail.updated_by,
+
+        just_remarks: detail.just_remarks,
+
+        regular: detail.regular,
+        overtime: detail.overtime,
+        twh: detail.twh,
+        break: detail.break,
+
+        payroll_remarks: detail.payroll_remarks,
+
+        regular_hours: detail.regular_hours,
+        overtime_hours: detail.overtime_hours,
+        twh_hours: detail.twh_hours,
+        break_hours: detail.break_hours,
+
+        created_at: detail.created_at,
+        modified_at: detail.modified_at,
+
+        regular_amount: Number(detail.regular_amount || 0).toFixed(2),
+        overtime_amount: Number(detail.overtime_amount || 0).toFixed(2),
+        gross_pay: grossPay.toFixed(2),
+
+        regular_day: regularDay.toFixed(2),
+        special_holiday: specialHoliday.toFixed(2),
+        regular_holiday: regularHoliday.toFixed(2),
+
+        total_day_work: totalDayWorkWhole.toString(),
+
+        thirteen_month_pay: thirteenMonthPay.toFixed(2),
+
+        sss_lookup_value: lookupValue.toFixed(2),
+        sss_with_mpf_ec: withMpfEc.toFixed(2),
+        sss_sample_mpf: sampleMpf.toFixed(2),
+        sss_share: sssShare.toFixed(2),
+
+        pagibig_number_perc: pagibigNumberPerc.toFixed(2),
+        pag_ibig_share: pagIbigShare.toFixed(2),
+
+        phil_health_contri_perc: philHealthContriPerc.toFixed(2),
+        phil_health_share: philHealthShare.toFixed(2),
+
+        // --- Vendor Billing Outputs ---
+        total_payroll: totalPayroll.toFixed(2),
+        asf: asf.toFixed(2),
+        total_asf: totalAsf.toFixed(2),
+        allowance: allowance.toFixed(2),
+        total_allowance: totalAllowance.toFixed(2),
+        vat: vat.toFixed(2),
+        total_with_vat: totalWithVat.toFixed(2),
+        tax: tax.toFixed(2),
+        net_of_tax: netOfTax.toFixed(2),
+        total_billing: totalBilling.toFixed(2),
+
+        status_name: detail.status?.status_name ?? null,
+        location_name: detail.location?.location_name ?? null,
+        warehouse_name: detail.warehouse?.warehouse_name ?? null,
+        warehouse_code: detail.warehouse?.warehouse_code ?? null,
+        service_provider_name: detail.vendor?.service_provider_name ?? null,
+        working_day_name: detail.workingDays?.description ?? null,
+      };
+    });
+  } catch (error) {
+    throw new Error("Failed to fetch staff payroll report");
+  }
+}
 }

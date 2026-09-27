@@ -20,4 +20,27 @@ export class CreateStaffVendorSalaryDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+  @IsOptional()
+
+  @IsOptional()
+  @IsNumber()
+  allowance?: number;
+
+  @IsOptional()
+  @IsNumber()
+  salary_rate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  phil_health_contri_perc?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sss_contri_perc?: number;
+
+  @IsOptional()
+  @IsNumber()
+  pagibig_number_perc?: number;
+
+  
 }

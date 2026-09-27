@@ -15,6 +15,7 @@ import { Location } from "./Location";
 import { Vendor } from "./Vendor";
 import { ScheduleHeader } from "./ScheduleHeader";
 import { WorkingDay } from "./WorkingDay";
+import { ActualLogsDetail } from "./ActualLogsDetail";
 
 @Entity("schedule_details")
 export class ScheduleDetail {
@@ -28,7 +29,7 @@ export class ScheduleDetail {
   schedule_header_id: number;
 
   @Column({ nullable: true })
-  pos_logs_id: number;
+  actual_logs_detail_id: number;
 
   @Column({ type: "varchar", length: 255 })
   staff_code: string;
@@ -45,11 +46,20 @@ export class ScheduleDetail {
   @Column({ type: "text", nullable: true })
   remarks: string;
 
+  @Column({ type: "text", nullable: true })
+  system_remarks: string;
+
   @Column({ type: "timestamp", nullable: true })
   duty_start_time: Date;
 
   @Column({ type: "timestamp", nullable: true })
   duty_end_time: Date;
+
+  @Column({ type: "timestamp", nullable: true })
+  planned_duty_start_time: Date;
+
+  @Column({ type: "timestamp", nullable: true })
+  planned_duty_end_time: Date;
 
   @Column({ type: "timestamp", nullable: true })
   operational_start_time: Date;
@@ -62,6 +72,12 @@ export class ScheduleDetail {
 
   @Column({ type: "timestamp", nullable: true })
   just_time_in: Date;
+  
+  @Column({ type: "timestamp", nullable: true })
+  overtime_in: Date;
+  
+  @Column({ type: "timestamp", nullable: true })
+  overtime_out: Date;
 
   @Column({ type: "timestamp", nullable: true })
   just_time_out: Date;
@@ -75,17 +91,29 @@ export class ScheduleDetail {
   @Column({ nullable: true })
   add_ot: number;
 
-  @Column({ type: "timestamp", nullable: true })
-  starting_time: Date;
-
-  @Column({ type: "timestamp", nullable: true })
-  ending_time: Date;
-
   @Column({ nullable: true })
   working_day_id: number;
 
   @Column({ default: 1 })
   status_id: number;
+
+  @Column({ type: "time", nullable: true })
+  regular_hours: string;
+
+  @Column({ type: "time", nullable: true })
+  overtime_hours: string;
+
+  @Column({ type: "time", nullable: true })
+  twh_hours: string;
+
+  @Column({ type: "time", nullable: true })
+  break_hours: string;
+
+  @Column({ nullable: true })
+  attendance_status_id: number;
+
+  @Column({ type: 'boolean', default: false })
+  cron_computed: boolean;
 
   @Column({ nullable: true })
   created_by: number;
@@ -104,6 +132,9 @@ export class ScheduleDetail {
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
   twh: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  break: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
   payroll_invoice: number;
@@ -187,6 +218,14 @@ export class ScheduleDetail {
   @JoinColumn({ name: "status_id" })
   status: Status;
 
+  @ManyToOne(() => Status, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "attendance_status_id" })
+  attendanceStatus: Status;
+
   @ManyToOne(() => User, {
     eager: false,
     onDelete: "RESTRICT",
@@ -210,6 +249,14 @@ export class ScheduleDetail {
   })
   @JoinColumn({ name: "staff_id" })
   staff: Staff;
+
+  @ManyToOne(() => ActualLogsDetail, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "actual_logs_detail_id" })
+  actualLogsDetail: ActualLogsDetail;
 
   @ManyToOne(() => Warehouse, {
     eager: false,
@@ -249,5 +296,5 @@ export class ScheduleDetail {
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "working_day_id" })
-  workingDay: WorkingDay;
+  workingDays: WorkingDay;
 }

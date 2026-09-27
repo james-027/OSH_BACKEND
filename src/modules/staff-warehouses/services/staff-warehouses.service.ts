@@ -72,7 +72,7 @@ export class StaffWarehousesService {
         where.staff = {
         status_id: STATUS_IDS.ACTIVE,
       };
-
+ 
       const records = await this.staffWarehousesRepository.find({
         where,
         relations: this.relationFields,
@@ -309,6 +309,7 @@ export class StaffWarehousesService {
 
       await this.staffWarehousesRepository.update(id, {
         approval_status_id: STATUS_IDS.INACTIVE,
+        status_id: STATUS_IDS.INACTIVE,
       } as any);
 
       const updatedRecord = await this.staffWarehousesRepository.findOne({
@@ -385,6 +386,7 @@ export class StaffWarehousesService {
       .update()
       .set({
         approval_status_id,
+        status_id: approval_status_id,
         updated_by: userId,
       })
       .whereInIds(ids)

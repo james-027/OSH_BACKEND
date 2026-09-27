@@ -146,6 +146,12 @@ export class StaffHistory {
   @JoinColumn({ name: "reason_status_id" })
   reasonStatus: Status;
 
+  @Column({ length: 255, nullable: true })
+  old_dws_code: string;
+
+  @Column({ nullable: true })
+  old_dws_id: number;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",

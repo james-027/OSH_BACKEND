@@ -47,7 +47,10 @@ export class ResponseMapperService {
           "training",
           "subStatus",
           "staffTransfers",
-          "scheduleHeader"
+          "scheduleHeader",
+          "attendanceStatus",
+          "workingDays",
+          "actualLogsDetail"
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
@@ -116,6 +119,7 @@ export class ResponseMapperService {
     // Map warehouse relation
     if (entity.warehouse && typeof entity.warehouse === "object") {
       response.warehouse_name = entity.warehouse.warehouse_name || null;
+      response.warehouse_code = entity.warehouse.warehouse_code || null;
     }
 
     // Map vendor relation
@@ -193,6 +197,19 @@ export class ResponseMapperService {
     if (entity.brand && typeof entity.brand === "object") {
       response.brand_name = entity.brand.brand_name || null;
     }
+    // Map Actual Logs Detail relation
+    if (entity.actualLogsDetail && typeof entity.actualLogsDetail === "object") {
+      response.actual_time_in = entity.actualLogsDetail.time_in || null;
+      response.actual_time_out = entity.actualLogsDetail.time_out || null;
+      response.actual_break_in = entity.actualLogsDetail.break_in || null;
+      response.actual_break_out = entity.actualLogsDetail.break_out || null;
+      response.actual_overtime_in = entity.actualLogsDetail.overtime_in || null;
+      response.actual_overtime_out = entity.actualLogsDetail.overtime_out || null;
+      response.actual_regular = entity.actualLogsDetail.regular || null;
+      response.actual_twh = entity.actualLogsDetail.twh || null;
+      response.actual_overtime = entity.actualLogsDetail.overtime || null;
+      response.actual_break_hours = entity.actualLogsDetail.break_hours || null;
+    }
 
     // Map categoryType relation
     if (entity.categoryType && typeof entity.categoryType === "object") {
@@ -212,6 +229,14 @@ export class ResponseMapperService {
     // Map sub status relation
     if (entity.subStatus && typeof entity.subStatus === "object") {
       response.sub_status_name = entity.subStatus.status_name || null;
+    }
+    // Map attendance status relation
+    if (entity.attendanceStatus && typeof entity.attendanceStatus === "object") {
+      response.status_name = entity.attendanceStatus.status_name || null;
+    }
+    // Map working days relation
+    if (entity.workingDays && typeof entity.workingDays === "object") {
+      response.working_day_name = entity.workingDays.description || null;
     }
         // Map Schedule Header relation
     if (entity.scheduleHeader && typeof entity.scheduleHeader === "object") {

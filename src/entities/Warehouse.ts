@@ -68,6 +68,9 @@ export class Warehouse {
   @Column({nullable:true})
   pos_availability_id: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  allowance: number;
+
   @CreateDateColumn({ type: "timestamp" })
   created_at: Date;
 

@@ -633,6 +633,8 @@ async create(
         try {
           await this.staffHistoriesRepository.save({
             staff_id: staff.id,
+            old_dws_code: staff.old_dws_code,
+            old_dws_id: staff.old_dws_id,
             staff_code: staff.staff_code,
             last_name: staff.last_name,
             first_name: staff.first_name,
@@ -765,6 +767,8 @@ async create(
         if (saved.warehouse_id != null && staff) {
           await this.staffHistoriesRepository.save({
             staff_id: staff.id,
+            old_dws_code: staff.old_dws_code,
+            old_dws_id: staff.old_dws_id,
             staff_code: staff.staff_code,
             last_name: staff.last_name,
             first_name: staff.first_name,

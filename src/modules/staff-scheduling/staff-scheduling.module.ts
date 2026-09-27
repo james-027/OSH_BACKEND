@@ -21,10 +21,19 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
 import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
+import { RegularHoliday } from "src/entities/RegularHoliday";
+import { PayrollDetails } from "src/entities/PayrollDetails";
+import { LogsType } from "src/entities/LogsType";
+import { StaffSalary } from "src/entities/StaffSalary";
+import { DwsScheduleSyncCronService } from "src/schedulers/dws-schedule-logs.scheduler";
+import { HttpModule } from "node_modules/@nestjs/axios/dist/http.module";
+import { SssConfigs } from "src/entities/SssConfig";
+import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 
 
 @Module({
   imports: [
+    HttpModule,
     TypeOrmModule.forFeature([
       ScheduleDetail,
       ScheduleHeader,
@@ -35,10 +44,16 @@ import { ScheduleHeader } from "src/entities/ScheduleHeader";
       Warehouse,
       Action,
       Staff,
+      StaffSalary,
       Vendor,
+      SssConfigs,
+      StaffVendorSalary,
       TransactionSequence,
       StaffHistory,
-      Status
+      Status,
+      RegularHoliday,
+      LogsType,
+      PayrollDetails
     ]),
     UsersModule,
     SSEModule,
@@ -47,6 +62,7 @@ import { ScheduleHeader } from "src/entities/ScheduleHeader";
   controllers: [StaffSchedulingController],
   providers: [
     StaffSchedulingService,
+    DwsScheduleSyncCronService,
     UserAuditTrailCreateService,
     ResponseMapperService,
      CommonUtilitiesService,

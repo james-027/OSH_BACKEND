@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
@@ -20,7 +21,7 @@ export class CreateSchedulingDetailDto {
 
   @IsOptional()
   @IsInt()
-  pos_logs_id?: number;
+  actual_logs_detail_id?: number;
 
   @IsOptional()
   @IsInt()
@@ -65,6 +66,62 @@ export class CreateSchedulingDetailDto {
   @IsOptional()
   @IsDateString()
   starting_time?: string;
+
+  @IsOptional()
+  @IsDateString()
+  just_time_in?: string;
+
+  @IsOptional()
+  @IsDateString()
+  just_time_out?: string;
+
+  @IsOptional()
+  @IsDateString()
+  orig_time_in?: string;
+
+  @IsOptional()
+  @IsDateString()
+  orig_time_out?: string;
+  
+  @IsOptional()
+  @IsDateString()
+  orig_break_out?: string;
+
+  @IsOptional()
+  @IsDateString()
+  orig_break_in?: string;
+
+  @IsOptional()
+  @IsDateString()
+  just_break_in?: string;
+
+  @IsOptional()
+  @IsDateString()
+  just_break_out?: string;
+
+  @IsOptional()
+  @IsDateString()
+  overtime_in?: string;
+
+  @IsOptional()
+  @IsDateString()
+  overtime_out?: string;
+
+  @IsOptional()
+  @IsNumber()
+  regular?: number;
+
+  @IsOptional()
+  @IsNumber()
+  break_hours?: number;
+
+  @IsOptional()
+  @IsNumber()
+  overtime?: number;
+
+  @IsOptional()
+  @IsNumber()
+  twh?: number;
 
   @IsOptional()
   @IsDateString()

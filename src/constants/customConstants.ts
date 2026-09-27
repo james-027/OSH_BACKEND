@@ -43,6 +43,8 @@ export const STATUS_IDS = {
   REJECTED: 15,
   TRAINEE : 20,
   POSTED : 4,
+  VALIDATED : 40,
+  COMPUTED : 41,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -50,6 +52,28 @@ export const POS_AVAILABILITY_IDS = {
   WITH_POS: 1,
   WITHOUT_POS: 2,
 } as const;
+
+
+// ============= WORKING DAY =============
+export const WORKING_DAY_IDS = {
+  REGULAR: 1,
+  HOLIDAY: 2,
+} as const;
+// ============= ACCESS KEY =============
+export const ACCESS_KEY_IDS = {
+  CTGI_ACCESS: 1,
+  BOUNTY_PLUS_ACCESS: 2,
+} as const;
+
+// ============= LOGS TYPE  =============
+export const LOGS_TYPE_ID = {
+  POS_FETCH: 1,
+  CC_FETCH: 2,
+} as const;
+
+export const ACCESS_PROCESS = {
+    AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
+};
 
 export const STATUS_NAMES = {
   [STATUS_IDS.PENDING]: "Pending",

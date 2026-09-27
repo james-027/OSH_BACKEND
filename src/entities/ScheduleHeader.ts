@@ -11,6 +11,7 @@ import {
 import { Status } from "./Status";
 import { User } from "./User";
 import { ScheduleDetail } from "./ScheduleDetails";
+import { AccessKey } from "./AccessKey";
 
 @Entity("schedule_headers")
 export class ScheduleHeader {
@@ -40,13 +41,13 @@ export class ScheduleHeader {
 
   @Column({
     type: "timestamp",
-    nullable:true
+    nullable: true,
   })
   attendance_ts: Date;
 
   @Column({
     type: "timestamp",
-    nullable:true
+    nullable: true,
   })
   payroll_ts: Date;
 
@@ -61,6 +62,9 @@ export class ScheduleHeader {
 
   @Column({ nullable: true })
   updated_by: number;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -122,9 +126,12 @@ export class ScheduleHeader {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
+
   @OneToMany(() => ScheduleDetail, (detail) => detail.scheduleHeader, {
     cascade: true,
   })
   details: ScheduleDetail[];
-  
 }
