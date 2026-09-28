@@ -19,6 +19,7 @@ import { AccessKey } from "./AccessKey";
 @Index("IDX_we_warehouse_id", ["warehouse_id"])
 @Unique("UQ_assignment_emp_per_month", [
   "warehouse_id",
+  "assigned_ac",
   "assigned_ss",
   "assigned_ah",
   "assigned_bch",
@@ -82,6 +83,9 @@ export class WarehouseEmployee {
   @Column({ type: "date", nullable: true })
   assignment_date: string;
 
+  @Column({ nullable: true })
+  assigned_ac: number;
+
   @ManyToOne(() => Warehouse)
   @JoinColumn({ name: "warehouse_id" })
   warehouse: Warehouse;
@@ -109,6 +113,10 @@ export class WarehouseEmployee {
   @ManyToOne(() => Employee)
   @JoinColumn({ name: "assigned_grh" })
   assignedGrh: Employee;
+
+  @ManyToOne(() => Employee)
+  @JoinColumn({ name: "assigned_ac" })
+  assignedAc: Employee;
 
   @ManyToOne(() => Status)
   @JoinColumn({ name: "status_id" })

@@ -7,6 +7,10 @@ export class CreateWarehouseEmployeeDto {
 
   @IsNotEmpty()
   @IsInt()
+  assigned_ac: number;
+
+  @IsNotEmpty()
+  @IsInt()
   assigned_ss: number;
 
   @IsNotEmpty()
