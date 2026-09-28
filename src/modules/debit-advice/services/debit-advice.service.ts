@@ -1296,7 +1296,7 @@ export class DebitAdviceService {
 
       const totalBatchCount = Math.ceil(documentKeys.length / BATCH_SIZE);
 
-      console.log(
+      logger.warn(
         `Processing Sales Upload batch ${currentBatchNumber}/${totalBatchCount} ` +
           `(${documentBatch.length} documents)`,
       );
@@ -1988,7 +1988,7 @@ export class DebitAdviceService {
 
       const totalBatchCount = Math.ceil(documentKeys.length / BATCH_SIZE);
 
-      console.log(
+      logger.warn(
         `Processing Sales Upload batch ${currentBatchNumber}/${totalBatchCount} ` +
           `(${documentBatch.length} documents)`,
       );
@@ -2077,53 +2077,17 @@ export class DebitAdviceService {
 
                   const remarksToSave = String(sourceGL.Remarks ?? "").trim();
 
-                  console.log(
-                    "========== GL ITEM DATABASE SAVE DEBUG ==========",
-                  );
-                  console.log("Debit Advice ID:", reloadedDebitAdvice.id);
-                  console.log("Vendor Code:", savedLine.vendor_code);
-                  console.log("GL Code:", savedGL.gl_code);
-                  console.log("Profitcenter:", savedGL.profitcenter_code);
-                  console.log("Amount:", savedGL.amount);
-                  console.log("Source Remarks:", sourceGL.Remarks);
-                  console.log("Remarks To Save:", remarksToSave);
-                  console.log("Remarks Length:", remarksToSave.length);
-                  console.log("Existing DB Remarks:", savedGL.Remarks);
-
                   savedGL.Remarks = remarksToSave;
-                  console.log("Final savedGL.Remarks:", savedGL.Remarks);
 
                   const savedGLItem =
                     await this.debitAdviceGLItemsRepository.save(savedGL);
 
-                  console.log("========== AFTER DATABASE SAVE ==========");
-                  console.log("Saved GL Item ID:", savedGLItem.id);
-                  console.log("Saved GL Code:", savedGLItem.gl_code);
-                  console.log("Saved GL Remarks:", savedGLItem.Remarks);
-                  console.log(
-                    "Saved GL Remarks Length:",
-                    String(savedGLItem.Remarks ?? "").length,
-                  );
                   const verifyGLItem =
                     await this.debitAdviceGLItemsRepository.findOne({
                       where: {
                         id: savedGLItem.id,
                       },
                     });
-
-                  console.log("========== DATABASE VERIFY ==========");
-                  console.log("GL Item ID:", verifyGLItem?.id);
-                  console.log("DB GL Code:", verifyGLItem?.gl_code);
-                  console.log(
-                    "DB Profitcenter:",
-                    verifyGLItem?.profitcenter_code,
-                  );
-                  console.log("DB Amount:", verifyGLItem?.amount);
-                  console.log("DB Remarks:", verifyGLItem?.Remarks);
-                  console.log(
-                    "DB Remarks Length:",
-                    String(verifyGLItem?.Remarks ?? "").length,
-                  );
                 }
               }
               // ============================================
