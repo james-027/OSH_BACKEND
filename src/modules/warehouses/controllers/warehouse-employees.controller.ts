@@ -239,15 +239,117 @@ export class WarehouseEmployeesController {
     const errors: { row: number; error: string }[] = [];
     const rowMap: { row: number; record: any }[] = [];
 
+    // Define interface outside the processing loop
+    interface Employee {
+      id: number;
+      employee_number: string;
+      status_id: number;
+      position_abbr?: string;
+      position_name?: string;
+      locations?: { location_id: number; location_name: string }[];
+    }
+
+    // Pre-index warehouses into a Map for O(1) instant lookups
+    const activeWarehouseMap = new Map<string, (typeof warehouses)[0]>();
+    for (const w of warehouses) {
+      if (w.status_id === 1 && w.warehouse_ifs) {
+        activeWarehouseMap.set(String(w.warehouse_ifs).trim(), w);
+      }
+    }
+
+    // Pre-index status names into a Map
+    const statusMap = new Map<string, number>();
+    statusMap.set("ACTIVE", 1);
+    statusMap.set("INACTIVE", 2);
+    if (Array.isArray(statuses)) {
+      for (const s of statuses) {
+        if (s.status_name) {
+          statusMap.set(String(s.status_name).trim().toUpperCase(), s.id);
+        }
+      }
+    }
+
+    // Centralized Employee Finder Function
+    const findEmployee = (
+      empNo: string,
+      abbrs: string[],
+      warehouseLocationId: number,
+      requireLocationId = false,
+    ): Employee | undefined => {
+      if (!empNo) return undefined;
+      const cleanEmpNo = String(empNo).trim();
+
+      return employees.find((e: any) => {
+        const matchesEmpNo = e.employee_number == cleanEmpNo;
+        const matchesStatus = e.status_id === 1;
+        const matchesAbbr = abbrs.includes(
+          (e.position_abbr || e.position_name || "").toUpperCase(),
+        );
+
+        const matchesLocation =
+          !requireLocationId ||
+          (Array.isArray(e.locations) &&
+            e.locations.some(
+              (loc: { location_id: number }) =>
+                loc.location_id === warehouseLocationId,
+            ));
+
+        return matchesEmpNo && matchesStatus && matchesAbbr && matchesLocation;
+      });
+    };
+
+    // Helper for repetitive Employee Role Resolution & Validation
+    const resolveEmployeeRole = (
+      row: Record<string, any>,
+      columnKey: string,
+      roleLabel: string,
+      allowedAbbrs: string[],
+      warehouseLocationId: number,
+      options: { required: boolean; requireLocationId: boolean },
+    ): number | null => {
+      const rawVal = row[columnKey];
+      const empNoStr = typeof rawVal === "string" ? rawVal.trim() : rawVal;
+
+      if (!empNoStr) {
+        if (options.required) {
+          throw new Error(`${columnKey} is required`);
+        }
+        return null;
+      }
+
+      const foundEmp = findEmployee(
+        empNoStr,
+        allowedAbbrs,
+        warehouseLocationId,
+        options.requireLocationId,
+      );
+
+      if (!foundEmp) {
+        const locationSuffix = options.requireLocationId
+          ? " (not found or not assigned to this store's location)"
+          : " (not found or not assigned to this store's location)";
+        throw new Error(`Invalid ${columnKey} [${empNoStr}]${locationSuffix}`);
+      }
+
+      return foundEmp.id;
+    };
+
+    // Main Upload Processing Loop
     for (let i = 0; i < json.length; i++) {
       const row = json[i];
       const excelRowNum = i + 2; // +2 for Excel row number (header + 1-based)
+
       try {
-        // 1. Warehouse lookup
-        const warehouse = warehouses.find(
-          (w) => w.warehouse_ifs == row["STORE IFS"] && w.status_id === 1,
-        );
-        if (!warehouse) throw new Error("Invalid or inactive STORE IFS");
+        // 1. Warehouse lookup via Map (O(1))
+        const rawStoreIfs = row["STORE IFS"]
+          ? String(row["STORE IFS"]).trim()
+          : "";
+        const warehouse = activeWarehouseMap.get(rawStoreIfs);
+
+        if (!warehouse) {
+          throw new Error("Invalid or inactive STORE IFS");
+        }
+
         // Location permission check
         if (!allowedLocationIds.includes(warehouse.location_id)) {
           throw new Error(
@@ -255,144 +357,83 @@ export class WarehouseEmployeesController {
           );
         }
 
-        // 2. Employee lookups
-        interface Employee {
-          id: number;
-          employee_number: string;
-          status_id: number;
-          position_abbr?: string;
-          position_name?: string;
-          locations?: { location_id: number; location_name: string }[]; // Updated to match the structure returned by the service
-        }
-        // General employee finder - updated to use employee_locations many-to-many relationship
-        const findEmp = (
-          empNo: string,
-          abbrs: string[],
-          opts?: { requireLocationId?: boolean },
-        ): Employee | undefined =>
-          employees.find((e: any) => {
-            const matchesEmpNo = e.employee_number == empNo;
-            const matchesStatus = e.status_id === 1;
-            const matchesAbbr = abbrs.includes(
-              (e.position_abbr || e.position_name || "").toUpperCase(),
-            );
+        const locId = warehouse.location_id;
 
-            // Check if employee is assigned to the warehouse location through employee_locations
-            const matchesLocation =
-              !opts?.requireLocationId ||
-              (e.locations &&
-                Array.isArray(e.locations) &&
-                e.locations.some(
-                  (loc) => loc.location_id === warehouse.location_id,
-                ));
+        // 2. Employee Lookups using standardized helper
+        const acId = resolveEmployeeRole(
+          row,
+          "ASSIGNED AC EMP. NO.",
+          "AC",
+          ["AC"],
+          locId,
+          { required: true, requireLocationId: true },
+        )!;
 
-            return (
-              matchesEmpNo && matchesStatus && matchesAbbr && matchesLocation
-            );
-          });
-
-        // SS (must be assigned to this warehouse's location via employee_locations)
-        const ss = findEmp(
-          row["ASSIGNED SS EMP. NO."],
+        const ssId = resolveEmployeeRole(
+          row,
+          "ASSIGNED SS EMP. NO.",
+          "SS",
           ["SS", "AH", "GAH", "BCH", "GBCH", "RH", "GRH"],
-          {
-            requireLocationId: true,
-          },
-        );
-        if (!ss)
-          throw new Error(
-            `Invalid ASSIGNED SS EMP. NO. [${row["ASSIGNED SS EMP. NO."]}] (not found or not assigned to this warehouse's location)`,
-          );
+          locId,
+          { required: true, requireLocationId: true },
+        )!;
 
-        // AH (must be assigned to this warehouse's location via employee_locations)
-        const ah = findEmp(
-          row["ASSIGNED AH EMP. NO."],
+        const ahId = resolveEmployeeRole(
+          row,
+          "ASSIGNED AH EMP. NO.",
+          "AH",
           ["AH", "GAH", "BCH", "GBCH", "RH", "GRH"],
-          {
-            requireLocationId: true,
-          },
+          locId,
+          { required: true, requireLocationId: true },
+        )!;
+
+        const bchId = resolveEmployeeRole(
+          row,
+          "ASSIGNED BCH EMP. NO.",
+          "BCH",
+          ["GAH", "BCH", "GBCH", "RH", "GRH"],
+          locId,
+          { required: true, requireLocationId: true },
+        )!;
+
+        const gbchId = resolveEmployeeRole(
+          row,
+          "ASSIGNED GBCH EMP. NO.",
+          "GBCH",
+          ["BCH", "GBCH", "RH", "GRH"],
+          locId,
+          { required: false, requireLocationId: true },
         );
-        if (!ah)
-          throw new Error(
-            `Invalid ASSIGNED AH EMP. NO. [${row["ASSIGNED AH EMP. NO."]}] (not found or not assigned to this warehouse's location)`,
-          );
 
-        // BCH
-        // BCH (nullable)
-        let bch = null;
-        if (row["ASSIGNED BCH EMP. NO."]) {
-          const foundBch = findEmp(row["ASSIGNED BCH EMP. NO."], [
-            "AH",
-            "GAH",
-            "BCH",
-            "GBCH",
-            "RH",
-            "GRH",
-          ]);
-          if (!foundBch)
-            throw new Error(
-              `Invalid ASSIGNED BCH EMP. NO. [${row["ASSIGNED BCH EMP. NO."]}]`,
-            );
-          bch = foundBch ? foundBch.id : null;
-        }
+        const rhId = resolveEmployeeRole(
+          row,
+          "ASSIGNED RH EMP. NO.",
+          "RH",
+          ["BCH", "GBCH", "RH", "GRH"],
+          locId,
+          { required: true, requireLocationId: true },
+        )!;
 
-        // GBCH (nullable)
-        let gbch = null;
-        if (row["ASSIGNED GBCH EMP. NO."]) {
-          const foundGbch = findEmp(row["ASSIGNED GBCH EMP. NO."], [
-            "BCH",
-            "GBCH",
-            "RH",
-            "GRH",
-          ]);
-          gbch = foundGbch ? foundGbch.id : null;
-        }
+        const grhId = resolveEmployeeRole(
+          row,
+          "ASSIGNED GRH EMP. NO.",
+          "GRH",
+          ["BCH", "GBCH", "RH", "GRH"],
+          locId,
+          { required: false, requireLocationId: true },
+        );
 
-        // RH (nullable)
-        let rh = null;
-        if (row["ASSIGNED RH EMP. NO."]) {
-          const foundRh = findEmp(row["ASSIGNED RH EMP. NO."], [
-            "BCH",
-            "GBCH",
-            "RH",
-            "GRH",
-          ]);
-          if (!foundRh)
-            throw new Error(
-              `Invalid ASSIGNED RH EMP. NO. [${row["ASSIGNED RH EMP. NO."]}]`,
-            );
-          rh = foundRh ? foundRh.id : null;
-        }
-
-        // GRH (nullable)
-        let grh = null;
-        if (row["ASSIGNED GRH EMP. NO."]) {
-          const foundGrh = findEmp(row["ASSIGNED GRH EMP. NO."], [
-            "BCH",
-            "GBCH",
-            "RH",
-            "GRH",
-          ]);
-          grh = foundGrh ? foundGrh.id : null;
-        }
-
-        // 3. Status mapping
+        // 3. Status mapping via Map lookup
         let status_id: number | undefined = undefined;
         if (row["STATUS"]) {
           const statusName = String(row["STATUS"]).trim().toUpperCase();
-          if (statusName === "ACTIVE") status_id = 1;
-          else if (statusName === "INACTIVE") status_id = 2;
-          else {
-            // Try to lookup by status name
-            const status = statuses.find(
-              (s) => String(s.status_name).trim().toUpperCase() === statusName,
-            );
-            if (status) status_id = status.id;
-            else throw new Error("Invalid STATUS value");
+          status_id = statusMap.get(statusName);
+          if (!status_id) {
+            throw new Error("Invalid STATUS value");
           }
         }
 
-        // 4. Assignment date mapping - extract month/year and convert to first day of month
+        // 4. Assignment date mapping
         let assignment_date: string | null = null;
         if (row["ASSIGNMENT MONTH"]) {
           assignment_date = parseToFirstDayOfMonth(row["ASSIGNMENT MONTH"]);
@@ -405,12 +446,13 @@ export class WarehouseEmployeesController {
 
         records.push({
           warehouse_id: warehouse.id,
-          assigned_ss: ss.id,
-          assigned_ah: ah.id,
-          assigned_bch: bch,
-          assigned_gbch: gbch,
-          assigned_rh: rh,
-          assigned_grh: grh,
+          assigned_ac: acId,
+          assigned_ss: ssId,
+          assigned_ah: ahId,
+          assigned_bch: bchId,
+          assigned_gbch: gbchId,
+          assigned_rh: rhId,
+          assigned_grh: grhId,
           status_id,
           assignment_date,
           __rowNum__: excelRowNum,
