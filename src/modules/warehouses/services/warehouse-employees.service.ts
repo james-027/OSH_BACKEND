@@ -63,6 +63,10 @@ export class WarehouseEmployeesService {
       warehouse_id: rec.warehouse_id,
       warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
       assignment_date: rec.assignment_date,
+      assigned_ac: rec.assigned_ac,
+      assigned_ac_name: rec.assignedAc
+        ? `${rec.assignedAc.employee_first_name} ${rec.assignedAc.employee_last_name}`
+        : null,
       assigned_ss: rec.assigned_ss,
       assigned_ss_name: rec.assignedSs
         ? `${rec.assignedSs.employee_first_name} ${rec.assignedSs.employee_last_name}`
@@ -118,8 +122,9 @@ export class WarehouseEmployeesService {
     newAssignment: any, // New/current warehouse_employee record with relations
     viaUpload: boolean = false, // Indicate if the change is from bulk upload
   ): string {
-    const roles = ["SS", "AH", "BCH", "GBCH", "RH", "GRH"];
+    const roles = ["AC", "SS", "AH", "BCH", "GBCH", "RH", "GRH"];
     const relationMap = {
+      ac: "assignedAc",
       ss: "assignedSs",
       ah: "assignedAh",
       bch: "assignedBch",
@@ -184,6 +189,7 @@ export class WarehouseEmployeesService {
       .leftJoinAndSelect("we.warehouse", "warehouse")
       .leftJoinAndSelect("warehouse.location", "location")
       .leftJoinAndSelect("we.assignedSs", "assignedSs")
+      .leftJoinAndSelect("we.assignedAc", "assignedAc")
       .leftJoinAndSelect("we.assignedAh", "assignedAh")
       .leftJoinAndSelect("we.assignedBch", "assignedBch")
       .leftJoinAndSelect("we.assignedGbch", "assignedGbch")
@@ -227,6 +233,13 @@ export class WarehouseEmployeesService {
           : null,
       assignment_date: rec.assignment_date
         ? dayjs(rec.assignment_date).format("MMMM YYYY")
+        : null,
+      assigned_ac: rec.assigned_ac,
+      assigned_ac_emp_no: rec.assignedAc
+        ? rec.assignedAc.employee_number
+        : null,
+      assigned_ac_name: rec.assignedAc
+        ? `${rec.assignedAc.employee_first_name} ${rec.assignedAc.employee_last_name}`
         : null,
       assigned_ss: rec.assigned_ss,
       assigned_ss_emp_no: rec.assignedSs
@@ -338,6 +351,7 @@ export class WarehouseEmployeesService {
       where: { id },
       relations: [
         "warehouse",
+        "assignedAc",
         "assignedSs",
         "assignedAh",
         "assignedBch",
@@ -420,6 +434,7 @@ export class WarehouseEmployeesService {
             await this.warehouseEmployeesRepository.findOne({
               where: { id: saved.id },
               relations: [
+                "assignedAc",
                 "assignedSs",
                 "assignedAh",
                 "assignedBch",
@@ -466,6 +481,7 @@ export class WarehouseEmployeesService {
       where: { id },
       relations: [
         "warehouse",
+        "assignedAc",
         "assignedSs",
         "assignedAh",
         "assignedBch",
@@ -560,6 +576,7 @@ export class WarehouseEmployeesService {
               where: { id },
               relations: [
                 "warehouse",
+                "assignedAc",
                 "assignedSs",
                 "assignedAh",
                 "assignedBch",
@@ -779,6 +796,7 @@ export class WarehouseEmployeesService {
             oldAssignment = await this.warehouseEmployeesRepository.findOne({
               where: { id: existing.id },
               relations: [
+                "assignedAc",
                 "assignedSs",
                 "assignedAh",
                 "assignedBch",
@@ -805,6 +823,7 @@ export class WarehouseEmployeesService {
               where: { id: existing.id },
               relations: [
                 "warehouse",
+                "assignedAc",
                 "assignedSs",
                 "assignedAh",
                 "assignedBch",
@@ -835,6 +854,7 @@ export class WarehouseEmployeesService {
               where: { id: createdRec.id },
               relations: [
                 "warehouse",
+                "assignedAc",
                 "assignedSs",
                 "assignedAh",
                 "assignedBch",
