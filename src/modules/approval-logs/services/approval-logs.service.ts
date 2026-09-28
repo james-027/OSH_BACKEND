@@ -20,7 +20,7 @@ export class ApprovalLogsService {
 
     @InjectRepository(ApprovalMatrix)
     private approvalMatrixRepository: Repository<ApprovalMatrix>,
-  ) { }
+  ) {}
 
   // Fetch approval logs by debit advice header ID
   async findByHeaderId(transaction_id: number): Promise<any[]> {
@@ -43,11 +43,11 @@ export class ApprovalLogsService {
         },
       });
 
-      if (!approvalLogs.length) {
-        throw new NotFoundException(
-          `No approval logs found for Debit Advice ID ${transaction_id}`,
-        );
-      }
+      // if (!approvalLogs.length) {
+      //   throw new NotFoundException(
+      //     `No approval logs found for Debit Advice ID ${transaction_id}`,
+      //   );
+      // }
 
       return approvalLogs.map((item) => ({
         id: item.id,
