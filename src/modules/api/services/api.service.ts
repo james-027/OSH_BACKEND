@@ -786,7 +786,7 @@ export class ApiService {
           );
 
           // Define ng listahan ng roles
-          const roles = ["ss", "ah", "bch", "gbch", "rh", "grh"];
+          const roles = ["ac", "ss", "ah", "bch", "gbch", "rh", "grh"];
 
           // 3. I-group ang data per location at per role
           const groupedByLocation = bcPersonnels.reduce(
@@ -806,6 +806,7 @@ export class ApiService {
                   // created_user: currentItem.created_user,
                   // updated_user: currentItem.updated_user,
                   // Initialize arrays para sa bawat role
+                  ac: [],
                   ss: [],
                   ah: [],
                   bch: [],
