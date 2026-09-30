@@ -56,8 +56,13 @@ export const POS_AVAILABILITY_IDS = {
 
 // ============= WORKING DAY =============
 export const WORKING_DAY_IDS = {
-  REGULAR: 1,
-  HOLIDAY: 2,
+REGULAR_DAY : 1,
+REGULAR_HOLIDAY : 2,
+SPECIAL_HOLIDAY : 3,
+REST_DAY_REGULAR_HOLIDAY : 4,
+REST_DAY_SPECIAL_HOLIDAY : 5,
+REGULAR_HOLIDAY_OFF :6,
+REST_DAY: 7
 } as const;
 // ============= ACCESS KEY =============
 export const ACCESS_KEY_IDS = {
@@ -125,3 +130,8 @@ export const SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS = [
 ] as const;
 
 export const QA_PORT = "3002";
+
+// ============= Days Factor Rate =============
+export const DAYS_FACTOR_RATE = {
+  DAYS: 26,
+} as const;

@@ -54,58 +54,15 @@ export class StaffAttendanceService {
 
   private readonly module_name = "STAFF ATTENDANCE";
 
-  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
-    try {
-      const where: any = {};
-      if (statusId !== undefined) {
-        where.attendance_status_id = statusId;
-      }
-      if (accessKeyId !== undefined) {
-        where.access_key_id = accessKeyId;
-      }
-      const scheduleHeaders = await this.scheduleHeaderRepository.find({
-        where,
-        order: {
-          id: "DESC",
-        },
-        relations: [
-          "createdBy",
-          "updatedBy",
-          "attendanceStatus",
-          "details",
-          "details.location",
-        ],
-      });
-
-      const mappedHeaders =
-        this.responseMapperService.mapEntitiesToResponse(scheduleHeaders);
-
-      return mappedHeaders.map((mappedHeader, index) => {
-        const originalHeader = scheduleHeaders[index];
-
-        const firstDetail = originalHeader.details?.[0];
-
-        return {
-          ...mappedHeader,
-
-          location_name: firstDetail?.location?.location_name ?? null,
-        };
-      });
-    } catch (error) {
-      console.error("Error fetching staff schedule:", error);
-
-      throw new Error("Failed to fetch staff schedule");
-    }
-  }
-
-  //   async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+  // async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
   //   try {
   //     const where: any = {};
-
+  //     if (statusId !== undefined) {
+  //       where.attendance_status_id = statusId;
+  //     }
   //     if (accessKeyId !== undefined) {
   //       where.access_key_id = accessKeyId;
   //     }
-
   //     const scheduleHeaders = await this.scheduleHeaderRepository.find({
   //       where,
   //       order: {
@@ -114,36 +71,24 @@ export class StaffAttendanceService {
   //       relations: [
   //         "createdBy",
   //         "updatedBy",
+  //         "attendanceStatus",
   //         "details",
   //         "details.location",
   //       ],
   //     });
 
-  //     // Filter based on Schedule Detail attendance status
-  //     const filteredHeaders =
-  //       statusId !== undefined
-  //         ? scheduleHeaders.filter((header) =>
-  //             header.details?.some((detail) =>
-  //               statusId.includes(detail.attendance_status_id),
-  //             ),
-  //           )
-  //         : scheduleHeaders;
-
   //     const mappedHeaders =
-  //       this.responseMapperService.mapEntitiesToResponse(
-  //         filteredHeaders,
-  //       );
+  //       this.responseMapperService.mapEntitiesToResponse(scheduleHeaders);
 
   //     return mappedHeaders.map((mappedHeader, index) => {
-  //       const originalHeader = filteredHeaders[index];
+  //       const originalHeader = scheduleHeaders[index];
 
   //       const firstDetail = originalHeader.details?.[0];
 
   //       return {
   //         ...mappedHeader,
 
-  //         location_name:
-  //           firstDetail?.location?.location_name ?? null,
+  //         location_name: firstDetail?.location?.location_name ?? null,
   //       };
   //     });
   //   } catch (error) {
@@ -152,6 +97,71 @@ export class StaffAttendanceService {
   //     throw new Error("Failed to fetch staff schedule");
   //   }
   // }
+
+  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+    try {
+      const where: any = {};
+
+      if (accessKeyId !== undefined) {
+        where.access_key_id = accessKeyId;
+      }
+
+      const scheduleHeaders = await this.scheduleHeaderRepository.find({
+        where,
+        order: {
+          id: "DESC",
+        },
+        relations: [
+          "createdBy",
+          "updatedBy",
+          "details",
+          "details.location",
+          "details.attendanceStatus",
+        ],
+      });
+
+      // Filter based on Schedule Detail attendance status
+      const filteredHeaders =
+        statusId !== undefined
+          ? scheduleHeaders.filter((header) =>
+              header.details?.some((detail) =>
+                statusId.includes(detail.attendance_status_id),
+              ),
+            )
+          : scheduleHeaders;
+
+      const mappedHeaders =
+        this.responseMapperService.mapEntitiesToResponse(
+          filteredHeaders,
+        );
+
+      return mappedHeaders.map((mappedHeader, index) => {
+        const originalHeader = filteredHeaders[index];
+
+        const firstDetail = originalHeader.details?.[0];
+
+        const detailCount =
+        statusId !== undefined
+          ? originalHeader.details?.filter((detail) =>
+              statusId.includes(detail.attendance_status_id),
+            ).length ?? 0
+          : originalHeader.details?.length ?? 0;
+
+        return {
+          ...mappedHeader,
+          entry_no:detailCount,
+          location_name:
+            firstDetail?.location?.location_name ?? null,
+          status_name:
+            firstDetail?.attendanceStatus?.status_name ?? null,
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching staff schedule:", error);
+
+      throw new Error("Failed to fetch staff schedule");
+    }
+  }
 
   async findScheduleHeaderDetails(
     scheduleHeaderId?: number,

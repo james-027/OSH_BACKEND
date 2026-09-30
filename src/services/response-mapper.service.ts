@@ -50,7 +50,8 @@ export class ResponseMapperService {
           "scheduleHeader",
           "attendanceStatus",
           "workingDays",
-          "actualLogsDetail"
+          "actualLogsDetail",
+          "payrollHeader",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
@@ -211,6 +212,8 @@ export class ResponseMapperService {
       response.actual_break_hours = entity.actualLogsDetail.break_hours || null;
     }
 
+
+
     // Map categoryType relation
     if (entity.categoryType && typeof entity.categoryType === "object") {
       response.category_type_name =
@@ -242,6 +245,11 @@ export class ResponseMapperService {
     if (entity.scheduleHeader && typeof entity.scheduleHeader === "object") {
       response.schedule_entry_no = entity.scheduleHeader.entry_no || null;
       response.schedule_date = entity.scheduleHeader.schedule_date || null;
+    }
+        // Map Payroll Header relation
+    if (entity.payrollHeader && typeof entity.payrollHeader === "object") {
+      response.payroll_date_from = entity.payrollHeader.payroll_date_from || null;
+      response.payroll_date_to = entity.payrollHeader.payroll_date_to || null;
     }
 
     // Map accessKey relation

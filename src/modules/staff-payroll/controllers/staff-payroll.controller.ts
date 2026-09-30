@@ -49,6 +49,68 @@ export class StaffPayrollController {
     return this.staffPayrollService.computePayroll(accessKeyId,createPayrollHeaderDto,userId);
   }
 
+  @Get("history/:id")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.staffPayrollService.findOneHistory(id);
+  }
+
+    @Patch("post-payroll")
+    @RequirePermissions({ module: "STAFF PAYROLL", action: "POST" })
+    async postPayroll(
+      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+      @Request() req,
+    ) {
+      const userId = req.user.id;
+      return this.staffPayrollService.postPayroll(
+        updatePayrollHeaderDto,
+        userId,
+      );
+    }
+
+    @Patch("revert-payroll")
+    @RequirePermissions({ module: "STAFF PAYROLL", action: "REVERT" })
+    async revertPayroll(
+      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+      @Request() req,
+    ) {
+      const userId = req.user.id;
+      return this.staffPayrollService.revertPayroll(
+        updatePayrollHeaderDto,
+        userId,
+      );
+    }
+    @Patch("cancel-payroll")
+    @RequirePermissions({ module: "STAFF PAYROLL", action: "CANCEL" })
+    async cancelPayroll(
+      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+      @Request() req,
+    ) {
+      const userId = req.user.id;
+      return this.staffPayrollService.cancelPayroll(
+        updatePayrollHeaderDto,
+        userId,
+      );
+    }
+
+
+  @Get("details")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async findPayrollHeaderDetails(
+    @Query("payroll_header_id") payrollHeaderId?: string,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const parsedHeaderId = payrollHeaderId
+      ? Number(payrollHeaderId)
+      : undefined;
+
+    return this.staffPayrollService.findPayrollHeaderDetails(
+      parsedHeaderId,
+      accessKeyId,
+    );
+  }
+
 
 
 }

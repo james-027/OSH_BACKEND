@@ -51,7 +51,6 @@ export class StaffSchedulingController {
     return this.staffSchedulingService.findAll(parsedStatusId, accessKeyId);
   }
 
-  // Placed before :id to prevent collision
   @Get("details")
   @RequirePermissions({ module: "STAFF SCHEDULING", action: "VIEW" })
   async findScheduleHeaderDetails(

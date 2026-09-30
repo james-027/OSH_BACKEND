@@ -27,6 +27,7 @@ import {
   ACCESS_PROCESS,
   ACCESS_KEY_IDS,
   LOGS_TYPE_ID,
+  DAYS_FACTOR_RATE,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -156,7 +157,7 @@ export class StaffSchedulingService {
           "status",
           "createdBy",
           "updatedBy",
-          "actualLogsDetail"
+          "actualLogsDetail",
         ],
         order: {
           id: "ASC",
@@ -518,9 +519,7 @@ export class StaffSchedulingService {
               },
             );
 
-            const workingDayId = regularHoliday
-              ? WORKING_DAY_IDS.HOLIDAY
-              : WORKING_DAY_IDS.REGULAR;
+            const workingDayId = regularHoliday.id;
 
             // ========================================================
             // PROCESS EACH LOCATION
@@ -593,7 +592,7 @@ export class StaffSchedulingService {
                   created_by: userId,
                   updated_by: userId,
                   access_key_id: accessKeyId,
-                  status_id: STATUS_IDS.ACTIVE
+                  status_id: STATUS_IDS.ACTIVE,
                 };
 
                 const actualLogsHeader = transactionalEntityManager.create(
@@ -655,8 +654,7 @@ export class StaffSchedulingService {
                 let savedActualLogsDetail: ActualLogsDetail | null = null;
 
                 if (isAutoEnrollSchedule && savedActualLogsHeader) {
-                  
-               let actualLogsDetailDto: CreateActualLogsDetailDto;
+                  let actualLogsDetailDto: CreateActualLogsDetailDto;
 
                   try {
                     actualLogsDetailDto = {
@@ -668,7 +666,7 @@ export class StaffSchedulingService {
                       service_provider_id: staff.vendor_id,
                       access_key_id: accessKeyId,
                       logs_date: createScheduleDto.schedule_date,
-                      status_id:STATUS_IDS.ACTIVE,
+                      status_id: STATUS_IDS.ACTIVE,
                       orig_time_in: detail.orig_time_in
                         ? new Date(detail.orig_time_in).toISOString()
                         : undefined,
@@ -699,7 +697,7 @@ export class StaffSchedulingService {
                       overtime_in: detail.overtime_in
                         ? new Date(detail.overtime_in).toISOString()
                         : undefined,
-                        
+
                       overtime_out: detail.overtime_out
                         ? new Date(detail.overtime_out).toISOString()
                         : undefined,
@@ -756,7 +754,7 @@ export class StaffSchedulingService {
                     is_night_shift: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
-                    attendance_status_id:STATUS_IDS.VALIDATED,
+                    attendance_status_id: STATUS_IDS.VALIDATED,
                     access_key_id: accessKeyId,
                     // ==========================================
                     // DWS ACTUAL TIME DATA
@@ -1424,58 +1422,57 @@ export class StaffSchedulingService {
         );
       }
 
-
       const updatedScheduleHeaders =
-      await this.scheduleHeaderRepository.manager.transaction(
-        async (transactionalEntityManager) => {
-          // Update Schedule Headers
-          await transactionalEntityManager.update(
-            ScheduleHeader,
-            {
-              id: In(scheduleIds),
-            },
-            {
-              status_id: STATUS_IDS.POSTED,
-              attendance_status_id: STATUS_IDS.PENDING,
-              updated_by: userId,
-              modified_at: new Date(),
-            },
-          );
-
-          // Update related Schedule Details
-          await transactionalEntityManager.update(
-            ScheduleDetail,
-            {
-              schedule_header_id: In(scheduleIds),
-            },
-            {
-              attendance_status_id: STATUS_IDS.PENDING,
-              updated_by: userId,
-              modified_at: new Date(),
-            },
-          );
-
-          const updatedHeaders = await transactionalEntityManager.find(
-            ScheduleHeader,
-            {
-              where: {
+        await this.scheduleHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            // Update Schedule Headers
+            await transactionalEntityManager.update(
+              ScheduleHeader,
+              {
                 id: In(scheduleIds),
               },
-              relations: ["status", "createdBy", "updatedBy"],
-            },
-          );
-
-          for (const schedule of updatedHeaders) {
-            await this.createScheduleHeaderHistory(
-              transactionalEntityManager,
-              schedule,
-              userId,
+              {
+                status_id: STATUS_IDS.POSTED,
+                attendance_status_id: STATUS_IDS.PENDING,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
             );
-          }
 
-          return updatedHeaders;
-        },
-      );
+            // Update related Schedule Details
+            await transactionalEntityManager.update(
+              ScheduleDetail,
+              {
+                schedule_header_id: In(scheduleIds),
+              },
+              {
+                attendance_status_id: STATUS_IDS.PENDING,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
+
+            const updatedHeaders = await transactionalEntityManager.find(
+              ScheduleHeader,
+              {
+                where: {
+                  id: In(scheduleIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
+
+            for (const schedule of updatedHeaders) {
+              await this.createScheduleHeaderHistory(
+                transactionalEntityManager,
+                schedule,
+                userId,
+              );
+            }
+
+            return updatedHeaders;
+          },
+        );
 
       await this.userAuditTrailCreateService.create(
         {
@@ -1589,16 +1586,15 @@ export class StaffSchedulingService {
               },
             );
 
-                  await transactionalEntityManager.update(
-                  ScheduleDetail,
-                  {
-                    schedule_header_id: In(scheduleIds),
-                  },
-                  {
-                    cron_computed: false,
-                  },
-                );
-
+            await transactionalEntityManager.update(
+              ScheduleDetail,
+              {
+                schedule_header_id: In(scheduleIds),
+              },
+              {
+                cron_computed: false,
+              },
+            );
 
             const updatedHeaders = await transactionalEntityManager.find(
               ScheduleHeader,
@@ -2470,612 +2466,550 @@ export class StaffSchedulingService {
     return !!existingRecord;
   }
 
+  async syncDwsSchedulesByDate(
+    scheduleDateStr: string,
+    userId: number = 1,
+  ): Promise<any> {
+    const url = process.env.DWS_FST_API_URL;
 
-async syncDwsSchedulesByDate(
-  scheduleDateStr: string,
-  userId: number = 1,
-): Promise<any> {
-  const url = process.env.DWS_FST_API_URL
-
-  const response = await firstValueFrom(
-    this.httpService.post(
-      url,
-      { date: scheduleDateStr },
-      {
-        headers: {
-          "x-api-key": process.env.DWS_API_KEY,
-          "Content-Type": "application/json",
+    const response = await firstValueFrom(
+      this.httpService.post(
+        url,
+        { date: scheduleDateStr },
+        {
+          headers: {
+            "x-api-key": process.env.DWS_API_KEY,
+            "Content-Type": "application/json",
+          },
         },
-      },
-    ),
-  );
-
-  const apiRecords: any[] = response.data;
-
-  if (!Array.isArray(apiRecords) || apiRecords.length === 0) {
-    logger.warn(
-      `[StaffSchedulingService] No records returned from DWS for date: ${scheduleDateStr}`,
+      ),
     );
 
-    return null;
-  }
+    const apiRecords: any[] = response.data;
 
-  /*
-   * ============================================================
-   * 1. GET STAFF FROM DWS CREW_ID
-   * ============================================================
-   */
-
-  const staffIds = [
-    ...new Set(
-      apiRecords
-        .map((record) => Number(record["CREW_ID"]))
-        .filter((id) => !isNaN(id) && id > 0),
-    ),
-  ];
-
-  if (staffIds.length === 0) {
-    logger.warn(
-      `[StaffSchedulingService] No valid CREW_ID found from DWS for date: ${scheduleDateStr}`,
-    );
-
-    return null;
-  }
-
-  const staffs = await this.staffRepository.find({
-    where: staffIds.map((id) => ({
-      old_dws_id: id,
-    })),
-    relations: ["status"],
-  });
-
-  /*
-   * Map DWS CREW_ID -> Staff
-   */
-  const staffMap = new Map<number, Staff>();
-
-  staffs.forEach((staff) => {
-    if (staff.old_dws_id) {
-      staffMap.set(staff.old_dws_id, staff);
-    }
-  });
-
-  /*
-   * ============================================================
-   * 2. PROCESS EACH DWS RECORD
-   * ============================================================
-   */
-
-  const details: CreateSchedulingDetailDto[] = [];
-
-  for (const record of apiRecords) {
-    const crewId = Number(record["CREW_ID"]);
-
-    /*
-     * ----------------------------------------------------------
-     * Get schedule date first because the StaffWarehouse
-     * assignment must be effective for this date.
-     * ----------------------------------------------------------
-     */
-    const dutyDate = record["SCHEDULE_DATE"] || scheduleDateStr;
-
-    /*
-     * ----------------------------------------------------------
-     * VALIDATION #1
-     * Staff must exist
-     * ----------------------------------------------------------
-     */
-    const staff = staffMap.get(crewId);
-
-    if (!staff) {
+    if (!Array.isArray(apiRecords) || apiRecords.length === 0) {
       logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: Staff not found. CREW_ID=${crewId}`,
+        `[StaffSchedulingService] No records returned from DWS for date: ${scheduleDateStr}`,
       );
 
-      continue;
+      return null;
     }
 
     /*
-     * ----------------------------------------------------------
-     * VALIDATION #2
-     * Staff must be ACTIVE
-     * ----------------------------------------------------------
+     * ============================================================
+     * 1. GET STAFF FROM DWS CREW_ID
+     * ============================================================
      */
-    if (staff.status_id !== STATUS_IDS.ACTIVE) {
+
+    const staffIds = [
+      ...new Set(
+        apiRecords
+          .map((record) => Number(record["CREW_ID"]))
+          .filter((id) => !isNaN(id) && id > 0),
+      ),
+    ];
+
+    if (staffIds.length === 0) {
       logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: Staff is not ACTIVE. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STATUS_ID=${staff.status_id}`,
+        `[StaffSchedulingService] No valid CREW_ID found from DWS for date: ${scheduleDateStr}`,
       );
 
-      continue;
+      return null;
     }
 
-    const staffWarehouse = await this.staffWarehouseRepository.findOne({
-      where: {
-        staff_id: staff.id,
-        status_id: STATUS_IDS.ACTIVE,
-        approval_status_id: STATUS_IDS.APPROVED,
-      },
-      order: {
-        effectivity_date: "DESC",
-      },
+    const staffs = await this.staffRepository.find({
+      where: staffIds.map((id) => ({
+        old_dws_id: id,
+      })),
+      relations: ["status"],
     });
 
-    if (!staffWarehouse) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: No active/approved StaffWarehouse assignment found. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+    /*
+     * Map DWS CREW_ID -> Staff
+     */
+    const staffMap = new Map<number, Staff>();
+
+    staffs.forEach((staff) => {
+      if (staff.old_dws_id) {
+        staffMap.set(staff.old_dws_id, staff);
+      }
+    });
+
+    /*
+     * ============================================================
+     * 2. PROCESS EACH DWS RECORD
+     * ============================================================
+     */
+
+    const details: CreateSchedulingDetailDto[] = [];
+
+    for (const record of apiRecords) {
+      const crewId = Number(record["CREW_ID"]);
+
+      /*
+       * ----------------------------------------------------------
+       * Get schedule date first because the StaffWarehouse
+       * assignment must be effective for this date.
+       * ----------------------------------------------------------
+       */
+      const dutyDate = record["SCHEDULE_DATE"] || scheduleDateStr;
+
+      /*
+       * ----------------------------------------------------------
+       * VALIDATION #1
+       * Staff must exist
+       * ----------------------------------------------------------
+       */
+      const staff = staffMap.get(crewId);
+
+      if (!staff) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: Staff not found. CREW_ID=${crewId}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * ----------------------------------------------------------
+       * VALIDATION #2
+       * Staff must be ACTIVE
+       * ----------------------------------------------------------
+       */
+      if (staff.status_id !== STATUS_IDS.ACTIVE) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: Staff is not ACTIVE. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STATUS_ID=${staff.status_id}`,
+        );
+
+        continue;
+      }
+
+      const staffWarehouse = await this.staffWarehouseRepository.findOne({
+        where: {
+          staff_id: staff.id,
+          status_id: STATUS_IDS.ACTIVE,
+          approval_status_id: STATUS_IDS.APPROVED,
+        },
+        order: {
+          effectivity_date: "DESC",
+        },
+      });
+
+      if (!staffWarehouse) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: No active/approved StaffWarehouse assignment found. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * ============================================================
+       * 4. VALIDATE EFFECTIVITY DATE
+       * ============================================================
+       *
+       * Valid when:
+       *
+       * effectivity_date <= schedule date
+       *
+       * AND
+       *
+       * end_date IS NULL
+       * OR
+       * end_date >= schedule date
+       */
+
+      const scheduleDate = dayjs(dutyDate).startOf("day");
+
+      const effectivityDate = staffWarehouse.effectivity_date
+        ? dayjs(staffWarehouse.effectivity_date).startOf("day")
+        : null;
+
+      const endDate = staffWarehouse.end_date
+        ? dayjs(staffWarehouse.end_date).startOf("day")
+        : null;
+
+      /*
+       * Effectivity date is required.
+       */
+      if (!effectivityDate) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse has no effectivity date. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * Schedule date must not be before effectivity date.
+       */
+      if (scheduleDate.isBefore(effectivityDate)) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse assignment is not yet effective. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, EFFECTIVITY_DATE=${staffWarehouse.effectivity_date}, SCHEDULE_DATE=${dutyDate}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * If there is an end date, schedule date must not be
+       * after the end date.
+       */
+      if (endDate && scheduleDate.isAfter(endDate)) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse assignment already ended. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, END_DATE=${staffWarehouse.end_date}, SCHEDULE_DATE=${dutyDate}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * ============================================================
+       * 5. VALIDATE PROPER ASSIGNMENT
+       * ============================================================
+       */
+
+      if (!staffWarehouse.warehouse_id) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse has no warehouse assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+        );
+
+        continue;
+      }
+
+      if (!staffWarehouse.location_id) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse has no location assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+        );
+
+        continue;
+      }
+
+      if (!staffWarehouse.vendor_id) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: StaffWarehouse has no vendor assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+        );
+
+        continue;
+      }
+
+      /*
+       * ============================================================
+       * 6. PARSE DUTY TIME
+       * ============================================================
+       */
+
+      const startTime = this.parseDwsDateTime(
+        dutyDate,
+        record["SCHEDULE_START_TIME"] || record["TIME_IN"],
       );
 
-      continue;
-    }
-
-    /*
-     * ============================================================
-     * 4. VALIDATE EFFECTIVITY DATE
-     * ============================================================
-     *
-     * Valid when:
-     *
-     * effectivity_date <= schedule date
-     *
-     * AND
-     *
-     * end_date IS NULL
-     * OR
-     * end_date >= schedule date
-     */
-
-    const scheduleDate = dayjs(dutyDate).startOf("day");
-
-    const effectivityDate = staffWarehouse.effectivity_date
-      ? dayjs(staffWarehouse.effectivity_date).startOf("day")
-      : null;
-
-    const endDate = staffWarehouse.end_date
-      ? dayjs(staffWarehouse.end_date).startOf("day")
-      : null;
-
-    /*
-     * Effectivity date is required.
-     */
-    if (!effectivityDate) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse has no effectivity date. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+      let endTime = this.parseDwsDateTime(
+        dutyDate,
+        record["SCHEDULE_END_TIME"] || record["TIME_OUT"],
       );
 
-      continue;
-    }
+      if (!startTime || !endTime) {
+        logger.warn(
+          `[StaffSchedulingService] Skipping DWS record #${
+            record["NO"] || ""
+          }: Invalid duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+        );
 
-    /*
-     * Schedule date must not be before effectivity date.
-     */
-    if (scheduleDate.isBefore(effectivityDate)) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse assignment is not yet effective. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, EFFECTIVITY_DATE=${staffWarehouse.effectivity_date}, SCHEDULE_DATE=${dutyDate}`,
-      );
+        continue;
+      }
 
-      continue;
-    }
+      /*
+       * ============================================================
+       * 7. OVERNIGHT SHIFT ADJUSTMENT
+       * ============================================================
+       */
 
-    /*
-     * If there is an end date, schedule date must not be
-     * after the end date.
-     */
-    if (endDate && scheduleDate.isAfter(endDate)) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse assignment already ended. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, END_DATE=${staffWarehouse.end_date}, SCHEDULE_DATE=${dutyDate}`,
-      );
+      if (
+        dayjs(endTime).isBefore(dayjs(startTime)) ||
+        dayjs(endTime).isSame(dayjs(startTime))
+      ) {
+        endTime = dayjs(endTime).add(1, "day").toDate();
+      }
 
-      continue;
-    }
+      /*
+       * ============================================================
+       * 8. PARSE ACTUAL DWS TIME LOGS
+       * ============================================================
+       */
 
-    /*
-     * ============================================================
-     * 5. VALIDATE PROPER ASSIGNMENT
-     * ============================================================
-     */
+      const time_in = this.parseDwsDateTime(dutyDate, record["TIME_IN"]);
 
-    if (!staffWarehouse.warehouse_id) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse has no warehouse assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
-      );
+      let time_out = this.parseDwsDateTime(dutyDate, record["TIME_OUT"]);
 
-      continue;
-    }
+      let breakStart = this.parseDwsDateTime(dutyDate, record["BREAK_IN"]);
 
-    if (!staffWarehouse.location_id) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse has no location assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
-      );
+      let breakEnd = this.parseDwsDateTime(dutyDate, record["BREAK_OUT"]);
 
-      continue;
-    }
+      let overtimeIn = this.parseDwsDateTime(dutyDate, record["OVERTIME_IN"]);
 
-    if (!staffWarehouse.vendor_id) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: StaffWarehouse has no vendor assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
-      );
+      let overtimeOut = this.parseDwsDateTime(dutyDate, record["OVERTIME_OUT"]);
 
-      continue;
-    }
+      /*
+       * ============================================================
+       * KEEP ORIGINAL DWS VALUES
+       * ============================================================
+       */
 
-    /*
-     * ============================================================
-     * 6. PARSE DUTY TIME
-     * ============================================================
-     */
+      const origTimeIn = time_in;
+      const origTimeOut = time_out;
+      const origBreakIn = breakStart;
+      const origBreakOut = breakEnd;
 
-    const startTime = this.parseDwsDateTime(
-      dutyDate,
-      record["SCHEDULE_START_TIME"] || record["TIME_IN"],
-    );
+      /*
+       * ============================================================
+       * 8.2 OVERNIGHT ACTUAL TIME ADJUSTMENT
+       * ============================================================
+       *
+       * Example:
+       *
+       * SCHEDULE_DATE       = 2026-09-16
+       * SCHEDULE_START_TIME = 11:00 PM
+       * SCHEDULE_END_TIME   = 08:00 AM
+       *
+       * TIME_IN             = 11:11 PM
+       * TIME_OUT            = 06:41 AM
+       *
+       * Expected:
+       *
+       * TIME_IN  = 2026-09-16 11:11 PM
+       * TIME_OUT = 2026-09-17 06:41 AM
+       */
 
-    let endTime = this.parseDwsDateTime(
-      dutyDate,
-      record["SCHEDULE_END_TIME"] || record["TIME_OUT"],
-    );
+      const isOvernightShift =
+        dayjs(endTime).date() !== dayjs(startTime).date();
 
-    if (!startTime || !endTime) {
-      logger.warn(
-        `[StaffSchedulingService] Skipping DWS record #${
-          record["NO"] || ""
-        }: Invalid duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
-      );
+      if (isOvernightShift) {
+        const adjustIfNextDay = (value: Date | null): Date | null => {
+          if (!value) {
+            return null;
+          }
 
-      continue;
-    }
+          const parsed = dayjs(value);
 
-    /*
-     * ============================================================
-     * 7. OVERNIGHT SHIFT ADJUSTMENT
-     * ============================================================
-     */
+          /*
+           * If the actual time is earlier than the scheduled
+           * start time, it belongs to the following day.
+           */
+          if (parsed.isBefore(dayjs(startTime))) {
+            return parsed.add(1, "day").toDate();
+          }
 
-    if (
-      dayjs(endTime).isBefore(dayjs(startTime)) ||
-      dayjs(endTime).isSame(dayjs(startTime))
-    ) {
-      endTime = dayjs(endTime).add(1, "day").toDate();
-    }
+          return value;
+        };
 
-    /*
-     * ============================================================
-     * 8. PARSE ACTUAL DWS TIME LOGS
-     * ============================================================
-     */
+        time_out = adjustIfNextDay(time_out);
+        breakStart = adjustIfNextDay(breakStart);
+        breakEnd = adjustIfNextDay(breakEnd);
+        overtimeIn = adjustIfNextDay(overtimeIn);
+        overtimeOut = adjustIfNextDay(overtimeOut);
+      }
 
-    const time_in = this.parseDwsDateTime(
-      dutyDate,
-      record["TIME_IN"],
-    );
+      /*
+       * ============================================================
+       * 8.3 VALIDATE ACTUAL WORKING HOURS
+       * ============================================================
+       *
+       * RULE:
+       *
+       * 1. If TIME_IN or TIME_OUT is missing:
+       *    No adjustment.
+       *
+       * 2. If duration is 8 hours or less:
+       *    just_* = orig_*
+       *
+       * 3. If duration is MORE THAN 8 hours AND there is
+       *    NO COMPLETE BREAK:
+       *    Deduct 1 hour from just_time_out only.
+       *
+       * 4. If a complete BREAK_IN and BREAK_OUT exists:
+       *    No automatic deduction.
+       *
+       * IMPORTANT:
+       * orig_* always remains the original DWS value.
+       */
 
-    let time_out = this.parseDwsDateTime(
-      dutyDate,
-      record["TIME_OUT"],
-    );
+      if (time_in && time_out) {
+        const durationMinutes = dayjs(time_out).diff(dayjs(time_in), "minute");
 
-    let breakStart = this.parseDwsDateTime(
-      dutyDate,
-      record["BREAK_IN"],
-    );
-
-    let breakEnd = this.parseDwsDateTime(
-      dutyDate,
-      record["BREAK_OUT"],
-    );
-
-    let overtimeIn = this.parseDwsDateTime(
-      dutyDate,
-      record["OVERTIME_IN"],
-    );
-
-    let overtimeOut = this.parseDwsDateTime(
-      dutyDate,
-      record["OVERTIME_OUT"],
-    );
-
-    /*
-     * ============================================================
-     * 8.1 KEEP ORIGINAL DWS VALUES
-     * ============================================================
-     *
-     * These values MUST NOT be changed.
-     *
-     * orig_* = exact values received from DWS
-     */
-
-    const origTimeIn = time_in;
-    const origTimeOut = time_out;
-    const origBreakIn = breakStart;
-    const origBreakOut = breakEnd;
-
-    /*
-     * ============================================================
-     * 8.2 OVERNIGHT ACTUAL TIME ADJUSTMENT
-     * ============================================================
-     *
-     * Example:
-     *
-     * SCHEDULE_DATE       = 2026-09-16
-     * SCHEDULE_START_TIME = 11:00 PM
-     * SCHEDULE_END_TIME   = 08:00 AM
-     *
-     * TIME_IN             = 11:11 PM
-     * TIME_OUT            = 06:41 AM
-     *
-     * Expected:
-     *
-     * TIME_IN  = 2026-09-16 11:11 PM
-     * TIME_OUT = 2026-09-17 06:41 AM
-     */
-
-    const isOvernightShift =
-      dayjs(endTime).date() !== dayjs(startTime).date();
-
-    if (isOvernightShift) {
-      const adjustIfNextDay = (value: Date | null): Date | null => {
-        if (!value) {
-          return null;
-        }
-
-        const parsed = dayjs(value);
+        const hasCompleteBreak = !!breakStart && !!breakEnd;
 
         /*
-         * If the actual time is earlier than the scheduled
-         * start time, it belongs to the following day.
+         * More than 8 hours without a complete break.
          */
-        if (parsed.isBefore(dayjs(startTime))) {
-          return parsed.add(1, "day").toDate();
+        if (durationMinutes > 9 * 60 && !hasCompleteBreak) {
+          time_out = dayjs(time_out).subtract(1, "hour").toDate();
+
+          logger.warn(
+            `[StaffSchedulingService] Automatically deducted 1 hour due to work duration exceeding 8 hours without a complete break. ` +
+              `CREW_ID=${crewId}, ` +
+              `STAFF_ID=${staff.id}, ` +
+              `ORIG_TIME_IN=${origTimeIn?.toISOString() || "NULL"}, ` +
+              `ORIG_TIME_OUT=${origTimeOut?.toISOString() || "NULL"}, ` +
+              `ADJUSTED_TIME_OUT=${time_out.toISOString()}, ` +
+              `BREAK_IN=${origBreakIn?.toISOString() || "NULL"}, ` +
+              `BREAK_OUT=${origBreakOut?.toISOString() || "NULL"}`,
+          );
         }
+      }
 
-        return value;
-      };
+      /*
+       * ============================================================
+       * 9. PARSE HOURS
+       * ============================================================
+       */
 
-      time_out = adjustIfNextDay(time_out);
-      breakStart = adjustIfNextDay(breakStart);
-      breakEnd = adjustIfNextDay(breakEnd);
-      overtimeIn = adjustIfNextDay(overtimeIn);
-      overtimeOut = adjustIfNextDay(overtimeOut);
+      const regularHours = record["REGULAR_HOURS"]
+        ? Number(record["REGULAR_HOURS"])
+        : 0;
+
+      const breakHours = record["BREAK_HOURS"]
+        ? Number(record["BREAK_HOURS"])
+        : 0;
+
+      const overtimeHours = record["OVERTIME_HOURS"]
+        ? Number(record["OVERTIME_HOURS"])
+        : 0;
+
+      const twh = record["NO_OF_HOURS"] ? Number(record["NO_OF_HOURS"]) : 0;
+
+      /*
+       * ============================================================
+       * 10. CREATE SCHEDULING DETAIL
+       * ============================================================
+       */
+
+      details.push({
+        staff_id: staff.id,
+
+        warehouse_id: staffWarehouse.warehouse_id,
+        location_id: staffWarehouse.location_id,
+        vendor_id: staffWarehouse.vendor_id,
+
+        duty_start_time: startTime.toISOString(),
+        duty_end_time: endTime.toISOString(),
+
+        just_time_in: time_in ? time_in.toISOString() : undefined,
+
+        just_time_out: time_out ? time_out.toISOString() : undefined,
+
+        just_break_in: breakStart ? breakStart.toISOString() : undefined,
+
+        just_break_out: breakEnd ? breakEnd.toISOString() : undefined,
+
+        /*
+         * ========================================================
+         * ORIGINAL DWS VALUES
+         * ========================================================
+         *
+         * These ALWAYS contain the original values received
+         * from DWS before any automatic adjustment.
+         */
+
+        orig_time_in: origTimeIn ? origTimeIn.toISOString() : undefined,
+
+        orig_time_out: origTimeOut ? origTimeOut.toISOString() : undefined,
+
+        orig_break_in: origBreakIn ? origBreakIn.toISOString() : undefined,
+
+        orig_break_out: origBreakOut ? origBreakOut.toISOString() : undefined,
+
+        overtime_in: overtimeIn ? overtimeIn.toISOString() : undefined,
+
+        overtime_out: overtimeOut ? overtimeOut.toISOString() : undefined,
+
+        regular: regularHours,
+        break_hours: breakHours,
+        overtime: overtimeHours,
+        twh: twh,
+
+        remarks: `Auto-synced from DWS log #${record["NO"] || ""}`,
+      });
     }
 
     /*
      * ============================================================
-     * 8.3 VALIDATE ACTUAL WORKING HOURS
+     * 11. NO VALID DETAILS
      * ============================================================
-     *
-     * RULE:
-     *
-     * 1. If TIME_IN or TIME_OUT is missing:
-     *    No adjustment.
-     *
-     * 2. If duration is 8 hours or less:
-     *    just_* = orig_*
-     *
-     * 3. If duration is MORE THAN 8 hours AND there is
-     *    NO COMPLETE BREAK:
-     *    Deduct 1 hour from just_time_out only.
-     *
-     * 4. If a complete BREAK_IN and BREAK_OUT exists:
-     *    No automatic deduction.
-     *
-     * IMPORTANT:
-     * orig_* always remains the original DWS value.
      */
 
-    if (time_in && time_out) {
-      const durationMinutes = dayjs(time_out).diff(
-        dayjs(time_in),
-        "minute",
+    if (details.length === 0) {
+      logger.warn(
+        `[StaffSchedulingService] No valid detail rows to process for date: ${scheduleDateStr}`,
       );
 
-      const hasCompleteBreak =
-        !!breakStart && !!breakEnd;
-
-      /*
-       * More than 8 hours without a complete break.
-       */
-      if (
-        durationMinutes > 9 * 60 &&
-        !hasCompleteBreak
-      ) {
-        time_out = dayjs(time_out)
-          .subtract(1, "hour")
-          .toDate();
-
-        logger.warn(
-          `[StaffSchedulingService] Automatically deducted 1 hour due to work duration exceeding 8 hours without a complete break. ` +
-            `CREW_ID=${crewId}, ` +
-            `STAFF_ID=${staff.id}, ` +
-            `ORIG_TIME_IN=${origTimeIn?.toISOString() || "NULL"}, ` +
-            `ORIG_TIME_OUT=${origTimeOut?.toISOString() || "NULL"}, ` +
-            `ADJUSTED_TIME_OUT=${time_out.toISOString()}, ` +
-            `BREAK_IN=${origBreakIn?.toISOString() || "NULL"}, ` +
-            `BREAK_OUT=${origBreakOut?.toISOString() || "NULL"}`,
-        );
-      }
+      return null;
     }
 
     /*
      * ============================================================
-     * 9. PARSE HOURS
+     * 12. FILTER INTERNAL STAFF SCHEDULE COLLISIONS
      * ============================================================
      */
 
-    const regularHours = record["REGULAR_HOURS"]
-      ? Number(record["REGULAR_HOURS"])
-      : 0;
+    const safeDetails = this.filterInternalScheduleCollisions(details);
 
-    const breakHours = record["BREAK_HOURS"]
-      ? Number(record["BREAK_HOURS"])
-      : 0;
+    if (safeDetails.length === 0) {
+      logger.warn(
+        `[StaffSchedulingService] All DWS detail rows were removed because of internal schedule collisions. Date: ${scheduleDateStr}`,
+      );
 
-    const overtimeHours = record["OVERTIME_HOURS"]
-      ? Number(record["OVERTIME_HOURS"])
-      : 0;
-
-    const twh = record["NO_OF_HOURS"]
-      ? Number(record["NO_OF_HOURS"])
-      : 0;
+      return null;
+    }
 
     /*
      * ============================================================
-     * 10. CREATE SCHEDULING DETAIL
+     * 13. CREATE HEADER
      * ============================================================
      */
 
-    details.push({
-      staff_id: staff.id,
+    const headerDto: CreateScheduleHeaderDto = {
+      schedule_date: scheduleDateStr,
+      entry_no: safeDetails.length,
+      reason: "DWS Daily Automated Sync",
+      shifting_day: 1,
+      details: safeDetails,
+    };
 
-      warehouse_id: staffWarehouse.warehouse_id,
-      location_id: staffWarehouse.location_id,
-      vendor_id: staffWarehouse.vendor_id,
+    /*
+     * ============================================================
+     * 14. AUTO-ENROLL ACCESS KEY
+     * ============================================================
+     */
 
-      duty_start_time: startTime.toISOString(),
-      duty_end_time: endTime.toISOString(),
+    const accessKeyId = ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS;
 
-      just_time_in: time_in
-        ? time_in.toISOString()
-        : undefined,
+    /*
+     * ============================================================
+     * 15. REUSE EXISTING TRANSACTIONAL CREATE
+     * ============================================================
+     */
 
-      just_time_out: time_out
-        ? time_out.toISOString()
-        : undefined,
-
-      just_break_in: breakStart
-        ? breakStart.toISOString()
-        : undefined,
-
-      just_break_out: breakEnd
-        ? breakEnd.toISOString()
-        : undefined,
-
-      /*
-       * ========================================================
-       * ORIGINAL DWS VALUES
-       * ========================================================
-       *
-       * These ALWAYS contain the original values received
-       * from DWS before any automatic adjustment.
-       */
-
-      orig_time_in: origTimeIn
-        ? origTimeIn.toISOString()
-        : undefined,
-
-      orig_time_out: origTimeOut
-        ? origTimeOut.toISOString()
-        : undefined,
-
-      orig_break_in: origBreakIn
-        ? origBreakIn.toISOString()
-        : undefined,
-
-      orig_break_out: origBreakOut
-        ? origBreakOut.toISOString()
-        : undefined,
-
-      overtime_in: overtimeIn
-        ? overtimeIn.toISOString()
-        : undefined,
-
-      overtime_out: overtimeOut
-        ? overtimeOut.toISOString()
-        : undefined,
-
-      regular: regularHours,
-      break_hours: breakHours,
-      overtime: overtimeHours,
-      twh: twh,
-
-      remarks: `Auto-synced from DWS log #${record["NO"] || ""}`,
-    });
-
-
+    return await this.create(headerDto, userId, accessKeyId);
   }
-
-  /*
-   * ============================================================
-   * 11. NO VALID DETAILS
-   * ============================================================
-   */
-
-  if (details.length === 0) {
-    logger.warn(
-      `[StaffSchedulingService] No valid detail rows to process for date: ${scheduleDateStr}`,
-    );
-
-    return null;
-  }
-
-  /*
-   * ============================================================
-   * 12. FILTER INTERNAL STAFF SCHEDULE COLLISIONS
-   * ============================================================
-   */
-
-  const safeDetails =
-    this.filterInternalScheduleCollisions(details);
-
-  if (safeDetails.length === 0) {
-    logger.warn(
-      `[StaffSchedulingService] All DWS detail rows were removed because of internal schedule collisions. Date: ${scheduleDateStr}`,
-    );
-
-    return null;
-  }
-
-  /*
-   * ============================================================
-   * 13. CREATE HEADER
-   * ============================================================
-   */
-
-  const headerDto: CreateScheduleHeaderDto = {
-    schedule_date: scheduleDateStr,
-    entry_no: safeDetails.length,
-    reason: "DWS Daily Automated Sync",
-    shifting_day: 1,
-    details: safeDetails,
-  };
-
-  /*
-   * ============================================================
-   * 14. AUTO-ENROLL ACCESS KEY
-   * ============================================================
-   */
-
-  const accessKeyId =
-    ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS;
-
-  /*
-   * ============================================================
-   * 15. REUSE EXISTING TRANSACTIONAL CREATE
-   * ============================================================
-   */
-
-  return await this.create(
-    headerDto,
-    userId,
-    accessKeyId,
-  );
-}
 
   private filterInternalScheduleCollisions(
     details: CreateSchedulingDetailDto[],
@@ -3112,11 +3046,7 @@ async syncDwsSchedulesByDate(
     const date = String(dateStr).trim();
     const time = String(timeStr).trim();
 
-    const parsed = dayjs(
-      `${date} ${time}`,
-      "YYYY-MM-DD hh:mm A",
-      true,
-    );
+    const parsed = dayjs(`${date} ${time}`, "YYYY-MM-DD hh:mm A", true);
 
     if (!parsed.isValid()) {
       return null;
@@ -3293,349 +3223,608 @@ async syncDwsSchedulesByDate(
   //   }
   // }
 
-async generateReportScheduleDetails(
-  payrollHeaderId?: number,
-  accessKeyId?: number,
-  dateFrom?: string,
-  dateTo?: string,
-  locationIds?: number[],
-  vendorIds?: number[],
-): Promise<any[]> {
-  try {
-    const query = this.payrollDetailRepository
-      .createQueryBuilder("payrollDetail")
-      .leftJoinAndSelect("payrollDetail.payrollHeader", "payrollHeader")
-      .leftJoinAndSelect("payrollDetail.staff", "staff")
-      .leftJoinAndSelect("payrollDetail.vendor", "vendor")
-      .leftJoinAndSelect("payrollDetail.location", "location")
-      .leftJoinAndSelect("payrollDetail.warehouse", "warehouse")
-      .leftJoinAndSelect("payrollDetail.status", "status")
-      .leftJoinAndSelect("payrollDetail.workingDays", "workingDay")
-      .leftJoinAndSelect("payrollDetail.createdBy", "createdBy")
-      .leftJoinAndSelect("payrollDetail.updatedBy", "updatedBy");
+  async generateReportScheduleDetails(
+    payrollHeaderId?: number,
+    accessKeyId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    locationIds?: number[],
+    vendorIds?: number[],
+  ): Promise<any[]> {
+    try {
+      const query = this.payrollDetailRepository
+        .createQueryBuilder("payrollDetail")
+        .leftJoinAndSelect("payrollDetail.payrollHeader", "payrollHeader")
+        .leftJoinAndSelect("payrollDetail.staff", "staff")
+        .leftJoinAndSelect("payrollDetail.vendor", "vendor")
+        .leftJoinAndSelect("payrollDetail.location", "location")
+        .leftJoinAndSelect("payrollDetail.warehouse", "warehouse")
+        .leftJoinAndSelect("payrollDetail.status", "status")
+        .leftJoinAndSelect("payrollDetail.workingDays", "workingDay")
+        .leftJoinAndSelect("payrollDetail.createdBy", "createdBy")
+        .leftJoinAndSelect("payrollDetail.updatedBy", "updatedBy");
 
-    query.andWhere("payrollHeader.status_id = :postedStatus", {
-      postedStatus: STATUS_IDS.POSTED,
-    });
-
-    if (payrollHeaderId !== undefined) {
-      query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
-        payrollHeaderId,
+      query.andWhere("payrollHeader.status_id = :postedStatus", {
+        postedStatus: STATUS_IDS.POSTED,
       });
-    }
 
-    if (accessKeyId !== undefined) {
-      query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
-        accessKeyId,
-      });
-    }
-
-    if (dateFrom !== undefined) {
-      query.andWhere("DATE(payrollHeader.payroll_date_from) >= :dateFrom", {
-        dateFrom,
-      });
-    }
-
-    if (dateTo !== undefined) {
-      query.andWhere("DATE(payrollHeader.payroll_date_to) <= :dateTo", {
-        dateTo,
-      });
-    }
-
-    if (locationIds !== undefined && locationIds.length > 0) {
-      query.andWhere("payrollDetail.location_id IN (:...locationIds)", {
-        locationIds,
-      });
-    }
-
-    if (vendorIds !== undefined && vendorIds.length > 0) {
-      query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
-        vendorIds,
-      });
-    }
-
-    query
-      .orderBy("payrollHeader.payroll_date_from", "ASC")
-      .addOrderBy("warehouse.warehouse_name", "ASC")
-      .addOrderBy("payrollDetail.location_id", "ASC")
-      .addOrderBy("payrollDetail.id", "ASC");
-
-    const payrollDetails = await query.getMany();
-
-    if (!payrollDetails.length) {
-      return [];
-    }
-
-    const staffIds = [
-      ...new Set(
-        payrollDetails
-          .map((detail) => detail.staff_id)
-          .filter((id) => id !== null && id !== undefined),
-      ),
-    ];
-
-    const accessKeyIdFromPayroll =
-      payrollDetails[0]?.payrollHeader?.access_key_id;
-
-    const staffSalaries = await this.staffSalaryRepository.find({
-      where: {
-        staff_id: In(staffIds),
-        access_key_id: accessKeyIdFromPayroll,
-        status_id: STATUS_IDS.ACTIVE,
-      },
-    });
-
-    const salaryMap = new Map(
-      staffSalaries.map((salary) => [
-        salary.staff_id,
-        Number(salary.salary_rate) || 0,
-      ]),
-    );
-
-    const staffVendorSalaries = await this.staffVendorSalaryRepository.find({
-      where: {
-        staff_id: In(staffIds),
-        access_key_id: accessKeyIdFromPayroll,
-        status_id: STATUS_IDS.ACTIVE,
-      },
-    });
-
-    const staffVendorMap = new Map(
-      staffVendorSalaries.map((staffVendor) => [
-        `${staffVendor.staff_id}-${staffVendor.vendor_id}-${staffVendor.location_id}`,
-        staffVendor,
-      ]),
-    );
-
-    const sssConfigs = await this.sssConfigRepository.find();
-
-    const staffSummaryMap = new Map<
-      number,
-      {
-        regular_day: number;
-        special_holiday: number;
-        regular_holiday: number;
-      }
-    >();
-
-    for (const detail of payrollDetails) {
-      const staffId = detail.staff_id;
-
-      if (!staffId) {
-        continue;
-      }
-
-      if (!staffSummaryMap.has(staffId)) {
-        staffSummaryMap.set(staffId, {
-          regular_day: 0,
-          special_holiday: 0,
-          regular_holiday: 0,
+      if (payrollHeaderId !== undefined) {
+        query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
+          payrollHeaderId,
         });
       }
 
-      const summary = staffSummaryMap.get(staffId)!;
-      const regular = Number(detail.regular) || 0;
-
-      if (detail.working_day_id === 1) {
-        summary.regular_day += regular;
+      if (accessKeyId !== undefined) {
+        query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
+          accessKeyId,
+        });
       }
 
-      if (detail.working_day_id === 2) {
-        summary.regular_holiday += regular;
+      if (dateFrom !== undefined) {
+        query.andWhere("DATE(payrollHeader.payroll_date_from) >= :dateFrom", {
+          dateFrom,
+        });
       }
 
-      if (detail.working_day_id === 3) {
-        summary.special_holiday += regular;
+      if (dateTo !== undefined) {
+        query.andWhere("DATE(payrollHeader.payroll_date_to) <= :dateTo", {
+          dateTo,
+        });
       }
-    }
 
-    return payrollDetails.map((detail) => {
-      const salaryRate = salaryMap.get(detail.staff_id) ?? 0;
-      const hourRate = salaryRate / 8;
+      if (locationIds !== undefined && locationIds.length > 0) {
+        query.andWhere("payrollDetail.location_id IN (:...locationIds)", {
+          locationIds,
+        });
+      }
 
-      const regularAmount = Number(detail.regular_amount) || 0;
-      const overtimeAmount = Number(detail.overtime_amount) || 0;
-      const grossPay = regularAmount + overtimeAmount;
+      if (vendorIds !== undefined && vendorIds.length > 0) {
+        query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
+          vendorIds,
+        });
+      }
 
-      const staffSummary = staffSummaryMap.get(detail.staff_id) ?? {
-        regular_day: 0,
-        special_holiday: 0,
-        regular_holiday: 0,
-      };
+      query
+        .orderBy("payrollHeader.payroll_date_from", "ASC")
+        .addOrderBy("warehouse.warehouse_name", "ASC")
+        .addOrderBy("payrollDetail.location_id", "ASC")
+        .addOrderBy("payrollDetail.id", "ASC");
 
-      const regularDay = staffSummary.regular_day;
-      const specialHoliday = staffSummary.special_holiday;
-      const regularHoliday = staffSummary.regular_holiday;
+      const payrollDetails = await query.getMany();
 
-      // Exact hours worked sum
-      const totalHoursWorked = regularDay + specialHoliday + regularHoliday;
+      if (!payrollDetails.length) {
+        return [];
+      }
 
-      // Unrounded days for calculation accuracy
-      const totalDayWorkFraction = totalHoursWorked / 8;
+      /*
+       * ============================================================
+       * 1. GET STAFF IDS
+       * ============================================================
+       */
 
-      // Whole number display
-      const totalDayWorkWhole = Math.round(totalDayWorkFraction);
+      const staffIds = [
+        ...new Set(
+          payrollDetails
+            .map((detail) => detail.staff_id)
+            .filter((id) => id !== null && id !== undefined),
+        ),
+      ];
 
-      const thirteenMonthPay = (hourRate * totalHoursWorked) / 12;
+      /*
+       * ============================================================
+       * 2. GET ACCESS KEY
+       * ============================================================
+       */
 
-      // 1. SSS Calculation
-      const lookupValue = salaryRate * 26;
-      const sssConfig = sssConfigs.find((config) => {
-        const rangeFrom = Number(config.range_from) || 0;
-        const rangeTo = Number(config.range_to) || 0;
-        return lookupValue >= rangeFrom && lookupValue <= rangeTo;
+      const accessKeyIdFromPayroll =
+        payrollDetails[0]?.payrollHeader?.access_key_id;
+
+      /*
+       * ============================================================
+       * 3. GET STAFF SALARIES
+       * ============================================================
+       */
+
+      const staffSalaries = await this.staffSalaryRepository.find({
+        where: {
+          staff_id: In(staffIds),
+          access_key_id: accessKeyIdFromPayroll,
+          status_id: STATUS_IDS.ACTIVE,
+        },
       });
 
-      const withMpfEc = Number(sssConfig?.with_mpf_ec) || 0;
-      const sampleMpf = withMpfEc / 26;
-      const sssShare = sampleMpf * totalDayWorkFraction;
+      const salaryMap = new Map(
+        staffSalaries.map((salary) => [
+          salary.staff_id,
+          Number(salary.salary_rate) || 0,
+        ]),
+      );
 
-      // 2. Pag-IBIG Calculation
-      const staffVendorKey = `${detail.staff_id}-${detail.vendor_id}-${detail.location_id}`;
-      const staffVendor = staffVendorMap.get(staffVendorKey);
+      /*
+       * ============================================================
+       * 4. GET STAFF VENDOR SALARIES
+       * ============================================================
+       */
 
-      const pagibigNumberPerc = Number(staffVendor?.pagibig_number_perc) || 0;
-      const philHealthContriPerc = Number(staffVendor?.phil_health_contri_perc) || 0;
+      const staffVendorSalaries = await this.staffVendorSalaryRepository.find({
+        where: {
+          staff_id: In(staffIds),
+          access_key_id: accessKeyIdFromPayroll,
+          status_id: STATUS_IDS.ACTIVE,
+        },
+      });
 
-      // Formula: ROUND(200 / 26, 2) * (Total Hours / 8)
-      const pagibigDailyRate = Math.round((pagibigNumberPerc / 26) * 100) / 100;
-      const pagIbigShare = pagibigDailyRate * totalDayWorkFraction;
+      const staffVendorMap = new Map(
+        staffVendorSalaries.map((staffVendor) => [
+          `${staffVendor.staff_id}-${staffVendor.vendor_id}-${staffVendor.location_id}`,
+          staffVendor,
+        ]),
+      );
 
-      // 3. PhilHealth Calculation
-      // Formula: ROUND((SalaryRate * (Perc / 100)) / 2, 2) * (Total Hours / 8)
-      const philHealthDailyRate =
-        Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) / 100;
-      const philHealthShare = philHealthDailyRate * totalDayWorkFraction;
+      /*
+       * ============================================================
+       * 5. GET SSS CONFIGS
+       * ============================================================
+       */
 
-      // 4. Vendor Billing Calculations
-      const vendorAsfField = Number(detail.vendor?.asf) || 0;
-      const vendorVatField = Number(detail.vendor?.vat) || 0;
-      const vendorTaxField = Number(detail.vendor?.tax) || 0;
-      const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
-      const dutyCount = 1; // 1 duty shift per row detail record
+      const sssConfigs = await this.sssConfigRepository.find();
 
-      const totalPayroll = grossPay;
-      const asf = totalPayroll * vendorAsfField;
-      const totalAsf = totalPayroll + asf;
-      const allowance = warehouseAllowance * dutyCount;
-      const totalAllowance = totalAsf + allowance;
-      const vat = totalAllowance * vendorVatField;
-      const totalWithVat = totalAllowance + vat;
-      const tax = totalAllowance * vendorTaxField;
-      const netOfTax = totalWithVat - tax;
-      const totalBilling = netOfTax;
+      /*
+       * ============================================================
+       * 6. GROUP DETAILS BY STAFF
+       *
+       * One staff = one returned row
+       *
+       * All filtered details belonging to the same staff
+       * will be accumulated here.
+       * ============================================================
+       */
 
-      return {
-        id: detail.id,
-        payroll_header_id: detail.payroll_header_id,
-        schedule_detail_id: detail.schedule_detail_id,
+      const groupedDetails = new Map<number, typeof payrollDetails>();
 
-        staff_id: detail.staff_id,
-        staff_code: detail.staff?.staff_code ?? null,
-        staff_name: detail.staff
-          ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
-          : null,
+      for (const detail of payrollDetails) {
+        const staffId = detail.staff_id;
 
-        salary_rate: salaryRate.toFixed(2),
-        hour_rate: hourRate.toFixed(2),
+        if (!staffId) {
+          continue;
+        }
 
-        vendor_id: detail.vendor_id,
-        location_id: detail.location_id,
-        warehouse_id: detail.warehouse_id,
+        if (!groupedDetails.has(staffId)) {
+          groupedDetails.set(staffId, []);
+        }
 
-        warehouse_ifs: detail.warehouse?.warehouse_name ?? null,
+        groupedDetails.get(staffId)!.push(detail);
+      }
 
-        duty_start_time: detail.duty_start_time,
-        duty_end_time: detail.duty_end_time,
+      /*
+       * ============================================================
+       * 7. BUILD STAFF TOTALS
+       * ============================================================
+       */
 
-        planned_duty_start_time: detail.planned_duty_start_time,
-        planned_duty_end_time: detail.planned_duty_end_time,
+      const staffSummaryMap = new Map<
+        number,
+        {
+          regular_day: number;
+          special_holiday: number;
+          regular_holiday: number;
+          total_regular: number;
+          total_overtime: number;
+          total_twh: number;
+          total_break: number;
+          total_regular_amount: number;
+          total_overtime_amount: number;
+        }
+      >();
 
-        just_time_in: detail.just_time_in,
-        overtime_in: detail.overtime_in,
-        overtime_out: detail.overtime_out,
-        just_time_out: detail.just_time_out,
+      for (const detail of payrollDetails) {
+        const staffId = detail.staff_id;
 
-        just_break_out: detail.just_break_out,
-        just_break_in: detail.just_break_in,
+        if (!staffId) {
+          continue;
+        }
 
-        actual_time_in: detail.actual_time_in,
-        actual_time_out: detail.actual_time_out,
+        if (!staffSummaryMap.has(staffId)) {
+          staffSummaryMap.set(staffId, {
+            regular_day: 0,
+            special_holiday: 0,
+            regular_holiday: 0,
+            total_regular: 0,
+            total_overtime: 0,
+            total_twh: 0,
+            total_break: 0,
+            total_regular_amount: 0,
+            total_overtime_amount: 0,
+          });
+        }
 
-        actual_break_in: detail.actual_break_in,
-        actual_break_out: detail.actual_break_out,
+        const summary = staffSummaryMap.get(staffId)!;
 
-        add_ot: detail.add_ot,
+        /*
+         * ----------------------------------------------------------
+         * TOTAL HOURS
+         * ----------------------------------------------------------
+         */
 
-        working_day_id: detail.working_day_id,
-        status_id: detail.status_id,
-        attendance_status_id: detail.attendance_status_id,
+        const regular = Number(detail.regular) || 0;
+        const overtime = Number(detail.overtime) || 0;
+        const twh = Number(detail.twh) || 0;
+        const breakHours = Number(detail.break) || 0;
 
-        created_by: detail.created_by,
-        updated_by: detail.updated_by,
+        summary.total_regular += regular;
+        summary.total_overtime += overtime;
+        summary.total_twh += twh;
+        summary.total_break += breakHours;
 
-        just_remarks: detail.just_remarks,
+        /*
+         * ----------------------------------------------------------
+         * TOTAL PAYROLL AMOUNTS
+         * ----------------------------------------------------------
+         */
 
-        regular: detail.regular,
-        overtime: detail.overtime,
-        twh: detail.twh,
-        break: detail.break,
+        const regularAmount = Number(detail.regular_amount) || 0;
 
-        payroll_remarks: detail.payroll_remarks,
+        const overtimeAmount = Number(detail.overtime_amount) || 0;
 
-        regular_hours: detail.regular_hours,
-        overtime_hours: detail.overtime_hours,
-        twh_hours: detail.twh_hours,
-        break_hours: detail.break_hours,
+        summary.total_regular_amount += regularAmount;
+        summary.total_overtime_amount += overtimeAmount;
 
-        created_at: detail.created_at,
-        modified_at: detail.modified_at,
+        /*
+         * ----------------------------------------------------------
+         * WORKING DAY TOTALS
+         * ----------------------------------------------------------
+         */
 
-        regular_amount: Number(detail.regular_amount || 0).toFixed(2),
-        overtime_amount: Number(detail.overtime_amount || 0).toFixed(2),
-        gross_pay: grossPay.toFixed(2),
+        if (detail.working_day_id === WORKING_DAY_IDS.REGULAR_DAY) {
+          summary.regular_day += regular;
+        }
 
-        regular_day: regularDay.toFixed(2),
-        special_holiday: specialHoliday.toFixed(2),
-        regular_holiday: regularHoliday.toFixed(2),
+        if (detail.working_day_id === WORKING_DAY_IDS.REGULAR_HOLIDAY) {
+          summary.regular_holiday += regular;
+        }
 
-        total_day_work: totalDayWorkWhole.toString(),
+        if (detail.working_day_id === WORKING_DAY_IDS.SPECIAL_HOLIDAY) {
+          summary.special_holiday += regular;
+        }
+      }
 
-        thirteen_month_pay: thirteenMonthPay.toFixed(2),
+      /*
+       * ============================================================
+       * 8. RETURN ONE ROW PER STAFF
+       * ============================================================
+       */
 
-        sss_lookup_value: lookupValue.toFixed(2),
-        sss_with_mpf_ec: withMpfEc.toFixed(2),
-        sss_sample_mpf: sampleMpf.toFixed(2),
-        sss_share: sssShare.toFixed(2),
+      return Array.from(groupedDetails.entries()).map(([staffId, details]) => {
+        /*
+         * --------------------------------------------------------
+         * FIRST DETAIL IS ONLY USED AS REPRESENTATIVE DATA
+         *
+         * It is NOT used for total hours/pay.
+         *
+         * All totals come from staffSummary.
+         * --------------------------------------------------------
+         */
 
-        pagibig_number_perc: pagibigNumberPerc.toFixed(2),
-        pag_ibig_share: pagIbigShare.toFixed(2),
+        const detail = details[0];
 
-        phil_health_contri_perc: philHealthContriPerc.toFixed(2),
-        phil_health_share: philHealthShare.toFixed(2),
+        const salaryRate = salaryMap.get(staffId) ?? 0;
 
-        // --- Vendor Billing Outputs ---
-        total_payroll: totalPayroll.toFixed(2),
-        asf: asf.toFixed(2),
-        total_asf: totalAsf.toFixed(2),
-        allowance: allowance.toFixed(2),
-        total_allowance: totalAllowance.toFixed(2),
-        vat: vat.toFixed(2),
-        total_with_vat: totalWithVat.toFixed(2),
-        tax: tax.toFixed(2),
-        net_of_tax: netOfTax.toFixed(2),
-        total_billing: totalBilling.toFixed(2),
+        const hourRate = salaryRate / 8;
 
-        status_name: detail.status?.status_name ?? null,
-        location_name: detail.location?.location_name ?? null,
-        warehouse_name: detail.warehouse?.warehouse_name ?? null,
-        warehouse_code: detail.warehouse?.warehouse_code ?? null,
-        service_provider_name: detail.vendor?.service_provider_name ?? null,
-        working_day_name: detail.workingDays?.description ?? null,
-      };
-    });
-  } catch (error) {
-    throw new Error("Failed to fetch staff payroll report");
+        const staffSummary = staffSummaryMap.get(staffId) ?? {
+          regular_day: 0,
+          special_holiday: 0,
+          regular_holiday: 0,
+          total_regular: 0,
+          total_overtime: 0,
+          total_twh: 0,
+          total_break: 0,
+          total_regular_amount: 0,
+          total_overtime_amount: 0,
+        };
+
+        /*
+         * --------------------------------------------------------
+         * TOTAL HOURS
+         * --------------------------------------------------------
+         */
+
+        const totalRegular = staffSummary.total_regular;
+
+        const totalOvertime = staffSummary.total_overtime;
+
+        const totalTwh = staffSummary.total_twh;
+
+        const totalBreak = staffSummary.total_break;
+
+        /*
+         * --------------------------------------------------------
+         * TOTAL PAYROLL AMOUNTS
+         * --------------------------------------------------------
+         */
+
+        const regularAmount = staffSummary.total_regular_amount;
+
+        const overtimeAmount = staffSummary.total_overtime_amount;
+
+        const grossPay = regularAmount + overtimeAmount;
+
+        /*
+         * --------------------------------------------------------
+         * WORKING DAY TOTALS
+         * --------------------------------------------------------
+         */
+
+        const regularDay = staffSummary.regular_day;
+
+        const specialHoliday = staffSummary.special_holiday;
+
+        const regularHoliday = staffSummary.regular_holiday;
+
+        /*
+         * --------------------------------------------------------
+         * DUTY COUNT
+         *
+         * Duty count is based on total regular hours.
+         *
+         * Example:
+         *
+         * 8 + 8 = 16 regular hours
+         * 16 / 8 = 2 duties
+         * --------------------------------------------------------
+         */
+
+        const totalHoursWorked = regularDay + specialHoliday + regularHoliday;
+
+        const totalDayWorkFraction = totalHoursWorked / 8;
+
+        const dutyCount = Math.round(totalDayWorkFraction);
+
+        /*
+         * --------------------------------------------------------
+         * 13TH MONTH
+         * --------------------------------------------------------
+         */
+
+        const thirteenMonthPay = (hourRate * totalHoursWorked) / 12;
+
+        /*
+         * --------------------------------------------------------
+         * SSS CALCULATION
+         * --------------------------------------------------------
+         */
+
+        const lookupValue = salaryRate * DAYS_FACTOR_RATE.DAYS;
+
+        const sssConfig = sssConfigs.find((config) => {
+          const rangeFrom = Number(config.range_from) || 0;
+
+          const rangeTo = Number(config.range_to) || 0;
+
+          return lookupValue >= rangeFrom && lookupValue <= rangeTo;
+        });
+
+        const withMpfEc = Number(sssConfig?.with_mpf_ec) || 0;
+
+        const sampleMpf = withMpfEc / DAYS_FACTOR_RATE.DAYS;
+
+        const sssShare = sampleMpf * totalDayWorkFraction;
+
+        /*
+         * --------------------------------------------------------
+         * PAG-IBIG / PHILHEALTH
+         * --------------------------------------------------------
+         */
+
+        const staffVendorKey = `${staffId}-${detail.vendor_id}-${detail.location_id}`;
+
+        const staffVendor = staffVendorMap.get(staffVendorKey);
+
+        const pagibigNumberPerc = Number(staffVendor?.pagibig_number_perc) || 0;
+
+        const philHealthContriPerc =
+          Number(staffVendor?.phil_health_contri_perc) || 0;
+
+        const pagibigDailyRate =
+          Math.round((pagibigNumberPerc / DAYS_FACTOR_RATE.DAYS) * 100) / 100;
+
+        const pagIbigShare = pagibigDailyRate * totalDayWorkFraction;
+
+        const philHealthDailyRate =
+          Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) /
+          100;
+
+        const philHealthShare = philHealthDailyRate * totalDayWorkFraction;
+
+        const vendorAsfField = Number(detail.vendor?.asf) || 0;
+
+        const vendorVatField = Number(detail.vendor?.vat) || 0;
+
+        const vendorTaxField = Number(detail.vendor?.tax) || 0;
+
+        const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
+
+        const totalPayroll = grossPay;
+
+        const asf = totalPayroll * vendorAsfField;
+
+        const totalAsf = totalPayroll + asf;
+
+        const allowance = warehouseAllowance * dutyCount;
+
+        const totalAllowance = totalAsf + allowance;
+
+        const vat = totalAllowance * vendorVatField;
+
+        const totalWithVat = totalAllowance + vat;
+
+        const tax = totalAllowance * vendorTaxField;
+
+        const netOfTax = totalWithVat - tax;
+
+        const totalBilling = netOfTax;
+
+
+        return {
+          id: detail.id,
+
+          payroll_header_id: detail.payroll_header_id,
+
+          schedule_detail_id: detail.schedule_detail_id,
+
+          staff_id: staffId,
+
+          staff_code: detail.staff?.staff_code ?? null,
+
+          staff_name: detail.staff
+            ? `${detail.staff.first_name ?? ""} ${
+                detail.staff.last_name ?? ""
+              }`.trim()
+            : null,
+
+          salary_rate: salaryRate.toFixed(2),
+
+          hour_rate: hourRate.toFixed(2),
+
+          vendor_id: detail.vendor_id,
+
+          location_id: detail.location_id,
+
+          warehouse_id: detail.warehouse_id,
+
+          warehouse_ifs: detail.warehouse?.warehouse_name ?? null,
+
+          duty_start_time: detail.duty_start_time,
+
+          duty_end_time: detail.duty_end_time,
+
+          planned_duty_start_time: detail.planned_duty_start_time,
+
+          planned_duty_end_time: detail.planned_duty_end_time,
+
+          just_time_in: detail.just_time_in,
+
+          overtime_in: detail.overtime_in,
+
+          overtime_out: detail.overtime_out,
+
+          just_time_out: detail.just_time_out,
+
+          just_break_out: detail.just_break_out,
+
+          just_break_in: detail.just_break_in,
+
+          actual_time_in: detail.actual_time_in,
+
+          actual_time_out: detail.actual_time_out,
+
+          actual_break_in: detail.actual_break_in,
+
+          actual_break_out: detail.actual_break_out,
+
+          add_ot: detail.add_ot,
+
+          working_day_id: detail.working_day_id,
+
+          status_id: detail.status_id,
+
+          attendance_status_id: detail.attendance_status_id,
+
+          created_by: detail.created_by,
+
+          updated_by: detail.updated_by,
+
+          just_remarks: detail.just_remarks,
+
+          regular: totalRegular.toFixed(2),
+
+          overtime: totalOvertime.toFixed(2),
+
+          twh: totalTwh.toFixed(2),
+
+          break: totalBreak.toFixed(2),
+
+          payroll_remarks: detail.payroll_remarks,
+
+          regular_hours: detail.regular_hours,
+
+          overtime_hours: detail.overtime_hours,
+
+          twh_hours: detail.twh_hours,
+
+          break_hours: detail.break_hours,
+
+          created_at: detail.created_at,
+
+          modified_at: detail.modified_at,
+
+          regular_amount: regularAmount.toFixed(2),
+
+          overtime_amount: overtimeAmount.toFixed(2),
+
+          gross_pay: grossPay.toFixed(2),
+
+          regular_day: regularDay.toFixed(2),
+
+          special_holiday: specialHoliday.toFixed(2),
+
+          regular_holiday: regularHoliday.toFixed(2),
+
+          total_day_work: dutyCount.toString(),
+
+          thirteen_month_pay: thirteenMonthPay.toFixed(2),
+
+          sss_lookup_value: lookupValue.toFixed(2),
+
+          sss_with_mpf_ec: withMpfEc.toFixed(2),
+
+          sss_sample_mpf: sampleMpf.toFixed(2),
+
+          sss_share: sssShare.toFixed(2),
+
+          pagibig_number_perc: pagibigNumberPerc.toFixed(2),
+
+          pag_ibig_share: pagIbigShare.toFixed(2),
+
+          phil_health_contri_perc: philHealthContriPerc.toFixed(2),
+
+          phil_health_share: philHealthShare.toFixed(2),
+
+          total_payroll: totalPayroll.toFixed(2),
+
+          asf: asf.toFixed(2),
+
+          total_asf: totalAsf.toFixed(2),
+
+          allowance: allowance.toFixed(2),
+
+          total_allowance: totalAllowance.toFixed(2),
+
+          vat: vat.toFixed(2),
+
+          total_with_vat: totalWithVat.toFixed(2),
+
+          tax: tax.toFixed(2),
+
+          net_of_tax: netOfTax.toFixed(2),
+
+          total_billing: totalBilling.toFixed(2),
+
+          status_name: detail.status?.status_name ?? null,
+
+          location_name: detail.location?.location_name ?? null,
+
+          warehouse_name: detail.warehouse?.warehouse_name ?? null,
+
+          warehouse_code: detail.warehouse?.warehouse_code ?? null,
+
+          service_provider_name: detail.vendor?.service_provider_name ?? null,
+
+          working_day_name: detail.workingDays?.description ?? null,
+        };
+      });
+    } catch (error) {
+      throw new Error("Failed to fetch staff payroll report");
+    }
   }
-}
 }

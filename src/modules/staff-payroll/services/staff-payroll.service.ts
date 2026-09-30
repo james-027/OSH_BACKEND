@@ -27,7 +27,6 @@ import { CommonUtilitiesService } from "../../../services/common-utilities.servi
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
 
-
 @Injectable()
 export class StaffPayrollService {
   constructor(
@@ -53,48 +52,40 @@ export class StaffPayrollService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private actionLogsService: ActionLogsService,
-    
   ) {}
 
   private readonly module_name = "STAFF PAYROLL";
 
+  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+    try {
+      const where: any = {
+        status_id: STATUS_IDS.ACTIVE,
+      };
 
-async findAll(
-  statusId?: number[],
-  accessKeyId?: number,
-): Promise<any[]> {
-  try {
-    const where: any = {
-      status_id: STATUS_IDS.ACTIVE,
-    };
+      if (statusId && statusId.length > 0) {
+        where.status_id = In(statusId);
+      }
 
-    if (statusId && statusId.length > 0) {
-      where.status_id = In(statusId);
-    }
+      if (accessKeyId !== undefined && accessKeyId !== null) {
+        where.access_key_id = accessKeyId;
+      }
 
-    if (accessKeyId !== undefined && accessKeyId !== null) {
-      where.access_key_id = accessKeyId;
-    }
-
-    const payrollHeaders =
-      await this.payrollHeaderRepository.find({
+      const payrollHeaders = await this.payrollHeaderRepository.find({
         where,
         relations: ["status", "createdBy", "updatedBy"],
       });
 
-    return this.responseMapperService.mapEntitiesToResponse(
-      payrollHeaders,
-    );
-} catch (error) {
-  console.error("Error fetching payroll header:", error);
+      return this.responseMapperService.mapEntitiesToResponse(payrollHeaders);
+    } catch (error) {
+      console.error("Error fetching payroll header:", error);
 
-  throw new Error(
-    `Failed to fetch payroll header: ${
-      error instanceof Error ? error.message : String(error)
-    }`,
-  );
-}
-}
+      throw new Error(
+        `Failed to fetch payroll header: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   async findStaffPayrollDetails(
     accessKeyId: number,
@@ -174,7 +165,7 @@ async findAll(
   async computePayroll(
     accessKeyId: number,
     createPayroll: CreatePayrollHeaderDto,
-    userId:number
+    userId: number,
   ): Promise<any> {
     try {
       const {
@@ -212,10 +203,7 @@ async findAll(
       if (payroll_date_from && payroll_date_to) {
         where.scheduleHeader = {
           access_key_id: accessKeyId,
-          schedule_date: Between(
-            payroll_date_from,
-            payroll_date_to,
-          ),
+          schedule_date: Between(payroll_date_from, payroll_date_to),
         };
       }
 
@@ -223,10 +211,9 @@ async findAll(
       // 2. GET ALL COMPUTED + VALIDATED SCHEDULE DETAILS
       // ============================================================
 
-      const scheduleDetails =
-        await this.scheduleDetailRepository.find({
-          where,
-          relations: [
+      const scheduleDetails = await this.scheduleDetailRepository.find({
+        where,
+        relations: [
           "scheduleHeader",
           "staff",
           "warehouse",
@@ -234,8 +221,8 @@ async findAll(
           "location",
           "workingDays",
           "actualLogsDetail",
-          ],
-        });
+        ],
+      });
 
       if (!scheduleDetails.length) {
         return {
@@ -249,14 +236,10 @@ async findAll(
       // 3. GROUP BY VENDOR + LOCATION
       // ============================================================
 
-      const groupedDetails = new Map<
-        string,
-        typeof scheduleDetails
-      >();
+      const groupedDetails = new Map<string, typeof scheduleDetails>();
 
       for (const detail of scheduleDetails) {
-        const groupKey =
-          `${detail.vendor_id}-${detail.location_id}`;
+        const groupKey = `${detail.vendor_id}-${detail.location_id}`;
 
         if (!groupedDetails.has(groupKey)) {
           groupedDetails.set(groupKey, []);
@@ -278,11 +261,9 @@ async findAll(
 
         const firstDetail = details[0];
 
-        const agencyCode =
-          firstDetail.vendor?.service_provider_code ?? "";
+        const agencyCode = firstDetail.vendor?.service_provider_code ?? "";
 
-        const locationAbbr =
-          firstDetail.location?.location_abbr;
+        const locationAbbr = firstDetail.location?.location_abbr;
 
         const payrollInvoice =
           await this.commonUtilitiesService.generateTransactionNumber({
@@ -300,137 +281,94 @@ async findAll(
         // Create Payroll Header
         // ========================================================
 
-        const payrollHeader =
-          this.payrollHeaderRepository.create({
-            payroll_date_from: new Date(payroll_date_from),
-            payroll_date_to: new Date(payroll_date_to),
-            reason: reason || "",
-            remarks: remarks || "",
-            payroll_invoice: payrollInvoice,
-            access_key_id: accessKeyId,
-            status_id: STATUS_IDS.PENDING,
-            created_by: userId
-          });
+        const payrollHeader = this.payrollHeaderRepository.create({
+          payroll_date_from: new Date(payroll_date_from),
+          payroll_date_to: new Date(payroll_date_to),
+          reason: reason || "",
+          remarks: remarks || "",
+          payroll_invoice: payrollInvoice,
+          access_key_id: accessKeyId,
+          status_id: STATUS_IDS.PENDING,
+          created_by: userId,
+        });
 
         const savedPayrollHeader =
-          await this.payrollHeaderRepository.save(
-            payrollHeader,
-          );
+          await this.payrollHeaderRepository.save(payrollHeader);
 
         // ========================================================
         // Create Payroll Details
         // ========================================================
 
-        const payrollDetails = details.map(
-          (scheduleDetail) => {
-            return this.payrollDetailRepository.create({
-              payroll_header_id:
-                savedPayrollHeader.id,
+        const payrollDetails = details.map((scheduleDetail) => {
+          return this.payrollDetailRepository.create({
+            payroll_header_id: savedPayrollHeader.id,
 
-              schedule_detail_id:
-                scheduleDetail.id,
+            schedule_detail_id: scheduleDetail.id,
 
-              staff_id:
-                scheduleDetail.staff_id,
+            staff_id: scheduleDetail.staff_id,
 
-              staff_code:
-                scheduleDetail.staff?.staff_code || "",
+            staff_code: scheduleDetail.staff?.staff_code || "",
 
-              vendor_id:
-                scheduleDetail.vendor_id,
+            vendor_id: scheduleDetail.vendor_id,
 
-              location_id:
-                scheduleDetail.location_id,
+            location_id: scheduleDetail.location_id,
 
-              warehouse_id:
-                scheduleDetail.warehouse_id,
+            warehouse_id: scheduleDetail.warehouse_id,
 
-              warehouse_ifs:
-                scheduleDetail.warehouse?.warehouse_ifs || "",
+            warehouse_ifs: scheduleDetail.warehouse?.warehouse_ifs || "",
 
-              duty_start_time:
-                scheduleDetail.duty_start_time,
+            duty_start_time: scheduleDetail.duty_start_time,
 
-              duty_end_time:
-                scheduleDetail.duty_end_time,
+            duty_end_time: scheduleDetail.duty_end_time,
 
-              planned_duty_start_time:
-                scheduleDetail.planned_duty_start_time,
+            planned_duty_start_time: scheduleDetail.planned_duty_start_time,
 
-              planned_duty_end_time:
-                scheduleDetail.planned_duty_end_time,
+            planned_duty_end_time: scheduleDetail.planned_duty_end_time,
 
-              just_time_in:
-                scheduleDetail.just_time_in,
+            just_time_in: scheduleDetail.just_time_in,
 
-              overtime_in:
-                scheduleDetail.overtime_in,
-              overtime_out:
-                scheduleDetail.overtime_out,
-              just_time_out:
-                scheduleDetail.just_time_out,
-              just_break_out:
-                scheduleDetail.just_break_out,
-              just_break_in:
-                scheduleDetail.just_break_in,
-              actual_time_in:
-                scheduleDetail.actualLogsDetail?.time_in,
-              actual_time_out:
-                scheduleDetail.actualLogsDetail?.time_out,
-              actual_break_in:
-                scheduleDetail.actualLogsDetail?.break_in,
-              actual_break_out:
-                scheduleDetail.actualLogsDetail?.break_out,
-              add_ot:
-                scheduleDetail.add_ot,
-              working_day_id:
-                scheduleDetail.working_day_id,
-              status_id:
-                STATUS_IDS.ACTIVE,
-              attendance_status_id:
-                scheduleDetail.attendance_status_id,
+            overtime_in: scheduleDetail.actualLogsDetail?.overtime_in,
+            overtime_out: scheduleDetail.actualLogsDetail?.overtime_out,
+            just_time_out: scheduleDetail.just_time_out,
+            just_break_out: scheduleDetail.just_break_out,
+            just_break_in: scheduleDetail.just_break_in,
+            actual_time_in: scheduleDetail.actualLogsDetail?.time_in,
+            actual_time_out: scheduleDetail.actualLogsDetail?.time_out,
+            actual_break_in: scheduleDetail.actualLogsDetail?.break_in,
+            actual_break_out: scheduleDetail.actualLogsDetail?.break_out,
+            add_ot: scheduleDetail.add_ot,
+            working_day_id: scheduleDetail.working_day_id,
+            status_id: STATUS_IDS.ACTIVE,
+            attendance_status_id: scheduleDetail.attendance_status_id,
 
-              just_remarks:
-                scheduleDetail.just_remarks,
+            just_remarks: scheduleDetail.just_remarks,
 
-              regular:
-                scheduleDetail.regular,
+            regular: scheduleDetail.regular,
 
-              overtime:
-                scheduleDetail.overtime,
+            overtime: scheduleDetail.overtime,
 
-              twh:
-                scheduleDetail.twh,
+            twh: scheduleDetail.twh,
 
-              break:
-                scheduleDetail.break,
+            break: scheduleDetail.break,
 
-              payroll_remarks:
-                scheduleDetail.payroll_remarks,
+            payroll_remarks: scheduleDetail.payroll_remarks,
 
-              regular_hours:
-                scheduleDetail.regular_hours,
+            regular_hours: scheduleDetail.regular_hours,
 
-              overtime_hours:
-                scheduleDetail.overtime_hours,
+            overtime_hours: scheduleDetail.overtime_hours,
 
-              twh_hours:
-                scheduleDetail.twh_hours,
+            twh_hours: scheduleDetail.twh_hours,
 
-              break_hours:
-                scheduleDetail.break_hours,
+            break_hours: scheduleDetail.break_hours,
 
-                created_by: userId
-            });
-          },
-        );
+            created_by: userId,
+          });
+        });
 
         const savedPayrollDetails =
-          await this.payrollDetailRepository.save(
-            payrollDetails,
-          );
+          await this.payrollDetailRepository.save(payrollDetails);
 
-          await this.scheduleDetailRepository.update(
+        await this.scheduleDetailRepository.update(
           {
             id: In(details.map((detail) => detail.id)),
           },
@@ -444,93 +382,90 @@ async findAll(
         // RESULT
         // ========================================================
 
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "StaffPayrollService",
-          method: "create",
-          raw_data: JSON.stringify(savedPayrollHeader),
-          description: `Created payroll ${payrollInvoice}`,
-          status_id: 1,
-        },
-        userId,
-      );
-
-      const payrollWithRelations = await this.payrollHeaderRepository.findOne(
-        {
-          where: {
-            id: savedPayrollHeader.id,
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffPayrollService",
+            method: "create",
+            raw_data: JSON.stringify(savedPayrollHeader),
+            description: `Created payroll ${payrollInvoice}`,
+            status_id: 1,
           },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "details",
-            "details.staff",
-            "details.vendor",
-            "details.location",
-            "details.warehouse",
-            "details.status",
-          ],
-        },
-      );
-
-      if (!payrollWithRelations) {
-        throw new Error("Failed to retrieve created staff payroll");
-      }
-
-      try {
-        await this.actionLogsService.logAction({
-          module_name: this.module_name,
-          ref_id: savedPayrollHeader.id,
-          action_id: ACTION_IDS.ADD,
-          description: `Add Payroll ${payrollInvoice}`,
-          raw_data: JSON.stringify({
-            savedPayrollHeader,
-          }),
-          created_by: userId,
-        });
-      } catch (err) {
-        logger.error("Action log failed for Create Staff payroll:", err);
-      }
-
-      const response = this.responseMapperService.mapEntityToResponse(
-        payrollWithRelations,
-      );
-
-      try {
-        this.sseEventEmitter.emitCreate(
-          "staff_payroll",
-          response.id,
-          response,
+          userId,
         );
-      } catch (err) {
-        logger.error("SSE event failed:", err);
+
+        const payrollWithRelations = await this.payrollHeaderRepository.findOne(
+          {
+            where: {
+              id: savedPayrollHeader.id,
+            },
+            relations: [
+              "status",
+              "createdBy",
+              "updatedBy",
+              "details",
+              "details.staff",
+              "details.vendor",
+              "details.location",
+              "details.warehouse",
+              "details.status",
+            ],
+          },
+        );
+
+        if (!payrollWithRelations) {
+          throw new Error("Failed to retrieve created staff payroll");
+        }
+
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: savedPayrollHeader.id,
+            action_id: ACTION_IDS.ADD,
+            description: `Add Payroll ${payrollInvoice}`,
+            raw_data: JSON.stringify({
+              savedPayrollHeader,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error("Action log failed for Create Staff payroll:", err);
+        }
+
+        const response =
+          this.responseMapperService.mapEntityToResponse(payrollWithRelations);
+
+        try {
+          this.sseEventEmitter.emitCreate(
+            "staff_payroll",
+            response.id,
+            response,
+          );
+            this.sseEventEmitter.emitUpdate(
+            "staff_attendance",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+
+        generatedPayrolls.push(response);
       }
 
-      generatedPayrolls.push(response);
-    }
-
-    return {
-      message: "Payroll generated successfully.",
-      data: generatedPayrolls,
-    };
-
-     
+      return {
+        message: "Payroll generated successfully.",
+        data: generatedPayrolls,
+      };
     } catch (error) {
-      console.error(
-        "Error generating payroll:",
-        error,
-      );
+      console.error("Error generating payroll:", error);
 
       throw new Error(
-        error instanceof Error
-          ? error.message
-          : "Failed to generate payroll",
+        error instanceof Error ? error.message : "Failed to generate payroll",
       );
     }
   }
 
-    async autoComputationScheduleDetails(): Promise<any> {
+  async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
         attendance_status_id: STATUS_IDS.VALIDATED,
@@ -548,7 +483,6 @@ async findAll(
           "actualLogsDetail",
         ],
       });
-
 
       if (!allScheduleDetails.length) {
         return [];
@@ -844,7 +778,8 @@ async findAll(
 
             return {
               schedule_detail_id: scheduleDetail.id,
-              access_key_id: scheduleDetail.scheduleHeader?.access_key_id ?? null,
+              access_key_id:
+                scheduleDetail.scheduleHeader?.access_key_id ?? null,
               time_in: timeIn,
               time_out: timeOut,
               break_out: breakOut,
@@ -954,7 +889,6 @@ async findAll(
     return Number(result[0]?.difference ?? 0);
   }
 
-  
   private secondsToDecimalHours(seconds: number): number {
     return Number((seconds / 3600).toFixed(2));
   }
@@ -976,11 +910,9 @@ async findAll(
     )}`;
   }
 
-
-async autoPayrollComputation(): Promise<any> {
-  try {
-    const postedPayrollDetails =
-      await this.payrollDetailRepository.find({
+  async autoPayrollComputation(): Promise<any> {
+    try {
+      const postedPayrollDetails = await this.payrollDetailRepository.find({
         where: {
           payrollHeader: {
             status_id: STATUS_IDS.POSTED,
@@ -1001,43 +933,41 @@ async autoPayrollComputation(): Promise<any> {
         },
       });
 
-    if (!postedPayrollDetails.length) {
-      return {
-        success: true,
-        total: 0,
-      };
-    }
-
-    const groupedByHeader = new Map<number, PayrollDetails[]>();
-
-    for (const payrollDetail of postedPayrollDetails) {
-      const payrollHeaderId = payrollDetail.payroll_header_id;
-
-      if (!payrollHeaderId) {
-        continue;
+      if (!postedPayrollDetails.length) {
+        return {
+          success: true,
+          total: 0,
+        };
       }
 
-      if (!groupedByHeader.has(payrollHeaderId)) {
-        groupedByHeader.set(payrollHeaderId, []);
+      const groupedByHeader = new Map<number, PayrollDetails[]>();
+
+      for (const payrollDetail of postedPayrollDetails) {
+        const payrollHeaderId = payrollDetail.payroll_header_id;
+
+        if (!payrollHeaderId) {
+          continue;
+        }
+
+        if (!groupedByHeader.has(payrollHeaderId)) {
+          groupedByHeader.set(payrollHeaderId, []);
+        }
+
+        groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
       }
 
-      groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
-    }
+      for (const [
+        payrollHeaderId,
+        payrollDetails,
+      ] of groupedByHeader.entries()) {
+        const payrollHeader = payrollDetails[0]?.payrollHeader ?? null;
 
-    for (const [
-      payrollHeaderId,
-      payrollDetails,
-    ] of groupedByHeader.entries()) {
-      const payrollHeader =
-        payrollDetails[0]?.payrollHeader ?? null;
+        if (!payrollHeader) {
+          continue;
+        }
 
-      if (!payrollHeader) {
-        continue;
-      }
-
-      for (const detail of payrollDetails) {
-        const salary =
-          await this.staffSalaryRepository.findOne({
+        for (const detail of payrollDetails) {
+          const salary = await this.staffSalaryRepository.findOne({
             where: {
               staff_id: detail.staff_id,
               access_key_id: payrollHeader.access_key_id,
@@ -1045,41 +975,453 @@ async autoPayrollComputation(): Promise<any> {
             },
           });
 
-        if (!salary) {
-          continue;
+          if (!salary) {
+            continue;
+          }
+
+          const salaryRate = Number(salary.salary_rate) || 0;
+          const regular = Number(detail.regular) || 0;
+          const overtime = Number(detail.overtime) || 0;
+
+          const regularAmount = (regular * salaryRate) / 8;
+
+          const overtimeAmount = (overtime * salaryRate) / 8;
+
+          detail.regular_amount = regularAmount;
+          detail.overtime_amount = overtimeAmount;
+
+          await this.payrollDetailRepository.save(detail);
         }
-
-        const salaryRate = Number(salary.salary_rate) || 0;
-        const regular = Number(detail.regular) || 0;
-        const overtime = Number(detail.overtime) || 0;
-
-        const regularAmount =
-          (regular * salaryRate) / 8;
-
-        const overtimeAmount =
-          (overtime * salaryRate) / 8;
-
-        detail.regular_amount = regularAmount;
-        detail.overtime_amount = overtimeAmount;
-
-        await this.payrollDetailRepository.save(detail);
       }
-    }
 
       return {
         success: true,
         message: "Payroll computation completed successfully.",
       };
-  } catch (error) {
-    throw new Error(
-      error instanceof Error
-        ? error.message
-        : "Failed to fetch posted payroll details.",
-    );
+    } catch (error) {
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch posted payroll details.",
+      );
+    }
   }
-}
 
+  async postPayroll(
+      updatePayrollDto: UpdatePayrollHeaderDto,
+      userId: number,
+    ): Promise<any> {
+      try {
+        const payrollIds = updatePayrollDto.id;
+  
+        if (!payrollIds?.length) {
+          throw new BadRequestException(
+            "At least one Payroll Header ID is required.",
+          );
+        }
+  
+        const payrollHeaders = await this.payrollHeaderRepository.find({
+          where: {
+            id: In(payrollIds),
+          },
+          relations: ["status", "createdBy", "updatedBy"],
+        });
+  
+        const foundIds = payrollHeaders.map((payroll) => payroll.id);
+  
+        const missingIds = payrollIds.filter(
+          (payrollId) => !foundIds.includes(payrollId),
+        );
+  
+        if (missingIds.length > 0) {
+          throw new NotFoundException(
+            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+          );
+        }
+  
+        const updatedPayrollHeaders =
+        await this.payrollHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            // Update Schedule Headers
+            await transactionalEntityManager.update(
+              PayrollHeader,
+              {
+                id: In(payrollIds),
+              },
+              {
+                status_id: STATUS_IDS.POSTED,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
+  
+            const updatedHeaders = await transactionalEntityManager.find(
+              PayrollHeader,
+              {
+                where: {
+                  id: In(payrollIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
+  
+            return updatedHeaders;
+          },
+        );
+  
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "Staff Payroll Service",
+            method: "",
+            raw_data: JSON.stringify(updatedPayrollHeaders),
+            description: `Posted Payroll Headers: ${payrollIds.join(", ")}`,
+            status_id: 1,
+          },
+          userId,
+        );
+  
+        const responses = updatedPayrollHeaders.map((schedule) =>
+          this.responseMapperService.mapEntityToResponse(schedule),
+        );
+  
+        try {
+          for (const payroll of updatedPayrollHeaders) {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: payroll.id,
+              action_id: ACTION_IDS.POST,
+              description: `Post Payroll`,
+              raw_data: JSON.stringify(payroll),
+              created_by: userId,
+            });
+          }
+        } catch (err) {
+          logger.error("Action log failed for Post Payroll:", err);
+        }
+  
+        for (const response of responses) {
+          try {
+            this.sseEventEmitter.emitUpdate(
+              "staff_attendance",
+              response.id,
+              response,
+            );
+            this.sseEventEmitter.emitUpdate(
+              "staff_payroll",
+              response.id,
+              response,
+            );
+          } catch (err) {
+            logger.error("SSE event failed:", err);
+          }
+        }
+  
+        return responses;
+      } catch (error) {
+        if (
+          error instanceof NotFoundException ||
+          error instanceof BadRequestException
+        ) {
+          throw error;
+        }
+  
+        logger.error("Failed to post payroll headers:", error);
+  
+        throw new Error("Failed to post payroll headers");
+      }
+    }
 
+  async revertPayroll(
+      updatePayrollDto: UpdatePayrollHeaderDto,
+      userId: number,
+    ): Promise<any> {
+      try {
+        const payrollIds = updatePayrollDto.id;
+  
+        if (!payrollIds?.length) {
+          throw new BadRequestException(
+            "At least one Payroll Header ID is required.",
+          );
+        }
+  
+        const payrollHeaders = await this.payrollHeaderRepository.find({
+          where: {
+            id: In(payrollIds),
+          },
+          relations: ["status", "createdBy", "updatedBy"],
+        });
+  
+        const foundIds = payrollHeaders.map((payroll) => payroll.id);
+  
+        const missingIds = payrollIds.filter(
+          (payrollId) => !foundIds.includes(payrollId),
+        );
+  
+        if (missingIds.length > 0) {
+          throw new NotFoundException(
+            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+          );
+        }
+  
+        const updatedPayrollHeaders =
+        await this.payrollHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            // Update Payroll Headers
+            await transactionalEntityManager.update(
+              PayrollHeader,
+              {
+                id: In(payrollIds),
+              },
+              {
+                status_id: STATUS_IDS.PENDING,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
+  
+            const updatedHeaders = await transactionalEntityManager.find(
+              PayrollHeader,
+              {
+                where: {
+                  id: In(payrollIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
+  
+            return updatedHeaders;
+          },
+        );
+  
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "Staff Payroll Service",
+            method: "",
+            raw_data: JSON.stringify(updatedPayrollHeaders),
+            description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
+            status_id: 1,
+          },
+          userId,
+        );
+  
+        const responses = updatedPayrollHeaders.map((schedule) =>
+          this.responseMapperService.mapEntityToResponse(schedule),
+        );
+  
+        try {
+          for (const payroll of updatedPayrollHeaders) {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: payroll.id,
+              action_id: ACTION_IDS.REVERT,
+              description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
+              raw_data: JSON.stringify(payroll),
+              created_by: userId,
+            });
+          }
+        } catch (err) {
+          logger.error("Action log failed for Revert Payroll:", err);
+        }
+  
+        for (const response of responses) {
+          try {
+            this.sseEventEmitter.emitUpdate(
+              "staff_attendance",
+              response.id,
+              response,
+            );
+            this.sseEventEmitter.emitUpdate(
+              "staff_payroll",
+              response.id,
+              response,
+            );
+          } catch (err) {
+            logger.error("SSE event failed:", err);
+          }
+        }
+  
+        return responses;
+      } catch (error) {
+        if (
+          error instanceof NotFoundException ||
+          error instanceof BadRequestException
+        ) {
+          throw error;
+        }
+  
+        logger.error("Failed to revert payroll headers:", error);
+  
+        throw new Error("Failed to revert payroll headers");
+      }
+    }
 
+  async cancelPayroll(
+      updatePayrollDto: UpdatePayrollHeaderDto,
+      userId: number,
+    ): Promise<any> {
+      try {
+        const payrollIds = updatePayrollDto.id;
+  
+        if (!payrollIds?.length) {
+          throw new BadRequestException(
+            "At least one Payroll Header ID is required.",
+          );
+        }
+  
+        const payrollHeaders = await this.payrollHeaderRepository.find({
+          where: {
+            id: In(payrollIds),
+          },
+          relations: ["status", "createdBy", "updatedBy"],
+        });
+  
+        const foundIds = payrollHeaders.map((payroll) => payroll.id);
+  
+        const missingIds = payrollIds.filter(
+          (payrollId) => !foundIds.includes(payrollId),
+        );
+  
+        if (missingIds.length > 0) {
+          throw new NotFoundException(
+            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+          );
+        }
+  
+        const updatedPayrollHeaders =
+        await this.payrollHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            // Update Payroll Headers
+            await transactionalEntityManager.update(
+              PayrollHeader,
+              {
+                id: In(payrollIds),
+              },
+              {
+                status_id: STATUS_IDS.CANCELLED,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
+  
+            const updatedHeaders = await transactionalEntityManager.find(
+              PayrollHeader,
+              {
+                where: {
+                  id: In(payrollIds),
+                },
+                relations: ["status", "createdBy", "updatedBy"],
+              },
+            );
+  
+            return updatedHeaders;
+          },
+        );
+  
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "Staff Payroll Service",
+            method: "",
+            raw_data: JSON.stringify(updatedPayrollHeaders),
+            description: `Cancelled Payroll Remarks: ${updatePayrollDto.remarks}`,
+            status_id: 1,
+          },
+          userId,
+        );
+  
+        const responses = updatedPayrollHeaders.map((schedule) =>
+          this.responseMapperService.mapEntityToResponse(schedule),
+        );
+  
+        try {
+          for (const payroll of updatedPayrollHeaders) {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: payroll.id,
+              action_id: ACTION_IDS.CANCEL,
+              description: `Cancel Payroll Remarks: ${updatePayrollDto.remarks}`,
+              raw_data: JSON.stringify(payroll),
+              created_by: userId,
+            });
+          }
+        } catch (err) {
+          logger.error("Action log failed for cancel Payroll:", err);
+        }
+  
+        for (const response of responses) {
+          try {
+            this.sseEventEmitter.emitUpdate(
+              "staff_attendance",
+              response.id,
+              response,
+            );
+            this.sseEventEmitter.emitUpdate(
+              "staff_payroll",
+              response.id,
+              response,
+            );
+          } catch (err) {
+            logger.error("SSE event failed:", err);
+          }
+        }
+  
+        return responses;
+      } catch (error) {
+        if (
+          error instanceof NotFoundException ||
+          error instanceof BadRequestException
+        ) {
+          throw error;
+        }
+  
+        logger.error("Failed to cancel payroll headers:", error);
+  
+        throw new Error("Failed to cancel payroll headers");
+      }
+    }
+
+    async findOneHistory(ref_id: number) {
+    return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
+  }
+
+    async findPayrollHeaderDetails(
+    payrollHeaderId?: number,
+    accessKeyId?: number,
+  ): Promise<any[]> {
+    try {
+      const where: any = {};
+
+      if (payrollHeaderId !== undefined) {
+        where.payroll_header_id = payrollHeaderId;
+      }
+
+      if (accessKeyId !== undefined) {
+        where.payrollHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
+
+      const payrollDetail = await this.payrollDetailRepository.find({
+        where,
+        relations: [
+          "payrollHeader",
+          "staff",
+          "vendor",
+          "location",
+          "warehouse",
+          "status",
+          "createdBy",
+          "updatedBy",
+          "scheduleDetail",
+        ],
+        order: {
+          id: "ASC",
+        },
+      });
+      return this.responseMapperService.mapEntitiesToResponse(payrollDetail);
+    } catch (error) {
+      console.error("Error fetching payroll details:", error);
+      throw new Error("Failed to fetch payroll details");
+    }
+  }
 
 }
