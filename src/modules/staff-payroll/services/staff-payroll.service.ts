@@ -20,7 +20,7 @@ import { FindStaffPayrollDetailsDto } from "src/modules/staff-payroll/dto/FindSt
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { ScheduleDetail } from "src/entities/ScheduleDetails";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
-import { SyncLog } from "src/entities/SyncLog";
+import { SyncLog } from "src/entities/syncLog";
 import { PayrollDetails } from "src/entities/PayrollDetails";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";

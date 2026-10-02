@@ -17,7 +17,7 @@ import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { ScheduleDetail } from "src/entities/ScheduleDetails";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
-import { SyncLog } from "src/entities/SyncLog";
+import { SyncLog } from "src/entities/syncLog";
 import { LogsComputationService } from "src/schedulers/logs-computation.scheduler";
 import { PayrollComputationScheduler } from "src/schedulers/payroll-computation.scheduler";
 import { PayrollDetails } from "src/entities/PayrollDetails";
