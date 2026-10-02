@@ -519,7 +519,9 @@ export class StaffSchedulingService {
               },
             );
 
-            const workingDayId = regularHoliday.id;
+            const workingDay = regularHoliday
+            ? WORKING_DAY_IDS.REGULAR_HOLIDAY
+            : WORKING_DAY_IDS.REGULAR_DAY;
 
             // ========================================================
             // PROCESS EACH LOCATION
@@ -750,7 +752,7 @@ export class StaffSchedulingService {
                     operational_end_time: detail.operational_end_time,
                     diff_outlet: detail.diff_outlet,
                     add_ot: detail.add_ot,
-                    working_day_id: workingDayId,
+                    working_day_id: workingDay,
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
@@ -909,17 +911,29 @@ export class StaffSchedulingService {
 
       return responses;
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
+  if (
+    error instanceof NotFoundException ||
+    error instanceof BadRequestException
+  ) {
+    throw error;
+  }
 
-      logger.error("Failed to create staff scheduling:", error);
+  const errorMessage =
+    error instanceof Error ? error.message : String(error);
 
-      throw new Error("Failed to create staff scheduling");
-    }
+  const errorStack =
+    error instanceof Error ? error.stack : undefined;
+
+  logger.error(
+    `Failed to create staff scheduling: ${errorMessage}`,
+  );
+
+  if (errorStack) {
+    logger.error(errorStack);
+  }
+
+  throw error;
+}
   }
 
   async update(
