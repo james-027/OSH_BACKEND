@@ -12,18 +12,49 @@ export class DwsScheduleSyncCronService {
     private readonly staffSchedulingService: StaffSchedulingService,
   ) {}
 
-  @ConditionalCron(CronExpression.EVERY_DAY_AT_11AM, "ENABLE_DWS_SCHEDULE_SYNC_CRON")
-  async handleDailyScheduleSync() {
-     const targetDate = dayjs().subtract(1, "day").format("YYYY-MM-DD");
-    // const targetDate = dayjs().format("YYYY-MM-DD");
-    logger.info(`[DwsScheduleSync] Scheduler triggered for base date: ${targetDate}`);
 
-    try {
-      await this.staffSchedulingService.syncDwsSchedulesByDate(targetDate);
-      logger.info(`[DwsScheduleSync] Completed sync for date: ${targetDate}`);
-    } catch (error: any) {
-      const errorMsg = error.getResponse ? JSON.stringify(error.getResponse()) : error.message;
-      logger.error(`[DwsScheduleSync] Scheduler failed for date ${targetDate}: ${errorMsg}`, error.stack);
-    }
+
+  @ConditionalCron(
+  CronExpression.EVERY_DAY_AT_11AM,
+  "ENABLE_DWS_SCHEDULE_SYNC_CRON",
+)
+async handleDailyScheduleSyncFirstBatch() {
+  await this.handleDailyScheduleSync();
+}
+
+@ConditionalCron(
+  CronExpression.EVERY_DAY_AT_2PM,
+  "ENABLE_DWS_SCHEDULE_SYNC_CRON",
+)
+async handleDailyScheduleSyncSecondBatch() {
+  await this.handleDailyScheduleSync();
+}
+
+private async handleDailyScheduleSync() {
+  const targetDate = dayjs().subtract(1, "day").format("YYYY-MM-DD");
+  const currentTime = dayjs().format("YYYY-MM-DD HH:mm:ss");
+
+  logger.info(
+    `[DwsScheduleSync] Scheduler triggered at ${currentTime} for base date: ${targetDate}`,
+  );
+
+  try {
+    await this.staffSchedulingService.syncDwsSchedulesByDate(targetDate);
+
+    logger.info(
+      `[DwsScheduleSync] Completed sync at ${dayjs().format(
+        "YYYY-MM-DD HH:mm:ss",
+      )} for date: ${targetDate}`,
+    );
+  } catch (error: any) {
+    const errorMsg = error.getResponse
+      ? JSON.stringify(error.getResponse())
+      : error.message;
+
+    logger.error(
+      `[DwsScheduleSync] Scheduler failed for date ${targetDate}: ${errorMsg}`,
+      error.stack,
+    );
   }
+}
 }

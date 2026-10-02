@@ -95,9 +95,10 @@ export class ActualLogsDetail {
   @Column({
     type: "tinyint",
     nullable: true,
-    comment: "flag for night shift",
+    comment:
+      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
-  is_night_shift: number;
+  shift_type: number;
   
   @Column({ nullable: true })
   created_by: number;

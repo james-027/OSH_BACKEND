@@ -557,7 +557,7 @@ export class StaffAttendanceService {
                   starting_time: detail.starting_time,
                   ending_time: detail.ending_time,
                   working_day_id: detail.working_day_id,
-                  is_night_shift: isNightShift,
+                  shift_type: isNightShift,
                   multiple_duty: multipleDuty,
                   status_id: STATUS_IDS.ACTIVE,
                   access_key_id: accessKeyId,

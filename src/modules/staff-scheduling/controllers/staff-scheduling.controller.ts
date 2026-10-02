@@ -190,7 +190,9 @@ async uploadExcel(
   async getScheduleReport(
     @Query() filter: StaffScheduleReportFilterDto,
     @Request() req?: any,
-  ): Promise<any[]> {
+  // ): Promise<any[]> {
+  ): Promise<{ data: any[]; totals: any }> {
+
     const accessKeyId = req?.user?.current_access_key;
 
       const locationIds = filter.location_ids

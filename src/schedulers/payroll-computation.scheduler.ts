@@ -7,7 +7,7 @@ import { StaffPayrollService } from "src/modules/staff-payroll/services/staff-pa
 const dayjs = require("dayjs");
 
 @Injectable()
-export class PayrollComputationService {
+export class PayrollComputationScheduler {
   constructor(
     private readonly staffPayrollService: StaffPayrollService,
   ) {}

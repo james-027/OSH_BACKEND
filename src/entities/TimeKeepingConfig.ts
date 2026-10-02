@@ -40,6 +40,9 @@ export class TimeKeepingConfig {
   @Column({ nullable: true })
   full_duty_auto_break: number;
 
+  @Column({ type: 'boolean', default: false })
+  cash_bond: boolean;
+
   @Column({ nullable: true })
   created_by: number;
 

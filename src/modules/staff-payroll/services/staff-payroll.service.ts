@@ -14,7 +14,7 @@ import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayr
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS } from "src/constants/customConstants";
+import { STATUS_IDS, ACTION_IDS,DAYS_FACTOR_RATE,WORKING_DAY_IDS } from "src/constants/customConstants";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { FindStaffPayrollDetailsDto } from "src/modules/staff-payroll/dto/FindStaffPayrollDetailsDto";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
@@ -25,7 +25,10 @@ import { PayrollDetails } from "src/entities/PayrollDetails";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { PayrollComputationService } from "src/modules/staff-payroll/services/payroll-computation.service";
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
+import { SssConfigs } from "src/entities/SssConfig";
+import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 
 @Injectable()
 export class StaffPayrollService {
@@ -46,13 +49,19 @@ export class StaffPayrollService {
     private syncLogRepository: Repository<SyncLog>,
     @InjectRepository(StaffSalary)
     private staffSalaryRepository: Repository<StaffSalary>,
+    @InjectRepository(SssConfigs)
+    private sssConfigRepository: Repository<SssConfigs>,
+    @InjectRepository(StaffVendorSalary)
+    private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private actionLogsService: ActionLogsService,
+    private payrollComputationService: PayrollComputationService,
   ) {}
+
 
   private readonly module_name = "STAFF PAYROLL";
 
@@ -485,7 +494,11 @@ export class StaffPayrollService {
       });
 
       if (!allScheduleDetails.length) {
-        return [];
+          return {
+            message: "No schedule details found for computation.",
+            computed: 0,
+            details: [],
+          };
       }
 
       /*
@@ -910,99 +923,349 @@ export class StaffPayrollService {
     )}`;
   }
 
+  // async autoPayrollComputation(): Promise<any> {
+  //   try {
+  //     const postedPayrollDetails = await this.payrollDetailRepository.find({
+  //       where: {
+  //         payrollHeader: {
+  //           status_id: STATUS_IDS.POSTED,
+  //         },
+  //       },
+  //       relations: [
+  //         "payrollHeader",
+  //         "scheduleDetail",
+  //         "staff",
+  //         "warehouse",
+  //         "location",
+  //         "vendor",
+  //         "workingDays",
+  //       ],
+  //       order: {
+  //         payroll_header_id: "ASC",
+  //         id: "ASC",
+  //       },
+  //     });
+
+  //     if (!postedPayrollDetails.length) {
+  //       return {
+  //         success: true,
+  //         total: 0,
+  //       };
+  //     }
+
+  //     const groupedByHeader = new Map<number, PayrollDetails[]>();
+
+  //     for (const payrollDetail of postedPayrollDetails) {
+  //       const payrollHeaderId = payrollDetail.payroll_header_id;
+
+  //       if (!payrollHeaderId) {
+  //         continue;
+  //       }
+
+  //       if (!groupedByHeader.has(payrollHeaderId)) {
+  //         groupedByHeader.set(payrollHeaderId, []);
+  //       }
+
+  //       groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
+  //     }
+
+  //     for (const [
+  //       payrollHeaderId,
+  //       payrollDetails,
+  //     ] of groupedByHeader.entries()) {
+  //       const payrollHeader = payrollDetails[0]?.payrollHeader ?? null;
+
+  //       if (!payrollHeader) {
+  //         continue;
+  //       }
+
+  //       for (const detail of payrollDetails) {
+  //         const salary = await this.staffSalaryRepository.findOne({
+  //           where: {
+  //             staff_id: detail.staff_id,
+  //             access_key_id: payrollHeader.access_key_id,
+  //             status_id: STATUS_IDS.ACTIVE,
+  //           },
+  //         });
+
+  //         if (!salary) {
+  //           continue;
+  //         }
+
+  //         const salaryRate = Number(salary.salary_rate) || 0;
+  //         const regular = Number(detail.regular) || 0;
+  //         const overtime = Number(detail.overtime) || 0;
+
+  //         const regularAmount = (regular * salaryRate) / 8;
+
+  //         const overtimeAmount = (overtime * salaryRate) / 8;
+
+  //         detail.regular_amount = regularAmount;
+  //         detail.overtime_amount = overtimeAmount;
+
+  //         await this.payrollDetailRepository.save(detail);
+  //       }
+  //     }
+
+  //     return {
+  //       success: true,
+  //       message: "Payroll computation completed successfully.",
+  //     };
+  //   } catch (error) {
+  //     throw new Error(
+  //       error instanceof Error
+  //         ? error.message
+  //         : "Failed to fetch posted payroll details.",
+  //     );
+  //   }
+  // }
+
   async autoPayrollComputation(): Promise<any> {
     try {
-      const postedPayrollDetails = await this.payrollDetailRepository.find({
-        where: {
-          payrollHeader: {
-            status_id: STATUS_IDS.POSTED,
+      const postedPayrollDetails =
+        await this.payrollDetailRepository.find({
+          where: {
+            payrollHeader: {
+              status_id: STATUS_IDS.POSTED,
+              // cron_computed: false,
+            },
           },
-        },
-        relations: [
-          "payrollHeader",
-          "scheduleDetail",
-          "staff",
-          "warehouse",
-          "location",
-          "vendor",
-          "workingDays",
-        ],
-        order: {
-          payroll_header_id: "ASC",
-          id: "ASC",
-        },
-      });
+          relations: [
+            "payrollHeader",
+            "scheduleDetail",
+            "staff",
+            "warehouse",
+            "location",
+            "vendor",
+            "workingDays",
+          ],
+          order: {
+            payroll_header_id: "ASC",
+            id: "ASC",
+          },
+        });
 
       if (!postedPayrollDetails.length) {
-        return {
-          success: true,
-          total: 0,
-        };
+          logger.info("[PayrollComputation] No posted and computed post header found");
       }
 
-      const groupedByHeader = new Map<number, PayrollDetails[]>();
+      const staffIds = [
+        ...new Set(
+          postedPayrollDetails
+            .map((detail) => detail.staff_id)
+            .filter(
+              (id) =>
+                id !== null &&
+                id !== undefined,
+            ),
+        ),
+      ];
 
-      for (const payrollDetail of postedPayrollDetails) {
-        const payrollHeaderId = payrollDetail.payroll_header_id;
+      const accessKeyIds = [
+        ...new Set(
+          postedPayrollDetails
+            .map(
+              (detail) =>
+                detail.payrollHeader?.access_key_id,
+            )
+            .filter(
+              (id) =>
+                id !== null &&
+                id !== undefined,
+            ),
+        ),
+      ];
 
-        if (!payrollHeaderId) {
-          continue;
-        }
+      const staffSalaries =
+        await this.staffSalaryRepository.find({
+          where: {
+            staff_id: In(staffIds),
+            access_key_id: In(accessKeyIds),
+            status_id: STATUS_IDS.ACTIVE,
+          },
+        });
 
-        if (!groupedByHeader.has(payrollHeaderId)) {
-          groupedByHeader.set(payrollHeaderId, []);
-        }
+      const salaryMap =
+        new Map<string, number>();
 
-        groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
+      for (const salary of staffSalaries) {
+        salaryMap.set(
+          `${salary.staff_id}-${salary.access_key_id}`,
+          Number(salary.salary_rate) || 0,
+        );
       }
 
-      for (const [
-        payrollHeaderId,
-        payrollDetails,
-      ] of groupedByHeader.entries()) {
-        const payrollHeader = payrollDetails[0]?.payrollHeader ?? null;
+      const staffVendorSalaries =
+        await this.staffVendorSalaryRepository.find({
+          where: {
+            staff_id: In(staffIds),
+            access_key_id: In(accessKeyIds),
+            status_id: STATUS_IDS.ACTIVE,
+          },
+        });
+
+      const staffVendorMap =
+        new Map<string, any>();
+
+      for (const staffVendor of staffVendorSalaries) {
+        staffVendorMap.set(
+          `${staffVendor.staff_id}-${staffVendor.vendor_id}-${staffVendor.location_id}`,
+          staffVendor,
+        );
+      }
+
+      const sssConfigs =
+        await this.sssConfigRepository.find();
+
+      const timeKeepingConfigs =
+        await this.timeKeepingRepository.find({
+          where: {
+            access_key_id: In(accessKeyIds),
+          },
+        });
+
+      const timeKeepingMap =
+        new Map<number, any>();
+
+      for (const timeKeeping of timeKeepingConfigs) {
+        timeKeepingMap.set(
+          timeKeeping.access_key_id,
+          timeKeeping,
+        );
+      }
+
+      const computedDetailsByHeader =
+        new Map<number, PayrollDetails[]>();
+
+      let computedCount = 0;
+
+      for (const detail of postedPayrollDetails) {
+        const payrollHeader =
+          detail.payrollHeader;
 
         if (!payrollHeader) {
           continue;
         }
 
-        for (const detail of payrollDetails) {
-          const salary = await this.staffSalaryRepository.findOne({
-            where: {
-              staff_id: detail.staff_id,
-              access_key_id: payrollHeader.access_key_id,
-              status_id: STATUS_IDS.ACTIVE,
-            },
-          });
+        const staffId =
+          detail.staff_id;
 
-          if (!salary) {
-            continue;
-          }
-
-          const salaryRate = Number(salary.salary_rate) || 0;
-          const regular = Number(detail.regular) || 0;
-          const overtime = Number(detail.overtime) || 0;
-
-          const regularAmount = (regular * salaryRate) / 8;
-
-          const overtimeAmount = (overtime * salaryRate) / 8;
-
-          detail.regular_amount = regularAmount;
-          detail.overtime_amount = overtimeAmount;
-
-          await this.payrollDetailRepository.save(detail);
+        if (!staffId) {
+          continue;
         }
+
+        const accessKeyId =
+          payrollHeader.access_key_id;
+
+        const salaryRate =
+          salaryMap.get(
+            `${staffId}-${accessKeyId}`,
+          ) ?? 0;
+
+        if (!salaryRate) {
+          continue;
+        }
+
+        const staffVendorKey =
+          `${staffId}-${detail.vendor_id}-${detail.location_id}`;
+
+        const staffVendor =
+          staffVendorMap.get(
+            staffVendorKey,
+          );
+
+        const timeKeeping =
+          timeKeepingMap.get(
+            accessKeyId,
+          );
+
+        const computedValues =
+          this.payrollComputationService.computePayrollDetail(
+            {
+              detail,
+              payrollHeader,
+              salaryRate,
+              staffVendor,
+              sssConfigs,
+              timeKeeping,
+            },
+          );
+
+        if (!computedValues) {
+          continue;
+        }
+
+        Object.assign(
+          detail,
+          computedValues,
+        );
+
+        payrollHeader.cron_computed = true;
+
+        await this.payrollDetailRepository.save(
+          detail,
+        );
+
+        const headerId =
+          detail.payroll_header_id;
+
+        if (!computedDetailsByHeader.has(headerId)) {
+          computedDetailsByHeader.set(
+            headerId,
+            [],
+          );
+        }
+
+        computedDetailsByHeader
+          .get(headerId)!
+          .push(detail);
+
+        computedCount++;
+      }
+
+      for (
+        const [
+          headerId,
+          details,
+        ] of computedDetailsByHeader
+      ) {
+        const payrollHeader =
+          postedPayrollDetails.find(
+            (detail) =>
+              detail.payroll_header_id ===
+              headerId,
+          )?.payrollHeader;
+
+        if (!payrollHeader) {
+          continue;
+        }
+
+        const headerTotals =
+          this.payrollComputationService.computePayrollHeaderTotals(
+            details,
+          );
+
+        Object.assign(
+          payrollHeader,
+          headerTotals,
+        );
+
+        await this.payrollHeaderRepository.save(
+          payrollHeader,
+        );
       }
 
       return {
         success: true,
-        message: "Payroll computation completed successfully.",
+        message:
+          "Payroll computation completed successfully.",
+        total: computedCount,
       };
     } catch (error) {
       throw new Error(
         error instanceof Error
           ? error.message
-          : "Failed to fetch posted payroll details.",
+          : "Failed to compute posted payroll details.",
       );
     }
   }
@@ -1383,7 +1646,8 @@ export class StaffPayrollService {
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
-    async findPayrollHeaderDetails(
+  
+  async findPayrollHeaderDetails(
     payrollHeaderId?: number,
     accessKeyId?: number,
   ): Promise<any[]> {

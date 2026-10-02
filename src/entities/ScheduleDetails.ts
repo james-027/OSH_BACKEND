@@ -145,16 +145,17 @@ export class ScheduleDetail {
   @Column({
     type: "tinyint",
     nullable: true,
-    comment: "flag for night shift",
+    comment:
+      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
-  is_night_shift: number;
+  shift_type: number;
 
   @Column({
     type: "time",
     nullable: true,
     comment: "night_shift_hrs",
   })
-  is_night_shift_hrs: string;
+  night_shift_hrs: string;
 
   @Column({
     type: "decimal",

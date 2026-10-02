@@ -88,4 +88,121 @@ export class PayrollHeader {
 
   @OneToMany(() => PayrollDetails, (details) => details.payrollHeader)
   details: PayrollDetails[];
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_gross_pay: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_regular_day: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_special_holiday: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_regular_holiday: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_rest_day: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_day_work: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_ot_regular_day: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_ot_special_holiday: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_ot_regular_holiday: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_ot_rest_day: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_ot_day_work: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_regular_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_rest_day_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_special_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_regular_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_regular_holiday_off_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_rd_regular_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_rd_special_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_regular_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_rest_day_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_special_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_regular_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_rd_regular_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_ot_rd_special_holiday_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_overtime_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_thirteen_month_pay: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_sss_share: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_pag_ibig_share: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_phil_health_share: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_payroll: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_asf: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_allowance: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_vat: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_with_vat: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_tax: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_net_of_tax: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_cash_bond: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_billing: number;
+
+  @Column({ type: "boolean", default: false })
+  cron_computed: boolean;
 }

@@ -85,7 +85,7 @@ export class CreateActualLogsDetailDto {
 
   @IsOptional()
   @IsInt()
-  is_night_shift?: number;
+  shift_type?: number;
 
   @IsOptional()
   @IsInt()

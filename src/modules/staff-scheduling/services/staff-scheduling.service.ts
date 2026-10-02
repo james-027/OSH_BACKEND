@@ -706,7 +706,7 @@ export class StaffSchedulingService {
                       overtime: detail.overtime,
                       twh: detail.twh,
                       working_hours: detail.twh ?? 0,
-                      is_night_shift: isNightShift,
+                      shift_type: isNightShift,
                       created_by: userId,
                       updated_by: userId,
                     };
@@ -751,7 +751,7 @@ export class StaffSchedulingService {
                     diff_outlet: detail.diff_outlet,
                     add_ot: detail.add_ot,
                     working_day_id: workingDayId,
-                    is_night_shift: isNightShift,
+                    shift_type: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
                     attendance_status_id: STATUS_IDS.VALIDATED,
@@ -1264,7 +1264,7 @@ export class StaffSchedulingService {
                 ending_time: detail.ending_time,
 
                 // Old schedule logic
-                is_night_shift: isNightShift,
+                shift_type: isNightShift,
                 multiple_duty: multipleDuty,
 
                 status_id: STATUS_IDS.ACTIVE,
@@ -3097,132 +3097,6 @@ export class StaffSchedulingService {
     );
   }
 
-  // async generateReportScheduleDetails(
-  //   scheduleHeaderId?: number,
-  //   accessKeyId?: number,
-  //   dateFrom?: string,
-  //   dateTo?: string,
-  //   locationIds?: number[],
-  //   vendorIds?: number[],
-  // ): Promise<any[]> {
-  //   try {
-  //     const query = this.scheduleDetailRepository
-  //       .createQueryBuilder("scheduleDetail")
-
-  //       .leftJoinAndSelect("scheduleDetail.scheduleHeader", "scheduleHeader")
-
-  //       .leftJoinAndSelect("scheduleDetail.staff", "staff")
-
-  //       .leftJoinAndSelect("scheduleDetail.vendor", "vendor")
-
-  //       .leftJoinAndSelect("scheduleDetail.location", "location")
-
-  //       .leftJoinAndSelect("scheduleDetail.warehouse", "warehouse")
-
-  //       .leftJoinAndSelect("scheduleDetail.status", "status")
-
-  //       .leftJoinAndSelect("scheduleDetail.workingDays", "workingDay")
-
-  //       .leftJoinAndSelect("scheduleDetail.createdBy", "createdBy")
-
-  //       .leftJoinAndSelect("scheduleDetail.updatedBy", "updatedBy");
-
-  //     // ============================================================
-  //     // EXCLUDE CANCELLED SCHEDULES
-  //     // ============================================================
-
-  //     query.andWhere("scheduleHeader.status_id != :cancelledStatus", {
-  //       cancelledStatus: STATUS_IDS.CANCELLED,
-  //     });
-
-  //     // ============================================================
-  //     // SCHEDULE HEADER FILTER
-  //     // ============================================================
-
-  //     if (scheduleHeaderId !== undefined) {
-  //       query.andWhere(
-  //         "scheduleDetail.schedule_header_id = :scheduleHeaderId",
-  //         {
-  //           scheduleHeaderId,
-  //         },
-  //       );
-  //     }
-
-  //     // ACCESS KEY FILTER
-
-  //     if (accessKeyId !== undefined) {
-  //       query.andWhere("scheduleHeader.access_key_id = :accessKeyId", {
-  //         accessKeyId,
-  //       });
-  //     }
-
-  //     if (dateFrom !== undefined) {
-  //       query.andWhere("DATE(scheduleHeader.schedule_date) >= :dateFrom", {
-  //         dateFrom,
-  //       });
-  //     }
-
-  //     // ============================================================
-  //     // DATE TO
-  //     // Uses schedule_header.schedule_date
-  //     // ============================================================
-
-  //     if (dateTo !== undefined) {
-  //       query.andWhere("DATE(scheduleHeader.schedule_date) <= :dateTo", {
-  //         dateTo,
-  //       });
-  //     }
-
-  //     // ============================================================
-  //     // LOCATION FILTER
-  //     // Uses schedule_detail.location_id
-  //     // ============================================================
-
-  //     if (locationIds !== undefined) {
-  //       query.andWhere("scheduleDetail.location_id IN (:...locationIds)", {
-  //         locationIds,
-  //       });
-  //     }
-
-  //     // ============================================================
-  //     // AGENCY FILTER
-  //     // Uses schedule_detail.vendor_id
-  //     // ============================================================
-
-  //     if (vendorIds !== undefined) {
-  //       query.andWhere("scheduleDetail.vendor_id IN (:...vendorIds)", {
-  //         vendorIds,
-  //       });
-  //     }
-
-  //     // ============================================================
-  //     // ORDER
-  //     // ============================================================
-  //     query
-  //       .orderBy("scheduleHeader.schedule_date", "ASC")
-  //       .addOrderBy("warehouse.warehouse_name", "ASC")
-  //       .addOrderBy("scheduleDetail.location_id", "ASC")
-  //       .addOrderBy("scheduleDetail.id", "ASC");
-
-  //     // ============================================================
-  //     // EXECUTE QUERY
-  //     // ============================================================
-
-  //     const scheduleDetails = await query.getMany();
-
-  //     // ============================================================
-  //     // MAP RESPONSE
-  //     // ============================================================
-
-  //     const response =
-  //       this.responseMapperService.mapEntitiesToResponse(scheduleDetails);
-
-  //     return response;
-  //   } catch (error) {
-  //     throw new Error("Failed to fetch staff schedule report");
-  //   }
-  // }
-
   async generateReportScheduleDetails(
     payrollHeaderId?: number,
     accessKeyId?: number,
@@ -3230,7 +3104,7 @@ export class StaffSchedulingService {
     dateTo?: string,
     locationIds?: number[],
     vendorIds?: number[],
-  ): Promise<any[]> {
+  ): Promise<{ data: any[]; totals: any }> {
     try {
       const query = this.payrollDetailRepository
         .createQueryBuilder("payrollDetail")
@@ -3249,9 +3123,10 @@ export class StaffSchedulingService {
       });
 
       if (payrollHeaderId !== undefined) {
-        query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
-          payrollHeaderId,
-        });
+        query.andWhere(
+          "payrollDetail.payroll_header_id = :payrollHeaderId",
+          { payrollHeaderId },
+        );
       }
 
       if (accessKeyId !== undefined) {
@@ -3261,27 +3136,31 @@ export class StaffSchedulingService {
       }
 
       if (dateFrom !== undefined) {
-        query.andWhere("DATE(payrollHeader.payroll_date_from) >= :dateFrom", {
-          dateFrom,
-        });
+        query.andWhere(
+          "DATE(payrollHeader.payroll_date_from) >= :dateFrom",
+          { dateFrom },
+        );
       }
 
       if (dateTo !== undefined) {
-        query.andWhere("DATE(payrollHeader.payroll_date_to) <= :dateTo", {
-          dateTo,
-        });
+        query.andWhere(
+          "DATE(payrollHeader.payroll_date_to) <= :dateTo",
+          { dateTo },
+        );
       }
 
       if (locationIds !== undefined && locationIds.length > 0) {
-        query.andWhere("payrollDetail.location_id IN (:...locationIds)", {
-          locationIds,
-        });
+        query.andWhere(
+          "payrollDetail.location_id IN (:...locationIds)",
+          { locationIds },
+        );
       }
 
       if (vendorIds !== undefined && vendorIds.length > 0) {
-        query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
-          vendorIds,
-        });
+        query.andWhere(
+          "payrollDetail.vendor_id IN (:...vendorIds)",
+          { vendorIds },
+        );
       }
 
       query
@@ -3292,539 +3171,558 @@ export class StaffSchedulingService {
 
       const payrollDetails = await query.getMany();
 
+      const emptyTotals = {
+        regular: "0.00",
+        overtime: "0.00",
+        regular_amount: "0.00",
+        overtime_amount: "0.00",
+        regular_day: "0.00",
+        rest_day: "0.00",
+        special_holiday: "0.00",
+        regular_holiday: "0.00",
+        total_day_work: "0.00",
+        ot_regular_day: "0.00",
+        ot_rest_day: "0.00",
+        ot_special_holiday: "0.00",
+        ot_regular_holiday: "0.00",
+        total_ot_day_work: "0.00",
+        gross_pay: "0.00",
+        thirteen_month_pay: "0.00",
+        sss_share: "0.00",
+        pag_ibig_share: "0.00",
+        phil_health_share: "0.00",
+        total_govt: "0.00",
+        total_payroll: "0.00",
+        asf: "0.00",
+        total_asf: "0.00",
+        allowance: "0.00",
+        total_allowance: "0.00",
+        vat: "0.00",
+        total_with_vat: "0.00",
+        tax: "0.00",
+        net_of_tax: "0.00",
+        cash_bond: "0.00",
+        total_billing: "0.00",
+      };
+
       if (!payrollDetails.length) {
-        return [];
+        return { data: [], totals: emptyTotals };
       }
 
-      /*
-       * ============================================================
-       * 1. GET STAFF IDS
-       * ============================================================
-       */
-
-      const staffIds = [
-        ...new Set(
-          payrollDetails
-            .map((detail) => detail.staff_id)
-            .filter((id) => id !== null && id !== undefined),
-        ),
-      ];
-
-      /*
-       * ============================================================
-       * 2. GET ACCESS KEY
-       * ============================================================
-       */
-
-      const accessKeyIdFromPayroll =
-        payrollDetails[0]?.payrollHeader?.access_key_id;
-
-      /*
-       * ============================================================
-       * 3. GET STAFF SALARIES
-       * ============================================================
-       */
-
-      const staffSalaries = await this.staffSalaryRepository.find({
-        where: {
-          staff_id: In(staffIds),
-          access_key_id: accessKeyIdFromPayroll,
-          status_id: STATUS_IDS.ACTIVE,
-        },
-      });
-
-      const salaryMap = new Map(
-        staffSalaries.map((salary) => [
-          salary.staff_id,
-          Number(salary.salary_rate) || 0,
-        ]),
-      );
-
-      /*
-       * ============================================================
-       * 4. GET STAFF VENDOR SALARIES
-       * ============================================================
-       */
-
-      const staffVendorSalaries = await this.staffVendorSalaryRepository.find({
-        where: {
-          staff_id: In(staffIds),
-          access_key_id: accessKeyIdFromPayroll,
-          status_id: STATUS_IDS.ACTIVE,
-        },
-      });
-
-      const staffVendorMap = new Map(
-        staffVendorSalaries.map((staffVendor) => [
-          `${staffVendor.staff_id}-${staffVendor.vendor_id}-${staffVendor.location_id}`,
-          staffVendor,
-        ]),
-      );
-
-      /*
-       * ============================================================
-       * 5. GET SSS CONFIGS
-       * ============================================================
-       */
-
-      const sssConfigs = await this.sssConfigRepository.find();
-
-      /*
-       * ============================================================
-       * 6. GROUP DETAILS BY STAFF
-       *
-       * One staff = one returned row
-       *
-       * All filtered details belonging to the same staff
-       * will be accumulated here.
-       * ============================================================
-       */
-
+      // Group Details by Staff
       const groupedDetails = new Map<number, typeof payrollDetails>();
-
       for (const detail of payrollDetails) {
         const staffId = detail.staff_id;
-
-        if (!staffId) {
-          continue;
-        }
-
+        if (!staffId) continue;
         if (!groupedDetails.has(staffId)) {
           groupedDetails.set(staffId, []);
         }
-
         groupedDetails.get(staffId)!.push(detail);
       }
 
-      /*
-       * ============================================================
-       * 7. BUILD STAFF TOTALS
-       * ============================================================
-       */
-
-      const staffSummaryMap = new Map<
-        number,
-        {
-          regular_day: number;
-          special_holiday: number;
-          regular_holiday: number;
-          total_regular: number;
-          total_overtime: number;
-          total_twh: number;
-          total_break: number;
-          total_regular_amount: number;
-          total_overtime_amount: number;
-        }
-      >();
+      // Build Staff Summaries
+      const staffSummaryMap = new Map<number, any>();
 
       for (const detail of payrollDetails) {
         const staffId = detail.staff_id;
-
-        if (!staffId) {
-          continue;
-        }
+        if (!staffId) continue;
 
         if (!staffSummaryMap.has(staffId)) {
           staffSummaryMap.set(staffId, {
+            regular: 0,
+            overtime: 0,
+            twh: 0,
+            break: 0,
+            gross_pay: 0,
             regular_day: 0,
             special_holiday: 0,
             regular_holiday: 0,
-            total_regular: 0,
-            total_overtime: 0,
-            total_twh: 0,
-            total_break: 0,
-            total_regular_amount: 0,
-            total_overtime_amount: 0,
+            rest_day: 0,
+            total_day_work: 0,
+            ot_regular_day: 0,
+            ot_special_holiday: 0,
+            ot_regular_holiday: 0,
+            ot_rest_day: 0,
+            total_ot_day_work: 0,
+            thirteen_month_pay: 0,
+            sss_share: 0,
+            pag_ibig_share: 0,
+            phil_health_share: 0,
+            total_payroll: 0,
+            asf: 0,
+            total_asf: 0,
+            allowance: 0,
+            total_allowance: 0,
+            vat: 0,
+            total_with_vat: 0,
+            tax: 0,
+            net_of_tax: 0,
+            cash_bond: 0,
+            total_billing: 0,
+            regular_amount: 0,
+            overtime_amount: 0,
           });
         }
 
         const summary = staffSummaryMap.get(staffId)!;
 
-        /*
-         * ----------------------------------------------------------
-         * TOTAL HOURS
-         * ----------------------------------------------------------
-         */
+        summary.regular += Number(detail.regular) || 0;
+        summary.overtime += Number(detail.overtime) || 0;
+        summary.twh += Number(detail.twh) || 0;
+        summary.break += Number(detail.break) || 0;
 
-        const regular = Number(detail.regular) || 0;
-        const overtime = Number(detail.overtime) || 0;
-        const twh = Number(detail.twh) || 0;
-        const breakHours = Number(detail.break) || 0;
+        summary.gross_pay += Number(detail.gross_pay) || 0;
+        summary.regular_day += Number(detail.regular_day) || 0;
+        summary.special_holiday += Number(detail.special_holiday) || 0;
+        summary.regular_holiday += Number(detail.regular_holiday) || 0;
+        summary.rest_day += Number(detail.rest_day) || 0;
+        summary.total_day_work += Number(detail.total_day_work) || 0;
 
-        summary.total_regular += regular;
-        summary.total_overtime += overtime;
-        summary.total_twh += twh;
-        summary.total_break += breakHours;
+        summary.ot_regular_day += Number(detail.ot_regular_day) || 0;
+        summary.ot_special_holiday += Number(detail.ot_special_holiday) || 0;
+        summary.ot_regular_holiday += Number(detail.ot_regular_holiday) || 0;
+        summary.ot_rest_day += Number(detail.ot_rest_day) || 0;
+        summary.total_ot_day_work += Number(detail.total_ot_day_work) || 0;
 
-        /*
-         * ----------------------------------------------------------
-         * TOTAL PAYROLL AMOUNTS
-         * ----------------------------------------------------------
-         */
+        summary.thirteen_month_pay += Number(detail.thirteen_month_pay) || 0;
+        summary.sss_share += Number(detail.sss_share) || 0;
+        summary.pag_ibig_share += Number(detail.pag_ibig_share) || 0;
+        summary.phil_health_share += Number(detail.phil_health_share) || 0;
 
-        const regularAmount = Number(detail.regular_amount) || 0;
+        summary.total_payroll += Number(detail.total_payroll) || 0;
+        summary.asf += Number(detail.asf) || 0;
+        summary.total_asf += Number(detail.total_asf) || 0;
+        summary.allowance += Number(detail.allowance) || 0;
+        summary.total_allowance += Number(detail.total_allowance) || 0;
+        summary.vat += Number(detail.vat) || 0;
+        summary.total_with_vat += Number(detail.total_with_vat) || 0;
+        summary.tax += Number(detail.tax) || 0;
+        summary.net_of_tax += Number(detail.net_of_tax) || 0;
+        summary.cash_bond += Number(detail.cash_bond) || 0;
+        summary.total_billing += Number(detail.total_billing) || 0;
 
-        const overtimeAmount = Number(detail.overtime_amount) || 0;
-
-        summary.total_regular_amount += regularAmount;
-        summary.total_overtime_amount += overtimeAmount;
-
-        /*
-         * ----------------------------------------------------------
-         * WORKING DAY TOTALS
-         * ----------------------------------------------------------
-         */
-
-        if (detail.working_day_id === WORKING_DAY_IDS.REGULAR_DAY) {
-          summary.regular_day += regular;
-        }
-
-        if (detail.working_day_id === WORKING_DAY_IDS.REGULAR_HOLIDAY) {
-          summary.regular_holiday += regular;
-        }
-
-        if (detail.working_day_id === WORKING_DAY_IDS.SPECIAL_HOLIDAY) {
-          summary.special_holiday += regular;
-        }
+        summary.regular_amount += Number(detail.regular_amount) || 0;
+        summary.overtime_amount += Number(detail.overtime_amount) || 0;
       }
 
-      /*
-       * ============================================================
-       * 8. RETURN ONE ROW PER STAFF
-       * ============================================================
-       */
+      // Map rows (one per staff)
+      const data = Array.from(groupedDetails.entries()).map(
+        ([staffId, details]) => {
+          const detail = details[0];
+          const staffSummary = staffSummaryMap.get(staffId);
 
-      return Array.from(groupedDetails.entries()).map(([staffId, details]) => {
-        /*
-         * --------------------------------------------------------
-         * FIRST DETAIL IS ONLY USED AS REPRESENTATIVE DATA
-         *
-         * It is NOT used for total hours/pay.
-         *
-         * All totals come from staffSummary.
-         * --------------------------------------------------------
-         */
+return {
 
-        const detail = details[0];
+  id: detail.id,
+  payroll_header_id: detail.payroll_header_id,
+  schedule_detail_id: detail.schedule_detail_id,
 
-        const salaryRate = salaryMap.get(staffId) ?? 0;
+  staff_id: staffId,
+  staff_code: detail.staff?.staff_code ?? null,
+  staff_name: detail.staff
+    ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
+    : null,
 
-        const hourRate = salaryRate / 8;
+  salary_rate:
+    detail.salary_rate !== undefined && detail.salary_rate !== null
+      ? Number(detail.salary_rate).toFixed(2)
+      : "0.00",
 
-        const staffSummary = staffSummaryMap.get(staffId) ?? {
-          regular_day: 0,
-          special_holiday: 0,
-          regular_holiday: 0,
-          total_regular: 0,
-          total_overtime: 0,
-          total_twh: 0,
-          total_break: 0,
-          total_regular_amount: 0,
-          total_overtime_amount: 0,
-        };
+  hour_rate:
+    detail.hour_rate !== undefined && detail.hour_rate !== null
+      ? Number(detail.hour_rate).toFixed(2)
+      : "0.00",
 
-        /*
-         * --------------------------------------------------------
-         * TOTAL HOURS
-         * --------------------------------------------------------
-         */
+  vendor_id: detail.vendor_id,
+  location_id: detail.location_id,
+  warehouse_id: detail.warehouse_id,
 
-        const totalRegular = staffSummary.total_regular;
+  warehouse_ifs: detail.warehouse?.warehouse_name ?? null,
 
-        const totalOvertime = staffSummary.total_overtime;
+  duty_start_time: detail.duty_start_time,
+  duty_end_time: detail.duty_end_time,
 
-        const totalTwh = staffSummary.total_twh;
+  planned_duty_start_time: detail.planned_duty_start_time,
+  planned_duty_end_time: detail.planned_duty_end_time,
 
-        const totalBreak = staffSummary.total_break;
+  just_time_in: detail.just_time_in,
+  overtime_in: detail.overtime_in,
+  overtime_out: detail.overtime_out,
+  just_time_out: detail.just_time_out,
 
-        /*
-         * --------------------------------------------------------
-         * TOTAL PAYROLL AMOUNTS
-         * --------------------------------------------------------
-         */
+  just_break_out: detail.just_break_out,
+  just_break_in: detail.just_break_in,
 
-        const regularAmount = staffSummary.total_regular_amount;
+  actual_time_in: detail.actual_time_in,
+  actual_time_out: detail.actual_time_out,
+  actual_break_in: detail.actual_break_in,
+  actual_break_out: detail.actual_break_out,
 
-        const overtimeAmount = staffSummary.total_overtime_amount;
+  add_ot: detail.add_ot,
 
-        const grossPay = regularAmount + overtimeAmount;
+  working_day_id: detail.working_day_id,
+  status_id: detail.status_id,
+  attendance_status_id: detail.attendance_status_id,
 
-        /*
-         * --------------------------------------------------------
-         * WORKING DAY TOTALS
-         * --------------------------------------------------------
-         */
+  created_by: detail.created_by,
+  updated_by: detail.updated_by,
 
-        const regularDay = staffSummary.regular_day;
+  just_remarks: detail.just_remarks,
+  payroll_remarks: detail.payroll_remarks,
 
-        const specialHoliday = staffSummary.special_holiday;
+  regular: staffSummary.regular.toFixed(2),
+  overtime: staffSummary.overtime.toFixed(2),
+  twh: staffSummary.twh.toFixed(2),
+  break: staffSummary.break.toFixed(2),
 
-        const regularHoliday = staffSummary.regular_holiday;
+  regular_hours: detail.regular_hours,
+  overtime_hours: detail.overtime_hours,
+  twh_hours: detail.twh_hours,
+  break_hours: detail.break_hours,
 
-        /*
-         * --------------------------------------------------------
-         * DUTY COUNT
-         *
-         * Duty count is based on total regular hours.
-         *
-         * Example:
-         *
-         * 8 + 8 = 16 regular hours
-         * 16 / 8 = 2 duties
-         * --------------------------------------------------------
-         */
+  created_at: detail.created_at,
+  modified_at: detail.modified_at,
 
-        const totalHoursWorked = regularDay + specialHoliday + regularHoliday;
+  // ============================================================
+  // DETAIL COMPUTATION
+  // ============================================================
+  regular_amount: staffSummary.regular_amount.toFixed(2),
+  overtime_amount: staffSummary.overtime_amount.toFixed(2),
 
-        const totalDayWorkFraction = totalHoursWorked / 8;
+  gross_pay: staffSummary.gross_pay.toFixed(2),
 
-        const dutyCount = Math.round(totalDayWorkFraction);
+  regular_day: staffSummary.regular_day.toFixed(2),
+  special_holiday: staffSummary.special_holiday.toFixed(2),
+  regular_holiday: staffSummary.regular_holiday.toFixed(2),
+  rest_day: staffSummary.rest_day.toFixed(2),
+  total_day_work: staffSummary.total_day_work.toFixed(2),
 
-        /*
-         * --------------------------------------------------------
-         * 13TH MONTH
-         * --------------------------------------------------------
-         */
+  ot_regular_day: staffSummary.ot_regular_day.toFixed(2),
+  ot_special_holiday: staffSummary.ot_special_holiday.toFixed(2),
+  ot_regular_holiday: staffSummary.ot_regular_holiday.toFixed(2),
+  ot_rest_day: staffSummary.ot_rest_day.toFixed(2),
+  total_ot_day_work: staffSummary.total_ot_day_work.toFixed(2),
 
-        const thirteenMonthPay = (hourRate * totalHoursWorked) / 12;
+  thirteen_month_pay: staffSummary.thirteen_month_pay.toFixed(2),
 
-        /*
-         * --------------------------------------------------------
-         * SSS CALCULATION
-         * --------------------------------------------------------
-         */
+  sss_share: staffSummary.sss_share.toFixed(2),
+  pag_ibig_share: staffSummary.pag_ibig_share.toFixed(2),
+  phil_health_share: staffSummary.phil_health_share.toFixed(2),
 
-        const lookupValue = salaryRate * DAYS_FACTOR_RATE.DAYS;
+  total_payroll: staffSummary.total_payroll.toFixed(2),
 
-        const sssConfig = sssConfigs.find((config) => {
-          const rangeFrom = Number(config.range_from) || 0;
+  asf: staffSummary.asf.toFixed(2),
+  total_asf: staffSummary.total_asf.toFixed(2),
 
-          const rangeTo = Number(config.range_to) || 0;
+  allowance: staffSummary.allowance.toFixed(2),
+  total_allowance: staffSummary.total_allowance.toFixed(2),
 
-          return lookupValue >= rangeFrom && lookupValue <= rangeTo;
-        });
+  vat: staffSummary.vat.toFixed(2),
+  total_with_vat: staffSummary.total_with_vat.toFixed(2),
 
-        const withMpfEc = Number(sssConfig?.with_mpf_ec) || 0;
+  tax: staffSummary.tax.toFixed(2),
+  net_of_tax: staffSummary.net_of_tax.toFixed(2),
 
-        const sampleMpf = withMpfEc / DAYS_FACTOR_RATE.DAYS;
+  cash_bond: staffSummary.cash_bond.toFixed(2),
+  total_billing: staffSummary.total_billing.toFixed(2),
 
-        const sssShare = sampleMpf * totalDayWorkFraction;
+  // ============================================================
+  // DETAIL LOOKUP NAMES
+  // ============================================================
+  status_name: detail.status?.status_name ?? null,
+  location_name: detail.location?.location_name ?? null,
+  warehouse_name: detail.warehouse?.warehouse_name ?? null,
+  warehouse_code: detail.warehouse?.warehouse_code ?? null,
+  service_provider_name:
+    detail.vendor?.service_provider_name ?? null,
+  working_day_name: detail.workingDays?.description ?? null,
 
-        /*
-         * --------------------------------------------------------
-         * PAG-IBIG / PHILHEALTH
-         * --------------------------------------------------------
-         */
+  // ============================================================
+  // PAYROLL HEADER
+  // Stored values - DO NOT recompute from payroll details
+  // ============================================================
+  payroll_header: detail.payrollHeader
+    ? {
+        id: detail.payrollHeader.id,
 
-        const staffVendorKey = `${staffId}-${detail.vendor_id}-${detail.location_id}`;
+        payroll_date_from: detail.payrollHeader.payroll_date_from,
+        payroll_date_to: detail.payrollHeader.payroll_date_to,
 
-        const staffVendor = staffVendorMap.get(staffVendorKey);
+        reason: detail.payrollHeader.reason,
+        remarks: detail.payrollHeader.remarks,
+        payroll_invoice: detail.payrollHeader.payroll_invoice,
 
-        const pagibigNumberPerc = Number(staffVendor?.pagibig_number_perc) || 0;
+        created_by: detail.payrollHeader.created_by,
+        updated_by: detail.payrollHeader.updated_by,
+        access_key_id: detail.payrollHeader.access_key_id,
+        status_id: detail.payrollHeader.status_id,
 
-        const philHealthContriPerc =
-          Number(staffVendor?.phil_health_contri_perc) || 0;
+        created_at: detail.payrollHeader.created_at,
+        modified_at: detail.payrollHeader.modified_at,
 
-        const pagibigDailyRate =
-          Math.round((pagibigNumberPerc / DAYS_FACTOR_RATE.DAYS) * 100) / 100;
+        cron_computed: detail.payrollHeader.cron_computed,
 
-        const pagIbigShare = pagibigDailyRate * totalDayWorkFraction;
+        // ======================================================
+        // HEADER TOTALS
+        // ======================================================
+        total_gross_pay:
+          Number(detail.payrollHeader.total_gross_pay ?? 0).toFixed(2),
 
-        const philHealthDailyRate =
-          Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) /
-          100;
+        total_regular_day:
+          Number(detail.payrollHeader.total_regular_day ?? 0).toFixed(2),
 
-        const philHealthShare = philHealthDailyRate * totalDayWorkFraction;
+        total_special_holiday:
+          Number(detail.payrollHeader.total_special_holiday ?? 0).toFixed(2),
 
-        const vendorAsfField = Number(detail.vendor?.asf) || 0;
+        total_regular_holiday:
+          Number(detail.payrollHeader.total_regular_holiday ?? 0).toFixed(2),
 
-        const vendorVatField = Number(detail.vendor?.vat) || 0;
+        total_rest_day:
+          Number(detail.payrollHeader.total_rest_day ?? 0).toFixed(2),
 
-        const vendorTaxField = Number(detail.vendor?.tax) || 0;
+        total_day_work:
+          Number(detail.payrollHeader.total_day_work ?? 0).toFixed(2),
 
-        const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
+        total_ot_regular_day:
+          Number(detail.payrollHeader.total_ot_regular_day ?? 0).toFixed(2),
 
-        const totalPayroll = grossPay;
+        total_ot_special_holiday:
+          Number(
+            detail.payrollHeader.total_ot_special_holiday ?? 0,
+          ).toFixed(2),
 
-        const asf = totalPayroll * vendorAsfField;
+        total_ot_regular_holiday:
+          Number(
+            detail.payrollHeader.total_ot_regular_holiday ?? 0,
+          ).toFixed(2),
 
-        const totalAsf = totalPayroll + asf;
+        total_ot_rest_day:
+          Number(detail.payrollHeader.total_ot_rest_day ?? 0).toFixed(2),
 
-        const allowance = warehouseAllowance * dutyCount;
+        total_ot_day_work:
+          Number(detail.payrollHeader.total_ot_day_work ?? 0).toFixed(2),
 
-        const totalAllowance = totalAsf + allowance;
+        // ======================================================
+        // HEADER AMOUNT TOTALS
+        // ======================================================
+        total_regular_amount:
+          Number(
+            detail.payrollHeader.total_regular_amount ?? 0,
+          ).toFixed(2),
 
-        const vat = totalAllowance * vendorVatField;
+        total_rest_day_amount:
+          Number(
+            detail.payrollHeader.total_rest_day_amount ?? 0,
+          ).toFixed(2),
 
-        const totalWithVat = totalAllowance + vat;
+        total_special_holiday_amount:
+          Number(
+            detail.payrollHeader.total_special_holiday_amount ?? 0,
+          ).toFixed(2),
 
-        const tax = totalAllowance * vendorTaxField;
+        total_regular_holiday_amount:
+          Number(
+            detail.payrollHeader.total_regular_holiday_amount ?? 0,
+          ).toFixed(2),
 
-        const netOfTax = totalWithVat - tax;
+        total_regular_holiday_off_amount:
+          Number(
+            detail.payrollHeader.total_regular_holiday_off_amount ?? 0,
+          ).toFixed(2),
 
-        const totalBilling = netOfTax;
+        total_rd_regular_holiday_amount:
+          Number(
+            detail.payrollHeader.total_rd_regular_holiday_amount ?? 0,
+          ).toFixed(2),
 
+        total_rd_special_holiday_amount:
+          Number(
+            detail.payrollHeader.total_rd_special_holiday_amount ?? 0,
+          ).toFixed(2),
 
-        return {
-          id: detail.id,
+        total_ot_regular_amount:
+          Number(
+            detail.payrollHeader.total_ot_regular_amount ?? 0,
+          ).toFixed(2),
 
-          payroll_header_id: detail.payroll_header_id,
+        total_ot_rest_day_amount:
+          Number(
+            detail.payrollHeader.total_ot_rest_day_amount ?? 0,
+          ).toFixed(2),
 
-          schedule_detail_id: detail.schedule_detail_id,
+        total_ot_special_holiday_amount:
+          Number(
+            detail.payrollHeader.total_ot_special_holiday_amount ?? 0,
+          ).toFixed(2),
 
-          staff_id: staffId,
+        total_ot_regular_holiday_amount:
+          Number(
+            detail.payrollHeader.total_ot_regular_holiday_amount ?? 0,
+          ).toFixed(2),
 
-          staff_code: detail.staff?.staff_code ?? null,
+        total_ot_rd_regular_holiday_amount:
+          Number(
+            detail.payrollHeader.total_ot_rd_regular_holiday_amount ?? 0,
+          ).toFixed(2),
 
-          staff_name: detail.staff
-            ? `${detail.staff.first_name ?? ""} ${
-                detail.staff.last_name ?? ""
+        total_ot_rd_special_holiday_amount:
+          Number(
+            detail.payrollHeader.total_ot_rd_special_holiday_amount ?? 0,
+          ).toFixed(2),
+
+        total_overtime_amount:
+          Number(
+            detail.payrollHeader.total_overtime_amount ?? 0,
+          ).toFixed(2),
+
+        // ======================================================
+        // HEADER GOVERNMENT / PAYROLL TOTALS
+        // ======================================================
+        total_thirteen_month_pay:
+          Number(
+            detail.payrollHeader.total_thirteen_month_pay ?? 0,
+          ).toFixed(2),
+
+        total_sss_share:
+          Number(
+            detail.payrollHeader.total_sss_share ?? 0,
+          ).toFixed(2),
+
+        total_pag_ibig_share:
+          Number(
+            detail.payrollHeader.total_pag_ibig_share ?? 0,
+          ).toFixed(2),
+
+        total_phil_health_share:
+          Number(
+            detail.payrollHeader.total_phil_health_share ?? 0,
+          ).toFixed(2),
+
+        total_payroll:
+          Number(
+            detail.payrollHeader.total_payroll ?? 0,
+          ).toFixed(2),
+
+        total_asf:
+          Number(
+            detail.payrollHeader.total_asf ?? 0,
+          ).toFixed(2),
+
+        total_allowance:
+          Number(
+            detail.payrollHeader.total_allowance ?? 0,
+          ).toFixed(2),
+
+        total_vat:
+          Number(
+            detail.payrollHeader.total_vat ?? 0,
+          ).toFixed(2),
+
+        total_with_vat:
+          Number(
+            detail.payrollHeader.total_with_vat ?? 0,
+          ).toFixed(2),
+
+        total_tax:
+          Number(
+            detail.payrollHeader.total_tax ?? 0,
+          ).toFixed(2),
+
+        total_net_of_tax:
+          Number(
+            detail.payrollHeader.total_net_of_tax ?? 0,
+          ).toFixed(2),
+
+        total_cash_bond:
+          Number(
+            detail.payrollHeader.total_cash_bond ?? 0,
+          ).toFixed(2),
+
+        total_billing:
+          Number(
+            detail.payrollHeader.total_billing ?? 0,
+          ).toFixed(2),
+
+        // Header status
+        status_name:
+          detail.payrollHeader.status?.status_name ?? null,
+
+        created_by_name:
+          detail.payrollHeader.createdBy
+            ? `${detail.payrollHeader.createdBy.first_name ?? ""} ${
+                detail.payrollHeader.createdBy.last_name ?? ""
               }`.trim()
             : null,
 
-          salary_rate: salaryRate.toFixed(2),
-
-          hour_rate: hourRate.toFixed(2),
-
-          vendor_id: detail.vendor_id,
-
-          location_id: detail.location_id,
-
-          warehouse_id: detail.warehouse_id,
-
-          warehouse_ifs: detail.warehouse?.warehouse_name ?? null,
-
-          duty_start_time: detail.duty_start_time,
-
-          duty_end_time: detail.duty_end_time,
-
-          planned_duty_start_time: detail.planned_duty_start_time,
-
-          planned_duty_end_time: detail.planned_duty_end_time,
-
-          just_time_in: detail.just_time_in,
-
-          overtime_in: detail.overtime_in,
-
-          overtime_out: detail.overtime_out,
-
-          just_time_out: detail.just_time_out,
-
-          just_break_out: detail.just_break_out,
-
-          just_break_in: detail.just_break_in,
-
-          actual_time_in: detail.actual_time_in,
-
-          actual_time_out: detail.actual_time_out,
-
-          actual_break_in: detail.actual_break_in,
-
-          actual_break_out: detail.actual_break_out,
-
-          add_ot: detail.add_ot,
-
-          working_day_id: detail.working_day_id,
-
-          status_id: detail.status_id,
-
-          attendance_status_id: detail.attendance_status_id,
-
-          created_by: detail.created_by,
-
-          updated_by: detail.updated_by,
-
-          just_remarks: detail.just_remarks,
-
-          regular: totalRegular.toFixed(2),
-
-          overtime: totalOvertime.toFixed(2),
-
-          twh: totalTwh.toFixed(2),
-
-          break: totalBreak.toFixed(2),
-
-          payroll_remarks: detail.payroll_remarks,
-
-          regular_hours: detail.regular_hours,
-
-          overtime_hours: detail.overtime_hours,
-
-          twh_hours: detail.twh_hours,
-
-          break_hours: detail.break_hours,
-
-          created_at: detail.created_at,
-
-          modified_at: detail.modified_at,
-
-          regular_amount: regularAmount.toFixed(2),
-
-          overtime_amount: overtimeAmount.toFixed(2),
-
-          gross_pay: grossPay.toFixed(2),
-
-          regular_day: regularDay.toFixed(2),
-
-          special_holiday: specialHoliday.toFixed(2),
-
-          regular_holiday: regularHoliday.toFixed(2),
-
-          total_day_work: dutyCount.toString(),
-
-          thirteen_month_pay: thirteenMonthPay.toFixed(2),
-
-          sss_lookup_value: lookupValue.toFixed(2),
-
-          sss_with_mpf_ec: withMpfEc.toFixed(2),
-
-          sss_sample_mpf: sampleMpf.toFixed(2),
-
-          sss_share: sssShare.toFixed(2),
-
-          pagibig_number_perc: pagibigNumberPerc.toFixed(2),
-
-          pag_ibig_share: pagIbigShare.toFixed(2),
-
-          phil_health_contri_perc: philHealthContriPerc.toFixed(2),
-
-          phil_health_share: philHealthShare.toFixed(2),
-
-          total_payroll: totalPayroll.toFixed(2),
-
-          asf: asf.toFixed(2),
-
-          total_asf: totalAsf.toFixed(2),
-
-          allowance: allowance.toFixed(2),
-
-          total_allowance: totalAllowance.toFixed(2),
-
-          vat: vat.toFixed(2),
-
-          total_with_vat: totalWithVat.toFixed(2),
-
-          tax: tax.toFixed(2),
-
-          net_of_tax: netOfTax.toFixed(2),
-
-          total_billing: totalBilling.toFixed(2),
-
-          status_name: detail.status?.status_name ?? null,
-
-          location_name: detail.location?.location_name ?? null,
-
-          warehouse_name: detail.warehouse?.warehouse_name ?? null,
-
-          warehouse_code: detail.warehouse?.warehouse_code ?? null,
-
-          service_provider_name: detail.vendor?.service_provider_name ?? null,
-
-          working_day_name: detail.workingDays?.description ?? null,
-        };
-      });
+        updated_by_name:
+          detail.payrollHeader.updatedBy
+            ? `${detail.payrollHeader.updatedBy.first_name ?? ""} ${
+                detail.payrollHeader.updatedBy.last_name ?? ""
+              }`.trim()
+            : null,
+      }
+    : null,
+};
+        },
+      );
+
+      // Compute Overall Grand Totals across all staff
+      const grandTotalsAcc = Array.from(staffSummaryMap.values()).reduce(
+        (acc, curr) => {
+          Object.keys(curr).forEach((key) => {
+            acc[key] = (acc[key] || 0) + (Number(curr[key]) || 0);
+          });
+          return acc;
+        },
+        {},
+      );
+
+      const totals = {
+        rh_reg: grandTotalsAcc.regular_day?.toFixed(2) ?? "0.00",
+        rh_rd: grandTotalsAcc.rest_day?.toFixed(2) ?? "0.00",
+        rh_sph: grandTotalsAcc.special_holiday?.toFixed(2) ?? "0.00",
+        rh_rh: grandTotalsAcc.regular_holiday?.toFixed(2) ?? "0.00",
+        rh_total: grandTotalsAcc.regular?.toFixed(2) ?? "0.00",
+
+        ra_reg: grandTotalsAcc.regular_amount?.toFixed(2) ?? "0.00",
+        ra_total: grandTotalsAcc.regular_amount?.toFixed(2) ?? "0.00",
+
+        ot_reg: grandTotalsAcc.ot_regular_day?.toFixed(2) ?? "0.00",
+        ot_rd: grandTotalsAcc.ot_rest_day?.toFixed(2) ?? "0.00",
+        ot_sph: grandTotalsAcc.ot_special_holiday?.toFixed(2) ?? "0.00",
+        ot_rh: grandTotalsAcc.ot_regular_holiday?.toFixed(2) ?? "0.00",
+        ot_total: grandTotalsAcc.overtime?.toFixed(2) ?? "0.00",
+
+        ota_total: grandTotalsAcc.overtime_amount?.toFixed(2) ?? "0.00",
+
+        gross_pay: grandTotalsAcc.gross_pay?.toFixed(2) ?? "0.00",
+        thirteen_month: grandTotalsAcc.thirteen_month_pay?.toFixed(2) ?? "0.00",
+        sss_ec: grandTotalsAcc.sss_share?.toFixed(2) ?? "0.00",
+        phic: grandTotalsAcc.phil_health_share?.toFixed(2) ?? "0.00",
+        pagibig: grandTotalsAcc.pag_ibig_share?.toFixed(2) ?? "0.00",
+        total_govt: (
+          (grandTotalsAcc.sss_share || 0) +
+          (grandTotalsAcc.phil_health_share || 0) +
+          (grandTotalsAcc.pag_ibig_share || 0)
+        ).toFixed(2),
+        total_with_govt: grandTotalsAcc.total_payroll?.toFixed(2) ?? "0.00",
+
+        asf: grandTotalsAcc.asf?.toFixed(2) ?? "0.00",
+        total_w_asf: grandTotalsAcc.total_asf?.toFixed(2) ?? "0.00",
+        allowance: grandTotalsAcc.allowance?.toFixed(2) ?? "0.00",
+        total_w_allowance: grandTotalsAcc.total_allowance?.toFixed(2) ?? "0.00",
+        vat: grandTotalsAcc.vat?.toFixed(2) ?? "0.00",
+        total_w_vat: grandTotalsAcc.total_with_vat?.toFixed(2) ?? "0.00",
+        tax: grandTotalsAcc.tax?.toFixed(2) ?? "0.00",
+        net_of_tax: grandTotalsAcc.net_of_tax?.toFixed(2) ?? "0.00",
+        cash_bond: grandTotalsAcc.cash_bond?.toFixed(2) ?? "0.00",
+        total_billing: grandTotalsAcc.total_billing?.toFixed(2) ?? "0.00",
+      };
+
+      return { data, totals };
     } catch (error) {
       throw new Error("Failed to fetch staff payroll report");
     }
   }
+
 }

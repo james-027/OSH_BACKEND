@@ -188,7 +188,7 @@ export class DigitalWorkspaceService {
         crew_id: crewId,
         schedule_date: dayjs(scheduleDate).format("YYYY-MM-DD"),
         location_id: locationId,
-        is_night_shift: isNightShift,
+        shift_type: isNightShift,
         warehouse_id: warehouseId,
       };
 
