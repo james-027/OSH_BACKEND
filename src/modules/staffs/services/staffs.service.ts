@@ -162,50 +162,48 @@ export class StaffsService {
         trainingMap.get(key)!.push(t);
       }
 
+      const totalActiveTrainings = allTrainings.length;
+
       const result = staffs.map((staff) => {
-        const trainings = trainingMap.get(staff.id) || [];
+        const allStaffTrainings = trainingMap.get(staff.id) || [];
 
-        const totalActiveTrainings = allTrainings.length;
-
-        const hasTraining = trainings.length > 0;
-
-        const passedTrainings = trainings.filter((t) => {
-          const trainingMeta = allTrainings.find(
-            (at) => Number(at.id) === Number(t.training_id),
-          );
-
-          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
-
-          return t.ratings !== "" && Number(t.ratings) >= passingRate;
-        });
-
-        const failedTrainings = trainings.filter((t) => {
-          const trainingMeta = allTrainings.find(
-            (at) => Number(at.id) === Number(t.training_id),
-          );
-
-          const passingRate = Number(trainingMeta?.passing_rate ?? 0);
-
-          return t.ratings !== "" && Number(t.ratings) < passingRate;
-        });
-
-        const isSingleTraining = totalActiveTrainings === 1;
-
-        const allPassed =
-          hasTraining &&
-          passedTrainings.length === totalActiveTrainings &&
-          totalActiveTrainings > 0;
+        // Match only trainings belonging to the current staff_code cycle
+        const currentStaffCode = staff.staff_code || null;
+        const trainings = allStaffTrainings.filter(
+          (t) => (t.staff_code || null) === currentStaffCode,
+        );
 
         let canPost = false;
 
-        if (!hasTraining) {
-          canPost = false;
-        } else if (isSingleTraining) {
-          canPost = failedTrainings.length > 0;
-        } else if (allPassed) {
-          canPost = true;
-        } else {
-          canPost = failedTrainings.length > 0;
+        if (trainings.length > 0 && totalActiveTrainings > 0) {
+          const staffTrainingMap = new Map<number, any>();
+          for (const t of trainings) {
+            staffTrainingMap.set(Number(t.training_id), t);
+          }
+
+          // Check if any training was taken and failed
+          const hasFailed = trainings.some((t) => {
+            const trainingMeta = allTrainings.find(
+              (at) => Number(at.id) === Number(t.training_id),
+            );
+            const passingRate = Number(trainingMeta?.passing_rate ?? 0);
+            return (
+              t.ratings !== null &&
+              t.ratings !== "" &&
+              Number(t.ratings) < passingRate
+            );
+          });
+
+          // Check if all required active trainings have been completed and passed
+          const allPassed = allTrainings.every((at) => {
+            const st = staffTrainingMap.get(Number(at.id));
+            if (!st || st.ratings === null || st.ratings === "") return false;
+            const passingRate = Number(at.passing_rate ?? 0);
+            return Number(st.ratings) >= passingRate;
+          });
+
+          // canPost is true if they passed all or failed any (ready to post to failed)
+          canPost = hasFailed || allPassed;
         }
 
         return {
@@ -302,6 +300,9 @@ export class StaffsService {
       const existingPagibig = await this.staffsRepository.findOne({
         where: { pagibig_number: createStaffDto.pagibig_number },
       });
+      const existingPhilHealth = await this.staffsRepository.findOne({
+        where: { phil_health_number: createStaffDto.phil_health_number },
+      });
 
       if (existingTin) {
         throw new BadRequestException(
@@ -320,6 +321,11 @@ export class StaffsService {
           `Staff with PagIBIG Number '${createStaffDto.pagibig_number}' already exists`,
         );
       }
+      if (existingPhilHealth) {
+        throw new BadRequestException(
+          `Staff with PhilHealth Number '${createStaffDto.phil_health_number}' already exists`,
+        );
+      }
 
       const newStaff = this.staffsRepository.create({
         staff_code: createStaffDto.staff_code
@@ -331,13 +337,15 @@ export class StaffsService {
           ? createStaffDto.middle_name.toUpperCase()
           : null,
         location_id: createStaffDto.location_id,
-        email: createStaffDto.email,
+        email: createStaffDto.email || null,
         vendor_id: createStaffDto.vendor_id,
         assign_status_id: 20,
         position_id: createStaffDto.position_id,
+        is_institutional: createStaffDto.is_institutional,
         access_key_id: accessKeyId,
         sss_number: createStaffDto.sss_number || null,
         pagibig_number: createStaffDto.pagibig_number || null,
+        phil_health_number: createStaffDto.phil_health_number || null,
         tin: createStaffDto.tin || null,
         remarks: createStaffDto.remarks || null,
         hired_date: createStaffDto.hired_date
@@ -376,6 +384,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: savedStaff.id,
+        old_dws_code: savedStaff.old_dws_code,
+        old_dws_id: savedStaff.old_dws_id,
         staff_code: savedStaff.staff_code,
         last_name: savedStaff.last_name,
         first_name: savedStaff.first_name,
@@ -385,9 +395,11 @@ export class StaffsService {
         vendor_id: savedStaff.vendor_id,
         assign_status_id: savedStaff.assign_status_id,
         position_id: savedStaff.position_id,
+        is_institutional: savedStaff.is_institutional,
         access_key_id: savedStaff.access_key_id,
         sss_number: savedStaff.sss_number,
         pagibig_number: savedStaff.pagibig_number,
+        phil_health_number: savedStaff.phil_health_number,
         tin: savedStaff.tin,
         remarks: savedStaff.remarks,
         overall_remarks: savedStaff.overall_remarks,
@@ -398,6 +410,8 @@ export class StaffsService {
         approved_eprf_date: savedStaff.approved_eprf_date,
         req_completion_date: savedStaff.req_completion_date,
         actual_deployment_date: savedStaff.actual_deployment_date,
+        warehouse_id: savedStaff.warehouse_id,
+        effectivity_date: savedStaff.effectivity_date,
         separated_date: savedStaff.separated_date,
         birthday: savedStaff.birthday,
         contact_number: savedStaff.contact_number,
@@ -441,19 +455,28 @@ export class StaffsService {
       const savedStaffVendorSalary =
         await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
 
-      const newStaffSalary = this.staffSalaryRepository.create({
-        staff_id: savedStaff.id,
-        staff_vendor_id: newStaffVendorSalary.id,
-        allowance: createStaffDto.allowance,
-        salary_rate: createStaffDto.salary_rate,
-        access_key_id: accessKeyId,
-        status_id: 1,
-        created_by: userId,
-        updated_by: userId,
-      });
+      let savedStaffSalary: StaffSalary | null = null;
 
-      const savedStaffSalary =
-        await this.staffSalaryRepository.save(newStaffSalary);
+      if (
+        (createStaffDto.allowance !== undefined &&
+          createStaffDto.allowance !== null) ||
+        (createStaffDto.salary_rate !== undefined &&
+          createStaffDto.salary_rate !== null)
+      ) {
+        const newStaffSalary = this.staffSalaryRepository.create({
+          staff_id: savedStaff.id,
+          staff_vendor_id: newStaffVendorSalary.id,
+          allowance: createStaffDto.allowance,
+          salary_rate: createStaffDto.salary_rate,
+          access_key_id: accessKeyId,
+          status_id: 1,
+          created_by: userId,
+          updated_by: userId,
+        });
+
+        const savedStaffSalary =
+          await this.staffSalaryRepository.save(newStaffSalary);
+      }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -685,18 +708,24 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
+        warehouse_id: staff.warehouse_id,
+        effectivity_date: staff.effectivity_date,
         email: staff.email,
         middle_name: staff.middle_name,
         location_id: staff.location_id,
         vendor_id: staff.vendor_id,
         assign_status_id: staff.assign_status_id,
         position_id: staff.position_id,
+        is_institutional: staff.is_institutional,
         access_key_id: staff.access_key_id,
         sss_number: staff.sss_number,
         pagibig_number: staff.pagibig_number,
+        phil_health_number: staff.phil_health_number,
         tin: staff.tin,
         remarks: staff.remarks,
         overall_remarks: staff.overall_remarks,
@@ -1177,7 +1206,7 @@ export class StaffsService {
                 await this.actionLogsService.logAction({
                   action_id: staffWarehouseActionId,
                   ref_id: staffWarehouseDetails.id,
-                  module_name: "STAFF WAREHOUSES",
+                  module_name: "STAFF STORE ASSIGNMENTS",
                   description:
                     staffWarehouseActionId === ACTION_IDS.APPROVE
                       ? "Approved"
@@ -1207,9 +1236,11 @@ export class StaffsService {
             vendor_id: transfer.new_vendor_id,
             assign_status_id: updatedStaff.assign_status_id,
             position_id: updatedStaff.position_id,
+            is_institutional: updatedStaff.is_institutional,
             access_key_id: updatedStaff.access_key_id,
             sss_number: updatedStaff.sss_number,
             pagibig_number: updatedStaff.pagibig_number,
+            phil_health_number: updatedStaff.phil_health_number,
             tin: updatedStaff.tin,
             remarks: transfer.remarks,
             overall_remarks: updatedStaff.overall_remarks,
@@ -1480,7 +1511,8 @@ export class StaffsService {
 
       const staffHistory = this.staffHistoriesRepository.save({
         staff_id: updatedStaff.id,
-
+        old_dws_code: updatedStaff.old_dws_code,
+        old_dws_id: updatedStaff.old_dws_id,
         staff_code: updatedStaff.staff_code,
         last_name: updatedStaff.last_name,
         first_name: updatedStaff.first_name,
@@ -1491,12 +1523,17 @@ export class StaffsService {
         vendor_id: updatedStaff.vendor_id,
         assign_status_id: updatedStaff.assign_status_id,
         position_id: updatedStaff.position_id,
+        is_institutional: updatedStaff.is_institutional,
 
         access_key_id: updatedStaff.access_key_id,
 
         sss_number: updatedStaff.sss_number,
         pagibig_number: updatedStaff.pagibig_number,
+        phil_health_number: updatedStaff.phil_health_number,
         tin: updatedStaff.tin,
+
+        warehouse_id: updatedStaff.warehouse_id,
+        effectivity_date: updatedStaff.effectivity_date,
 
         remarks: updatedStaff.remarks,
         overall_remarks: updatedStaff.overall_remarks,
@@ -1674,8 +1711,11 @@ export class StaffsService {
           where: { id },
         });
 
+
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -1685,9 +1725,11 @@ export class StaffsService {
           vendor_id: updatedStaff.vendor_id,
           assign_status_id: updatedStaff.assign_status_id,
           position_id: updatedStaff.position_id,
+          is_institutional: updatedStaff.is_institutional,
           access_key_id: updatedStaff.access_key_id,
           sss_number: updatedStaff.sss_number,
           pagibig_number: updatedStaff.pagibig_number,
+          phil_health_number: updatedStaff.phil_health_number,
           tin: updatedStaff.tin,
           remarks: updatedStaff.remarks,
           overall_remarks: updatedStaff.overall_remarks,
@@ -1740,7 +1782,7 @@ export class StaffsService {
         await this.actionLogsService.logAction({
           action_id: staffWarehouseAction_id,
           ref_id: staffWarehouseDetails.id,
-          module_name: "STAFF WAREHOUSES", // ✅ Self-documenting
+          module_name: "STAFF STORE ASSIGNMENTS",
           description:
             staffWarehouseAction_id === ACTION_IDS.APPROVE
               ? "Approved"
@@ -1777,6 +1819,14 @@ export class StaffsService {
     }
   }
 
+  private parseExcelBoolean = (val: any): boolean => {
+    if (val === null || val === undefined) return false;
+    if (typeof val === "boolean") return val;
+    if (typeof val === "number") return val === 1;
+    const str = String(val).trim().toUpperCase();
+    return ["TRUE", "YES", "Y", "1"].includes(str);
+  };
+
   async uploadExcel(
     file: Express.Multer.File,
     userId: number,
@@ -1809,12 +1859,12 @@ export class StaffsService {
         const requiredFields = [
           "First Name",
           "Last Name",
-          "Email",
           "Location",
           "Position",
           "Vendor",
           "Brand",
           "Category Type",
+          "Is Institutional",
         ];
 
         const missingFields = requiredFields.filter(
@@ -1833,24 +1883,49 @@ export class StaffsService {
           continue;
         }
 
-        const location = await this.locationRepository.findOne({
-          where: { location_name: row["Location"] },
-        });
 
-        const position = await this.positionRepository.findOne({
-          where: { position_name: row["Position"] },
-        });
+        const locationValue = this.normalizeValue(row["Location"]);
+        const positionValue = this.normalizeValue(row["Position"]);
+        const vendorValue = this.normalizeValue(row["Vendor"]);
+        const brandValue = this.normalizeValue(row["Brand"]);
+        const categoryTypeValue = this.normalizeValue(row["Category Type"]);
 
-        const vendor = await this.vendorRepository.findOne({
-          where: { service_provider_name: row["Vendor"] },
-        });
+        const location = await this.locationRepository
+          .createQueryBuilder("location")
+          .where("REPLACE(UPPER(location.location_name), ' ', '') = :value", {
+            value: locationValue,
+          })
+          .getOne();
 
-        const brand = await this.brandRepository.findOne({
-          where: { brand_name: row["Brand"] },
-        });
-        const categoryType = await this.categoryTypeRepository.findOne({
-          where: { category_type_name: row["Category Type"] },
-        });
+        const position = await this.positionRepository
+          .createQueryBuilder("position")
+          .where("REPLACE(UPPER(position.position_name), ' ', '') = :value", {
+            value: positionValue,
+          })
+          .getOne();
+
+        const vendor = await this.vendorRepository
+          .createQueryBuilder("vendor")
+          .where(
+            "REPLACE(UPPER(vendor.service_provider_name), ' ', '') = :value",
+            { value: vendorValue },
+          )
+          .getOne();
+
+        const brand = await this.brandRepository
+          .createQueryBuilder("brand")
+          .where("REPLACE(UPPER(brand.brand_name), ' ', '') = :value", {
+            value: brandValue,
+          })
+          .getOne();
+
+        const categoryType = await this.categoryTypeRepository
+          .createQueryBuilder("categoryType")
+          .where(
+            "REPLACE(UPPER(categoryType.category_type_name), ' ', '') = :value",
+            { value: categoryTypeValue },
+          )
+          .getOne();
 
         if (!location) {
           errors.push({
@@ -1895,6 +1970,10 @@ export class StaffsService {
         const lastName = row["Last Name"].toUpperCase().trim();
         const middleName = (row["Middle Name"] || "").toUpperCase().trim();
         const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsCode = row["DWS Code"]?.toString().trim();
+        const dwsId = row["DWS ID"];
+
+        const isInstitutional = this.parseExcelBoolean(row["Is Institutional"]);
 
         let existingRecord = null;
 
@@ -1937,17 +2016,18 @@ export class StaffsService {
         const TIN = String(row["TIN"] || "").trim();
         const SSS = String(row["SSS Number"] || "").trim();
         const PAGIBIG = String(row["PAGIBIG Number"] || "").trim();
+        const PHILHEALTH = String(row["Phil Health Number"] || "").trim();
         const EMAIL = String(row["Email"] || "").trim();
 
-        if (!EMAIL) {
+        if (isInstitutional === true && !EMAIL) {
           errors.push({
             row: i + 2,
-            error: "Email is required.",
+            error: "Email is required when Is Institutional is Yes or True.",
           });
           continue;
         }
 
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(EMAIL)) {
+        if (EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(EMAIL)) {
           errors.push({
             row: i + 2,
             error: `Invalid email format: '${EMAIL}'.`,
@@ -1998,7 +2078,22 @@ export class StaffsService {
         if (!/^\d{12}$/.test(PAGIBIG)) {
           errors.push({
             row: i + 2,
-            error: "PAGIBIG Number must be exactly 9 digits.",
+            error: "PAGIBIG Number must be exactly 12 digits.",
+          });
+          continue;
+        }
+        if (!PHILHEALTH) {
+          errors.push({
+            row: i + 2,
+            error: "PHILHEALTH Number is required.",
+          });
+          continue;
+        }
+
+        if (!/^\d{12}$/.test(PHILHEALTH)) {
+          errors.push({
+            row: i + 2,
+            error: "PHILHEALTH Number must be exactly 12 digits.",
           });
           continue;
         }
@@ -2011,6 +2106,9 @@ export class StaffsService {
         });
         const existingPagibig = await this.staffsRepository.findOne({
           where: { pagibig_number: PAGIBIG },
+        });
+        const existingPhilHealth = await this.staffsRepository.findOne({
+          where: { phil_health_number: PAGIBIG },
         });
         const existingEmail = await this.staffsRepository.findOne({
           where: { email: EMAIL },
@@ -2037,10 +2135,13 @@ export class StaffsService {
           });
           continue;
         }
-        if (existingEmail && existingEmail.id !== existingRecord?.id) {
+        if (
+          existingPhilHealth &&
+          existingPhilHealth.id !== existingRecord?.id
+        ) {
           errors.push({
             row: i + 2,
-            error: `EMAIL '${EMAIL}' already exists for another staff`,
+            error: `PHILHEALTH '${PHILHEALTH}' already exists for another staff`,
           });
           continue;
         }
@@ -2062,10 +2163,14 @@ export class StaffsService {
           existingRecord.vendor_id = vendor.id;
           existingRecord.position_id = position.id;
           existingRecord.access_key_id = accessKeyId;
+          existingRecord.is_institutional = isInstitutional;
           existingRecord.store_request = row["Store Request"];
           existingRecord.sss_number = row["SSS Number"];
           existingRecord.tin = row["TIN"];
+          existingRecord.old_dws_code = dwsCode;
+          existingRecord.old_dws_id = dwsId;
           existingRecord.pagibig_number = row["PAGIBIG Number"];
+          existingRecord.phil_health_number = row["Phil Health Number"];
           existingRecord.remarks = row["Remarks"];
           existingRecord.hired_date = this.formatDateToString(
             row["Hired Date"],
@@ -2197,17 +2302,21 @@ export class StaffsService {
             location_id: location.id,
             vendor_id: vendor.id,
             position_id: position.id,
+            is_institutional: isInstitutional,
             access_key_id: accessKeyId,
             assign_status_id: 20,
             store_request: row["Store Request"],
             sss_number: SSS,
             tin: TIN,
             pagibig_number: PAGIBIG,
+            phil_health_number: PHILHEALTH,
             remarks: row["Remarks"],
             hired_date: this.formatDateToString(row["Hired Date"]),
             to_hr_date: this.formatDateToString(row["To HR Date"]),
             separated_date: this.formatDateToString(row["Seperated Date"]),
             to_sts_date: this.formatDateToString(row["To STS Date"]),
+            old_dws_code: dwsCode,
+            old_dws_id: dwsId,
             approved_eprf_date: this.formatDateToString(
               row["Approved EPRF Date"],
             ),
@@ -2455,7 +2564,7 @@ export class StaffsService {
       try {
         // REQUIRED FIELD VALIDATION
         const requiredFields = [
-          "Staff Code",
+          // "Staff Code",
           "New Agency",
           "New Location",
           "Allowance",
@@ -2479,10 +2588,16 @@ export class StaffsService {
           continue;
         }
 
-        const location = await this.locationRepository.findOne({
-          where: { location_name: row["New Location"] },
-        });
+        const locationValue = this.normalizeValue(row["New Location"]);
 
+        const location = await this.locationRepository
+          .createQueryBuilder("location")
+          .where(
+            "REPLACE(UPPER(location.location_name), ' ', '') = :value",
+            { value: locationValue },
+          )
+          .getOne();
+   
         let allowedLocationIds: number[] | undefined = undefined;
 
         if (userId && roleId) {
@@ -2509,32 +2624,51 @@ export class StaffsService {
           continue;
         }
 
-        const vendor = await this.vendorRepository.findOne({
-          where: { service_provider_name: row["New Agency"] },
-        });
+
+        const vendorValue = this.normalizeValue(row["New Agency"]);
+
+        const vendor = await this.vendorRepository
+          .createQueryBuilder("vendor")
+          .where(
+            "REPLACE(UPPER(vendor.service_provider_name), ' ', '') = :value",
+            { value: vendorValue },
+          )
+          .getOne();
+
+
 
         if (!vendor) {
           errors.push({
             row: i + 2,
-            error: `Vendor '${row["New Agency"]}' not found`,
+            error: `Agency '${row["New Agency"]}' not found`,
           });
           continue;
         }
 
-        const staffCode = row["Staff Code"]?.toString().trim();
+        const staffCode = row["Staff Code"];
+        const dwsCode = row["DWS Code"];
 
         let existingRecord = null;
 
-        existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: staffCode,
-          },
-        });
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+        } else if (dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
+
 
         if (!existingRecord) {
           errors.push({
             row: i + 2,
-            error: `Staff with Staff Code '${staffCode}' not found`,
+            error: `Staff not found`,
           });
           continue;
         }
@@ -2549,6 +2683,30 @@ export class StaffsService {
         };
 
         const result = await this.staffTransfer(existingRecord.id, dto, userId);
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: existingRecord.id,
+            action_id: ACTION_IDS.TRANSFER,
+            description: `Staff ${existingRecord.first_name} ${existingRecord.last_name} Transfer to Location: ${location.location_name}`,
+            raw_data: JSON.stringify({
+              source: "STAFF TRANSFER UPLOAD",
+              staff_id: existingRecord.id,
+              staff_code: existingRecord.staff_code,
+              location_id: location.id,
+              location_nane: location.location_name,
+              effectivity_date: dto.effectivity_date,
+              remarks: dto.remarks,
+              row: i + 2,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(
+            `Action log failed for uploaded staff deploy, staff_id=${existingRecord.id}:`,
+            err,
+          );
+        }
         success.push({
           row: i + 2,
           action: "Staff Transfer Updated",
@@ -2630,7 +2788,7 @@ export class StaffsService {
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
+        const requiredFields = ["New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -2649,14 +2807,31 @@ export class StaffsService {
         }
 
         const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsCode = row["DWS Code"]?.toString().trim();
 
         let existingRecord = null;
 
-        existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: staffCode,
-          },
-        });
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+        } else if (dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
+
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff Not found`,
+          });
+          continue;
+        }
 
         let allowedWarehouseIds: number[] | undefined = undefined;
 
@@ -2689,14 +2864,6 @@ export class StaffsService {
           continue;
         }
 
-        if (!existingRecord) {
-          errors.push({
-            row: i + 2,
-            error: `Staff with Staff Code '${staffCode}' not found`,
-          });
-          continue;
-        }
-
         const dto: UpdateStaffDeployDto = {
           warehouse_id: warehouse.id,
           remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
@@ -2711,6 +2878,32 @@ export class StaffsService {
           userId,
           accessKeyId,
         );
+
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: existingRecord.id,
+            action_id: ACTION_IDS.DEPLOY,
+            description: `Staff ${existingRecord.first_name} ${existingRecord.last_name} Deployed to ${NAMING_CONVENTION.WAREHOUSE}: ${warehouse.warehouse_name}`,
+            raw_data: JSON.stringify({
+              source: "STAFF DEPLOY UPLOAD",
+              staff_id: existingRecord.id,
+              staff_code: existingRecord.staff_code,
+              warehouse_id: warehouse.id,
+              warehouse_name: warehouse.warehouse_name,
+              effectivity_date: dto.effectivity_date,
+              end_date: dto.end_date,
+              remarks: dto.remarks,
+              row: i + 2,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(
+            `Action log failed for uploaded staff deploy, staff_id=${existingRecord.id}:`,
+            err,
+          );
+        }
         success.push({
           row: i + 2,
           action: "updated",
@@ -2802,6 +2995,14 @@ export class StaffsService {
           },
         });
 
+        if (!existingRecord) {
+          errors.push({
+            row: i + 2,
+            error: `Staff with Staff Code '${staffCode}' not found`,
+          });
+          continue;
+        }
+
         let allowedWarehouseIds: number[] | undefined = undefined;
 
         if (userId) {
@@ -2833,14 +3034,6 @@ export class StaffsService {
           continue;
         }
 
-        if (!existingRecord) {
-          errors.push({
-            row: i + 2,
-            error: `Staff with Staff Code '${staffCode}' not found`,
-          });
-          continue;
-        }
-
         const isBuddyUp =
           existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
         if (!isBuddyUp) {
@@ -2865,6 +3058,31 @@ export class StaffsService {
           userId,
           accessKeyId,
         );
+        try {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: existingRecord.id,
+            action_id: ACTION_IDS.BUDDY_UP,
+            description: `Staff ${existingRecord.first_name} ${existingRecord.last_name} Buddy Up to ${NAMING_CONVENTION.WAREHOUSE}: ${warehouse.warehouse_name}`,
+            raw_data: JSON.stringify({
+              source: "STAFF BUDDY_UP UPLOAD",
+              staff_id: existingRecord.id,
+              staff_code: existingRecord.staff_code,
+              warehouse_id: warehouse.id,
+              warehouse_name: warehouse.warehouse_name,
+              effectivity_date: dto.effectivity_date,
+              end_date: dto.end_date,
+              remarks: dto.remarks,
+              row: i + 2,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error(
+            `Action log failed for uploaded staff deploy, staff_id=${existingRecord.id}:`,
+            err,
+          );
+        }
         success.push({
           row: i + 2,
           action: "updated",
@@ -2921,17 +3139,37 @@ export class StaffsService {
     const lastName = dto.last_name.toUpperCase().trim();
     const middleName = (dto.middle_name || "").toUpperCase().trim();
 
+    // Condition to exclude the current staff member when staff_id is present
+    const staffId = dto.staff_id ? Number(dto.staff_id) : undefined;
+    const excludeSelfCondition = dto.staff_id ? { id: Not(staffId) } : {};
+
     const existingStaff = await this.staffsRepository.findOne({
       where: [
         {
           first_name: firstName,
           last_name: lastName,
           ...(middleName && { middle_name: middleName }),
+          ...excludeSelfCondition,
         },
-        ...(dto.sss_number ? [{ sss_number: dto.sss_number.trim() }] : []),
-        ...(dto.tin ? [{ tin: dto.tin.trim() }] : []),
+        ...(dto.sss_number
+          ? [{ sss_number: dto.sss_number.trim(), ...excludeSelfCondition }]
+          : []),
+        ...(dto.tin ? [{ tin: dto.tin.trim(), ...excludeSelfCondition }] : []),
         ...(dto.pagibig_number
-          ? [{ pagibig_number: dto.pagibig_number.trim() }]
+          ? [
+              {
+                pagibig_number: dto.pagibig_number.trim(),
+                ...excludeSelfCondition,
+              },
+            ]
+          : []),
+        ...(dto.phil_health_number
+          ? [
+              {
+                phil_health_number: dto.phil_health_number.trim(),
+                ...excludeSelfCondition,
+              },
+            ]
           : []),
       ],
     });
@@ -2962,6 +3200,9 @@ export class StaffsService {
         pagibig_number:
           dto.pagibig_number &&
           existingStaff.pagibig_number === dto.pagibig_number.trim(),
+        phil_health_number:
+          dto.phil_health_number &&
+          existingStaff.phil_health_number === dto.phil_health_number.trim(),
       },
       staff: existingStaff,
     };
@@ -3124,6 +3365,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
@@ -3133,9 +3376,11 @@ export class StaffsService {
         vendor_id: staff.vendor_id,
         assign_status_id: staff.assign_status_id,
         position_id: staff.position_id,
+        is_institutional: staff.is_institutional,
         access_key_id: staff.access_key_id,
         sss_number: staff.sss_number,
         pagibig_number: staff.pagibig_number,
+        phil_health_number: staff.phil_health_number,
         tin: staff.tin,
         remarks: staff.remarks,
         overall_remarks: staff.overall_remarks,
@@ -3152,6 +3397,8 @@ export class StaffsService {
         reason_status_id: reason_status_id,
         reason_remarks: remarks,
         approval_status_id: approvalStatusId,
+        warehouse_id: staff.warehouse_id,
+        effectivity_date: staff.effectivity_date,
         deactivate_effectivity_date: this.safeDate(effectivity_date),
         status_id: staff.status_id,
         created_by: userId,
@@ -3215,6 +3462,8 @@ export class StaffsService {
 
       await this.staffHistoriesRepository.save({
         staff_id: staff.id,
+        old_dws_code: staff.old_dws_code,
+        old_dws_id: staff.old_dws_id,
         staff_code: staff.staff_code,
         last_name: staff.last_name,
         first_name: staff.first_name,
@@ -3224,9 +3473,11 @@ export class StaffsService {
         vendor_id: staff.vendor_id,
         assign_status_id: staff.assign_status_id,
         position_id: staff.position_id,
+        is_institutional: staff.is_institutional,
         access_key_id: staff.access_key_id,
         sss_number: staff.sss_number,
         pagibig_number: staff.pagibig_number,
+        phil_health_number: staff.phil_health_number,
         tin: staff.tin,
         remarks: staff.remarks,
         overall_remarks: staff.overall_remarks,
@@ -3245,6 +3496,8 @@ export class StaffsService {
         approval_status_id: staff.approval_status_id,
         deactivate_effectivity_date: staff.deactivate_effectivity_date,
         activate_effectivity_date: effectivityDate,
+        warehouse_id: staff.warehouse_id,
+        effectivity_date: staff.effectivity_date,
         status_id: staff.status_id,
         created_by: userId,
         updated_by: userId,
@@ -3451,9 +3704,11 @@ export class StaffsService {
             vendor_id: savedStaff.vendor_id,
             assign_status_id: savedStaff.assign_status_id,
             position_id: savedStaff.position_id,
+            is_institutional: savedStaff.is_institutional,
             access_key_id: savedStaff.access_key_id,
             sss_number: savedStaff.sss_number,
             pagibig_number: savedStaff.pagibig_number,
+            phil_health_number: savedStaff.phil_health_number,
             tin: savedStaff.tin,
             remarks: savedStaff.remarks,
             overall_remarks: savedStaff.overall_remarks,
@@ -3719,6 +3974,7 @@ export class StaffsService {
 
         await this.staffsRepository.update(id, {
           approval_status_id: newStatusId,
+          assign_status_id: STATUS_IDS.TRAINEE,
         });
 
         const latestStaffTransfer = await this.staffTransfersRepository.findOne(
@@ -3762,7 +4018,8 @@ export class StaffsService {
 
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
-
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -3772,9 +4029,11 @@ export class StaffsService {
           vendor_id: updatedStaff.vendor_id,
           assign_status_id: updatedStaff.assign_status_id,
           position_id: updatedStaff.position_id,
+          is_institutional: updatedStaff.is_institutional,
           access_key_id: updatedStaff.access_key_id,
           sss_number: updatedStaff.sss_number,
           pagibig_number: updatedStaff.pagibig_number,
+          phil_health_number: updatedStaff.phil_health_number,
           tin: updatedStaff.tin,
           remarks: updatedStaff.remarks,
           overall_remarks: updatedStaff.overall_remarks,
@@ -3794,6 +4053,8 @@ export class StaffsService {
           reason_status_id: updatedStaff.reason_status_id,
           activate_effectivity_date: updatedStaff.activate_effectivity_date,
           approval_status_id: updatedStaff.approval_status_id,
+          warehouse_id: updatedStaff.warehouse_id,
+          effectivity_date: updatedStaff.effectivity_date,
           created_by: userId,
           updated_by: userId,
         });
@@ -3938,7 +4199,8 @@ export class StaffsService {
 
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
-
+          old_dws_code: updatedStaff.old_dws_code,
+          old_dws_id: updatedStaff.old_dws_id,
           staff_code: updatedStaff.staff_code,
           last_name: updatedStaff.last_name,
           first_name: updatedStaff.first_name,
@@ -3948,9 +4210,11 @@ export class StaffsService {
           vendor_id: updatedStaff.vendor_id,
           assign_status_id: updatedStaff.assign_status_id,
           position_id: updatedStaff.position_id,
+          is_institutional: updatedStaff.is_institutional,
           access_key_id: updatedStaff.access_key_id,
           sss_number: updatedStaff.sss_number,
           pagibig_number: updatedStaff.pagibig_number,
+          phil_health_number: updatedStaff.phil_health_number,
           tin: updatedStaff.tin,
           remarks: updatedStaff.remarks,
           overall_remarks: updatedStaff.overall_remarks,
@@ -3970,6 +4234,9 @@ export class StaffsService {
           reason_status_id: updatedStaff.reason_status_id,
           activate_effectivity_date: updatedStaff.activate_effectivity_date,
           approval_status_id: updatedStaff.approval_status_id,
+          warehouse_id: updatedStaff.warehouse_id,
+          effectivity_date: updatedStaff.effectivity_date,
+
           created_by: userId,
           updated_by: userId,
         });
@@ -4036,4 +4303,12 @@ export class StaffsService {
       throw new Error("Failed to approve staff");
     }
   }
+
+  private normalizeValue = (value: any): string => {
+          return String(value || "")
+            .trim()
+            .toUpperCase()
+            .replace(/\s+/g, "");
+        };
+
 }

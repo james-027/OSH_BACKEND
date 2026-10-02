@@ -4,7 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsNumber,
-  isInt,
+  IsBoolean,
   IsArray,
 } from "class-validator";
 
@@ -22,7 +22,7 @@ export class CreateStaffDto {
   first_name!: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   email!: string;
 
   @IsOptional()
@@ -71,6 +71,10 @@ export class CreateStaffDto {
 
   @IsOptional()
   @IsString()
+  phil_health_number?: string;
+
+  @IsOptional()
+  @IsString()
   tin?: string;
 
   @IsOptional()
@@ -80,6 +84,10 @@ export class CreateStaffDto {
   @IsOptional()
   @IsString()
   hired_date?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_institutional?: boolean;
 
   @IsOptional()
   @IsString()
@@ -134,11 +142,18 @@ export class CheckStaffDto {
   @IsString()
   middle_name?: string;
 
+  @IsOptional()
+  @IsInt()
+  staff_id?: string;
+
   @IsString()
   last_name: string;
 
   @IsString()
   pagibig_number: string;
+
+  @IsString()
+  phil_health_number: string;
 
   @IsString()
   tin: string;

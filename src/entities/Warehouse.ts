@@ -68,11 +68,26 @@ export class Warehouse {
   @Column({nullable:true})
   pos_availability_id: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  allowance: number;
+
   @CreateDateColumn({ type: "timestamp" })
   created_at: Date;
 
   @UpdateDateColumn({ type: "timestamp" })
   modified_at: Date;
+
+  @Column({ type: "date", nullable: true })
+  start_operation: Date;
+
+  @Column({ type: "date", nullable: true })
+  end_operation: Date;
+
+  @Column({ type: "time", nullable: true })
+  starting_time: string;
+
+  @Column({ type: "time", nullable: true })
+  ending_time: string;
 
   @ManyToOne(() => WarehouseType, { eager: false })
   @JoinColumn({ name: "warehouse_type_id" })

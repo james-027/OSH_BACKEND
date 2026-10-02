@@ -23,6 +23,9 @@ export class StaffTraining {
   @Column()
   staff_id: number;
 
+  @Column({ type: "varchar", length: 255, nullable:true })
+  staff_code: string;
+
   @Column()
   training_id: number;
 
@@ -47,7 +50,6 @@ export class StaffTraining {
   @Column({ length: 255, nullable: true })
   remarks: string;
 
-
   @Column({ default: 1 })
   status_id: number;
 
@@ -56,7 +58,6 @@ export class StaffTraining {
 
   @Column({ nullable: true })
   updated_by: number;
-
 
   @CreateDateColumn({
     type: "timestamp",

@@ -1,0 +1,27 @@
+import { Injectable } from "@nestjs/common";
+import { CronExpression } from "@nestjs/schedule";
+import logger from "../config/logger";
+import { ConditionalCron } from "src/decorators/conditional-cron.decorator";
+import { StaffPayrollService } from "src/modules/staff-payroll/services/staff-payroll.service";
+
+const dayjs = require("dayjs");
+
+@Injectable()
+export class LogsComputationService {
+  constructor(
+    private readonly staffPayrollService: StaffPayrollService,
+  ) {}
+
+  @ConditionalCron(CronExpression.EVERY_MINUTE, "ENABLE_LOGS_COMPUTATION_CRON")
+  async handleDailyScheduleSync() {
+
+    logger.info(`LogsComputation] Computation triggered for base date`);
+    try {
+      await this.staffPayrollService.autoComputationScheduleDetails();
+      logger.info(`[LogsComputation] Completed sync for date:`);
+    } catch (error: any) {
+      const errorMsg = error.getResponse ? JSON.stringify(error.getResponse()) : error.message;
+      logger.error(`[LogsComputation] Computation syncing for date : ${errorMsg}`, error.stack);
+    }
+  }
+}

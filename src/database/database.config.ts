@@ -97,6 +97,20 @@ import { StaffTransfers } from "../entities/StaffTransfers";
 import { EmailQueue } from "../entities/EmailQueue";
 import { PosAvailability } from "../entities/PosAvailability";
 import { MasterDataSyncLog } from "../entities/MasterDataSyncLog";
+import { ScheduleHeader } from "../entities/ScheduleHeader";
+import { ScheduleDetail } from "../entities/ScheduleDetails";
+import { ScheduleHeaderHistory } from "../entities/ScheduleHeaderHistory";
+import { WorkingDay } from "../entities/WorkingDay";
+import { RegularHoliday } from "../entities/RegularHoliday";
+import { LogsType } from "../entities/LogsType";
+import { ActualLogsHeader } from "../entities/ActualLogsHeader";
+import { ActualLogsDetail } from "../entities/ActualLogsDetail";
+import { PayrollInvoice } from "../entities/PayrollInvoice";
+import { PayrollDetails } from "../entities/PayrollDetails";
+import { PayrollHeader } from "../entities/PayrollHeader";
+import { TimeKeepingConfig } from "../entities/TimeKeepingConfig";
+import { SssConfigs } from "../entities/SssConfig";
+
 // All entities in one place for easy maintenance
 export const entities = [
   User,
@@ -196,6 +210,19 @@ export const entities = [
   EmailQueue,
   PosAvailability,
   MasterDataSyncLog,
+  ScheduleHeader,
+  ScheduleDetail,
+  ScheduleHeaderHistory,
+  WorkingDay,
+  RegularHoliday,
+  ActualLogsDetail,
+  ActualLogsHeader,
+  LogsType,
+  PayrollInvoice,
+  PayrollDetails,
+  PayrollHeader,
+  TimeKeepingConfig,
+  SssConfigs
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

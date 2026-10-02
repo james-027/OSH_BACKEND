@@ -71,13 +71,16 @@ export class Staff {
   @Column({ type: "varchar", nullable: true })
   email!: string | null;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 50, nullable: true })
   sss_number: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 50, nullable: true })
   pagibig_number: string;
 
-  @Column({ length: 255, nullable: true })
+  @Column({ length: 50, nullable: true })
+  phil_health_number: string;
+
+  @Column({ length: 50, nullable: true })
   tin: string;
 
   @Column({ type: "text", nullable: true })
@@ -131,11 +134,20 @@ export class Staff {
   @Column({ type: "date", nullable: true })
   effectivity_date: Date;
 
+  @Column({ type: "boolean", default: false })
+  is_institutional: boolean;
+
   @Column({ type: "date", nullable: true })
   deactivate_effectivity_date: Date;
 
   @Column({ type: "date", nullable: true })
   activate_effectivity_date: Date;
+
+  @Column({ length: 255, nullable: true, unique: true })
+  old_dws_code: string;
+
+  @Column({ nullable: true, unique: true })
+  old_dws_id: number;
 
   @CreateDateColumn({
     type: "timestamp",

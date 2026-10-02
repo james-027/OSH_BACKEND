@@ -9,7 +9,21 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from "@nestjs/common";
+import {
+  FileInterceptor,
+  diskStorage,
+  UploadedFile as FileType,
+} from "../../../adapters";
+import {
+  imageFileFilter,
+  excelFileFilter,
+  FILE_SIZE_LIMITS,
+  generateTimestampFilename,
+} from "../../../utils/file-upload.utils";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -61,10 +75,12 @@ export class StaffVendorSalariesController {
     @Request() req,
   ) {
     const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
     return this.staffVendorSalariesService.update(
       id,
       updateStaffVendorSalaryDto,
       userId,
+      accessKeyId
     );
   }
 
@@ -87,4 +103,33 @@ export class StaffVendorSalariesController {
     const userId = req.user.id;
     return this.staffVendorSalariesService.toggleStatus(id, userId);
   }
+  
+  @Get("history/:id")
+  @RequirePermissions({ module: "STAFF VENDOR SALARIES", action: "VIEW" })
+  async findOneHistory(@Param("id", ParseIntPipe) id: number) {
+    return this.staffVendorSalariesService.findOneHistory(id);
+  }
+
+    @Post("/upload-excel")
+    @UseInterceptors(
+      FileInterceptor("file", {
+        storage: diskStorage({
+          destination: "./uploads/staff-vendor-salaries",
+          filename: generateTimestampFilename,
+        }),
+        fileFilter: excelFileFilter,
+        limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
+      }),
+    )
+    async uploadStaffVendorSalaries(
+      @UploadedFile() file: Express.Multer.File,
+      @Request() req,
+    ) {
+      return this.staffVendorSalariesService.uploadStaffVendorSalaries(
+        file,
+        req.user.id,
+        req.user.current_access_key,
+      );
+    }
+
 }

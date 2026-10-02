@@ -11,6 +11,7 @@ import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { STATUS_IDS } from "src/constants/customConstants";
 
 @Injectable()
 export class WarehousesService {
@@ -28,14 +29,19 @@ export class WarehousesService {
     userId?: number,
     roleId?: number,
   ): Promise<any[]> {
-    const where: any = {};
-    if (warehouse_type_id) {
+
+    const where: any = {
+      status_id: STATUS_IDS.ACTIVE,
+    };
+
+    if (warehouse_type_id !== undefined) {
       where.warehouse_type_id = warehouse_type_id;
     }
+
     if (accessKeyId !== undefined) {
       where.access_key_id = accessKeyId;
     }
-    
+
     if (userId && roleId) {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
@@ -43,8 +49,11 @@ export class WarehousesService {
           roleId,
         );
 
+
       where.location_id = In(allowedLocationIds);
     }
+
+
     const warehouses = await this.warehousesRepository.find({
       where,
       relations: [
@@ -57,6 +66,8 @@ export class WarehousesService {
         "updatedBy",
       ],
     });
+
+
     return warehouses.map((w) => ({
       id: w.id,
       warehouse_name: w.warehouse_name,
@@ -75,10 +86,18 @@ export class WarehousesService {
       warehouse_type_name: w.warehouseType
         ? w.warehouseType.warehouse_type_name
         : null,
-      location_name: w.location ? w.location.location_name : null,
-      segment_name: w.segment ? w.segment.segment_name : null,
-      status_name: w.status ? w.status.status_name : null,
-      rem_status_name: w.remStatus ? w.remStatus.status_name : null,
+      location_name: w.location
+        ? w.location.location_name
+        : null,
+      segment_name: w.segment
+        ? w.segment.segment_name
+        : null,
+      status_name: w.status
+        ? w.status.status_name
+        : null,
+      rem_status_name: w.remStatus
+        ? w.remStatus.status_name
+        : null,
       created_user: w.createdBy
         ? `${w.createdBy.first_name} ${w.createdBy.last_name}`
         : null,
@@ -87,6 +106,7 @@ export class WarehousesService {
         : null,
     }));
   }
+
 
   async findAllPerStatus(
     warehouse_type_id?: number,

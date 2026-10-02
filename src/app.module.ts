@@ -116,10 +116,15 @@ import { ApprovalMatrixLevels } from "./entities/ApprovalMatrixLevels";
 import { StaffTrainingModule } from "./modules/staff-trainings/staff-trainings.module";
 import { TrainingsModule } from "./modules/trainings/trainings.module";
 import { StaffSalariesModule } from "./modules/staff-salaries/staff-salaries.module";
+import { StaffSchedulingModule } from "./modules/staff-scheduling/staff-scheduling.module";
 import { EmailQueueModule } from "./modules/email-queue/email-queue.module";
 import { EmailQueue } from "./entities/EmailQueue";
 import { MasterDataSyncModule } from "./modules/master-data-sync/master-data-sync.module";
 import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
+import { DigitalWorkspaceModule } from "./modules/digital-workspace-integration/digital-workspace.module";
+import { StaffAttendanceModule } from "./modules/staff-attendance/staff-attendance.module";
+import { WorkingDaysModule } from "./modules/working-days/working-days.module";
+import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -229,8 +234,13 @@ import { MasterDataSyncLog } from "./entities/MasterDataSyncLog";
     StaffTrainingModule,
     TrainingsModule,
     StaffSalariesModule,
+    StaffSchedulingModule,
     EmailQueueModule,
     MasterDataSyncModule,
+    StaffAttendanceModule,
+    DigitalWorkspaceModule,
+    WorkingDaysModule,
+    StaffPayrollModule
   ],
   providers: [
     EmailService,

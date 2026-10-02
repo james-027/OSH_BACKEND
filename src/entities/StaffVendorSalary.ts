@@ -42,6 +42,15 @@ export class StaffVendorSalary {
   @Column({ nullable: true })
   access_key_id: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  phil_health_contri_perc: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  sss_contri_perc: number;
+  
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  pagibig_number_perc: number;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP(6)",

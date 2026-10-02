@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { StaffSalary } from "src/entities/StaffSalary";
 import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "src/entities/Module";
@@ -11,11 +12,19 @@ import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { ActionsModule } from "../actions/actions.module";
+import { Staff } from "src/entities/Staff";
+import { Vendor } from "src/entities/Vendor";
+import { Location } from "src/entities/Location";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       StaffVendorSalary,
+      StaffSalary,
+      Staff,
+      Vendor,
+      Location,
       UserAuditTrail,
       UserPermissions,
       AppModule,
@@ -23,6 +32,7 @@ import { SSEModule } from "../sse/sse.module";
     ]),
     UsersModule,
     SSEModule,
+    ActionsModule
   ],
   controllers: [StaffVendorSalariesController],
   providers: [

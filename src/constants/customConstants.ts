@@ -41,6 +41,10 @@ export const STATUS_IDS = {
   WITH_ASSIGNMENT: 21,
   TEMPORARY_ASSIGNMENT: 26,
   REJECTED: 15,
+  TRAINEE : 20,
+  POSTED : 4,
+  VALIDATED : 40,
+  COMPUTED : 41,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -48,6 +52,33 @@ export const POS_AVAILABILITY_IDS = {
   WITH_POS: 1,
   WITHOUT_POS: 2,
 } as const;
+
+
+// ============= WORKING DAY =============
+export const WORKING_DAY_IDS = {
+REGULAR_DAY : 1,
+REGULAR_HOLIDAY : 2,
+SPECIAL_HOLIDAY : 3,
+REST_DAY_REGULAR_HOLIDAY : 4,
+REST_DAY_SPECIAL_HOLIDAY : 5,
+REGULAR_HOLIDAY_OFF :6,
+REST_DAY: 7
+} as const;
+// ============= ACCESS KEY =============
+export const ACCESS_KEY_IDS = {
+  CTGI_ACCESS: 1,
+  BOUNTY_PLUS_ACCESS: 2,
+} as const;
+
+// ============= LOGS TYPE  =============
+export const LOGS_TYPE_ID = {
+  POS_FETCH: 1,
+  CC_FETCH: 2,
+} as const;
+
+export const ACCESS_PROCESS = {
+    AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
+};
 
 export const STATUS_NAMES = {
   [STATUS_IDS.PENDING]: "Pending",
@@ -99,3 +130,8 @@ export const SALES_PLOTTING_PERSONNEL_NOTIFICATION_ROLE_IDS = [
 ] as const;
 
 export const QA_PORT = "3002";
+
+// ============= Days Factor Rate =============
+export const DAYS_FACTOR_RATE = {
+  DAYS: 26,
+} as const;

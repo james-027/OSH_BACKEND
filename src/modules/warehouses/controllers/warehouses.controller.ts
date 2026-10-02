@@ -25,16 +25,52 @@ import { buildWarehouseKey, CACHE_TTL } from "src/config/cache.config";
 export class WarehousesController {
   constructor(private readonly warehousesService: WarehousesService) {}
 
-  @Get("/stores/:warehouse_type_id")
+  // @Get("/stores/:warehouse_type_id")
+  // // @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
+  // @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  // async findAll(
+  //   @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
+  //   @Request() req,
+  // ) {
+  //   const accessKeyId = req.user.current_access_key;
+  //   const userId = req.user?.id;
+  //   const roleId = req.user?.role_id;
+  //   return this.warehousesService.findAll(
+  //     warehouseTypeId,
+  //     accessKeyId,
+  //     userId,
+  //     roleId,
+  //   );
+  // }
+
+  @Get("/stores")
   @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
   async findAll(
+    @Request() req,
+  ) {
+    const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
+    return this.warehousesService.findAll(
+      undefined,
+      accessKeyId,
+      userId,
+      roleId,
+    );
+  }
+
+  @Get("/stores/:warehouse_type_id")
+  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  async findAllByType(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Request() req,
   ) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
     const roleId = req.user?.role_id;
+
     return this.warehousesService.findAll(
       warehouseTypeId,
       accessKeyId,
