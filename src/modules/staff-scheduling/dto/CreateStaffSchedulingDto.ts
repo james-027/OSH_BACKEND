@@ -124,6 +124,14 @@ export class CreateSchedulingDetailDto {
   twh?: number;
 
   @IsOptional()
+  @IsString()
+  night_shift_hrs?: string;
+
+  @IsOptional()
+  @IsNumber()
+  night_shift?: number;
+
+  @IsOptional()
   @IsDateString()
   ending_time?: string;
 

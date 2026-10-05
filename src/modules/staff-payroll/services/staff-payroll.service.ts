@@ -25,10 +25,17 @@ import { PayrollDetails } from "src/entities/PayrollDetails";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { StaffSchedulingService } from "src/modules/staff-scheduling/services/staff-scheduling.service";
 import { PayrollComputationService } from "src/modules/staff-payroll/services/payroll-computation.service";
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const customParseFormat = require("dayjs/plugin/customParseFormat");
+
+dayjs.extend(utc);
+dayjs.extend(customParseFormat);
 
 @Injectable()
 export class StaffPayrollService {
@@ -333,6 +340,8 @@ export class StaffPayrollService {
             planned_duty_start_time: scheduleDetail.planned_duty_start_time,
 
             planned_duty_end_time: scheduleDetail.planned_duty_end_time,
+            
+            schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
 
             just_time_in: scheduleDetail.just_time_in,
 
@@ -359,6 +368,8 @@ export class StaffPayrollService {
             twh: scheduleDetail.twh,
 
             break: scheduleDetail.break,
+            night_shift_hrs: scheduleDetail.night_shift_hrs,
+            night_shift: scheduleDetail.night_shift,
 
             payroll_remarks: scheduleDetail.payroll_remarks,
 
@@ -550,6 +561,16 @@ export class StaffPayrollService {
               actualLogs?.time_out ??
               scheduleDetail.duty_end_time ??
               null;
+
+              const scheduleDate =
+                scheduleDetail.scheduleHeader?.schedule_date;
+
+            const { night_shift_hrs, night_shift } =
+              await this.calculateNightShift(
+                timeIn,
+                timeOut,
+                scheduleDate,
+              );
 
             const breakOut =
               scheduleDetail.just_break_out ?? actualLogs?.break_out ?? null;
@@ -786,6 +807,8 @@ export class StaffPayrollService {
               overtime_hours: overtimeHours,
               twh_hours: totalWorkingHours,
               break_hours: breakHours,
+              night_shift: night_shift,
+              night_shift_hrs: night_shift_hrs,
               cron_computed: true,
             });
 
@@ -812,6 +835,8 @@ export class StaffPayrollService {
               overtime_hours: overtimeHours,
               twh_hours: totalWorkingHours,
               break_hours: breakHours,
+              night_shift,
+              night_shift_hrs,
               cron_computed: true,
 
               updated: true,
@@ -1686,6 +1711,104 @@ export class StaffPayrollService {
       console.error("Error fetching payroll details:", error);
       throw new Error("Failed to fetch payroll details");
     }
+  }
+
+  public async calculateNightShift(
+    startTime: Date | null | undefined,
+    endTime: Date | null | undefined,
+    scheduleDate: Date,
+  ): Promise<{
+    night_shift_hrs: string;
+    night_shift: number;
+  }> {
+    if (!startTime || !endTime) {
+      return {
+        night_shift_hrs: "00:00:00",
+        night_shift: 0,
+      };
+    }
+  
+    const start = dayjs(startTime);
+    let end = dayjs(endTime);
+  
+    if (!start.isValid() || !end.isValid()) {
+      return {
+        night_shift_hrs: "00:00:00",
+        night_shift: 0,
+      };
+    }
+  
+    if (!end.isAfter(start)) {
+      end = end.add(1, "day");
+    }
+  
+    const scheduleDay = dayjs(scheduleDate).startOf("day");
+  
+    // Night shift: 10:00 PM to 6:00 AM.
+    const nightStartHour = 22;
+    const nightEndHour = 6;
+  
+    let totalSeconds = 0;
+  
+    // Check night-shift windows across the dates covered by the duty.
+    let currentDay = start.startOf("day").subtract(1, "day");
+    const lastDay = end.startOf("day");
+  
+    while (
+      currentDay.isBefore(lastDay) ||
+      currentDay.isSame(lastDay, "day")
+    ) {
+      const windowStart = currentDay
+        .hour(nightStartHour)
+        .minute(0)
+        .second(0)
+        .millisecond(0);
+  
+      const windowEnd = currentDay
+        .add(1, "day")
+        .hour(nightEndHour)
+        .minute(0)
+        .second(0)
+        .millisecond(0);
+  
+      // Only count night hours belonging to the schedule date's
+      // night window and the following morning.
+      const nextMorning = scheduleDay.add(1, "day");
+  
+      const isRelevantWindow =
+        windowStart.isSame(scheduleDay, "day") ||
+        windowStart.isSame(nextMorning, "day");
+  
+      if (isRelevantWindow) {
+        const overlapStart = start.isAfter(windowStart)
+          ? start
+          : windowStart;
+  
+        const overlapEnd = end.isBefore(windowEnd)
+          ? end
+          : windowEnd;
+  
+        if (overlapEnd.isAfter(overlapStart)) {
+          totalSeconds += overlapEnd.diff(overlapStart, "second");
+        }
+      }
+  
+      currentDay = currentDay.add(1, "day");
+    }
+  
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+  
+    return {
+      night_shift_hrs: [
+        String(hours).padStart(2, "0"),
+        String(minutes).padStart(2, "0"),
+        String(seconds).padStart(2, "0"),
+      ].join(":"),
+  
+      night_shift: Number((totalSeconds / 3600).toFixed(2)),
+    };
   }
 
 }

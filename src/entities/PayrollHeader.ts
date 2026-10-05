@@ -103,6 +103,9 @@ export class PayrollHeader {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_rest_day: number;
+  
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_night_shift: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_day_work: number;
@@ -127,6 +130,9 @@ export class PayrollHeader {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
   total_rest_day_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
+  total_night_shift_amount: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true, default: 0 })
   total_special_holiday_amount: number;

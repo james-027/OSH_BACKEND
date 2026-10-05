@@ -43,6 +43,8 @@ export class PayrollComputationService {
     const hourRate = this.computeHourRate(salaryRate);
     const regular = Number(detail.regular) || 0;
     const overtime = Number(detail.overtime) || 0;
+    const nightShift = Number(detail.night_shift) || 0;
+   const nightShiftAmount = (salaryRate * 0.10 / 8) * nightShift;
 
     /**
      * ----------------------------------------------------------
@@ -63,6 +65,7 @@ export class PayrollComputationService {
     let otRegularHolidayAmount = 0;
     let otRdRegularHolidayAmount = 0;
     let otRdSpecialHolidayAmount = 0;
+
 
     switch (detail.working_day_id) {
       case WORKING_DAY_IDS.REGULAR_DAY:
@@ -131,7 +134,7 @@ export class PayrollComputationService {
       regularHolidayOffAmount +
       rdRegularHolidayAmount +
       rdSpecialHolidayAmount +
-      overtimeAmount;
+      overtimeAmount + nightShiftAmount;
 
     /**
      * ----------------------------------------------------------
@@ -206,6 +209,9 @@ export class PayrollComputationService {
     return {
       salary_rate: salaryRate,
       hour_rate: hourRate,
+
+      night_shift: nightShift,
+      night_shift_amount: Number(nightShiftAmount.toFixed(2)),
 
       regular_amount: regularAmount,
       rest_day_amount: restDayAmount,
@@ -565,6 +571,9 @@ export class PayrollComputationService {
     let totalOtRdSpecialHolidayAmount = 0;
     let totalOvertimeAmount = 0;
 
+    let totalNightShift = 0;
+    let totalNightShiftAmount = 0;
+
     let totalThirteenMonthPay = 0;
 
     let totalSssShare = 0;
@@ -612,6 +621,9 @@ export class PayrollComputationService {
       totalOtRdRegularHolidayAmount += Number(detail.ot_rd_regular_holiday_amount) || 0;
       totalOtRdSpecialHolidayAmount += Number(detail.ot_rd_special_holiday_amount) || 0;
       totalOvertimeAmount += Number(detail.overtime_amount) || 0;
+
+      totalNightShift += Number(detail.night_shift) || 0;
+      totalNightShiftAmount += Number(detail.night_shift_amount) || 0;
 
       totalDayWork += Number(detail.total_day_work) || 0;
       totalThirteenMonthPay += Number(detail.thirteen_month_pay) || 0;
@@ -661,6 +673,9 @@ export class PayrollComputationService {
       total_ot_rd_regular_holiday_amount: totalOtRdRegularHolidayAmount,
       total_ot_rd_special_holiday_amount: totalOtRdSpecialHolidayAmount,
       total_overtime_amount: totalOvertimeAmount,
+
+      total_night_shift: totalNightShift,
+      total_night_shift_amount: totalNightShiftAmount,
 
       total_thirteen_month_pay: totalThirteenMonthPay,
       total_sss_share: totalSssShare,
