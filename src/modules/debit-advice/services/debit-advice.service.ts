@@ -1525,7 +1525,19 @@ export class DebitAdviceService {
           continue;
         }
         const profitcenter = getExcelValue(row, "PROFITCENTER");
-        const remarks = getExcelValue(row, "REMARKS") ?? "";
+        const originalRemarks = String(
+          getExcelValue(row, "REMARKS") ?? ""
+        ).trim();
+
+        const advancesARType = String(
+          getExcelValue(row, "ADVANCES/AR TYPE") ?? ""
+        ).trim();
+
+        const remarks = advancesARType
+          ? originalRemarks
+            ? `${originalRemarks} || ${advancesARType}`
+            : `${advancesARType}`
+          : advancesARType;
         const amountValue = getExcelValue(row, "AMOUNT");
         const amount = Number(amountValue);
 
