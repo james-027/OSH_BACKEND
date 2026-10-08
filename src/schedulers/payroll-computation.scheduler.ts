@@ -12,7 +12,7 @@ export class PayrollComputationScheduler {
     private readonly staffPayrollService: StaffPayrollService,
   ) {}
 
-  @ConditionalCron(CronExpression.EVERY_MINUTE, "ENABLE_PAYROLL_COMPUTATION_CRON")
+  @ConditionalCron(CronExpression.EVERY_30_SECONDS, "ENABLE_PAYROLL_COMPUTATION_CRON")
   async handleDailyScheduleSync() {
 
     logger.info(`PayrollComputation] Computation triggered for base date`);

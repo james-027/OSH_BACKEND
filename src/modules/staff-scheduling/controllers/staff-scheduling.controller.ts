@@ -218,4 +218,20 @@ async uploadExcel(
       vendorIds
     );
   }
+
+  @Post("post-dws-schedule")
+  @RequirePermissions({ module: "STAFF SCHEDULING", action: "POST" })
+  async postDwsSchedule(
+    @Body("schedule_date") scheduleDate: string,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.staffSchedulingService.syncDwsSchedulesByDate(
+      scheduleDate,
+      userId,
+    );
+  }
+
+
+  
 }

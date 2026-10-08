@@ -22,9 +22,6 @@ export class CreateStaffVendorSalaryDto {
   status_id?: number;
   @IsOptional()
 
-  @IsOptional()
-  @IsNumber()
-  allowance?: number;
 
   @IsOptional()
   @IsNumber()

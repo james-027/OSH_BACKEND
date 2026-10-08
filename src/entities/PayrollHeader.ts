@@ -183,6 +183,12 @@ export class PayrollHeader {
   total_phil_health_share: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_govt_share: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_regular_day_amount: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_payroll: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
@@ -211,4 +217,7 @@ export class PayrollHeader {
 
   @Column({ type: "boolean", default: false })
   cron_computed: boolean;
+
+  @Column({ type: "boolean", default: false })
+  is_reverted: boolean;
 }

@@ -20,14 +20,14 @@ export class PayrollComputationService {
     detail,
     payrollHeader,
     salaryRate,
-    staffVendor,
+    staffSalary,
     sssConfigs,
     timeKeeping,
   }: {
     detail: PayrollDetails;
     payrollHeader: PayrollHeader;
     salaryRate: number;
-    staffVendor?: any;
+    staffSalary?: any;
     sssConfigs: SssConfigs[];
     timeKeeping?: any;
   }): Partial<PayrollDetails> | null {
@@ -115,6 +115,15 @@ export class PayrollComputationService {
         break;
     }
 
+    const regularDayAmount =
+      regularAmount +
+      restDayAmount +
+      specialHolidayAmount +
+      regularHolidayAmount +
+      regularHolidayOffAmount +
+      rdRegularHolidayAmount +
+      rdSpecialHolidayAmount;
+
     const overtimeAmount =
       otRegularAmount +
       otRestDayAmount +
@@ -127,14 +136,9 @@ export class PayrollComputationService {
      * TOTAL = REGULAR + RD + SPH + RH + RH OFF + (RD & RH) + (RD & SPH) + OVERTIME
      */
     const grossPay =
-      regularAmount +
-      restDayAmount +
-      specialHolidayAmount +
-      regularHolidayAmount +
-      regularHolidayOffAmount +
-      rdRegularHolidayAmount +
-      rdSpecialHolidayAmount +
-      overtimeAmount + nightShiftAmount;
+      regularDayAmount +
+      overtimeAmount +
+      nightShiftAmount;
 
     /**
      * ----------------------------------------------------------
@@ -179,15 +183,21 @@ export class PayrollComputationService {
     );
 
     const pagIbigShare = this.computePagIbigShare(
-      staffVendor,
+      staffSalary,
       totalDayWorkFraction,
     );
 
     const philHealthShare = this.computePhilHealthShare(
       salaryRate,
-      staffVendor,
+      staffSalary,
       totalDayWorkFraction,
     );
+
+    const totalGovtShare =
+    sssShare +
+    pagIbigShare +
+    philHealthShare +
+    thirteenMonthPay;
 
     /**
      * ----------------------------------------------------------
@@ -198,6 +208,7 @@ export class PayrollComputationService {
       detail,
       timeKeeping,
       grossPay,
+      totalGovtShare,
       dutyCount,
     );
 
@@ -220,6 +231,8 @@ export class PayrollComputationService {
       regular_holiday_off_amount: regularHolidayOffAmount,
       rd_regular_holiday_amount: rdRegularHolidayAmount,
       rd_special_holiday_amount: rdSpecialHolidayAmount,
+
+      regular_day_amount: Number(regularDayAmount.toFixed(2)),
 
       ot_regular_amount: otRegularAmount,
       ot_rest_day_amount: otRestDayAmount,
@@ -248,6 +261,8 @@ export class PayrollComputationService {
       sss_share: sssShare,
       pag_ibig_share: pagIbigShare,
       phil_health_share: philHealthShare,
+      
+      total_govt_share: Number(totalGovtShare.toFixed(2)),
 
       total_payroll: billingValues.totalPayroll,
       asf: billingValues.asf,
@@ -443,10 +458,10 @@ export class PayrollComputationService {
    * ============================================================
    */
   private computePagIbigShare(
-    staffVendor: any,
+    staffSalary: any,
     totalDayWorkFraction: number,
   ): number {
-    const pagibigNumberPerc = Number(staffVendor?.pagibig_number_perc) || 0;
+    const pagibigNumberPerc = Number(staffSalary?.pagibig_number_perc) || 0;
     const pagibigDailyRate =
       Math.round((pagibigNumberPerc / DAYS_FACTOR_RATE.DAYS) * 100) / 100;
 
@@ -460,11 +475,11 @@ export class PayrollComputationService {
    */
   private computePhilHealthShare(
     salaryRate: number,
-    staffVendor: any,
+    staffSalary: any,
     totalDayWorkFraction: number,
   ): number {
     const philHealthContriPerc =
-      Number(staffVendor?.phil_health_contri_perc) || 0;
+      Number(staffSalary?.phil_health_contri_perc) || 0;
 
     const philHealthDailyRate =
       Math.round(
@@ -483,6 +498,7 @@ export class PayrollComputationService {
     detail: PayrollDetails,
     timeKeeping: any,
     grossPay: number,
+    totalGovtShare: number,
     dutyCount: number,
   ): {
     totalPayroll: number;
@@ -502,7 +518,7 @@ export class PayrollComputationService {
     const vendorTaxField = Number(detail.vendor?.tax) || 0;
     const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
 
-    const totalPayroll = grossPay;
+    const totalPayroll = grossPay + totalGovtShare;
     const asf = totalPayroll * vendorAsfField;
     const totalAsf = totalPayroll + asf;
     const allowance = warehouseAllowance * dutyCount;
@@ -562,6 +578,8 @@ export class PayrollComputationService {
     let totalRdRegularHolidayAmount = 0;
     let totalRdSpecialHolidayAmount = 0;
 
+    let totalRegularDayAmount = 0;
+
     // --- Overtime Pay Amounts ---
     let totalOtRegularAmount = 0;
     let totalOtRestDayAmount = 0;
@@ -575,6 +593,8 @@ export class PayrollComputationService {
     let totalNightShiftAmount = 0;
 
     let totalThirteenMonthPay = 0;
+
+    let totalGovtShare = 0;
 
     let totalSssShare = 0;
     let totalPagIbigShare = 0;
@@ -604,6 +624,8 @@ export class PayrollComputationService {
       totalOtRestDay += Number(detail.ot_rest_day) || 0;
       totalOtDayWork += Number(detail.total_ot_day_work) || 0;
 
+      totalGovtShare += Number(detail.total_govt_share) || 0;
+
       // Sum Regular Pay Amounts
       totalRegularAmount += Number(detail.regular_amount) || 0;
       totalRestDayAmount += Number(detail.rest_day_amount) || 0;
@@ -612,6 +634,8 @@ export class PayrollComputationService {
       totalRegularHolidayOffAmount += Number(detail.regular_holiday_off_amount) || 0;
       totalRdRegularHolidayAmount += Number(detail.rd_regular_holiday_amount) || 0;
       totalRdSpecialHolidayAmount += Number(detail.rd_special_holiday_amount) || 0;
+
+      totalRegularDayAmount += Number(detail.regular_day_amount) || 0;
 
       // Sum Overtime Pay Amounts
       totalOtRegularAmount += Number(detail.ot_regular_amount) || 0;
@@ -658,6 +682,8 @@ export class PayrollComputationService {
       total_ot_rest_day: totalOtRestDay,
       total_ot_day_work: totalOtDayWork,
 
+      total_govt_share: totalGovtShare,
+
       total_regular_amount: totalRegularAmount,
       total_rest_day_amount: totalRestDayAmount,
       total_special_holiday_amount: totalSpecialHolidayAmount,
@@ -665,6 +691,8 @@ export class PayrollComputationService {
       total_regular_holiday_off_amount: totalRegularHolidayOffAmount,
       total_rd_regular_holiday_amount: totalRdRegularHolidayAmount,
       total_rd_special_holiday_amount: totalRdSpecialHolidayAmount,
+
+      total_regular_day_amount: totalRegularDayAmount,
 
       total_ot_regular_amount: totalOtRegularAmount,
       total_ot_rest_day_amount: totalOtRestDayAmount,

@@ -142,6 +142,10 @@ export class CreateSchedulingDetailDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+
+  @IsOptional()
+  @IsDateString()
+  dws_schedule_date?: string;
 }
 
 export class CreateScheduleHeaderDto {

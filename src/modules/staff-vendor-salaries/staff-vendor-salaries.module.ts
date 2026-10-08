@@ -16,6 +16,7 @@ import { ActionsModule } from "../actions/actions.module";
 import { Staff } from "src/entities/Staff";
 import { Vendor } from "src/entities/Vendor";
 import { Location } from "src/entities/Location";
+import { SssConfigs } from "src/entities/SssConfig";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { Location } from "src/entities/Location";
       Staff,
       Vendor,
       Location,
+      SssConfigs,
       UserAuditTrail,
       UserPermissions,
       AppModule,

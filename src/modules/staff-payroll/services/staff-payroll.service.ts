@@ -488,7 +488,10 @@ export class StaffPayrollService {
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
-        attendance_status_id: STATUS_IDS.VALIDATED,
+          attendance_status_id: In([
+          STATUS_IDS.VALIDATED,
+          // STATUS_IDS.COMPUTED,
+        ]),
         cron_computed: false,
       };
 
@@ -948,102 +951,6 @@ export class StaffPayrollService {
     )}`;
   }
 
-  // async autoPayrollComputation(): Promise<any> {
-  //   try {
-  //     const postedPayrollDetails = await this.payrollDetailRepository.find({
-  //       where: {
-  //         payrollHeader: {
-  //           status_id: STATUS_IDS.POSTED,
-  //         },
-  //       },
-  //       relations: [
-  //         "payrollHeader",
-  //         "scheduleDetail",
-  //         "staff",
-  //         "warehouse",
-  //         "location",
-  //         "vendor",
-  //         "workingDays",
-  //       ],
-  //       order: {
-  //         payroll_header_id: "ASC",
-  //         id: "ASC",
-  //       },
-  //     });
-
-  //     if (!postedPayrollDetails.length) {
-  //       return {
-  //         success: true,
-  //         total: 0,
-  //       };
-  //     }
-
-  //     const groupedByHeader = new Map<number, PayrollDetails[]>();
-
-  //     for (const payrollDetail of postedPayrollDetails) {
-  //       const payrollHeaderId = payrollDetail.payroll_header_id;
-
-  //       if (!payrollHeaderId) {
-  //         continue;
-  //       }
-
-  //       if (!groupedByHeader.has(payrollHeaderId)) {
-  //         groupedByHeader.set(payrollHeaderId, []);
-  //       }
-
-  //       groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
-  //     }
-
-  //     for (const [
-  //       payrollHeaderId,
-  //       payrollDetails,
-  //     ] of groupedByHeader.entries()) {
-  //       const payrollHeader = payrollDetails[0]?.payrollHeader ?? null;
-
-  //       if (!payrollHeader) {
-  //         continue;
-  //       }
-
-  //       for (const detail of payrollDetails) {
-  //         const salary = await this.staffSalaryRepository.findOne({
-  //           where: {
-  //             staff_id: detail.staff_id,
-  //             access_key_id: payrollHeader.access_key_id,
-  //             status_id: STATUS_IDS.ACTIVE,
-  //           },
-  //         });
-
-  //         if (!salary) {
-  //           continue;
-  //         }
-
-  //         const salaryRate = Number(salary.salary_rate) || 0;
-  //         const regular = Number(detail.regular) || 0;
-  //         const overtime = Number(detail.overtime) || 0;
-
-  //         const regularAmount = (regular * salaryRate) / 8;
-
-  //         const overtimeAmount = (overtime * salaryRate) / 8;
-
-  //         detail.regular_amount = regularAmount;
-  //         detail.overtime_amount = overtimeAmount;
-
-  //         await this.payrollDetailRepository.save(detail);
-  //       }
-  //     }
-
-  //     return {
-  //       success: true,
-  //       message: "Payroll computation completed successfully.",
-  //     };
-  //   } catch (error) {
-  //     throw new Error(
-  //       error instanceof Error
-  //         ? error.message
-  //         : "Failed to fetch posted payroll details.",
-  //     );
-  //   }
-  // }
 
   async autoPayrollComputation(): Promise<any> {
     try {
@@ -1052,7 +959,7 @@ export class StaffPayrollService {
           where: {
             payrollHeader: {
               status_id: STATUS_IDS.POSTED,
-              // cron_computed: false,
+              cron_computed: false,
             },
           },
           relations: [
@@ -1071,7 +978,9 @@ export class StaffPayrollService {
         });
 
       if (!postedPayrollDetails.length) {
-          logger.info("[PayrollComputation] No posted and computed post header found");
+        logger.info(
+          "[PayrollComputation] No posted and computed post header found",
+        );
       }
 
       const staffIds = [
@@ -1101,25 +1010,11 @@ export class StaffPayrollService {
         ),
       ];
 
-      const staffSalaries =
-        await this.staffSalaryRepository.find({
-          where: {
-            staff_id: In(staffIds),
-            access_key_id: In(accessKeyIds),
-            status_id: STATUS_IDS.ACTIVE,
-          },
-        });
-
-      const salaryMap =
-        new Map<string, number>();
-
-      for (const salary of staffSalaries) {
-        salaryMap.set(
-          `${salary.staff_id}-${salary.access_key_id}`,
-          Number(salary.salary_rate) || 0,
-        );
-      }
-
+      /**
+       * ============================================================
+       * STAFF VENDOR SALARIES
+       * ============================================================
+       */
       const staffVendorSalaries =
         await this.staffVendorSalaryRepository.find({
           where: {
@@ -1139,9 +1034,60 @@ export class StaffPayrollService {
         );
       }
 
+      /**
+       * ============================================================
+       * STAFF SALARIES
+       *
+       * staff_salaries.staff_vendor_id
+       *      -> staff_vendor_salaries.id
+       * ============================================================
+       */
+      const staffVendorIds = [
+        ...new Set(
+          staffVendorSalaries
+            .map(
+              (staffVendor) =>
+                staffVendor.id,
+            )
+            .filter(
+              (id) =>
+                id !== null &&
+                id !== undefined,
+            ),
+        ),
+      ];
+
+      const staffSalaries =
+        await this.staffSalaryRepository.find({
+          where: {
+            staff_vendor_id: In(staffVendorIds),
+            status_id: STATUS_IDS.ACTIVE,
+          },
+        });
+
+      const staffSalaryMap =
+        new Map<number, any>();
+
+      for (const staffSalary of staffSalaries) {
+        staffSalaryMap.set(
+          staffSalary.staff_vendor_id,
+          staffSalary,
+        );
+      }
+
+      /**
+       * ============================================================
+       * SSS CONFIG
+       * ============================================================
+       */
       const sssConfigs =
         await this.sssConfigRepository.find();
 
+      /**
+       * ============================================================
+       * TIME KEEPING CONFIG
+       * ============================================================
+       */
       const timeKeepingConfigs =
         await this.timeKeepingRepository.find({
           where: {
@@ -1159,6 +1105,11 @@ export class StaffPayrollService {
         );
       }
 
+      /**
+       * ============================================================
+       * COMPUTATION
+       * ============================================================
+       */
       const computedDetailsByHeader =
         new Map<number, PayrollDetails[]>();
 
@@ -1182,15 +1133,11 @@ export class StaffPayrollService {
         const accessKeyId =
           payrollHeader.access_key_id;
 
-        const salaryRate =
-          salaryMap.get(
-            `${staffId}-${accessKeyId}`,
-          ) ?? 0;
-
-        if (!salaryRate) {
-          continue;
-        }
-
+        /**
+         * ----------------------------------------------------------
+         * FIND STAFF VENDOR
+         * ----------------------------------------------------------
+         */
         const staffVendorKey =
           `${staffId}-${detail.vendor_id}-${detail.location_id}`;
 
@@ -1199,18 +1146,72 @@ export class StaffPayrollService {
             staffVendorKey,
           );
 
+        if (!staffVendor) {
+          logger.warn(
+            `[PayrollComputation] No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`,
+          );
+
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * FIND STAFF SALARY
+         *
+         * StaffSalary.staff_vendor_id
+         *          =
+         * StaffVendorSalary.id
+         * ----------------------------------------------------------
+         */
+        const staffSalary =
+          staffSalaryMap.get(
+            staffVendor.id,
+          );
+
+        if (!staffSalary) {
+          logger.warn(
+            `[PayrollComputation] No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`,
+          );
+
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * SALARY RATE
+         * ----------------------------------------------------------
+         */
+        const salaryRate =
+          Number(
+            staffSalary.salary_rate,
+          ) || 0;
+
+        if (!salaryRate) {
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * TIME KEEPING
+         * ----------------------------------------------------------
+         */
         const timeKeeping =
           timeKeepingMap.get(
             accessKeyId,
           );
 
+        /**
+         * ----------------------------------------------------------
+         * COMPUTE PAYROLL DETAIL
+         * ----------------------------------------------------------
+         */
         const computedValues =
           this.payrollComputationService.computePayrollDetail(
             {
               detail,
               payrollHeader,
               salaryRate,
-              staffVendor,
+              staffSalary,
               sssConfigs,
               timeKeeping,
             },
@@ -1248,6 +1249,11 @@ export class StaffPayrollService {
         computedCount++;
       }
 
+      /**
+       * ============================================================
+       * COMPUTE PAYROLL HEADER TOTALS
+       * ============================================================
+       */
       for (
         const [
           headerId,
@@ -1462,6 +1468,7 @@ export class StaffPayrollService {
               },
               {
                 status_id: STATUS_IDS.PENDING,
+                cron_computed: false,
                 updated_by: userId,
                 modified_at: new Date(),
               },
@@ -1586,6 +1593,7 @@ export class StaffPayrollService {
               },
               {
                 status_id: STATUS_IDS.CANCELLED,
+                cron_computed: false,
                 updated_by: userId,
                 modified_at: new Date(),
               },
