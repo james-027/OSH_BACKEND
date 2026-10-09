@@ -25,10 +25,17 @@ import { PayrollDetails } from "src/entities/PayrollDetails";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { StaffSchedulingService } from "src/modules/staff-scheduling/services/staff-scheduling.service";
 import { PayrollComputationService } from "src/modules/staff-payroll/services/payroll-computation.service";
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const customParseFormat = require("dayjs/plugin/customParseFormat");
+
+dayjs.extend(utc);
+dayjs.extend(customParseFormat);
 
 @Injectable()
 export class StaffPayrollService {
@@ -333,6 +340,8 @@ export class StaffPayrollService {
             planned_duty_start_time: scheduleDetail.planned_duty_start_time,
 
             planned_duty_end_time: scheduleDetail.planned_duty_end_time,
+            
+            schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
 
             just_time_in: scheduleDetail.just_time_in,
 
@@ -359,6 +368,8 @@ export class StaffPayrollService {
             twh: scheduleDetail.twh,
 
             break: scheduleDetail.break,
+            night_shift_hrs: scheduleDetail.night_shift_hrs,
+            night_shift: scheduleDetail.night_shift,
 
             payroll_remarks: scheduleDetail.payroll_remarks,
 
@@ -477,7 +488,10 @@ export class StaffPayrollService {
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
-        attendance_status_id: STATUS_IDS.VALIDATED,
+          attendance_status_id: In([
+          STATUS_IDS.VALIDATED,
+          // STATUS_IDS.COMPUTED,
+        ]),
         cron_computed: false,
       };
 
@@ -550,6 +564,16 @@ export class StaffPayrollService {
               actualLogs?.time_out ??
               scheduleDetail.duty_end_time ??
               null;
+
+              const scheduleDate =
+                scheduleDetail.scheduleHeader?.schedule_date;
+
+            const { night_shift_hrs, night_shift } =
+              await this.calculateNightShift(
+                timeIn,
+                timeOut,
+                scheduleDate,
+              );
 
             const breakOut =
               scheduleDetail.just_break_out ?? actualLogs?.break_out ?? null;
@@ -786,6 +810,8 @@ export class StaffPayrollService {
               overtime_hours: overtimeHours,
               twh_hours: totalWorkingHours,
               break_hours: breakHours,
+              night_shift: night_shift,
+              night_shift_hrs: night_shift_hrs,
               cron_computed: true,
             });
 
@@ -812,6 +838,8 @@ export class StaffPayrollService {
               overtime_hours: overtimeHours,
               twh_hours: totalWorkingHours,
               break_hours: breakHours,
+              night_shift,
+              night_shift_hrs,
               cron_computed: true,
 
               updated: true,
@@ -923,102 +951,6 @@ export class StaffPayrollService {
     )}`;
   }
 
-  // async autoPayrollComputation(): Promise<any> {
-  //   try {
-  //     const postedPayrollDetails = await this.payrollDetailRepository.find({
-  //       where: {
-  //         payrollHeader: {
-  //           status_id: STATUS_IDS.POSTED,
-  //         },
-  //       },
-  //       relations: [
-  //         "payrollHeader",
-  //         "scheduleDetail",
-  //         "staff",
-  //         "warehouse",
-  //         "location",
-  //         "vendor",
-  //         "workingDays",
-  //       ],
-  //       order: {
-  //         payroll_header_id: "ASC",
-  //         id: "ASC",
-  //       },
-  //     });
-
-  //     if (!postedPayrollDetails.length) {
-  //       return {
-  //         success: true,
-  //         total: 0,
-  //       };
-  //     }
-
-  //     const groupedByHeader = new Map<number, PayrollDetails[]>();
-
-  //     for (const payrollDetail of postedPayrollDetails) {
-  //       const payrollHeaderId = payrollDetail.payroll_header_id;
-
-  //       if (!payrollHeaderId) {
-  //         continue;
-  //       }
-
-  //       if (!groupedByHeader.has(payrollHeaderId)) {
-  //         groupedByHeader.set(payrollHeaderId, []);
-  //       }
-
-  //       groupedByHeader.get(payrollHeaderId)!.push(payrollDetail);
-  //     }
-
-  //     for (const [
-  //       payrollHeaderId,
-  //       payrollDetails,
-  //     ] of groupedByHeader.entries()) {
-  //       const payrollHeader = payrollDetails[0]?.payrollHeader ?? null;
-
-  //       if (!payrollHeader) {
-  //         continue;
-  //       }
-
-  //       for (const detail of payrollDetails) {
-  //         const salary = await this.staffSalaryRepository.findOne({
-  //           where: {
-  //             staff_id: detail.staff_id,
-  //             access_key_id: payrollHeader.access_key_id,
-  //             status_id: STATUS_IDS.ACTIVE,
-  //           },
-  //         });
-
-  //         if (!salary) {
-  //           continue;
-  //         }
-
-  //         const salaryRate = Number(salary.salary_rate) || 0;
-  //         const regular = Number(detail.regular) || 0;
-  //         const overtime = Number(detail.overtime) || 0;
-
-  //         const regularAmount = (regular * salaryRate) / 8;
-
-  //         const overtimeAmount = (overtime * salaryRate) / 8;
-
-  //         detail.regular_amount = regularAmount;
-  //         detail.overtime_amount = overtimeAmount;
-
-  //         await this.payrollDetailRepository.save(detail);
-  //       }
-  //     }
-
-  //     return {
-  //       success: true,
-  //       message: "Payroll computation completed successfully.",
-  //     };
-  //   } catch (error) {
-  //     throw new Error(
-  //       error instanceof Error
-  //         ? error.message
-  //         : "Failed to fetch posted payroll details.",
-  //     );
-  //   }
-  // }
 
   async autoPayrollComputation(): Promise<any> {
     try {
@@ -1027,7 +959,7 @@ export class StaffPayrollService {
           where: {
             payrollHeader: {
               status_id: STATUS_IDS.POSTED,
-              // cron_computed: false,
+              cron_computed: false,
             },
           },
           relations: [
@@ -1046,7 +978,9 @@ export class StaffPayrollService {
         });
 
       if (!postedPayrollDetails.length) {
-          logger.info("[PayrollComputation] No posted and computed post header found");
+        logger.info(
+          "[PayrollComputation] No posted and computed post header found",
+        );
       }
 
       const staffIds = [
@@ -1076,25 +1010,11 @@ export class StaffPayrollService {
         ),
       ];
 
-      const staffSalaries =
-        await this.staffSalaryRepository.find({
-          where: {
-            staff_id: In(staffIds),
-            access_key_id: In(accessKeyIds),
-            status_id: STATUS_IDS.ACTIVE,
-          },
-        });
-
-      const salaryMap =
-        new Map<string, number>();
-
-      for (const salary of staffSalaries) {
-        salaryMap.set(
-          `${salary.staff_id}-${salary.access_key_id}`,
-          Number(salary.salary_rate) || 0,
-        );
-      }
-
+      /**
+       * ============================================================
+       * STAFF VENDOR SALARIES
+       * ============================================================
+       */
       const staffVendorSalaries =
         await this.staffVendorSalaryRepository.find({
           where: {
@@ -1114,9 +1034,60 @@ export class StaffPayrollService {
         );
       }
 
+      /**
+       * ============================================================
+       * STAFF SALARIES
+       *
+       * staff_salaries.staff_vendor_id
+       *      -> staff_vendor_salaries.id
+       * ============================================================
+       */
+      const staffVendorIds = [
+        ...new Set(
+          staffVendorSalaries
+            .map(
+              (staffVendor) =>
+                staffVendor.id,
+            )
+            .filter(
+              (id) =>
+                id !== null &&
+                id !== undefined,
+            ),
+        ),
+      ];
+
+      const staffSalaries =
+        await this.staffSalaryRepository.find({
+          where: {
+            staff_vendor_id: In(staffVendorIds),
+            status_id: STATUS_IDS.ACTIVE,
+          },
+        });
+
+      const staffSalaryMap =
+        new Map<number, any>();
+
+      for (const staffSalary of staffSalaries) {
+        staffSalaryMap.set(
+          staffSalary.staff_vendor_id,
+          staffSalary,
+        );
+      }
+
+      /**
+       * ============================================================
+       * SSS CONFIG
+       * ============================================================
+       */
       const sssConfigs =
         await this.sssConfigRepository.find();
 
+      /**
+       * ============================================================
+       * TIME KEEPING CONFIG
+       * ============================================================
+       */
       const timeKeepingConfigs =
         await this.timeKeepingRepository.find({
           where: {
@@ -1134,6 +1105,11 @@ export class StaffPayrollService {
         );
       }
 
+      /**
+       * ============================================================
+       * COMPUTATION
+       * ============================================================
+       */
       const computedDetailsByHeader =
         new Map<number, PayrollDetails[]>();
 
@@ -1157,15 +1133,11 @@ export class StaffPayrollService {
         const accessKeyId =
           payrollHeader.access_key_id;
 
-        const salaryRate =
-          salaryMap.get(
-            `${staffId}-${accessKeyId}`,
-          ) ?? 0;
-
-        if (!salaryRate) {
-          continue;
-        }
-
+        /**
+         * ----------------------------------------------------------
+         * FIND STAFF VENDOR
+         * ----------------------------------------------------------
+         */
         const staffVendorKey =
           `${staffId}-${detail.vendor_id}-${detail.location_id}`;
 
@@ -1174,18 +1146,72 @@ export class StaffPayrollService {
             staffVendorKey,
           );
 
+        if (!staffVendor) {
+          logger.warn(
+            `[PayrollComputation] No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`,
+          );
+
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * FIND STAFF SALARY
+         *
+         * StaffSalary.staff_vendor_id
+         *          =
+         * StaffVendorSalary.id
+         * ----------------------------------------------------------
+         */
+        const staffSalary =
+          staffSalaryMap.get(
+            staffVendor.id,
+          );
+
+        if (!staffSalary) {
+          logger.warn(
+            `[PayrollComputation] No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`,
+          );
+
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * SALARY RATE
+         * ----------------------------------------------------------
+         */
+        const salaryRate =
+          Number(
+            staffSalary.salary_rate,
+          ) || 0;
+
+        if (!salaryRate) {
+          continue;
+        }
+
+        /**
+         * ----------------------------------------------------------
+         * TIME KEEPING
+         * ----------------------------------------------------------
+         */
         const timeKeeping =
           timeKeepingMap.get(
             accessKeyId,
           );
 
+        /**
+         * ----------------------------------------------------------
+         * COMPUTE PAYROLL DETAIL
+         * ----------------------------------------------------------
+         */
         const computedValues =
           this.payrollComputationService.computePayrollDetail(
             {
               detail,
               payrollHeader,
               salaryRate,
-              staffVendor,
+              staffSalary,
               sssConfigs,
               timeKeeping,
             },
@@ -1223,6 +1249,11 @@ export class StaffPayrollService {
         computedCount++;
       }
 
+      /**
+       * ============================================================
+       * COMPUTE PAYROLL HEADER TOTALS
+       * ============================================================
+       */
       for (
         const [
           headerId,
@@ -1437,6 +1468,7 @@ export class StaffPayrollService {
               },
               {
                 status_id: STATUS_IDS.PENDING,
+                cron_computed: false,
                 updated_by: userId,
                 modified_at: new Date(),
               },
@@ -1561,6 +1593,7 @@ export class StaffPayrollService {
               },
               {
                 status_id: STATUS_IDS.CANCELLED,
+                cron_computed: false,
                 updated_by: userId,
                 modified_at: new Date(),
               },
@@ -1687,5 +1720,572 @@ export class StaffPayrollService {
       throw new Error("Failed to fetch payroll details");
     }
   }
+
+  public async calculateNightShift(
+    startTime: Date | null | undefined,
+    endTime: Date | null | undefined,
+    scheduleDate: Date,
+  ): Promise<{
+    night_shift_hrs: string;
+    night_shift: number;
+  }> {
+    if (!startTime || !endTime) {
+      return {
+        night_shift_hrs: "00:00:00",
+        night_shift: 0,
+      };
+    }
+  
+    const start = dayjs(startTime);
+    let end = dayjs(endTime);
+  
+    if (!start.isValid() || !end.isValid()) {
+      return {
+        night_shift_hrs: "00:00:00",
+        night_shift: 0,
+      };
+    }
+  
+    if (!end.isAfter(start)) {
+      end = end.add(1, "day");
+    }
+  
+    const scheduleDay = dayjs(scheduleDate).startOf("day");
+  
+    // Night shift: 10:00 PM to 6:00 AM.
+    const nightStartHour = 22;
+    const nightEndHour = 6;
+  
+    let totalSeconds = 0;
+  
+    // Check night-shift windows across the dates covered by the duty.
+    let currentDay = start.startOf("day").subtract(1, "day");
+    const lastDay = end.startOf("day");
+  
+    while (
+      currentDay.isBefore(lastDay) ||
+      currentDay.isSame(lastDay, "day")
+    ) {
+      const windowStart = currentDay
+        .hour(nightStartHour)
+        .minute(0)
+        .second(0)
+        .millisecond(0);
+  
+      const windowEnd = currentDay
+        .add(1, "day")
+        .hour(nightEndHour)
+        .minute(0)
+        .second(0)
+        .millisecond(0);
+  
+      // Only count night hours belonging to the schedule date's
+      // night window and the following morning.
+      const nextMorning = scheduleDay.add(1, "day");
+  
+      const isRelevantWindow =
+        windowStart.isSame(scheduleDay, "day") ||
+        windowStart.isSame(nextMorning, "day");
+  
+      if (isRelevantWindow) {
+        const overlapStart = start.isAfter(windowStart)
+          ? start
+          : windowStart;
+  
+        const overlapEnd = end.isBefore(windowEnd)
+          ? end
+          : windowEnd;
+  
+        if (overlapEnd.isAfter(overlapStart)) {
+          totalSeconds += overlapEnd.diff(overlapStart, "second");
+        }
+      }
+  
+      currentDay = currentDay.add(1, "day");
+    }
+  
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+  
+    return {
+      night_shift_hrs: [
+        String(hours).padStart(2, "0"),
+        String(minutes).padStart(2, "0"),
+        String(seconds).padStart(2, "0"),
+      ].join(":"),
+  
+      night_shift: Number((totalSeconds / 3600).toFixed(2)),
+    };
+  }
+
+
+
+async generatePayrollReport(
+  accessKeyId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  vendorIds?: number[],
+  locationIds?: number[],
+): Promise<any> {
+  try {
+    const query = this.payrollDetailRepository
+      .createQueryBuilder("payrollDetail")
+      .innerJoin("payrollDetail.payrollHeader", "payrollHeader")
+      .leftJoin("payrollDetail.staff", "staff")
+      .leftJoin("payrollDetail.vendor", "vendor")
+      .leftJoin("payrollDetail.warehouse", "warehouse");
+
+    query.select([
+      "payrollDetail.id",
+      "payrollDetail.payroll_header_id",
+      "payrollDetail.schedule_detail_id",
+      "payrollDetail.staff_id",
+      "payrollDetail.staff_code",
+      "payrollDetail.vendor_id",
+      "payrollDetail.location_id",
+      "payrollDetail.warehouse_id",
+      "payrollDetail.warehouse_ifs",
+
+      "payrollDetail.schedule_date",
+      "payrollDetail.duty_start_time",
+      "payrollDetail.duty_end_time",
+      "payrollDetail.planned_duty_start_time",
+      "payrollDetail.planned_duty_end_time",
+
+      "payrollDetail.just_time_in",
+      "payrollDetail.just_time_out",
+      "payrollDetail.overtime_in",
+      "payrollDetail.overtime_out",
+      "payrollDetail.just_break_in",
+      "payrollDetail.just_break_out",
+
+      "payrollDetail.actual_time_in",
+      "payrollDetail.actual_time_out",
+      "payrollDetail.actual_break_in",
+      "payrollDetail.actual_break_out",
+
+      "payrollDetail.working_day_id",
+      "payrollDetail.status_id",
+      "payrollDetail.attendance_status_id",
+
+      "payrollDetail.regular",
+      "payrollDetail.overtime",
+      "payrollDetail.twh",
+      "payrollDetail.break",
+
+      "payrollDetail.regular_hours",
+      "payrollDetail.overtime_hours",
+      "payrollDetail.twh_hours",
+      "payrollDetail.break_hours",
+
+      "payrollDetail.shift_type",
+      "payrollDetail.night_shift_hrs",
+      "payrollDetail.night_shift",
+      "payrollDetail.night_shift_amount",
+
+      "payrollDetail.regular_amount",
+      "payrollDetail.regular_day_amount",
+      "payrollDetail.rest_day_amount",
+      "payrollDetail.special_holiday_amount",
+      "payrollDetail.regular_holiday_amount",
+      "payrollDetail.regular_holiday_off_amount",
+      "payrollDetail.rd_regular_holiday_amount",
+      "payrollDetail.rd_special_holiday_amount",
+
+      "payrollDetail.overtime_amount",
+      "payrollDetail.ot_regular_amount",
+      "payrollDetail.ot_rest_day_amount",
+      "payrollDetail.ot_special_holiday_amount",
+      "payrollDetail.ot_regular_holiday_amount",
+      "payrollDetail.ot_rd_regular_holiday_amount",
+      "payrollDetail.ot_rd_special_holiday_amount",
+      "payrollDetail.net_amt_diser",
+
+      "payrollDetail.salary_rate",
+      "payrollDetail.hour_rate",
+
+      "payrollDetail.regular_day",
+      "payrollDetail.special_holiday",
+      "payrollDetail.regular_holiday",
+      "payrollDetail.rest_day",
+      "payrollDetail.total_day_work",
+
+      "payrollDetail.ot_regular_day",
+      "payrollDetail.ot_special_holiday",
+      "payrollDetail.ot_regular_holiday",
+      "payrollDetail.ot_rest_day",
+      "payrollDetail.total_ot_day_work",
+
+      "payrollDetail.gross_pay",
+      "payrollDetail.thirteen_month_pay",
+      "payrollDetail.sss_share",
+      "payrollDetail.pag_ibig_share",
+      "payrollDetail.phil_health_share",
+      "payrollDetail.total_govt_share",
+      "payrollDetail.total_payroll",
+
+      "payrollDetail.asf",
+      "payrollDetail.total_asf",
+      "payrollDetail.allowance",
+      "payrollDetail.total_allowance",
+      "payrollDetail.vat",
+      "payrollDetail.total_with_vat",
+      "payrollDetail.tax",
+      "payrollDetail.net_of_tax",
+      "payrollDetail.cash_bond",
+      "payrollDetail.total_billing",
+
+      "staff.id",
+      "staff.first_name",
+      "staff.last_name",
+      "staff.staff_code",
+      "staff.old_dws_code",
+      "staff.contact_number",
+
+      "vendor.id",
+      "vendor.service_provider_name",
+      "vendor.service_provider_code",
+
+      "warehouse.id",
+      "warehouse.warehouse_name",
+      "warehouse.warehouse_code",
+      "warehouse.warehouse_ifs",
+    ]);
+
+    query.andWhere("payrollHeader.status_id = :postedStatus", {
+      postedStatus: STATUS_IDS.POSTED,
+    });
+
+    if (accessKeyId) {
+      query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
+        accessKeyId,
+      });
+    }
+
+    if (dateFrom) {
+      query.andWhere(
+        "DATE(payrollDetail.schedule_date) >= :dateFrom",
+        {
+          dateFrom,
+        },
+      );
+    }
+
+    if (dateTo) {
+      query.andWhere(
+        "DATE(payrollDetail.schedule_date) <= :dateTo",
+        {
+          dateTo,
+        },
+      );
+    }
+
+    if (vendorIds?.length) {
+      query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
+        vendorIds,
+      });
+    }
+
+    if (locationIds?.length) {
+      query.andWhere(
+        "payrollDetail.location_id IN (:...locationIds)",
+        {
+          locationIds,
+        },
+      );
+    }
+
+    query
+      .orderBy("vendor.id", "ASC")
+      .addOrderBy("payrollDetail.schedule_date", "ASC")
+      .addOrderBy("warehouse.id", "ASC")
+      .addOrderBy("staff.id", "ASC")
+      .addOrderBy("payrollDetail.id", "ASC");
+
+    const details = await query.getMany();
+
+    const vendorMap = new Map<number, any>();
+
+    for (const detail of details) {
+      const vendorId = detail.vendor?.id ?? detail.vendor_id;
+
+      const scheduleDate = detail.schedule_date
+        ? new Date(detail.schedule_date)
+            .toISOString()
+            .split("T")[0]
+        : null;
+
+      const warehouseId =
+        detail.warehouse?.id ?? detail.warehouse_id;
+
+      const staffId =
+        detail.staff?.id ?? detail.staff_id;
+
+      if (vendorId == null) {
+        continue;
+      }
+
+      if (!vendorMap.has(vendorId)) {
+        vendorMap.set(vendorId, {
+          vendor_id: vendorId,
+          vendor_name:
+            detail.vendor?.service_provider_name ?? null,
+          vendor_code:
+            detail.vendor?.service_provider_code ?? null,
+          dates: [],
+          _dateMap: new Map(),
+        });
+      }
+
+      const vendorGroup = vendorMap.get(vendorId);
+
+      if (!vendorGroup._dateMap.has(scheduleDate)) {
+        vendorGroup._dateMap.set(scheduleDate, {
+          schedule_date: scheduleDate,
+          schedule_day: scheduleDate
+          ? new Date(`${scheduleDate}T12:00:00`).toLocaleDateString("en-US", {weekday: "long",}).toUpperCase()
+          : null,
+          warehouses: [],
+          _warehouseMap: new Map(),
+        });
+      }
+
+      const dateGroup =
+        vendorGroup._dateMap.get(scheduleDate);
+
+      const warehouseKey =
+        warehouseId ?? `no-warehouse-${scheduleDate}`;
+
+      if (!dateGroup._warehouseMap.has(warehouseKey)) {
+        dateGroup._warehouseMap.set(warehouseKey, {
+          warehouse_id: warehouseId,
+          warehouse_name:
+            detail.warehouse?.warehouse_name ?? null,
+          warehouse_code:
+            detail.warehouse?.warehouse_code ?? null,
+          warehouse_ifs:
+            detail.warehouse?.warehouse_ifs ?? null,
+          total_actual_hours: 0,
+          total_staff_count: 0,
+          staff: [],
+          _staffMap: new Map(),
+        });
+      }
+
+      const warehouseGroup =
+        dateGroup._warehouseMap.get(warehouseKey);
+
+      const staffKey =
+        staffId ?? `no-staff-${detail.id}`;
+
+      if (!warehouseGroup._staffMap.has(staffKey)) {
+        warehouseGroup._staffMap.set(staffKey, {
+          staff_id: staffId,
+          staff_name: detail.staff
+            ? `${detail.staff.first_name ?? ""} ${
+                detail.staff.last_name ?? ""
+              }`.trim()
+            : null,
+          staff_code:
+            detail.staff_code ??
+            null,
+          old_dws_code:
+            detail.staff?.old_dws_code ??
+            null,
+          contact_number:
+            detail.staff?.contact_number ??
+            null,
+          details: [],
+        });
+        warehouseGroup.total_staff_count += 1;
+      }
+
+      const staffGroup =
+        warehouseGroup._staffMap.get(staffKey);
+
+      const actualHours = Number(detail.twh ?? 0);
+
+      warehouseGroup.total_actual_hours += actualHours;
+
+      if (!warehouseGroup._staffMap.has(staffKey)) {
+        warehouseGroup.total_staff_count += 1;
+      }
+
+      staffGroup.details.push({
+        id: detail.id,
+        payroll_header_id: detail.payroll_header_id,
+        schedule_detail_id: detail.schedule_detail_id,
+
+        schedule_date: detail.schedule_date,
+
+        duty_start_time: detail.duty_start_time,
+        duty_end_time: detail.duty_end_time,
+        planned_duty_start_time:
+          detail.planned_duty_start_time,
+        planned_duty_end_time:
+          detail.planned_duty_end_time,
+
+        just_time_in: detail.just_time_in,
+        just_time_out: detail.just_time_out,
+        overtime_in: detail.overtime_in,
+        overtime_out: detail.overtime_out,
+        just_break_in: detail.just_break_in,
+        just_break_out: detail.just_break_out,
+
+        actual_time_in: detail.actual_time_in,
+        actual_time_out: detail.actual_time_out,
+        actual_break_in: detail.actual_break_in,
+        actual_break_out: detail.actual_break_out,
+
+        working_day_id: detail.working_day_id,
+        status_id: detail.status_id,
+        attendance_status_id:
+          detail.attendance_status_id,
+
+        regular: detail.regular,
+        overtime: detail.overtime,
+        twh: detail.twh,
+        break: detail.break,
+
+        regular_hours: detail.regular_hours,
+        overtime_hours: detail.overtime_hours,
+        twh_hours: detail.twh_hours,
+        break_hours: detail.break_hours,
+
+        shift_type: detail.shift_type,
+        night_shift_hrs: detail.night_shift_hrs,
+        night_shift: detail.night_shift,
+        night_shift_amount:
+          detail.night_shift_amount,
+
+        regular_amount: detail.regular_amount,
+        regular_day_amount:
+          detail.regular_day_amount,
+        rest_day_amount:
+          detail.rest_day_amount,
+        special_holiday_amount:
+          detail.special_holiday_amount,
+        regular_holiday_amount:
+          detail.regular_holiday_amount,
+        regular_holiday_off_amount:
+          detail.regular_holiday_off_amount,
+        rd_regular_holiday_amount:
+          detail.rd_regular_holiday_amount,
+        rd_special_holiday_amount:
+          detail.rd_special_holiday_amount,
+        net_amt_diser:
+          detail.net_amt_diser,
+        overtime_amount:
+          detail.overtime_amount,
+        ot_regular_amount:
+          detail.ot_regular_amount,
+        ot_rest_day_amount:
+          detail.ot_rest_day_amount,
+        ot_special_holiday_amount:
+          detail.ot_special_holiday_amount,
+        ot_regular_holiday_amount:
+          detail.ot_regular_holiday_amount,
+        ot_rd_regular_holiday_amount:
+          detail.ot_rd_regular_holiday_amount,
+        ot_rd_special_holiday_amount:
+          detail.ot_rd_special_holiday_amount,
+
+        salary_rate: detail.salary_rate,
+        hour_rate: detail.hour_rate,
+
+        regular_day: detail.regular_day,
+        special_holiday:
+          detail.special_holiday,
+        regular_holiday:
+          detail.regular_holiday,
+        rest_day: detail.rest_day,
+        total_day_work:
+          detail.total_day_work,
+
+        ot_regular_day:
+          detail.ot_regular_day,
+        ot_special_holiday:
+          detail.ot_special_holiday,
+        ot_regular_holiday:
+          detail.ot_regular_holiday,
+        ot_rest_day:
+          detail.ot_rest_day,
+        total_ot_day_work:
+          detail.total_ot_day_work,
+
+        gross_pay: detail.gross_pay,
+        thirteen_month_pay:
+          detail.thirteen_month_pay,
+        sss_share: detail.sss_share,
+        pag_ibig_share:
+          detail.pag_ibig_share,
+        phil_health_share:
+          detail.phil_health_share,
+        total_govt_share:
+          detail.total_govt_share,
+        total_payroll:
+          detail.total_payroll,
+
+        asf: detail.asf,
+        total_asf: detail.total_asf,
+        allowance: detail.allowance,
+        total_allowance:
+          detail.total_allowance,
+        vat: detail.vat,
+        total_with_vat:
+          detail.total_with_vat,
+        tax: detail.tax,
+        net_of_tax:
+          detail.net_of_tax,
+        cash_bond:
+          detail.cash_bond,
+        total_billing:
+          detail.total_billing,
+      });
+    }
+
+    const vendors = Array.from(
+      vendorMap.values(),
+    ).map((vendorGroup) => {
+      const dates = Array.from(
+        vendorGroup._dateMap.values(),
+      ).map((dateGroup: any) => {
+        const warehouses = Array.from(
+          dateGroup._warehouseMap.values(),
+        ).map((warehouseGroup: any) => {
+          warehouseGroup.staff = Array.from(
+            warehouseGroup._staffMap.values(),
+          );
+
+          delete warehouseGroup._staffMap;
+
+          return warehouseGroup;
+        });
+
+        dateGroup.warehouses = warehouses;
+
+        delete dateGroup._warehouseMap;
+
+        return dateGroup;
+      });
+
+      vendorGroup.dates = dates;
+
+      delete vendorGroup._dateMap;
+
+      return vendorGroup;
+    });
+
+    return {
+      date_from: dateFrom ?? null,
+      date_to: dateTo ?? null,
+      vendors,
+      total_details: details.length,
+    };
+  } catch (error) {
+    throw error;
+  }
+}
 
 }

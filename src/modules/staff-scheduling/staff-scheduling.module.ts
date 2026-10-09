@@ -29,6 +29,9 @@ import { DwsScheduleSyncCronService } from "src/schedulers/dws-schedule-logs.sch
 import { HttpModule } from "node_modules/@nestjs/axios/dist/http.module";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { ActualLogsHeader } from "src/entities/ActualLogsHeader";
+import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+
 
 
 @Module({
@@ -43,6 +46,8 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
       StaffWarehouse,
       Warehouse,
       Action,
+      ActualLogsDetail,
+      ActualLogsHeader,
       Staff,
       StaffSalary,
       Vendor,

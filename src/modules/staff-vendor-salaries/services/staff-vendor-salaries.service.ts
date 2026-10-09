@@ -18,8 +18,14 @@ import { UpdateStaffVendorSalaryDto } from "src/modules/staff-vendor-salaries/dt
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  ACTION_IDS,
+  DAYS_FACTOR_RATE,
+} from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
+import { SssConfigs } from "src/entities/SssConfig";
+import { GovernmentContributionUtil } from "src/utils/government-contribution-util";
 
 @Injectable()
 export class StaffVendorSalariesService {
@@ -34,9 +40,12 @@ export class StaffVendorSalariesService {
     private locationRepository: Repository<Location>,
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
+    @InjectRepository(SssConfigs)
+    private readonly sssConfigsRepository: Repository<SssConfigs>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
+    
     private actionLogsService: ActionLogsService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
@@ -223,10 +232,8 @@ export class StaffVendorSalariesService {
       });
 
       await this.staffVendorSalariesRepository.save(staffVendorSalary);
-      if (
-        updateStaffVendorSalaryDto.allowance !== undefined ||
-        updateStaffVendorSalaryDto.salary_rate !== undefined
-      ) {
+
+      if (updateStaffVendorSalaryDto.salary_rate !== undefined) {
         let staffSalary = await this.staffSalaryRepository.findOne({
           where: {
             staff_vendor_id: staffVendorSalary.id,
@@ -234,16 +241,13 @@ export class StaffVendorSalariesService {
         });
 
         if (staffSalary) {
-          const oldAllowance = staffSalary.allowance;
           const oldSalaryRate = staffSalary.salary_rate;
+          const oldPagibigContriAmount = staffSalary.pagibig_contri_amount;
 
-          if (updateStaffVendorSalaryDto.allowance !== undefined) {
-            staffSalary.allowance = updateStaffVendorSalaryDto.allowance;
-          }
+          staffSalary.salary_rate = updateStaffVendorSalaryDto.salary_rate;
 
-          if (updateStaffVendorSalaryDto.salary_rate !== undefined) {
-            staffSalary.salary_rate = updateStaffVendorSalaryDto.salary_rate;
-          }
+          staffSalary.pagibig_contri_amount =
+            GovernmentContributionUtil.computePagIbigShare(staffSalary);
 
           staffSalary.updated_by = userId;
           staffSalary.access_key_id = accessKeyId;
@@ -254,17 +258,13 @@ export class StaffVendorSalariesService {
           try {
             const changes: string[] = [];
 
-            if (updateStaffVendorSalaryDto.allowance !== undefined) {
-              changes.push(
-                `Allowance from ${oldAllowance} to ${staffSalary.allowance}`,
-              );
-            }
+            changes.push(
+              `Salary rate from ${oldSalaryRate} to ${staffSalary.salary_rate}`,
+            );
 
-            if (updateStaffVendorSalaryDto.salary_rate !== undefined) {
-              changes.push(
-                `Salary rate from ${oldSalaryRate} to ${staffSalary.salary_rate}`,
-              );
-            }
+            changes.push(
+              `Pag-IBIG contribution from ${oldPagibigContriAmount} to ${staffSalary.pagibig_contri_amount}`,
+            );
 
             await this.actionLogsService.logAction({
               module_name: this.module_name,
@@ -272,10 +272,10 @@ export class StaffVendorSalariesService {
               action_id: ACTION_IDS.EDIT,
               description: changes.join(", "),
               raw_data: JSON.stringify({
-                old_allowance: oldAllowance,
-                new_allowance: staffSalary.allowance,
                 old_salary_rate: oldSalaryRate,
                 new_salary_rate: staffSalary.salary_rate,
+                old_pagibig_contri_amount: oldPagibigContriAmount,
+                new_pagibig_contri_amount: staffSalary.pagibig_contri_amount,
                 access_key_id: accessKeyId,
               }),
               created_by: userId,
@@ -288,12 +288,14 @@ export class StaffVendorSalariesService {
             staff_id: staffVendorSalary.staff_id,
             staff_vendor_id: staffVendorSalary.id,
             access_key_id: accessKeyId,
-            allowance: updateStaffVendorSalaryDto.allowance ?? 0,
             salary_rate: updateStaffVendorSalaryDto.salary_rate ?? 0,
             status_id: staffVendorSalary.status_id,
             created_by: userId,
             updated_by: userId,
           });
+
+          staffSalary.pagibig_contri_amount =
+            GovernmentContributionUtil.computePagIbigShare(staffSalary);
 
           const savedStaffSalary =
             await this.staffSalaryRepository.save(staffSalary);
@@ -303,7 +305,7 @@ export class StaffVendorSalariesService {
               module_name: this.module_name,
               ref_id: savedStaffSalary.id,
               action_id: ACTION_IDS.ADD,
-              description: `Created staff salary with allowance ${savedStaffSalary.allowance} and salary rate ${savedStaffSalary.salary_rate}`,
+              description: `Created staff salary with salary rate ${savedStaffSalary.salary_rate} and Pag-IBIG contribution ${savedStaffSalary.pagibig_contri_amount}`,
               raw_data: JSON.stringify(savedStaffSalary),
               created_by: userId,
             });
@@ -313,14 +315,12 @@ export class StaffVendorSalariesService {
         }
       }
 
-      // Audit trail
       await this.userAuditTrailCreateService.create(
         {
           service: "StaffVendorSalariesService",
           method: "update",
           raw_data: JSON.stringify({
             staffVendorSalary,
-            allowance: updateStaffVendorSalaryDto.allowance,
             salary_rate: updateStaffVendorSalaryDto.salary_rate,
           }),
           description: `Updated staff vendor salary ${staffVendorSalary.id}`,
@@ -352,7 +352,6 @@ export class StaffVendorSalariesService {
         staffVendorSalaryWithRelations,
       );
 
-      // SSE Events
       try {
         this.sseEventEmitter.emitUpdate(
           "staff_vendor_salaries",
@@ -495,10 +494,8 @@ export class StaffVendorSalariesService {
           "Staff Name",
           "Agency",
           "Location",
-          "Allowance",
           "Salary Rate",
           "PhilHealth Number Contribution Perc",
-          "SSS Contribution Perc",
           "PAGIBIG Number Perc",
         ];
 
@@ -524,32 +521,19 @@ export class StaffVendorSalariesService {
         const locationName = String(row["Location"]).trim();
 
         // Remove comma from Excel numbers
-        const allowance = Number(
-          String(row["Allowance"]).replace(/,/g, "").trim(),
-        );
 
         const salaryRate = Number(
           String(row["Salary Rate"]).replace(/,/g, "").trim(),
         );
         const phil_health_contri = Number(
-          String(row["PhilHealth Number Contribution Perc"]).replace(/,/g, "").trim(),
+          String(row["PhilHealth Number Contribution Perc"])
+            .replace(/,/g, "")
+            .trim(),
         );
 
-        const sss_contri = Number(
-          String(row["SSS Contribution Perc"]).replace(/,/g, "").trim(),
-        );
         const pagibig_contri = Number(
           String(row["PAGIBIG Number Perc"]).replace(/,/g, "").trim(),
         );
-
-        if (isNaN(allowance)) {
-          errors.push({
-            row: excelRow,
-            error: `Invalid Allowance '${row["Allowance"]}'`,
-          });
-
-          continue;
-        }
 
         if (isNaN(salaryRate)) {
           errors.push({
@@ -620,9 +604,6 @@ export class StaffVendorSalariesService {
         if (existingStaffVendorSalary) {
           staffVendorSalaryId = existingStaffVendorSalary.id;
 
-          existingStaffVendorSalary.phil_health_contri_perc = phil_health_contri;
-          existingStaffVendorSalary.sss_contri_perc = sss_contri;
-          existingStaffVendorSalary.pagibig_number_perc = pagibig_contri;
           existingStaffVendorSalary.updated_by = userId;
           existingStaffVendorSalary.access_key_id = accessKeyId;
           await this.staffVendorSalariesRepository.save(
@@ -644,6 +625,9 @@ export class StaffVendorSalariesService {
             existingStaffSalary.status_id = STATUS_IDS.INACTIVE;
             existingStaffSalary.updated_by = userId;
             existingStaffSalary.access_key_id = accessKeyId;
+
+            existingStaffSalary.phil_health_contri_perc = phil_health_contri;
+            existingStaffSalary.pagibig_number_perc = pagibig_contri;
 
             await this.staffSalaryRepository.save(existingStaffSalary);
 
@@ -678,10 +662,8 @@ export class StaffVendorSalariesService {
                   old_status_id: oldStatusId,
                   new_status_id: STATUS_IDS.INACTIVE,
 
-                  old_allowance: oldAllowance,
                   old_salary_rate: oldSalaryRate,
 
-                  new_allowance: allowance,
                   new_salary_rate: salaryRate,
 
                   access_key_id: accessKeyId,
@@ -754,7 +736,6 @@ export class StaffVendorSalariesService {
           staff_id: staff.id,
           staff_vendor_id: staffVendorSalaryId,
           access_key_id: accessKeyId,
-          allowance: allowance,
           salary_rate: salaryRate,
           status_id: STATUS_IDS.ACTIVE,
           created_by: userId,
@@ -770,7 +751,7 @@ export class StaffVendorSalariesService {
             action_id: ACTION_IDS.ADD,
             description:
               `Created new staff salary for Staff Code ${staffCode} ` +
-              `with New Allowance ${allowance} and New Salary Rate ${salaryRate}`,
+              `with New Salary Rate ${salaryRate}`,
             raw_data: JSON.stringify({
               source: "STAFF VENDOR SALARY UPLOAD",
               action: "CREATE_NEW_SALARY",
@@ -790,7 +771,6 @@ export class StaffVendorSalariesService {
               location_id: location.id,
               location: locationName,
 
-              allowance: allowance,
               salary_rate: salaryRate,
 
               old_staff_salary_id: existingStaffSalaryId,
@@ -832,14 +812,13 @@ export class StaffVendorSalariesService {
                 location_id: location.id,
                 location: locationName,
 
-                allowance: allowance,
                 salary_rate: salaryRate,
 
                 access_key_id: accessKeyId,
               }),
               description:
                 `Uploaded staff salary for Staff Code ${staffCode} ` +
-                `with Allowance ${allowance} and Salary Rate ${salaryRate}`,
+                `with Salary Rate ${salaryRate}`,
               status_id: 1,
             },
             userId,
@@ -907,7 +886,6 @@ export class StaffVendorSalariesService {
             location: locationName,
             location_id: location.id,
 
-            allowance: allowance,
             salary_rate: salaryRate,
 
             existing_staff_vendor_relation: !!existingStaffVendorSalary,
@@ -949,4 +927,5 @@ export class StaffVendorSalariesService {
       errors,
     };
   }
+
 }

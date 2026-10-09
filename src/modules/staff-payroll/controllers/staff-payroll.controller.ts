@@ -18,6 +18,7 @@ import { StaffPayrollService } from "src/modules/staff-payroll/services/staff-pa
 import { CreatePayrollHeaderDto } from "src/modules/staff-payroll/dto/CreatePayrollHeaderDto";
 import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayrollHeaderDto";
 import { FindStaffPayrollDetailsDto } from "src/modules/staff-payroll/dto/FindStaffPayrollDetailsDto";
+import { StaffScheduleReportFilterDto } from "src/modules/staff-payroll/dto/StaffScheduleReportFilterDto";
 
 @Controller("staffs-payroll")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -110,6 +111,23 @@ export class StaffPayrollController {
       accessKeyId,
     );
   }
+
+
+ @Post("payroll-reports")
+async getScheduleReport(
+  @Body() filter: StaffScheduleReportFilterDto,
+  @Request() req?: any,
+): Promise<{ data: any[]; totals: any }> {
+  const accessKeyId = req?.user?.current_access_key;
+
+  return this.staffPayrollService.generatePayrollReport(
+    accessKeyId,
+    filter.date_from,
+    filter.date_to,
+    filter.vendor_ids,
+    filter.location_ids,
+  );
+}
 
 
 

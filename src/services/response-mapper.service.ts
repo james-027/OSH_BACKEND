@@ -52,6 +52,7 @@ export class ResponseMapperService {
           "workingDays",
           "actualLogsDetail",
           "payrollHeader",
+          "scheduleDetail",
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
@@ -198,6 +199,11 @@ export class ResponseMapperService {
     if (entity.brand && typeof entity.brand === "object") {
       response.brand_name = entity.brand.brand_name || null;
     }
+
+    // if (entity.staffSalaries && typeof entity.staffSalaries === "object") {
+    //   response.salary_rate = entity.staffSalaries.salary_rate || null;
+    // }
+    
     // Map Actual Logs Detail relation
     if (entity.actualLogsDetail && typeof entity.actualLogsDetail === "object") {
       response.actual_time_in = entity.actualLogsDetail.time_in || null;
@@ -250,6 +256,11 @@ export class ResponseMapperService {
     if (entity.payrollHeader && typeof entity.payrollHeader === "object") {
       response.payroll_date_from = entity.payrollHeader.payroll_date_from || null;
       response.payroll_date_to = entity.payrollHeader.payroll_date_to || null;
+    }
+        // Map Schedule Detail relation
+    if (entity.scheduleDetail && typeof entity.scheduleDetail === "object") {
+      response.just_time_in = entity.scheduleDetail.just_time_in || null;
+      response.just_time_out = entity.scheduleDetail.just_time_out || null;
     }
 
     // Map accessKey relation

@@ -12,7 +12,7 @@ export class LogsComputationService {
     private readonly staffPayrollService: StaffPayrollService,
   ) {}
 
-  @ConditionalCron(CronExpression.EVERY_MINUTE, "ENABLE_LOGS_COMPUTATION_CRON")
+  @ConditionalCron(CronExpression.EVERY_30_SECONDS, "ENABLE_LOGS_COMPUTATION_CRON")
   async handleDailyScheduleSync() {
 
     logger.info(`LogsComputation] Computation triggered for base date`);

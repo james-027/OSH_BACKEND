@@ -12,8 +12,6 @@ export class DwsScheduleSyncCronService {
     private readonly staffSchedulingService: StaffSchedulingService,
   ) {}
 
-
-
   @ConditionalCron(
   CronExpression.EVERY_DAY_AT_11AM,
   "ENABLE_DWS_SCHEDULE_SYNC_CRON",

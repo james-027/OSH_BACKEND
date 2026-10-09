@@ -281,6 +281,9 @@ export class PayrollDetails {
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   regular_holiday_off_amount: number;
+  
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  regular_day_amount: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   rd_regular_holiday_amount: number;
@@ -290,6 +293,9 @@ export class PayrollDetails {
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   ot_regular_amount: number;
+  
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  net_amt_diser: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   ot_rest_day_amount: number;
@@ -359,6 +365,9 @@ export class PayrollDetails {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   phil_health_share: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_govt_share: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_payroll: number;

@@ -124,6 +124,14 @@ export class CreateSchedulingDetailDto {
   twh?: number;
 
   @IsOptional()
+  @IsString()
+  night_shift_hrs?: string;
+
+  @IsOptional()
+  @IsNumber()
+  night_shift?: number;
+
+  @IsOptional()
   @IsDateString()
   ending_time?: string;
 
@@ -134,6 +142,10 @@ export class CreateSchedulingDetailDto {
   @IsOptional()
   @IsInt()
   status_id?: number;
+
+  @IsOptional()
+  @IsDateString()
+  dws_schedule_date?: string;
 }
 
 export class CreateScheduleHeaderDto {
