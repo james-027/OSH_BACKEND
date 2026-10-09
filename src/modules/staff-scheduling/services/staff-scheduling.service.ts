@@ -3438,7 +3438,7 @@ export class StaffSchedulingService {
           schedule_detail_id: detail.schedule_detail_id,
           schedule_date: detail.schedule_date,
           staff_id: staffId,
-          staff_code: detail.staff?.staff_code ?? null,
+          staff_code: detail.staff_code ?? null,
           manual_staff_code: detail.staff?.old_dws_code ?? null,
           staff_name: detail.staff
             ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
@@ -3502,8 +3502,7 @@ export class StaffSchedulingService {
           rd_special_holiday_amount: toFixed(
             staffSummary.rd_special_holiday_amount,
           ),
-          /* * ALL REGULAR AMOUNTS COMBINED * * regular_day_amount = * regular * + rest day * + special holiday * + regular holiday * + regular holiday off * + RD regular holiday * + RD special holiday */ regular_day_amount:
-            toFixed(staffSummary.regular_day_amount),
+           regular_day_amount: toFixed(staffSummary.regular_day_amount),
           /* * OT AMOUNTS */ ot_regular_amount: toFixed(
             staffSummary.ot_regular_amount,
           ),

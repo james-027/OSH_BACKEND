@@ -132,13 +132,13 @@ export class PayrollComputationService {
       otRdRegularHolidayAmount +
       otRdSpecialHolidayAmount;
 
-    /**
-     * TOTAL = REGULAR + RD + SPH + RH + RH OFF + (RD & RH) + (RD & SPH) + OVERTIME
-     */
+
     const grossPay =
       regularDayAmount +
       overtimeAmount +
       nightShiftAmount;
+
+    
 
     /**
      * ----------------------------------------------------------
@@ -170,6 +170,9 @@ export class PayrollComputationService {
       hourRate,
       totalHoursWorked,
     );
+
+    const netAmtDiser = grossPay + thirteenMonthPay;
+
 
     /**
      * ----------------------------------------------------------
@@ -258,6 +261,7 @@ export class PayrollComputationService {
       total_day_work: dutyCount,
 
       thirteen_month_pay: thirteenMonthPay,
+      net_amt_diser: netAmtDiser,
       sss_share: sssShare,
       pag_ibig_share: pagIbigShare,
       phil_health_share: philHealthShare,
@@ -594,6 +598,8 @@ export class PayrollComputationService {
 
     let totalThirteenMonthPay = 0;
 
+    let totalNetAmtDiser = 0;
+
     let totalGovtShare = 0;
 
     let totalSssShare = 0;
@@ -651,6 +657,7 @@ export class PayrollComputationService {
 
       totalDayWork += Number(detail.total_day_work) || 0;
       totalThirteenMonthPay += Number(detail.thirteen_month_pay) || 0;
+      totalNetAmtDiser += Number(detail.net_amt_diser) || 0;
 
       totalSssShare += Number(detail.sss_share) || 0;
       totalPagIbigShare += Number(detail.pag_ibig_share) || 0;
@@ -706,6 +713,7 @@ export class PayrollComputationService {
       total_night_shift_amount: totalNightShiftAmount,
 
       total_thirteen_month_pay: totalThirteenMonthPay,
+      total_net_amt_diser: totalNetAmtDiser,
       total_sss_share: totalSssShare,
       total_pag_ibig_share: totalPagIbigShare,
       total_phil_health_share: totalPhilHealthShare,

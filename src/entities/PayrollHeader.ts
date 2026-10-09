@@ -188,6 +188,9 @@ export class PayrollHeader {
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_regular_day_amount: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  total_net_amt_diser: number;
+
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_payroll: number;
 

@@ -1819,4 +1819,473 @@ export class StaffPayrollService {
     };
   }
 
+
+
+async generatePayrollReport(
+  accessKeyId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  vendorIds?: number[],
+  locationIds?: number[],
+): Promise<any> {
+  try {
+    const query = this.payrollDetailRepository
+      .createQueryBuilder("payrollDetail")
+      .innerJoin("payrollDetail.payrollHeader", "payrollHeader")
+      .leftJoin("payrollDetail.staff", "staff")
+      .leftJoin("payrollDetail.vendor", "vendor")
+      .leftJoin("payrollDetail.warehouse", "warehouse");
+
+    query.select([
+      "payrollDetail.id",
+      "payrollDetail.payroll_header_id",
+      "payrollDetail.schedule_detail_id",
+      "payrollDetail.staff_id",
+      "payrollDetail.staff_code",
+      "payrollDetail.vendor_id",
+      "payrollDetail.location_id",
+      "payrollDetail.warehouse_id",
+      "payrollDetail.warehouse_ifs",
+
+      "payrollDetail.schedule_date",
+      "payrollDetail.duty_start_time",
+      "payrollDetail.duty_end_time",
+      "payrollDetail.planned_duty_start_time",
+      "payrollDetail.planned_duty_end_time",
+
+      "payrollDetail.just_time_in",
+      "payrollDetail.just_time_out",
+      "payrollDetail.overtime_in",
+      "payrollDetail.overtime_out",
+      "payrollDetail.just_break_in",
+      "payrollDetail.just_break_out",
+
+      "payrollDetail.actual_time_in",
+      "payrollDetail.actual_time_out",
+      "payrollDetail.actual_break_in",
+      "payrollDetail.actual_break_out",
+
+      "payrollDetail.working_day_id",
+      "payrollDetail.status_id",
+      "payrollDetail.attendance_status_id",
+
+      "payrollDetail.regular",
+      "payrollDetail.overtime",
+      "payrollDetail.twh",
+      "payrollDetail.break",
+
+      "payrollDetail.regular_hours",
+      "payrollDetail.overtime_hours",
+      "payrollDetail.twh_hours",
+      "payrollDetail.break_hours",
+
+      "payrollDetail.shift_type",
+      "payrollDetail.night_shift_hrs",
+      "payrollDetail.night_shift",
+      "payrollDetail.night_shift_amount",
+
+      "payrollDetail.regular_amount",
+      "payrollDetail.regular_day_amount",
+      "payrollDetail.rest_day_amount",
+      "payrollDetail.special_holiday_amount",
+      "payrollDetail.regular_holiday_amount",
+      "payrollDetail.regular_holiday_off_amount",
+      "payrollDetail.rd_regular_holiday_amount",
+      "payrollDetail.rd_special_holiday_amount",
+
+      "payrollDetail.overtime_amount",
+      "payrollDetail.ot_regular_amount",
+      "payrollDetail.ot_rest_day_amount",
+      "payrollDetail.ot_special_holiday_amount",
+      "payrollDetail.ot_regular_holiday_amount",
+      "payrollDetail.ot_rd_regular_holiday_amount",
+      "payrollDetail.ot_rd_special_holiday_amount",
+      "payrollDetail.net_amt_diser",
+
+      "payrollDetail.salary_rate",
+      "payrollDetail.hour_rate",
+
+      "payrollDetail.regular_day",
+      "payrollDetail.special_holiday",
+      "payrollDetail.regular_holiday",
+      "payrollDetail.rest_day",
+      "payrollDetail.total_day_work",
+
+      "payrollDetail.ot_regular_day",
+      "payrollDetail.ot_special_holiday",
+      "payrollDetail.ot_regular_holiday",
+      "payrollDetail.ot_rest_day",
+      "payrollDetail.total_ot_day_work",
+
+      "payrollDetail.gross_pay",
+      "payrollDetail.thirteen_month_pay",
+      "payrollDetail.sss_share",
+      "payrollDetail.pag_ibig_share",
+      "payrollDetail.phil_health_share",
+      "payrollDetail.total_govt_share",
+      "payrollDetail.total_payroll",
+
+      "payrollDetail.asf",
+      "payrollDetail.total_asf",
+      "payrollDetail.allowance",
+      "payrollDetail.total_allowance",
+      "payrollDetail.vat",
+      "payrollDetail.total_with_vat",
+      "payrollDetail.tax",
+      "payrollDetail.net_of_tax",
+      "payrollDetail.cash_bond",
+      "payrollDetail.total_billing",
+
+      "staff.id",
+      "staff.first_name",
+      "staff.last_name",
+      "staff.staff_code",
+      "staff.old_dws_code",
+      "staff.contact_number",
+
+      "vendor.id",
+      "vendor.service_provider_name",
+      "vendor.service_provider_code",
+
+      "warehouse.id",
+      "warehouse.warehouse_name",
+      "warehouse.warehouse_code",
+      "warehouse.warehouse_ifs",
+    ]);
+
+    query.andWhere("payrollHeader.status_id = :postedStatus", {
+      postedStatus: STATUS_IDS.POSTED,
+    });
+
+    if (accessKeyId) {
+      query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
+        accessKeyId,
+      });
+    }
+
+    if (dateFrom) {
+      query.andWhere(
+        "DATE(payrollDetail.schedule_date) >= :dateFrom",
+        {
+          dateFrom,
+        },
+      );
+    }
+
+    if (dateTo) {
+      query.andWhere(
+        "DATE(payrollDetail.schedule_date) <= :dateTo",
+        {
+          dateTo,
+        },
+      );
+    }
+
+    if (vendorIds?.length) {
+      query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
+        vendorIds,
+      });
+    }
+
+    if (locationIds?.length) {
+      query.andWhere(
+        "payrollDetail.location_id IN (:...locationIds)",
+        {
+          locationIds,
+        },
+      );
+    }
+
+    query
+      .orderBy("vendor.id", "ASC")
+      .addOrderBy("payrollDetail.schedule_date", "ASC")
+      .addOrderBy("warehouse.id", "ASC")
+      .addOrderBy("staff.id", "ASC")
+      .addOrderBy("payrollDetail.id", "ASC");
+
+    const details = await query.getMany();
+
+    const vendorMap = new Map<number, any>();
+
+    for (const detail of details) {
+      const vendorId = detail.vendor?.id ?? detail.vendor_id;
+
+      const scheduleDate = detail.schedule_date
+        ? new Date(detail.schedule_date)
+            .toISOString()
+            .split("T")[0]
+        : null;
+
+      const warehouseId =
+        detail.warehouse?.id ?? detail.warehouse_id;
+
+      const staffId =
+        detail.staff?.id ?? detail.staff_id;
+
+      if (vendorId == null) {
+        continue;
+      }
+
+      if (!vendorMap.has(vendorId)) {
+        vendorMap.set(vendorId, {
+          vendor_id: vendorId,
+          vendor_name:
+            detail.vendor?.service_provider_name ?? null,
+          vendor_code:
+            detail.vendor?.service_provider_code ?? null,
+          dates: [],
+          _dateMap: new Map(),
+        });
+      }
+
+      const vendorGroup = vendorMap.get(vendorId);
+
+      if (!vendorGroup._dateMap.has(scheduleDate)) {
+        vendorGroup._dateMap.set(scheduleDate, {
+          schedule_date: scheduleDate,
+          schedule_day: scheduleDate
+          ? new Date(`${scheduleDate}T12:00:00`).toLocaleDateString("en-US", {weekday: "long",}).toUpperCase()
+          : null,
+          warehouses: [],
+          _warehouseMap: new Map(),
+        });
+      }
+
+      const dateGroup =
+        vendorGroup._dateMap.get(scheduleDate);
+
+      const warehouseKey =
+        warehouseId ?? `no-warehouse-${scheduleDate}`;
+
+      if (!dateGroup._warehouseMap.has(warehouseKey)) {
+        dateGroup._warehouseMap.set(warehouseKey, {
+          warehouse_id: warehouseId,
+          warehouse_name:
+            detail.warehouse?.warehouse_name ?? null,
+          warehouse_code:
+            detail.warehouse?.warehouse_code ?? null,
+          warehouse_ifs:
+            detail.warehouse?.warehouse_ifs ?? null,
+          total_actual_hours: 0,
+          total_staff_count: 0,
+          staff: [],
+          _staffMap: new Map(),
+        });
+      }
+
+      const warehouseGroup =
+        dateGroup._warehouseMap.get(warehouseKey);
+
+      const staffKey =
+        staffId ?? `no-staff-${detail.id}`;
+
+      if (!warehouseGroup._staffMap.has(staffKey)) {
+        warehouseGroup._staffMap.set(staffKey, {
+          staff_id: staffId,
+          staff_name: detail.staff
+            ? `${detail.staff.first_name ?? ""} ${
+                detail.staff.last_name ?? ""
+              }`.trim()
+            : null,
+          staff_code:
+            detail.staff_code ??
+            null,
+          old_dws_code:
+            detail.staff?.old_dws_code ??
+            null,
+          contact_number:
+            detail.staff?.contact_number ??
+            null,
+          details: [],
+        });
+        warehouseGroup.total_staff_count += 1;
+      }
+
+      const staffGroup =
+        warehouseGroup._staffMap.get(staffKey);
+
+      const actualHours = Number(detail.twh ?? 0);
+
+      warehouseGroup.total_actual_hours += actualHours;
+
+      if (!warehouseGroup._staffMap.has(staffKey)) {
+        warehouseGroup.total_staff_count += 1;
+      }
+
+      staffGroup.details.push({
+        id: detail.id,
+        payroll_header_id: detail.payroll_header_id,
+        schedule_detail_id: detail.schedule_detail_id,
+
+        schedule_date: detail.schedule_date,
+
+        duty_start_time: detail.duty_start_time,
+        duty_end_time: detail.duty_end_time,
+        planned_duty_start_time:
+          detail.planned_duty_start_time,
+        planned_duty_end_time:
+          detail.planned_duty_end_time,
+
+        just_time_in: detail.just_time_in,
+        just_time_out: detail.just_time_out,
+        overtime_in: detail.overtime_in,
+        overtime_out: detail.overtime_out,
+        just_break_in: detail.just_break_in,
+        just_break_out: detail.just_break_out,
+
+        actual_time_in: detail.actual_time_in,
+        actual_time_out: detail.actual_time_out,
+        actual_break_in: detail.actual_break_in,
+        actual_break_out: detail.actual_break_out,
+
+        working_day_id: detail.working_day_id,
+        status_id: detail.status_id,
+        attendance_status_id:
+          detail.attendance_status_id,
+
+        regular: detail.regular,
+        overtime: detail.overtime,
+        twh: detail.twh,
+        break: detail.break,
+
+        regular_hours: detail.regular_hours,
+        overtime_hours: detail.overtime_hours,
+        twh_hours: detail.twh_hours,
+        break_hours: detail.break_hours,
+
+        shift_type: detail.shift_type,
+        night_shift_hrs: detail.night_shift_hrs,
+        night_shift: detail.night_shift,
+        night_shift_amount:
+          detail.night_shift_amount,
+
+        regular_amount: detail.regular_amount,
+        regular_day_amount:
+          detail.regular_day_amount,
+        rest_day_amount:
+          detail.rest_day_amount,
+        special_holiday_amount:
+          detail.special_holiday_amount,
+        regular_holiday_amount:
+          detail.regular_holiday_amount,
+        regular_holiday_off_amount:
+          detail.regular_holiday_off_amount,
+        rd_regular_holiday_amount:
+          detail.rd_regular_holiday_amount,
+        rd_special_holiday_amount:
+          detail.rd_special_holiday_amount,
+        net_amt_diser:
+          detail.net_amt_diser,
+        overtime_amount:
+          detail.overtime_amount,
+        ot_regular_amount:
+          detail.ot_regular_amount,
+        ot_rest_day_amount:
+          detail.ot_rest_day_amount,
+        ot_special_holiday_amount:
+          detail.ot_special_holiday_amount,
+        ot_regular_holiday_amount:
+          detail.ot_regular_holiday_amount,
+        ot_rd_regular_holiday_amount:
+          detail.ot_rd_regular_holiday_amount,
+        ot_rd_special_holiday_amount:
+          detail.ot_rd_special_holiday_amount,
+
+        salary_rate: detail.salary_rate,
+        hour_rate: detail.hour_rate,
+
+        regular_day: detail.regular_day,
+        special_holiday:
+          detail.special_holiday,
+        regular_holiday:
+          detail.regular_holiday,
+        rest_day: detail.rest_day,
+        total_day_work:
+          detail.total_day_work,
+
+        ot_regular_day:
+          detail.ot_regular_day,
+        ot_special_holiday:
+          detail.ot_special_holiday,
+        ot_regular_holiday:
+          detail.ot_regular_holiday,
+        ot_rest_day:
+          detail.ot_rest_day,
+        total_ot_day_work:
+          detail.total_ot_day_work,
+
+        gross_pay: detail.gross_pay,
+        thirteen_month_pay:
+          detail.thirteen_month_pay,
+        sss_share: detail.sss_share,
+        pag_ibig_share:
+          detail.pag_ibig_share,
+        phil_health_share:
+          detail.phil_health_share,
+        total_govt_share:
+          detail.total_govt_share,
+        total_payroll:
+          detail.total_payroll,
+
+        asf: detail.asf,
+        total_asf: detail.total_asf,
+        allowance: detail.allowance,
+        total_allowance:
+          detail.total_allowance,
+        vat: detail.vat,
+        total_with_vat:
+          detail.total_with_vat,
+        tax: detail.tax,
+        net_of_tax:
+          detail.net_of_tax,
+        cash_bond:
+          detail.cash_bond,
+        total_billing:
+          detail.total_billing,
+      });
+    }
+
+    const vendors = Array.from(
+      vendorMap.values(),
+    ).map((vendorGroup) => {
+      const dates = Array.from(
+        vendorGroup._dateMap.values(),
+      ).map((dateGroup: any) => {
+        const warehouses = Array.from(
+          dateGroup._warehouseMap.values(),
+        ).map((warehouseGroup: any) => {
+          warehouseGroup.staff = Array.from(
+            warehouseGroup._staffMap.values(),
+          );
+
+          delete warehouseGroup._staffMap;
+
+          return warehouseGroup;
+        });
+
+        dateGroup.warehouses = warehouses;
+
+        delete dateGroup._warehouseMap;
+
+        return dateGroup;
+      });
+
+      vendorGroup.dates = dates;
+
+      delete vendorGroup._dateMap;
+
+      return vendorGroup;
+    });
+
+    return {
+      date_from: dateFrom ?? null,
+      date_to: dateTo ?? null,
+      vendors,
+      total_details: details.length,
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
 }
