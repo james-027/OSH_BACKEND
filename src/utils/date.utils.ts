@@ -413,3 +413,46 @@ export function getMonthNumber(excelDate: any): number {
   }
   return 0;
 }
+
+/**
+ * Safely converts string dates (e.g. "01/13/2026"), JS Dates, or Excel serial numbers into YYYY-MM-DD.
+ */
+export function parseExcelDateToYMD(
+  value: any,
+  format: string = "YYYY-MM-DD",
+): string | null {
+  const dayjs = require("dayjs");
+  const utc = require("dayjs/plugin/utc");
+  dayjs.extend(utc);
+
+  if (!value) return null;
+
+  // Case 1: Kung ang value ay Excel Serial Number (e.g. 45292)
+  if (typeof value === "number") {
+    // Ang Excel serial date 25569 ay Jan 1, 1970 (Unix epoch start)
+    const dateFromSerial = new Date((value - 25569) * 86400 * 1000);
+    return dayjs.utc(dateFromSerial).format(format);
+  }
+
+  const strValue = String(value).trim();
+
+  // Case 2: Subukang i-parse gamit ang explicit formats (MM/DD/YYYY, M/D/YYYY, YYYY-MM-DD)
+  const parsedDate = dayjs.utc(
+    strValue,
+    ["MM/DD/YYYY", "M/D/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"],
+    true, // strict parsing mode
+  );
+
+  if (parsedDate.isValid()) {
+    return parsedDate.format(format);
+  }
+
+  // Case 3: Fallback sa standard Day.js / JS Date parsing
+  const fallbackDate = dayjs.utc(strValue);
+  if (fallbackDate.isValid()) {
+    return fallbackDate.format(format);
+  }
+
+  // Kung hindi talaga ma-parse, mag-throw ng error
+  throw new Error(`Invalid date format received from Excel: "${value}"`);
+}

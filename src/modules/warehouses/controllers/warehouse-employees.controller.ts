@@ -366,7 +366,7 @@ export class WarehouseEmployeesController {
           "AC",
           ["AC"],
           locId,
-          { required: true, requireLocationId: true },
+          { required: false, requireLocationId: false },
         )!;
 
         const ssId = resolveEmployeeRole(
