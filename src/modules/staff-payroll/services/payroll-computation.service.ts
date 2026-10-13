@@ -179,11 +179,11 @@ export class PayrollComputationService {
      * GOVERNMENT CONTRIBUTIONS
      * ----------------------------------------------------------
      */
-    const sssShare = this.computeSssShare(
-      salaryRate,
-      totalDayWorkFraction,
-      sssConfigs,
-    );
+      const { sssShare, ec } = this.computeSssShare(
+        salaryRate,
+        totalDayWorkFraction,
+        sssConfigs,
+      );
 
     const pagIbigShare = this.computePagIbigShare(
       staffSalary,
@@ -263,6 +263,7 @@ export class PayrollComputationService {
       thirteen_month_pay: thirteenMonthPay,
       net_amt_diser: netAmtDiser,
       sss_share: sssShare,
+      ec: ec,
       pag_ibig_share: pagIbigShare,
       phil_health_share: philHealthShare,
       
@@ -441,7 +442,7 @@ export class PayrollComputationService {
     salaryRate: number,
     totalDayWorkFraction: number,
     sssConfigs: SssConfigs[],
-  ): number {
+  ): { sssShare: number; ec: number } {
     const lookupValue = salaryRate * DAYS_FACTOR_RATE.DAYS;
 
     const sssConfig = sssConfigs.find((config) => {
@@ -451,9 +452,13 @@ export class PayrollComputationService {
     });
 
     const withMpfEc = Number(sssConfig?.with_mpf_ec) || 0;
+    const ec = Number(sssConfig?.ec) || 0;
     const sampleMpf = withMpfEc / DAYS_FACTOR_RATE.DAYS;
 
-    return sampleMpf * totalDayWorkFraction;
+    return {
+    sssShare: sampleMpf * totalDayWorkFraction,
+    ec,
+  };
   }
 
   /**
