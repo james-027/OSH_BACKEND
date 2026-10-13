@@ -1157,14 +1157,30 @@ export class EmailNotificationSenderService {
       return;
     }
 
+    console.log("=== EMAIL TRIGGER DEBUG ===");
+    console.log("Trigger Status ID:", triggerStatusId);
+    console.log("Matrix Lines:", JSON.stringify(matrix.lines, null, 2));
+
     const trigger = matrix.lines.find(
       (x) => x.status_id === 1 && x.trigger_status_id === triggerStatusId,
     );
 
+    console.log("Matched Trigger:", JSON.stringify(trigger, null, 2));
+
     if (!trigger) {
+      console.error("No Email Trigger Found.");
+      console.log("Available Active Lines:", matrix.lines
+        .filter((x) => x.status_id === 1)
+        .map((x) => ({
+          status_id: x.status_id,
+          trigger_status_id: x.trigger_status_id,
+        }))
+      );
+
       this.logger.error("No Email Trigger Found.");
       return;
     }
+    
     const debitAdvice = await this.debitAdviceRepository.findOne({
       where: {
         id: transactionId,

@@ -11,6 +11,7 @@ import { ApprovalMatrix } from "src/entities/ApprovalMatrix";
 import { CreateApprovalStagesDto } from "../dto/CreateApprovalStagesDto";
 import { BadRequestException } from "@nestjs/common";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { Module } from "src/entities/Module";
 @Injectable()
 export class ApprovalLogsService {
   constructor(
@@ -20,6 +21,9 @@ export class ApprovalLogsService {
 
     @InjectRepository(ApprovalMatrix)
     private approvalMatrixRepository: Repository<ApprovalMatrix>,
+
+    @InjectRepository(Module)
+    private moduleRepository: Repository<Module>,
   ) {}
 
   // Fetch approval logs by debit advice header ID
@@ -103,16 +107,31 @@ export class ApprovalLogsService {
     }
   }
 
-  async initialize(dto: CreateApprovalStagesDto, userId: number) {
-    const latestStage = await this.approvalStagesListRepository.findOne({
-      where: {
-        transaction_id: dto.transaction_id,
-        module: dto.module_id,
-      },
-      order: {
-        approval_cycle: "DESC",
-      },
-    });
+ async initialize(dto: CreateApprovalStagesDto, userId: number) {
+  const module = await this.moduleRepository.findOne({
+    where: {
+      module_name: dto.module_name.trim().toUpperCase(),
+      status_id: 1,
+    },
+  });
+
+  if (!module) {
+    throw new NotFoundException(
+      `Active module '${dto.module_name}' not found.`,
+    );
+  }
+
+  const moduleId = module.id;
+
+  const latestStage = await this.approvalStagesListRepository.findOne({
+    where: {
+      transaction_id: dto.transaction_id,
+      module: moduleId,
+    },
+    order: {
+      approval_cycle: "DESC",
+    },
+  });
 
     const nextCycle = latestStage ? latestStage.approval_cycle + 1 : 1;
     const matrix = await this.approvalMatrixRepository.findOne({
@@ -132,7 +151,7 @@ export class ApprovalLogsService {
 
     const moduleLine = matrix.lines.find(
       (x) =>
-        Number(x.module) === Number(dto.module_id) &&
+        Number(x.module) === Number(moduleId) &&
         Number(x.id) === Number(dto.approval_id),
     );
 
@@ -145,14 +164,14 @@ export class ApprovalLogsService {
     const existing = await this.approvalStagesListRepository.count({
       where: {
         transaction_id: dto.transaction_id,
-        module: dto.module_id,
+        module: moduleId,
       },
     });
 
     const latestCycleStage = await this.approvalStagesListRepository.findOne({
       where: {
         transaction_id: dto.transaction_id,
-        module: dto.module_id,
+        module: moduleId,
       },
       order: {
         approval_cycle: "DESC",
@@ -176,7 +195,7 @@ export class ApprovalLogsService {
     for (const level of levels) {
       await this.approvalStagesListRepository.save({
         transaction_id: dto.transaction_id,
-        module: dto.module_id,
+        module: moduleId,
         document_number: dto.document_number,
         transaction_date: dto.transaction_date,
 

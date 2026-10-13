@@ -10,8 +10,8 @@ export class CreateEmailQueueDto {
   transaction_id: number;
 
   @IsNotEmpty()
-  @IsNumber()
-  module_id: number;
+  @IsString()
+  module_name: string;
 
   @IsNotEmpty()
   @IsNumber()

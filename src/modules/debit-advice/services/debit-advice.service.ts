@@ -550,7 +550,7 @@ export class DebitAdviceService {
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: module.id,
+            module_name: this.module_name,
             trigger_status_id: 3,
             created_by: userId,
             email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,
@@ -558,31 +558,30 @@ export class DebitAdviceService {
         }
 
         // Posted -> Finance Confirmation
-        // Posted -> Finance Confirmation
         if (reloadedDebitAdvice.status_id === 4) {
-          // Look up module by name
-          const module = await this.moduleRepository.findOne({
+          const financeConfirmationModule = await this.moduleRepository.findOne({
             where: {
               module_name: "FINANCE CONFIRMATION",
               status_id: 1,
             },
           });
 
-          if (!module) {
+          if (!financeConfirmationModule) {
             throw new NotFoundException(
-              "Module 'FINANCE CONFIRMATION' not found",
+              "Active module 'FINANCE CONFIRMATION' not found",
             );
           }
 
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: module.id,
+            module_name: financeConfirmationModule.module_name,
             trigger_status_id: 4,
             created_by: userId,
-            email_subject: `[${this.module_name}] POSTED`,
+            email_subject: `[${financeConfirmationModule.module_name}] POSTED`,
           });
         }
+
       }
       return {
         id: reloadedDebitAdvice.id,
@@ -810,7 +809,7 @@ export class DebitAdviceService {
         await this.approvalLogsService.initialize(
           {
             transaction_id: reloadedDebitAdvice.id,
-            module_id: module.id,
+            module_name: this.module_name,
             document_number: reloadedDebitAdvice.document_number,
             transaction_date: reloadedDebitAdvice.transaction_date,
             approval_id: defaultApprovalId,
@@ -824,7 +823,7 @@ export class DebitAdviceService {
           await this.emailQueueService.enqueue({
             document_number: reloadedDebitAdvice.document_number,
             transaction_id: reloadedDebitAdvice.id,
-            module_id: module.id,
+            module_name: this.module_name,
             trigger_status_id: 3,
             created_by: userId,
             email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,
@@ -2015,7 +2014,7 @@ export class DebitAdviceService {
               await this.approvalLogsService.initialize(
                 {
                   transaction_id: reloadedDebitAdvice.id,
-                  module_id: module.id,
+                  module_name: this.module_name,
                   document_number: reloadedDebitAdvice.document_number,
                   transaction_date: reloadedDebitAdvice.transaction_date,
                   approval_id: defaultApprovalId,
@@ -2029,7 +2028,7 @@ export class DebitAdviceService {
                 await this.emailQueueService.enqueue({
                   document_number: reloadedDebitAdvice.document_number,
                   transaction_id: reloadedDebitAdvice.id,
-                  module_id: module.id,
+                  module_name: this.module_name,
                   trigger_status_id: 3,
                   created_by: userId,
                   email_subject: `[${this.module_name}] PENDING FOR APPROVAL`,

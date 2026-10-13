@@ -22,11 +22,14 @@ import logger from "src/config/logger";
 
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
 import { EmailQueueService } from "src/modules/email-queue/services/email-queue.service";
+import { Module as ModuleEntity } from "src/entities/Module";
 @Injectable()
 export class ApprovalStagesListService {
   constructor(
     @InjectRepository(ApprovalStagesList)
     private approvalStagesListRepository: Repository<ApprovalStagesList>,
+    @InjectRepository(ModuleEntity)
+    private moduleRepository: Repository<ModuleEntity>,
 
     @Inject(UserAuditTrailCreateService)
     private auditTrailService: UserAuditTrailCreateService,
@@ -37,9 +40,26 @@ export class ApprovalStagesListService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private readonly emailQueueService: EmailQueueService,
     private cacheInvalidationService: CacheInvalidationService,
-  ) {}
+    ) {}
 
-  private readonly module_name = "DEBIT ADVICE APPROVAL";
+    private readonly module_name = "DEBIT ADVICE APPROVAL";
+    private async getModuleName(moduleId: number): Promise<string> {
+      const module = await this.moduleRepository.findOne({
+        where: {
+          id: Number(moduleId),
+          status_id: 1,
+        },
+      });
+
+      if (!module) {
+        throw new NotFoundException(
+          `Active module with ID '${moduleId}' not found.`,
+        );
+      }
+
+      return module.module_name;
+    }
+
 
   async findAll(userId: number): Promise<any[]> {
     const approvals = await this.approvalStagesListRepository
@@ -275,12 +295,10 @@ export class ApprovalStagesListService {
         "optionalApprover",
       ],
     });
-
-    if (!approval) {
-      throw new NotFoundException("Approval stage not found");
-    }
-
-    return approval;
+        if (!approval) {
+          throw new NotFoundException(`Approval stage with ID ${id} not found`);
+        }
+          return approval;
   }
 
   async update(
@@ -399,8 +417,10 @@ export class ApprovalStagesListService {
       throw new NotFoundException(`Approval stage with ID ${id} not found`);
     }
 
-    let newStatusName = "Pending";
+    const moduleName = await this.getModuleName(approval.module);
 
+    let newStatusName = "Pending";
+    
     if (status_id === 7) newStatusName = "Approved";
     else if (status_id === 15) newStatusName = "Rejected";
     else if (status_id === 3) newStatusName = "Pending";
@@ -504,10 +524,10 @@ export class ApprovalStagesListService {
           .enqueue({
             document_number: approval.document_number,
             transaction_id: approval.transaction_id,
-            module_id: approval.module,
+            module_name: moduleName,
             trigger_status_id: 7,
             created_by: userId,
-            email_subject: `[Debit Advice] APPROVED`,
+            email_subject: `[${moduleName}] APPROVED`,
           })
           .catch((err) => {
             logger.error(
@@ -520,10 +540,10 @@ export class ApprovalStagesListService {
           .enqueue({
             document_number: approval.document_number,
             transaction_id: approval.transaction_id,
-            module_id: approval.module,
+            module_name: moduleName,
             trigger_status_id: 3,
             created_by: userId,
-            email_subject: `[Debit Advice] PENDING FOR APPROVAL`,
+            email_subject: `[${moduleName}] PENDING FOR APPROVAL`,
           })
           .catch((err) => {
             logger.error(
@@ -537,10 +557,10 @@ export class ApprovalStagesListService {
           .enqueue({
             document_number: approval.document_number,
             transaction_id: approval.transaction_id,
-            module_id: approval.module,
+            module_name: moduleName,
             trigger_status_id: 7,
             created_by: userId,
-            email_subject: `[Debit Advice] APPROVED`,
+            email_subject: `[${moduleName}] APPROVED`,
           })
           .catch((err) => {
             logger.error(
@@ -557,10 +577,10 @@ export class ApprovalStagesListService {
         .enqueue({
           document_number: approval.document_number,
           transaction_id: approval.transaction_id,
-          module_id: approval.module,
+          module_name: moduleName,
           trigger_status_id: 15,
           created_by: userId,
-          email_subject: `[Debit Advice] RETURNED TO MAKER`,
+          email_subject: `[${moduleName}] RETURNED TO MAKER`,
         })
         .catch((err) => {
           logger.error(
@@ -667,7 +687,9 @@ export class ApprovalStagesListService {
           where: { id: approvalId },
         });
 
-        if (!approval) continue;
+       if (!approval) continue;
+
+       const moduleName = await this.getModuleName(approval.module);
 
         const nextApproval = await this.approvalStagesListRepository.findOne({
           where: {
@@ -688,10 +710,10 @@ export class ApprovalStagesListService {
               .enqueue({
                 document_number: approval.document_number,
                 transaction_id: approval.transaction_id,
-                module_id: approval.module,
+                module_name: moduleName,
                 trigger_status_id: 7,
                 created_by: userId,
-                email_subject: `[Debit Advice] APPROVED - Document No: ${approval.document_number}`,
+                email_subject: `[${moduleName}] APPROVED - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
                 logger.error(
@@ -706,10 +728,10 @@ export class ApprovalStagesListService {
               .enqueue({
                 document_number: approval.document_number,
                 transaction_id: approval.transaction_id,
-                module_id: approval.module,
+                module_name: moduleName,
                 trigger_status_id: 3,
                 created_by: userId,
-                email_subject: `[Debit Advice] PENDING FOR APPROVAL - Document No: ${approval.document_number}`,
+                email_subject: `[${moduleName}] PENDING FOR APPROVAL - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
                 logger.error(
@@ -723,10 +745,10 @@ export class ApprovalStagesListService {
               .enqueue({
                 document_number: approval.document_number,
                 transaction_id: approval.transaction_id,
-                module_id: approval.module,
+                module_name: moduleName,
                 trigger_status_id: 7,
                 created_by: userId,
-                email_subject: `[Debit Advice] FINAL APPROVED - Document No: ${approval.document_number}`,
+                email_subject: `[${moduleName}] FINAL APPROVED - Document No: ${approval.document_number}`,
               })
               .catch((err) => {
                 logger.error(
