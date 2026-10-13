@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Patch,
   Body,
   Param,
@@ -10,7 +9,10 @@ import {
   Request,
   ParseIntPipe,
   Query,
+  Res,
+  StreamableFile,
 } from "@nestjs/common";
+import { Response } from "express";
 import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "src/guards/permissions.guard";
 import { RequirePermissions } from "src/decorators/permissions.decorator";
@@ -27,7 +29,7 @@ export class StaffPayrollController {
 
   @Get()
   @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
-  async findAll(@Query("status_id") statusId?: string , @Request() req?: any,) {
+  async findAll(@Query("status_id") statusId?: string, @Request() req?: any) {
     const parsedStatusId = statusId
       ? statusId.split(",").map(Number)
       : undefined;
@@ -37,17 +39,30 @@ export class StaffPayrollController {
 
   @Post("generate-staff-payroll")
   @RequirePermissions({ module: "STAFF PAYROLL", action: "ADD" })
-  async findStaffPayrollDetails(@Body() findStaffPayrollDetails: FindStaffPayrollDetailsDto,@Request() req) {
+  async findStaffPayrollDetails(
+    @Body() findStaffPayrollDetails: FindStaffPayrollDetailsDto,
+    @Request() req: any,
+  ) {
     const accessKeyId = req.user.current_access_key;
-    return this.staffPayrollService.findStaffPayrollDetails(accessKeyId,findStaffPayrollDetails);
+    return this.staffPayrollService.findStaffPayrollDetails(
+      accessKeyId,
+      findStaffPayrollDetails,
+    );
   }
 
   @Post("compute-staff-payroll")
   @RequirePermissions({ module: "STAFF PAYROLL", action: "ADD" })
-  async computePayroll(@Body() createPayrollHeaderDto: CreatePayrollHeaderDto,@Request() req) {
+  async computePayroll(
+    @Body() createPayrollHeaderDto: CreatePayrollHeaderDto,
+    @Request() req: any,
+  ) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
-    return this.staffPayrollService.computePayroll(accessKeyId,createPayrollHeaderDto,userId);
+    return this.staffPayrollService.computePayroll(
+      accessKeyId,
+      createPayrollHeaderDto,
+      userId,
+    );
   }
 
   @Get("history/:id")
@@ -56,44 +71,44 @@ export class StaffPayrollController {
     return this.staffPayrollService.findOneHistory(id);
   }
 
-    @Patch("post-payroll")
-    @RequirePermissions({ module: "STAFF PAYROLL", action: "POST" })
-    async postPayroll(
-      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
-      @Request() req,
-    ) {
-      const userId = req.user.id;
-      return this.staffPayrollService.postPayroll(
-        updatePayrollHeaderDto,
-        userId,
-      );
-    }
+  @Patch("post-payroll")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "POST" })
+  async postPayroll(
+    @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+    return this.staffPayrollService.postPayroll(
+      updatePayrollHeaderDto,
+      userId,
+    );
+  }
 
-    @Patch("revert-payroll")
-    @RequirePermissions({ module: "STAFF PAYROLL", action: "REVERT" })
-    async revertPayroll(
-      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
-      @Request() req,
-    ) {
-      const userId = req.user.id;
-      return this.staffPayrollService.revertPayroll(
-        updatePayrollHeaderDto,
-        userId,
-      );
-    }
-    @Patch("cancel-payroll")
-    @RequirePermissions({ module: "STAFF PAYROLL", action: "CANCEL" })
-    async cancelPayroll(
-      @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
-      @Request() req,
-    ) {
-      const userId = req.user.id;
-      return this.staffPayrollService.cancelPayroll(
-        updatePayrollHeaderDto,
-        userId,
-      );
-    }
+  @Patch("revert-payroll")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "REVERT" })
+  async revertPayroll(
+    @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+    return this.staffPayrollService.revertPayroll(
+      updatePayrollHeaderDto,
+      userId,
+    );
+  }
 
+  @Patch("cancel-payroll")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "CANCEL" })
+  async cancelPayroll(
+    @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+    @Request() req: any,
+  ) {
+    const userId = req.user.id;
+    return this.staffPayrollService.cancelPayroll(
+      updatePayrollHeaderDto,
+      userId,
+    );
+  }
 
   @Get("details")
   @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
@@ -112,23 +127,49 @@ export class StaffPayrollController {
     );
   }
 
+  @Post("payroll-reports")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async getPayrollReport(
+    @Body() filter: StaffScheduleReportFilterDto,
+    @Request() req?: any,
+  ): Promise<{ data: any[]; totals: any }> {
+    const accessKeyId = req?.user?.current_access_key;
 
- @Post("payroll-reports")
-async getScheduleReport(
-  @Body() filter: StaffScheduleReportFilterDto,
-  @Request() req?: any,
-): Promise<{ data: any[]; totals: any }> {
-  const accessKeyId = req?.user?.current_access_key;
+    return this.staffPayrollService.generatePayrollReport(
+      accessKeyId,
+      filter.date_from,
+      filter.date_to,
+      filter.vendor_ids,
+      filter.location_ids,
+    );
+  }
 
-  return this.staffPayrollService.generatePayrollReport(
-    accessKeyId,
-    filter.date_from,
-    filter.date_to,
-    filter.vendor_ids,
-    filter.location_ids,
-  );
-}
+  @Post("payroll-reports/export-excel")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async exportPayrollReportExcel(
+    @Body() filter: StaffScheduleReportFilterDto,
+    @Request() req?: any,
+  ): Promise<StreamableFile> {
+    const accessKeyId = req?.user?.current_access_key;
 
+    const workbook = await this.staffPayrollService.exportPayrollReportToExcel(
+      accessKeyId,
+      filter.date_from,
+      filter.date_to,
+      filter.vendor_ids,
+      filter.location_ids,
+    );
 
+    const filename = `SWP_Payroll_Report_${filter.date_from || "start"}_to_${filter.date_to || "end"}.xlsx`;
 
+    // Write workbook directly to buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    // Return NestJS StreamableFile with built-in headers
+    return new StreamableFile(Buffer.from(buffer), {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.byteLength,
+    });
+  }
 }

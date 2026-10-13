@@ -24,6 +24,9 @@ export class Vendor {
 
   @Column({ length: 255 })
   service_provider_code: string;
+  
+  @Column({ length: 255 })
+  vendor_code: string;
 
   @Column()
   category_id: number;

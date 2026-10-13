@@ -297,6 +297,14 @@ export class PayrollDetails {
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   net_amt_diser: number;
 
+  @Column({
+    type: "decimal",
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  ec: number;
+
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
   ot_rest_day_amount: number;
 

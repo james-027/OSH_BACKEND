@@ -37,6 +37,57 @@ const customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(utc);
 dayjs.extend(customParseFormat);
 
+import * as ExcelJS from 'exceljs';
+
+// --- Shared Style Constants ---
+const borderThin: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin', color: { argb: 'FF000000' } },
+  left: { style: 'thin', color: { argb: 'FF000000' } },
+  bottom: { style: 'thin', color: { argb: 'FF000000' } },
+  right: { style: 'thin', color: { argb: 'FF000000' } },
+};
+
+const S_CYAN_FILL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF9CD6F0' },
+};
+
+const S_GREEN_FILL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF76D776' },
+};
+
+const S_YELLOW_FILL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFFAFD32' },
+};
+
+const S_OFF_FILL: ExcelJS.FillPattern = {
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FF7F7F7F' },
+};
+
+const parseNum = (val: any): number => {
+  if (val === null || val === undefined || val === '' || isNaN(Number(val))) return 0;
+  return Number(val);
+};
+
+const fmtMoney = (val: any): string => {
+  const n = parseNum(val);
+  return n === 0
+    ? '-'
+    : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const fmtHours = (val: any): string => {
+  const n = parseNum(val);
+  return n === 0 ? '-' : n.toFixed(2);
+};
+
 @Injectable()
 export class StaffPayrollService {
   constructor(
@@ -1821,471 +1872,999 @@ export class StaffPayrollService {
 
 
 
-async generatePayrollReport(
-  accessKeyId?: number,
-  dateFrom?: string,
-  dateTo?: string,
-  vendorIds?: number[],
-  locationIds?: number[],
-): Promise<any> {
-  try {
-    const query = this.payrollDetailRepository
-      .createQueryBuilder("payrollDetail")
-      .innerJoin("payrollDetail.payrollHeader", "payrollHeader")
-      .leftJoin("payrollDetail.staff", "staff")
-      .leftJoin("payrollDetail.vendor", "vendor")
-      .leftJoin("payrollDetail.warehouse", "warehouse");
 
-    query.select([
-      "payrollDetail.id",
-      "payrollDetail.payroll_header_id",
-      "payrollDetail.schedule_detail_id",
-      "payrollDetail.staff_id",
-      "payrollDetail.staff_code",
-      "payrollDetail.vendor_id",
-      "payrollDetail.location_id",
-      "payrollDetail.warehouse_id",
-      "payrollDetail.warehouse_ifs",
+  async generatePayrollReport(
+    accessKeyId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    vendorIds?: number[],
+    locationIds?: number[],
+  ): Promise<any> {
+    try {
+      const query = this.payrollDetailRepository
+        .createQueryBuilder("payrollDetail")
+        .innerJoin("payrollDetail.payrollHeader", "payrollHeader")
+        .leftJoin("payrollDetail.staff", "staff")
+        .leftJoin("payrollDetail.vendor", "vendor")
+        .leftJoin("payrollDetail.warehouse", "warehouse");
 
-      "payrollDetail.schedule_date",
-      "payrollDetail.duty_start_time",
-      "payrollDetail.duty_end_time",
-      "payrollDetail.planned_duty_start_time",
-      "payrollDetail.planned_duty_end_time",
+      query.select([
+        "payrollDetail.id",
+        "payrollDetail.payroll_header_id",
+        "payrollDetail.schedule_detail_id",
+        "payrollDetail.staff_id",
+        "payrollDetail.staff_code",
+        "payrollDetail.vendor_id",
+        "payrollDetail.location_id",
+        "payrollDetail.warehouse_id",
+        "payrollDetail.warehouse_ifs",
+        "payrollDetail.schedule_date",
+        "payrollDetail.duty_start_time",
+        "payrollDetail.duty_end_time",
+        "payrollDetail.planned_duty_start_time",
+        "payrollDetail.planned_duty_end_time",
+        "payrollDetail.just_time_in",
+        "payrollDetail.just_time_out",
+        "payrollDetail.overtime_in",
+        "payrollDetail.overtime_out",
+        "payrollDetail.just_break_in",
+        "payrollDetail.just_break_out",
+        "payrollDetail.actual_time_in",
+        "payrollDetail.actual_time_out",
+        "payrollDetail.actual_break_in",
+        "payrollDetail.actual_break_out",
+        "payrollDetail.working_day_id",
+        "payrollDetail.status_id",
+        "payrollDetail.attendance_status_id",
+        "payrollDetail.regular",
+        "payrollDetail.overtime",
+        "payrollDetail.twh",
+        "payrollDetail.break",
+        "payrollDetail.regular_hours",
+        "payrollDetail.overtime_hours",
+        "payrollDetail.twh_hours",
+        "payrollDetail.break_hours",
+        "payrollDetail.shift_type",
+        "payrollDetail.night_shift_hrs",
+        "payrollDetail.night_shift",
+        "payrollDetail.night_shift_amount",
+        "payrollDetail.regular_amount",
+        "payrollDetail.regular_day_amount",
+        "payrollDetail.rest_day_amount",
+        "payrollDetail.special_holiday_amount",
+        "payrollDetail.regular_holiday_amount",
+        "payrollDetail.regular_holiday_off_amount",
+        "payrollDetail.rd_regular_holiday_amount",
+        "payrollDetail.rd_special_holiday_amount",
+        "payrollDetail.overtime_amount",
+        "payrollDetail.ot_regular_amount",
+        "payrollDetail.ot_rest_day_amount",
+        "payrollDetail.ot_special_holiday_amount",
+        "payrollDetail.ot_regular_holiday_amount",
+        "payrollDetail.ot_rd_regular_holiday_amount",
+        "payrollDetail.ot_rd_special_holiday_amount",
+        "payrollDetail.net_amt_diser",
+        "payrollDetail.salary_rate",
+        "payrollDetail.hour_rate",
+        "payrollDetail.regular_day",
+        "payrollDetail.special_holiday",
+        "payrollDetail.regular_holiday",
+        "payrollDetail.rest_day",
+        "payrollDetail.total_day_work",
+        "payrollDetail.ot_regular_day",
+        "payrollDetail.ot_special_holiday",
+        "payrollDetail.ot_regular_holiday",
+        "payrollDetail.ot_rest_day",
+        "payrollDetail.total_ot_day_work",
+        "payrollDetail.gross_pay",
+        "payrollDetail.thirteen_month_pay",
+        "payrollDetail.sss_share",
+        "payrollDetail.pag_ibig_share",
+        "payrollDetail.phil_health_share",
+        "payrollDetail.total_govt_share",
+        "payrollDetail.total_payroll",
+        "payrollDetail.asf",
+        "payrollDetail.total_asf",
+        "payrollDetail.allowance",
+        "payrollDetail.total_allowance",
+        "payrollDetail.vat",
+        "payrollDetail.total_with_vat",
+        "payrollDetail.tax",
+        "payrollDetail.net_of_tax",
+        "payrollDetail.cash_bond",
+        "payrollDetail.total_billing",
+        "payrollDetail.ec",
+        "staff.id",
+        "staff.first_name",
+        "staff.last_name",
+        "staff.staff_code",
+        "staff.old_dws_code",
+        "staff.contact_number",
+        "vendor.id",
+        "vendor.service_provider_name",
+        "vendor.service_provider_code",
+        "vendor.vendor_code",
+        "warehouse.id",
+        "warehouse.warehouse_name",
+        "warehouse.warehouse_code",
+        "warehouse.warehouse_ifs",
+      ]);
 
-      "payrollDetail.just_time_in",
-      "payrollDetail.just_time_out",
-      "payrollDetail.overtime_in",
-      "payrollDetail.overtime_out",
-      "payrollDetail.just_break_in",
-      "payrollDetail.just_break_out",
-
-      "payrollDetail.actual_time_in",
-      "payrollDetail.actual_time_out",
-      "payrollDetail.actual_break_in",
-      "payrollDetail.actual_break_out",
-
-      "payrollDetail.working_day_id",
-      "payrollDetail.status_id",
-      "payrollDetail.attendance_status_id",
-
-      "payrollDetail.regular",
-      "payrollDetail.overtime",
-      "payrollDetail.twh",
-      "payrollDetail.break",
-
-      "payrollDetail.regular_hours",
-      "payrollDetail.overtime_hours",
-      "payrollDetail.twh_hours",
-      "payrollDetail.break_hours",
-
-      "payrollDetail.shift_type",
-      "payrollDetail.night_shift_hrs",
-      "payrollDetail.night_shift",
-      "payrollDetail.night_shift_amount",
-
-      "payrollDetail.regular_amount",
-      "payrollDetail.regular_day_amount",
-      "payrollDetail.rest_day_amount",
-      "payrollDetail.special_holiday_amount",
-      "payrollDetail.regular_holiday_amount",
-      "payrollDetail.regular_holiday_off_amount",
-      "payrollDetail.rd_regular_holiday_amount",
-      "payrollDetail.rd_special_holiday_amount",
-
-      "payrollDetail.overtime_amount",
-      "payrollDetail.ot_regular_amount",
-      "payrollDetail.ot_rest_day_amount",
-      "payrollDetail.ot_special_holiday_amount",
-      "payrollDetail.ot_regular_holiday_amount",
-      "payrollDetail.ot_rd_regular_holiday_amount",
-      "payrollDetail.ot_rd_special_holiday_amount",
-      "payrollDetail.net_amt_diser",
-
-      "payrollDetail.salary_rate",
-      "payrollDetail.hour_rate",
-
-      "payrollDetail.regular_day",
-      "payrollDetail.special_holiday",
-      "payrollDetail.regular_holiday",
-      "payrollDetail.rest_day",
-      "payrollDetail.total_day_work",
-
-      "payrollDetail.ot_regular_day",
-      "payrollDetail.ot_special_holiday",
-      "payrollDetail.ot_regular_holiday",
-      "payrollDetail.ot_rest_day",
-      "payrollDetail.total_ot_day_work",
-
-      "payrollDetail.gross_pay",
-      "payrollDetail.thirteen_month_pay",
-      "payrollDetail.sss_share",
-      "payrollDetail.pag_ibig_share",
-      "payrollDetail.phil_health_share",
-      "payrollDetail.total_govt_share",
-      "payrollDetail.total_payroll",
-
-      "payrollDetail.asf",
-      "payrollDetail.total_asf",
-      "payrollDetail.allowance",
-      "payrollDetail.total_allowance",
-      "payrollDetail.vat",
-      "payrollDetail.total_with_vat",
-      "payrollDetail.tax",
-      "payrollDetail.net_of_tax",
-      "payrollDetail.cash_bond",
-      "payrollDetail.total_billing",
-
-      "staff.id",
-      "staff.first_name",
-      "staff.last_name",
-      "staff.staff_code",
-      "staff.old_dws_code",
-      "staff.contact_number",
-
-      "vendor.id",
-      "vendor.service_provider_name",
-      "vendor.service_provider_code",
-
-      "warehouse.id",
-      "warehouse.warehouse_name",
-      "warehouse.warehouse_code",
-      "warehouse.warehouse_ifs",
-    ]);
-
-    query.andWhere("payrollHeader.status_id = :postedStatus", {
-      postedStatus: STATUS_IDS.POSTED,
-    });
-
-    if (accessKeyId) {
-      query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
-        accessKeyId,
+      query.andWhere("payrollHeader.status_id = :postedStatus", {
+        postedStatus: STATUS_IDS.POSTED,
       });
-    }
 
-    if (dateFrom) {
-      query.andWhere(
-        "DATE(payrollDetail.schedule_date) >= :dateFrom",
-        {
+      if (accessKeyId) {
+        query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
+          accessKeyId,
+        });
+      }
+
+      if (dateFrom) {
+        query.andWhere("DATE(payrollDetail.schedule_date) >= :dateFrom", {
           dateFrom,
-        },
-      );
-    }
+        });
+      }
 
-    if (dateTo) {
-      query.andWhere(
-        "DATE(payrollDetail.schedule_date) <= :dateTo",
-        {
+      if (dateTo) {
+        query.andWhere("DATE(payrollDetail.schedule_date) <= :dateTo", {
           dateTo,
-        },
-      );
-    }
+        });
+      }
 
-    if (vendorIds?.length) {
-      query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
-        vendorIds,
-      });
-    }
+      if (vendorIds?.length) {
+        query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
+          vendorIds,
+        });
+      }
 
-    if (locationIds?.length) {
-      query.andWhere(
-        "payrollDetail.location_id IN (:...locationIds)",
-        {
+      if (locationIds?.length) {
+        query.andWhere("payrollDetail.location_id IN (:...locationIds)", {
           locationIds,
-        },
-      );
-    }
-
-    query
-      .orderBy("vendor.id", "ASC")
-      .addOrderBy("payrollDetail.schedule_date", "ASC")
-      .addOrderBy("warehouse.id", "ASC")
-      .addOrderBy("staff.id", "ASC")
-      .addOrderBy("payrollDetail.id", "ASC");
-
-    const details = await query.getMany();
-
-    const vendorMap = new Map<number, any>();
-
-    for (const detail of details) {
-      const vendorId = detail.vendor?.id ?? detail.vendor_id;
-
-      const scheduleDate = detail.schedule_date
-        ? new Date(detail.schedule_date)
-            .toISOString()
-            .split("T")[0]
-        : null;
-
-      const warehouseId =
-        detail.warehouse?.id ?? detail.warehouse_id;
-
-      const staffId =
-        detail.staff?.id ?? detail.staff_id;
-
-      if (vendorId == null) {
-        continue;
-      }
-
-      if (!vendorMap.has(vendorId)) {
-        vendorMap.set(vendorId, {
-          vendor_id: vendorId,
-          vendor_name:
-            detail.vendor?.service_provider_name ?? null,
-          vendor_code:
-            detail.vendor?.service_provider_code ?? null,
-          dates: [],
-          _dateMap: new Map(),
         });
       }
 
-      const vendorGroup = vendorMap.get(vendorId);
+      query
+        .orderBy("vendor.id", "ASC")
+        .addOrderBy("payrollDetail.schedule_date", "ASC")
+        .addOrderBy("warehouse.id", "ASC")
+        .addOrderBy("staff.id", "ASC")
+        .addOrderBy("payrollDetail.id", "ASC");
 
-      if (!vendorGroup._dateMap.has(scheduleDate)) {
-        vendorGroup._dateMap.set(scheduleDate, {
-          schedule_date: scheduleDate,
-          schedule_day: scheduleDate
-          ? new Date(`${scheduleDate}T12:00:00`).toLocaleDateString("en-US", {weekday: "long",}).toUpperCase()
-          : null,
-          warehouses: [],
-          _warehouseMap: new Map(),
+      const details = await query.getMany();
+
+      const vendorMap = new Map<number, any>();
+      const periodWarehouseMap = new Map<string, any>();
+
+      const round2 = (value: number | string | null | undefined): number =>
+        Number(Number(value ?? 0).toFixed(2));
+
+      for (const detail of details) {
+        const vendorId = detail.vendor?.id ?? detail.vendor_id;
+
+        const scheduleDate = detail.schedule_date
+          ? new Date(detail.schedule_date).toISOString().split("T")[0]
+          : null;
+
+        const warehouseId = detail.warehouse?.id ?? detail.warehouse_id;
+        const staffId = detail.staff?.id ?? detail.staff_id;
+
+        if (vendorId == null) {
+          continue;
+        }
+
+        const actualHours = Number(detail.regular ?? 0);
+        const overtimeHours = Number(detail.overtime ?? 0);
+        const totalDays = Number(detail.total_day_work ?? 0);
+        const workingDayId = Number(detail.working_day_id ?? 0);
+
+        const periodStaffKey =
+          `${vendorId}-${warehouseId ?? "no-warehouse"}-${staffId ?? `no-staff-${detail.id}`}`;
+
+        if (!periodWarehouseMap.has(periodStaffKey)) {
+          periodWarehouseMap.set(periodStaffKey, {
+            vendor_id: vendorId,
+            vendor_name: detail.vendor?.service_provider_name ?? null,
+            vendor_code:
+              detail.vendor?.vendor_code ||
+              detail.vendor?.service_provider_code ||
+              null,
+            warehouse_id: warehouseId,
+            warehouse_name: detail.warehouse?.warehouse_name ?? null,
+            warehouse_code: detail.warehouse?.warehouse_code ?? null,
+            warehouse_ifs: detail.warehouse?.warehouse_ifs ?? null,
+            staff_id: staffId,
+            staff_name: detail.staff
+              ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
+              : null,
+            staff_code: detail.staff_code ?? null,
+            old_dws_code: detail.staff?.old_dws_code ?? null,
+            contact_number: detail.staff?.contact_number ?? null,
+            total_hours: 0,
+            total_ot_hours: 0,
+            total_number_of_days: 0,
+            total_special_holiday_hours: 0,
+            total_regular_holiday_hours: 0,
+            total_lates: 0,
+          });
+        }
+
+        const periodStaff = periodWarehouseMap.get(periodStaffKey);
+
+        periodStaff.total_hours += actualHours;
+        periodStaff.total_ot_hours += overtimeHours;
+        periodStaff.total_number_of_days += totalDays;
+
+        if ([3, 5].includes(workingDayId)) {
+          periodStaff.total_special_holiday_hours += actualHours;
+        }
+
+        if ([2, 4].includes(workingDayId)) {
+          periodStaff.total_regular_holiday_hours += actualHours;
+        }
+
+        if (!vendorMap.has(vendorId)) {
+          vendorMap.set(vendorId, {
+            vendor_id: vendorId,
+            vendor_name: detail.vendor?.service_provider_name ?? null,
+            vendor_code:
+              detail.vendor?.vendor_code ||
+              detail.vendor?.service_provider_code ||
+              null,
+            dates: [],
+            _dateMap: new Map(),
+          });
+        }
+
+        const vendorGroup = vendorMap.get(vendorId);
+
+        if (!vendorGroup._dateMap.has(scheduleDate)) {
+          vendorGroup._dateMap.set(scheduleDate, {
+            schedule_date: scheduleDate,
+            schedule_day: scheduleDate
+              ? new Date(`${scheduleDate}T12:00:00`).toLocaleDateString(
+                  "en-GB",
+                  {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  },
+                )
+              : null,
+            warehouses: [],
+            _warehouseMap: new Map(),
+          });
+        }
+
+        const dateGroup = vendorGroup._dateMap.get(scheduleDate);
+        const warehouseKey = warehouseId ?? `no-warehouse-${scheduleDate}`;
+
+        if (!dateGroup._warehouseMap.has(warehouseKey)) {
+          dateGroup._warehouseMap.set(warehouseKey, {
+            warehouse_id: warehouseId,
+            warehouse_name: detail.warehouse?.warehouse_name ?? null,
+            warehouse_code: detail.warehouse?.warehouse_code ?? null,
+            warehouse_ifs: detail.warehouse?.warehouse_ifs ?? null,
+            total_actual_hours: 0,
+            total_hours: 0,
+            total_number_of_days: 0,
+            total_ot_hours: 0,
+            total_special_holiday_hours: 0,
+            total_regular_holiday_hours: 0,
+            total_lates: 0,
+            total_staff_count: 0,
+            budget_hours: 0,
+            staff: [],
+            _staffMap: new Map(),
+          });
+        }
+
+        const warehouseGroup = dateGroup._warehouseMap.get(warehouseKey);
+        const staffKey = staffId ?? `no-staff-${detail.id}`;
+
+        if (!warehouseGroup._staffMap.has(staffKey)) {
+          warehouseGroup._staffMap.set(staffKey, {
+            staff_id: staffId,
+            staff_name: detail.staff
+              ? `${detail.staff.first_name ?? ""} ${detail.staff.last_name ?? ""}`.trim()
+              : null,
+            staff_code: detail.staff_code ?? null,
+            old_dws_code: detail.staff?.old_dws_code ?? null,
+            contact_number: detail.staff?.contact_number ?? null,
+            details: [],
+          });
+
+          warehouseGroup.total_staff_count += 1;
+        }
+
+        const staffGroup = warehouseGroup._staffMap.get(staffKey);
+        const budgethours = 24; // HARD-CODED BUDGET HOURS FOR NOW - For Sir Alj
+
+
+        warehouseGroup.total_actual_hours += actualHours;
+        warehouseGroup.total_hours += actualHours;
+        warehouseGroup.total_number_of_days += totalDays;
+        warehouseGroup.total_ot_hours += overtimeHours;
+
+        if ([3, 5].includes(workingDayId)) {
+          warehouseGroup.total_special_holiday_hours += actualHours;
+        }
+
+        if ([2, 4].includes(workingDayId)) {
+          warehouseGroup.total_regular_holiday_hours += actualHours;
+        }
+
+        warehouseGroup.budget_hours = budgethours;
+
+        staffGroup.details.push({
+          id: detail.id,
+          payroll_header_id: detail.payroll_header_id,
+          schedule_detail_id: detail.schedule_detail_id,
+          schedule_date: detail.schedule_date,
+
+          duty_start_time: detail.duty_start_time,
+          duty_end_time: detail.duty_end_time,
+          planned_duty_start_time: detail.planned_duty_start_time,
+          planned_duty_end_time: detail.planned_duty_end_time,
+
+          just_time_in: detail.just_time_in,
+          just_time_out: detail.just_time_out,
+          overtime_in: detail.overtime_in,
+          overtime_out: detail.overtime_out,
+          just_break_in: detail.just_break_in,
+          just_break_out: detail.just_break_out,
+
+          actual_time_in: detail.actual_time_in,
+          actual_time_out: detail.actual_time_out,
+          actual_break_in: detail.actual_break_in,
+          actual_break_out: detail.actual_break_out,
+
+          working_day_id: detail.working_day_id,
+          status_id: detail.status_id,
+          attendance_status_id: detail.attendance_status_id,
+
+          regular: round2(detail.regular),
+          overtime: round2(detail.overtime),
+          twh: round2(detail.twh),
+          break: round2(detail.break),
+
+          regular_hours: round2(detail.regular_hours),
+          overtime_hours: round2(detail.overtime_hours),
+          twh_hours: round2(detail.twh_hours),
+          break_hours: round2(detail.break_hours),
+
+          shift_type: detail.shift_type,
+          night_shift_hrs: round2(detail.night_shift_hrs),
+          night_shift: detail.night_shift,
+          night_shift_amount: round2(detail.night_shift_amount),
+
+          regular_amount: round2(detail.regular_amount),
+          regular_day_amount: round2(detail.regular_day_amount),
+          rest_day_amount: round2(detail.rest_day_amount),
+          special_holiday_amount: round2(detail.special_holiday_amount),
+          regular_holiday_amount: round2(detail.regular_holiday_amount),
+          regular_holiday_off_amount: round2(detail.regular_holiday_off_amount),
+          rd_regular_holiday_amount: round2(detail.rd_regular_holiday_amount),
+          rd_special_holiday_amount: round2(detail.rd_special_holiday_amount),
+          net_amt_diser: round2(detail.net_amt_diser),
+
+          overtime_amount: round2(detail.overtime_amount),
+          ot_regular_amount: round2(detail.ot_regular_amount),
+          ot_rest_day_amount: round2(detail.ot_rest_day_amount),
+          ot_special_holiday_amount: round2(detail.ot_special_holiday_amount),
+          ot_regular_holiday_amount: round2(detail.ot_regular_holiday_amount),
+          ot_rd_regular_holiday_amount: round2(detail.ot_rd_regular_holiday_amount),
+          ot_rd_special_holiday_amount: round2(detail.ot_rd_special_holiday_amount),
+
+          salary_rate: round2(detail.salary_rate),
+          hour_rate: round2(detail.hour_rate),
+
+          regular_day: round2(detail.regular_day),
+          special_holiday: round2(detail.special_holiday),
+          regular_holiday: round2(detail.regular_holiday),
+          rest_day: round2(detail.rest_day),
+          total_day_work: round2(detail.total_day_work),
+
+          ot_regular_day: round2(detail.ot_regular_day),
+          ot_special_holiday: round2(detail.ot_special_holiday),
+          ot_regular_holiday: round2(detail.ot_regular_holiday),
+          ot_rest_day: round2(detail.ot_rest_day),
+          total_ot_day_work: round2(detail.total_ot_day_work),
+
+          gross_pay: round2(detail.gross_pay),
+          thirteen_month_pay: round2(detail.thirteen_month_pay),
+          sss_share: round2(detail.sss_share),
+          pag_ibig_share: round2(detail.pag_ibig_share),
+          phil_health_share: round2(detail.phil_health_share),
+          total_govt_share: round2(detail.total_govt_share),
+          total_payroll: round2(detail.total_payroll),
+
+          ec_er: round2(detail.ec),
+
+          asf: round2(detail.asf),
+          total_asf: round2(detail.total_asf),
+          allowance: round2(detail.allowance),
+          total_allowance: round2(detail.total_allowance),
+          vat: round2(detail.vat),
+          total_with_vat: round2(detail.total_with_vat),
+          tax: round2(detail.tax),
+          net_of_tax: round2(detail.net_of_tax),
+          cash_bond: round2(detail.cash_bond),
+          total_billing: round2(detail.total_billing),
         });
       }
 
-      const dateGroup =
-        vendorGroup._dateMap.get(scheduleDate);
-
-      const warehouseKey =
-        warehouseId ?? `no-warehouse-${scheduleDate}`;
-
-      if (!dateGroup._warehouseMap.has(warehouseKey)) {
-        dateGroup._warehouseMap.set(warehouseKey, {
-          warehouse_id: warehouseId,
-          warehouse_name:
-            detail.warehouse?.warehouse_name ?? null,
-          warehouse_code:
-            detail.warehouse?.warehouse_code ?? null,
-          warehouse_ifs:
-            detail.warehouse?.warehouse_ifs ?? null,
-          total_actual_hours: 0,
-          total_staff_count: 0,
-          staff: [],
-          _staffMap: new Map(),
-        });
+      for (const periodStaff of periodWarehouseMap.values()) {
+        periodStaff.total_hours = round2(periodStaff.total_hours);
+        periodStaff.total_ot_hours = round2(periodStaff.total_ot_hours);
+        periodStaff.total_number_of_days = round2(
+          periodStaff.total_number_of_days,
+        );
+        periodStaff.total_special_holiday_hours = round2(
+          periodStaff.total_special_holiday_hours,
+        );
+        periodStaff.total_regular_holiday_hours = round2(
+          periodStaff.total_regular_holiday_hours,
+        );
+        periodStaff.total_lates = round2(
+          Math.max(
+            0,
+            8 * periodStaff.total_number_of_days -
+              periodStaff.total_hours,
+          ),
+        );
       }
 
-      const warehouseGroup =
-        dateGroup._warehouseMap.get(warehouseKey);
+      const periodTotals = Array.from(periodWarehouseMap.values());
 
-      const staffKey =
-        staffId ?? `no-staff-${detail.id}`;
+      const vendors = Array.from(vendorMap.values()).map((vendorGroup) => {
+        const dates = Array.from(vendorGroup._dateMap.values()).map(
+          (dateGroup: any) => {
+            const warehouses = Array.from(
+              dateGroup._warehouseMap.values(),
+            ).map((warehouseGroup: any) => {
+              warehouseGroup.staff = Array.from(
+                warehouseGroup._staffMap.values(),
+              );
 
-      if (!warehouseGroup._staffMap.has(staffKey)) {
-        warehouseGroup._staffMap.set(staffKey, {
-          staff_id: staffId,
-          staff_name: detail.staff
-            ? `${detail.staff.first_name ?? ""} ${
-                detail.staff.last_name ?? ""
-              }`.trim()
-            : null,
-          staff_code:
-            detail.staff_code ??
-            null,
-          old_dws_code:
-            detail.staff?.old_dws_code ??
-            null,
-          contact_number:
-            detail.staff?.contact_number ??
-            null,
-          details: [],
-        });
-        warehouseGroup.total_staff_count += 1;
-      }
+              warehouseGroup.total_actual_hours = round2(
+                warehouseGroup.total_actual_hours,
+              );
+              warehouseGroup.total_hours = round2(
+                warehouseGroup.total_hours,
+              );
+              warehouseGroup.total_number_of_days = round2(
+                warehouseGroup.total_number_of_days,
+              );
+              warehouseGroup.total_ot_hours = round2(
+                warehouseGroup.total_ot_hours,
+              );
+              warehouseGroup.total_special_holiday_hours = round2(
+                warehouseGroup.total_special_holiday_hours,
+              );
+              warehouseGroup.total_regular_holiday_hours = round2(
+                warehouseGroup.total_regular_holiday_hours,
+              );
+              warehouseGroup.total_lates = round2(
+                Math.max(
+                  0,
+                  8 * warehouseGroup.total_number_of_days -
+                    warehouseGroup.total_hours,
+                ),
+              );
+              warehouseGroup.budget_hours = round2(
+                warehouseGroup.budget_hours,
+              );
 
-      const staffGroup =
-        warehouseGroup._staffMap.get(staffKey);
+              delete warehouseGroup._staffMap;
 
-      const actualHours = Number(detail.twh ?? 0);
+              return warehouseGroup;
+            });
 
-      warehouseGroup.total_actual_hours += actualHours;
+            dateGroup.warehouses = warehouses;
+            delete dateGroup._warehouseMap;
 
-      if (!warehouseGroup._staffMap.has(staffKey)) {
-        warehouseGroup.total_staff_count += 1;
-      }
+            return dateGroup;
+          },
+        );
 
-      staffGroup.details.push({
-        id: detail.id,
-        payroll_header_id: detail.payroll_header_id,
-        schedule_detail_id: detail.schedule_detail_id,
+        vendorGroup.dates = dates;
+        delete vendorGroup._dateMap;
 
-        schedule_date: detail.schedule_date,
-
-        duty_start_time: detail.duty_start_time,
-        duty_end_time: detail.duty_end_time,
-        planned_duty_start_time:
-          detail.planned_duty_start_time,
-        planned_duty_end_time:
-          detail.planned_duty_end_time,
-
-        just_time_in: detail.just_time_in,
-        just_time_out: detail.just_time_out,
-        overtime_in: detail.overtime_in,
-        overtime_out: detail.overtime_out,
-        just_break_in: detail.just_break_in,
-        just_break_out: detail.just_break_out,
-
-        actual_time_in: detail.actual_time_in,
-        actual_time_out: detail.actual_time_out,
-        actual_break_in: detail.actual_break_in,
-        actual_break_out: detail.actual_break_out,
-
-        working_day_id: detail.working_day_id,
-        status_id: detail.status_id,
-        attendance_status_id:
-          detail.attendance_status_id,
-
-        regular: detail.regular,
-        overtime: detail.overtime,
-        twh: detail.twh,
-        break: detail.break,
-
-        regular_hours: detail.regular_hours,
-        overtime_hours: detail.overtime_hours,
-        twh_hours: detail.twh_hours,
-        break_hours: detail.break_hours,
-
-        shift_type: detail.shift_type,
-        night_shift_hrs: detail.night_shift_hrs,
-        night_shift: detail.night_shift,
-        night_shift_amount:
-          detail.night_shift_amount,
-
-        regular_amount: detail.regular_amount,
-        regular_day_amount:
-          detail.regular_day_amount,
-        rest_day_amount:
-          detail.rest_day_amount,
-        special_holiday_amount:
-          detail.special_holiday_amount,
-        regular_holiday_amount:
-          detail.regular_holiday_amount,
-        regular_holiday_off_amount:
-          detail.regular_holiday_off_amount,
-        rd_regular_holiday_amount:
-          detail.rd_regular_holiday_amount,
-        rd_special_holiday_amount:
-          detail.rd_special_holiday_amount,
-        net_amt_diser:
-          detail.net_amt_diser,
-        overtime_amount:
-          detail.overtime_amount,
-        ot_regular_amount:
-          detail.ot_regular_amount,
-        ot_rest_day_amount:
-          detail.ot_rest_day_amount,
-        ot_special_holiday_amount:
-          detail.ot_special_holiday_amount,
-        ot_regular_holiday_amount:
-          detail.ot_regular_holiday_amount,
-        ot_rd_regular_holiday_amount:
-          detail.ot_rd_regular_holiday_amount,
-        ot_rd_special_holiday_amount:
-          detail.ot_rd_special_holiday_amount,
-
-        salary_rate: detail.salary_rate,
-        hour_rate: detail.hour_rate,
-
-        regular_day: detail.regular_day,
-        special_holiday:
-          detail.special_holiday,
-        regular_holiday:
-          detail.regular_holiday,
-        rest_day: detail.rest_day,
-        total_day_work:
-          detail.total_day_work,
-
-        ot_regular_day:
-          detail.ot_regular_day,
-        ot_special_holiday:
-          detail.ot_special_holiday,
-        ot_regular_holiday:
-          detail.ot_regular_holiday,
-        ot_rest_day:
-          detail.ot_rest_day,
-        total_ot_day_work:
-          detail.total_ot_day_work,
-
-        gross_pay: detail.gross_pay,
-        thirteen_month_pay:
-          detail.thirteen_month_pay,
-        sss_share: detail.sss_share,
-        pag_ibig_share:
-          detail.pag_ibig_share,
-        phil_health_share:
-          detail.phil_health_share,
-        total_govt_share:
-          detail.total_govt_share,
-        total_payroll:
-          detail.total_payroll,
-
-        asf: detail.asf,
-        total_asf: detail.total_asf,
-        allowance: detail.allowance,
-        total_allowance:
-          detail.total_allowance,
-        vat: detail.vat,
-        total_with_vat:
-          detail.total_with_vat,
-        tax: detail.tax,
-        net_of_tax:
-          detail.net_of_tax,
-        cash_bond:
-          detail.cash_bond,
-        total_billing:
-          detail.total_billing,
+        return vendorGroup;
       });
+
+      return {
+        date_from: dateFrom ?? null,
+        date_to: dateTo ?? null,
+        vendors,
+        period_totals: periodTotals,
+        total_details: details.length,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Inside StaffPayrollService:
+
+  async exportPayrollReportToExcel(
+    accessKeyId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    vendorIds?: number[],
+    locationIds?: number[],
+  ): Promise<ExcelJS.Workbook> {
+    const reportData = await this.generatePayrollReport(
+      accessKeyId,
+      dateFrom,
+      dateTo,
+      vendorIds,
+      locationIds,
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'SWP Payroll System';
+    workbook.created = new Date();
+
+    const vendors = reportData?.vendors || [];
+    if (vendors.length === 0) {
+      const ws = workbook.addWorksheet('No Data');
+      ws.addRow(['No payroll data found for the selected criteria.']);
+      return workbook;
     }
 
-    const vendors = Array.from(
-      vendorMap.values(),
-    ).map((vendorGroup) => {
-      const dates = Array.from(
-        vendorGroup._dateMap.values(),
-      ).map((dateGroup: any) => {
-        const warehouses = Array.from(
-          dateGroup._warehouseMap.values(),
-        ).map((warehouseGroup: any) => {
-          warehouseGroup.staff = Array.from(
-            warehouseGroup._staffMap.values(),
+    // 1. Collect and sort all distinct dates across vendors
+    const dateMap = new Map<string, string>();
+    vendors.forEach((v: any) => {
+      v.dates?.forEach((d: any) => {
+        if (d.schedule_date) {
+          dateMap.set(
+            d.schedule_date,
+            d.schedule_day || dayjs(d.schedule_date).format('dddd').toUpperCase(),
           );
-
-          delete warehouseGroup._staffMap;
-
-          return warehouseGroup;
-        });
-
-        dateGroup.warehouses = warehouses;
-
-        delete dateGroup._warehouseMap;
-
-        return dateGroup;
+        }
       });
-
-      vendorGroup.dates = dates;
-
-      delete vendorGroup._dateMap;
-
-      return vendorGroup;
     });
 
-    return {
-      date_from: dateFrom ?? null,
-      date_to: dateTo ?? null,
-      vendors,
-      total_details: details.length,
-    };
-  } catch (error) {
-    throw error;
+    const allDateKeys = Array.from(dateMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, day]) => ({ date, day }));
+
+    // 2. Iterate each vendor and build a sheet per warehouse
+    vendors.forEach((vendor: any) => {
+      const warehouseMap = new Map<number, any>();
+
+      vendor.dates?.forEach((d: any) => {
+        d.warehouses?.forEach((wh: any) => {
+          if (!warehouseMap.has(wh.warehouse_id)) {
+            warehouseMap.set(wh.warehouse_id, {
+              warehouse_id: wh.warehouse_id,
+              warehouse_name: wh.warehouse_name,
+              warehouse_code: wh.warehouse_code,
+              warehouse_ifs: wh.warehouse_ifs,
+              staff: [],
+              dailySummaries: new Map<string, any>(),
+            });
+          }
+          const targetWh = warehouseMap.get(wh.warehouse_id);
+
+          if (!targetWh.dailySummaries.has(d.schedule_date)) {
+            targetWh.dailySummaries.set(d.schedule_date, {
+              total_actual_hours: wh.total_actual_hours ?? d.total_actual_hours,
+              total_staff_count: wh.total_staff_count ?? d.total_staff_count,
+              total_budget_hours: wh.total_budget_hours ?? d.total_budget_hours,
+            });
+          }
+
+          wh.staff?.forEach((st: any) => {
+            let existingStaff = targetWh.staff.find((s: any) => s.staff_id === st.staff_id);
+            if (!existingStaff) {
+              existingStaff = {
+                staff_id: st.staff_id,
+                staff_name: st.staff_name,
+                staff_code: st.staff_code,
+                old_dws_code: st.old_dws_code,
+                contact_number: st.contact_number,
+                details: [],
+              };
+              targetWh.staff.push(existingStaff);
+            }
+            if (st.details) {
+              existingStaff.details.push(...st.details);
+            }
+          });
+        });
+      });
+
+      // 3. Render worksheets
+      warehouseMap.forEach((warehouse: any) => {
+        const cleanSheetName = (warehouse.warehouse_code || `Store_${warehouse.warehouse_id}`)
+          .substring(0, 31)
+          .replace(/[\\/?*[\]]/g, '');
+
+        const ws = workbook.addWorksheet(cleanSheetName, {
+          views: [{ showGridLines: true }],
+        });
+
+        const staffList: any[] = warehouse.staff || [];
+        const numStaffCols = Math.max(staffList.length, 4);
+        const totalCols = 2 + numStaffCols + 3;
+        const cTotHours = 2 + numStaffCols; // 0-based col index + 1 for ExcelJS (1-based: cTotHours + 1)
+        const cBudget = cTotHours + 1;
+        const cTotStaff = cBudget + 1;
+
+        // Helper function to set styled cells
+        const setCell = (
+          r: number,
+          c: number,
+          value: any,
+          font?: Partial<ExcelJS.Font>,
+          alignment?: Partial<ExcelJS.Alignment>,
+          fill?: ExcelJS.FillPattern,
+          border: boolean = true,
+        ) => {
+          const cell = ws.getCell(r, c);
+          cell.value = value;
+          if (font) cell.font = font;
+          if (alignment) cell.alignment = alignment;
+          if (fill) cell.fill = fill;
+          if (border) cell.border = borderThin;
+        };
+
+        // --- ROW 1: TITLE ---
+        ws.mergeCells(1, 5, 1, 7);
+        setCell(1, 5, 'SWP PAYROLL REPORT', { name: 'Arial', size: 14, bold: true }, { horizontal: 'center', vertical: 'middle' }, undefined, false);
+
+        // --- ROWS 3-5: METADATA 1 ---
+        const fromStr = `FROM : ${dayjs(dateFrom).format('MMMM DD, YYYY').toUpperCase()}`;
+        const toStr = `TO: ${dayjs(dateTo).format('MMMM DD, YYYY').toUpperCase()}`;
+
+        setCell(3, 1, 'PERIOD COVERED:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(3, 2, fromStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(3, 3, toStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+
+        setCell(4, 1, 'AGENCY & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(4, 2, String(vendor.vendor_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(4, 3, String(vendor.vendor_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+
+        setCell(5, 1, 'SHIP TO & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(5, 2, String(warehouse.warehouse_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(5, 3, String(warehouse.warehouse_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+
+        // --- ROWS 7-9: TABLE 1 HEADERS ---
+        const rH1 = 7;
+        const rH2 = 8;
+        const rH3 = 9;
+
+        setCell(rH1, 2, 'EMPLOYEE NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH2, 2, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH3, 2, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+
+        setCell(rH1, 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(rH2, 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(rH3, 1, '', undefined, undefined, S_CYAN_FILL);
+
+        for (let i = 0; i < numStaffCols; i++) {
+          const col = 3 + i;
+          const st = staffList[i];
+          setCell(rH1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rH2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rH3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        }
+
+        setCell(rH1, cTotHours + 1, 'TOTAL ACTUAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH2, cTotHours + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rH1, cTotHours + 1, rH2, cTotHours + 1);
+
+        setCell(rH1, cBudget + 1, 'BUDGET TOTAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH2, cBudget + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH3, cBudget + 1, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rH1, cBudget + 1, rH2, cBudget + 1);
+
+        setCell(rH1, cTotStaff + 1, 'TOTAL', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rH2, cTotStaff + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(rH3, cTotStaff + 1, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rH1, cTotStaff + 1, rH3, cTotStaff + 1);
+
+        // --- TABLE 1: SCHEDULE ROWS ---
+        let curRow = 10;
+        allDateKeys.forEach((dKey, dIdx) => {
+          setCell(curRow, 1, dIdx + 1, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+          setCell(curRow, 2, dKey.day, { name: 'Arial', size: 8 }, { horizontal: 'left', vertical: 'middle' });
+
+          for (let i = 0; i < numStaffCols; i++) {
+            const col = 3 + i;
+            const st = staffList[i];
+            const det = st?.details?.find((item: any) => item.schedule_date === dKey.date);
+
+            if (det && det.duty_start_time && det.duty_end_time) {
+              const tIn = dayjs(det.duty_start_time).format('h:mm A');
+              const tOut = dayjs(det.duty_end_time).format('h:mm A');
+              setCell(curRow, col, `${tIn}\n${tOut}`, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle', wrapText: true });
+            } else {
+              setCell(curRow, col, 'OFF', { name: 'Arial', size: 8, bold: true, color: { argb: 'FFFFFFFF' } }, { horizontal: 'center', vertical: 'middle' }, S_OFF_FILL);
+            }
+          }
+
+          const dateSummary = warehouse.dailySummaries?.get(dKey.date);
+          const actualHours = dateSummary?.total_actual_hours !== undefined ? fmtHours(dateSummary.total_actual_hours) : '-';
+          const staffCount = dateSummary?.total_staff_count !== undefined ? dateSummary.total_staff_count : 0;
+          const budgetHours = dateSummary?.total_budget_hours !== undefined ? dateSummary.total_budget_hours : 0;
+
+          setCell(curRow, cTotHours + 1, actualHours, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          setCell(curRow, cBudget + 1, budgetHours, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          setCell(curRow, cTotStaff + 1, staffCount, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+
+          curRow++;
+        });
+
+        // 3 Blank bordered rows
+        for (let k = 0; k < 3; k++) {
+          for (let c = 1; c <= totalCols; c++) {
+            setCell(curRow, c, '', undefined, undefined, undefined, true);
+          }
+          curRow++;
+        }
+        curRow += 2; // Spacing
+
+        // --- SECTION 2: METADATA 2 ---
+        setCell(curRow, 1, 'PERIOD COVERED:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 2, fromStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 3, toStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        curRow++;
+
+        setCell(curRow, 1, 'AGENCY & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 2, String(vendor.vendor_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 3, String(vendor.vendor_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        curRow++;
+
+        setCell(curRow, 1, 'SHIP TO & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 2, String(warehouse.warehouse_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(curRow, 3, String(warehouse.warehouse_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        curRow += 2;
+
+        // --- TABLE 2: WORKING HOURS HEADERS ---
+        const rT2_1 = curRow;
+        const rT2_2 = curRow + 1;
+        const rT2_3 = curRow + 2;
+
+        setCell(rT2_1, 1, 'DISER NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT2_1, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT2_1, 1, rT2_1, 2);
+
+        setCell(rT2_2, 1, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT2_2, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT2_2, 1, rT2_2, 2);
+
+        setCell(rT2_3, 1, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT2_3, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT2_3, 1, rT2_3, 2);
+
+        for (let i = 0; i < numStaffCols; i++) {
+          const col = 3 + i;
+          const st = staffList[i];
+          setCell(rT2_1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rT2_2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rT2_3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        }
+
+        setCell(rT2_1, cTotHours + 1, 'TOTAL ACTUAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rT2_2, cTotHours + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(rT2_3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT2_1, cTotHours + 1, rT2_3, cTotHours + 1);
+
+        curRow += 3;
+
+        // Table 2 Days
+        allDateKeys.forEach((dKey, dIdx) => {
+          setCell(curRow, 1, dIdx + 1, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+          setCell(curRow, 2, dKey.day, { name: 'Arial', size: 8 }, { horizontal: 'left', vertical: 'middle' });
+
+          let dayTot = 0;
+          for (let i = 0; i < numStaffCols; i++) {
+            const col = 3 + i;
+            const st = staffList[i];
+            const det = st?.details?.find((item: any) => item.schedule_date === dKey.date);
+            const hrs = parseNum(det?.regular);
+
+            if (hrs > 0) {
+              setCell(curRow, col, hrs.toFixed(2), { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+              dayTot += hrs;
+            } else {
+              setCell(curRow, col, 'OFF', { name: 'Arial', size: 8, bold: true, color: { argb: 'FFFFFFFF' } }, { horizontal: 'center', vertical: 'middle' }, S_OFF_FILL);
+            }
+          }
+
+          setCell(curRow, cTotHours + 1, fmtHours(dayTot), { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          curRow++;
+        });
+
+        // 3 Blank rows
+        for (let k = 0; k < 3; k++) {
+          for (let c = 1; c <= cTotHours + 1; c++) {
+            setCell(curRow, c, '', undefined, undefined, undefined, true);
+          }
+          curRow++;
+        }
+        curRow++;
+
+        // Table 2 Summaries
+        const summaryRows = [
+          { label: 'TOTAL HOURS', field: 'regular', fmt: fmtHours },
+          { label: 'NUMBER OF DAYS', field: 'total_day_work', fmt: (val: any) => parseNum(val) === 0 ? '' : String(Math.round(parseNum(val))) },
+          { label: 'TOTAL OT HOURS', field: 'overtime', fmt: fmtHours, green: true },
+          { label: 'TOTAL SPH HOURS', field: 'special_holiday', fmt: fmtHours, green: true },
+          { label: 'TOTAL RH HOURS', field: 'regular_holiday', fmt: fmtHours, green: true },
+          { label: 'TOTAL LATES', field: 'break', fmt: fmtHours },
+        ];
+
+        summaryRows.forEach((s) => {
+          setCell(curRow, 1, s.label, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, s.green ? S_GREEN_FILL : undefined);
+          setCell(curRow, 2, '', undefined, undefined, s.green ? S_GREEN_FILL : undefined);
+          ws.mergeCells(curRow, 1, curRow, 2);
+
+          let rowSum = 0;
+          for (let i = 0; i < numStaffCols; i++) {
+            const col = 3 + i;
+            const st = staffList[i];
+            const sum = st?.details?.reduce((acc: number, item: any) => acc + parseNum(item[s.field]), 0) || 0;
+            const formattedVal = sum > 0 ? (s.field === 'total_day_work' ? String(Math.round(sum)) : sum.toFixed(2)) : '';
+            setCell(curRow, col, formattedVal, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+            rowSum += sum;
+          }
+
+          setCell(curRow, cTotHours + 1, s.fmt(rowSum), { name: 'Arial', size: 8, bold: true }, { horizontal: 'right', vertical: 'middle' });
+          curRow++;
+        });
+        curRow++;
+
+        // --- TABLE 3: RATES & BILLING CALCULATION ---
+        const rT3_1 = curRow;
+        const rT3_2 = curRow + 1;
+        const rT3_3 = curRow + 2;
+
+        setCell(rT3_1, 1, 'DISER NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT3_1, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT3_1, 1, rT3_1, 2);
+
+        setCell(rT3_2, 1, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT3_2, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT3_2, 1, rT3_2, 2);
+
+        setCell(rT3_3, 1, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT3_3, 2, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT3_3, 1, rT3_3, 2);
+
+        for (let i = 0; i < numStaffCols; i++) {
+          const col = 3 + i;
+          const st = staffList[i];
+          setCell(rT3_1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rT3_2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(rT3_3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        }
+
+        setCell(rT3_1, cTotHours + 1, 'TOTAL', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
+        setCell(rT3_2, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(rT3_3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        ws.mergeCells(rT3_1, cTotHours + 1, rT3_3, cTotHours + 1);
+
+        curRow += 3;
+
+        // Rate Rows
+        const staffSalaryRates: number[] = staffList.map((st: any) => {
+          const found = st.details?.find((d: any) => parseNum(d.salary_rate) > 0);
+          return parseNum(found ? found.salary_rate : st.details?.[0]?.salary_rate);
+        });
+
+        const staffHourRates: number[] = staffList.map((st: any) => {
+          const found = st.details?.find((d: any) => parseNum(d.hour_rate) > 0);
+          return parseNum(found ? found.hour_rate : st.details?.[0]?.hour_rate);
+        });
+
+        const nonZeroSalaryRates = staffSalaryRates.filter((r) => r > 0);
+        const nonZeroHourRates = staffHourRates.filter((r) => r > 0);
+
+        const allSalarySame = nonZeroSalaryRates.length > 0 && nonZeroSalaryRates.every((r) => r === nonZeroSalaryRates[0]);
+        const allHourSame = nonZeroHourRates.length > 0 && nonZeroHourRates.every((r) => r === nonZeroHourRates[0]);
+
+        // Daily Rate
+        setCell(curRow, 1, 'DAILY RATE', { name: 'Arial', size: 8, bold: true }, { vertical: 'middle' });
+        setCell(curRow, 2, '', undefined, undefined);
+        ws.mergeCells(curRow, 1, curRow, 2);
+
+        for (let i = 0; i < numStaffCols; i++) {
+          const col = 3 + i;
+          const val = allSalarySame ? (i === 0 ? fmtMoney(nonZeroSalaryRates[0]) : '') : (staffSalaryRates[i] ? fmtMoney(staffSalaryRates[i]) : '-');
+          setCell(curRow, col, val, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        }
+        setCell(curRow, cTotHours + 1, '', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        curRow++;
+
+        // Hourly Rate
+        setCell(curRow, 1, 'HOURLY RATE', { name: 'Arial', size: 8, bold: true }, { vertical: 'middle' });
+        setCell(curRow, 2, '', undefined, undefined);
+        ws.mergeCells(curRow, 1, curRow, 2);
+
+        for (let i = 0; i < numStaffCols; i++) {
+          const col = 3 + i;
+          const val = allHourSame ? (i === 0 ? fmtMoney(nonZeroHourRates[0]) : '') : (staffHourRates[i] ? fmtMoney(staffHourRates[i]) : '-');
+          setCell(curRow, col, val, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        }
+        setCell(curRow, cTotHours + 1, '', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        curRow++;
+
+        // Billing Breakdown Rows
+        const billingRows = [
+          { label: 'BASIC RATE', field: 'regular_amount' },
+          { label: '13th MONTH', field: 'thirteen_month_pay' },
+          { label: 'NET AMT-DISER', field: 'gross_pay', green: true },
+          { label: 'SSS-EC', field: 'sss_share' },
+          { label: 'EC-ER', field: 'ec_share' },
+          { label: 'PHIC', field: 'phil_health_share' },
+          { label: 'PAG-IBIG-ER', field: 'pag_ibig_share' },
+          { label: 'TOTAL GOVT CONTRI', field: 'total_govt_share' },
+          { label: 'TOTAL W/ GOVT CONTRI', field: 'total_payroll' },
+          { label: 'ASF', field: 'asf' },
+          { label: 'TOTAL W/ ASF', field: 'total_asf' },
+          { label: 'VAT', field: 'vat' },
+          { label: 'TOTAL W/ VAT', field: 'total_with_vat' },
+          { label: 'TAX', field: 'tax' },
+          { label: 'NET OF TAX', field: 'net_of_tax' },
+          { label: 'CASH BOND', field: 'cash_bond' },
+          { label: 'TOTAL BILLING', field: 'total_billing', yellow: true },
+        ];
+
+        billingRows.forEach((item) => {
+          const fill = item.yellow ? S_YELLOW_FILL : item.green ? S_GREEN_FILL : undefined;
+          setCell(curRow, 1, item.label, { name: 'Arial', size: 8.5, bold: true }, { vertical: 'middle' }, fill);
+          setCell(curRow, 2, '', undefined, undefined, fill);
+          ws.mergeCells(curRow, 1, curRow, 2);
+
+          let rowSum = 0;
+          for (let i = 0; i < numStaffCols; i++) {
+            const col = 3 + i;
+            const st = staffList[i];
+            if (!st) {
+              setCell(curRow, col, '-', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' }, fill);
+              continue;
+            }
+            const sum = st.details?.reduce((acc: number, d: any) => acc + parseNum(d[item.field]), 0) || 0;
+            setCell(curRow, col, fmtMoney(sum), { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' }, fill);
+            rowSum += sum;
+          }
+
+          setCell(curRow, cTotHours + 1, fmtMoney(rowSum), { name: 'Arial', size: 8, bold: true }, { horizontal: 'right', vertical: 'middle' }, fill);
+          curRow++;
+        });
+
+        // Bottom Note
+        curRow++;
+        setCell(
+          curRow,
+          1,
+          '** THIS IS A SYSTEM GENERATED REPORT **',
+          { name: 'Arial', size: 8.5, bold: true, color: { argb: 'FFFF0000' } },
+          { vertical: 'middle' },
+          undefined,
+          false,
+        );
+
+        // Column widths
+        ws.columns = [
+          { width: 6 },
+          { width: 18 },
+          ...Array(numStaffCols).fill({ width: 22 }),
+          { width: 24 },
+          { width: 24 },
+          { width: 14 },
+        ];
+      });
+    });
+
+    return workbook;
   }
-}
 
 }
