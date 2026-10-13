@@ -24,7 +24,7 @@ import { StatusModule } from "../status/status.module";
 import { ActionsModule } from "../actions/actions.module";
 import { SSEModule } from "../sse/sse.module";
 import { CacheInvalidationModule } from "../cache/cache.module";
-
+import { Module as ModuleEntity } from "src/entities/Module";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { EmailNotificationMatrixModule } from "src/modules/email-notification-matrix/email-notification-matrix.module";
 import { EmailQueueModule } from "src/modules/email-queue/email-queue.module";
@@ -32,6 +32,7 @@ import { EmailQueueModule } from "src/modules/email-queue/email-queue.module";
   imports: [
     TypeOrmModule.forFeature([
       ApprovalStagesList,
+      ModuleEntity,
       DebitAdvice_header,
       Status,
       User,

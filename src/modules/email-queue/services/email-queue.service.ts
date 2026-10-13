@@ -29,22 +29,37 @@ export class EmailQueueService {
     dto: CreateEmailQueueDto,
     entityManager?: EntityManager,
   ): Promise<EmailQueue> {
-    const repository = entityManager
-      ? entityManager.getRepository(EmailQueue)
-      : this.emailQueueRepository;
-    this.logger.warn(
-      `[EMAIL QUEUE] enqueue() called
-  document=${dto.document_number}
-  trigger=${dto.trigger_status_id}
-  module=${dto.module_id}
-  ${new Error().stack}`,
-    );
+     const repository = entityManager
+  ? entityManager.getRepository(EmailQueue)
+  : this.emailQueueRepository;
+
+      const module = await this.moduleRepository.findOne({
+        where: {
+          module_name: dto.module_name.trim().toUpperCase(),
+          status_id: 1,
+        },
+      });
+
+      if (!module) {
+        throw new NotFoundException(
+          `Active module '${dto.module_name}' not found.`,
+        );
+      }
+
+      const moduleId = module.id;
+        this.logger.warn(
+          `[EMAIL QUEUE] enqueue() called
+          document=${dto.document_number}
+          trigger=${dto.trigger_status_id}
+          module=${moduleId}
+          ${new Error().stack}`,
+        );
 
     const existing = await repository.findOne({
       where: {
         document_number: dto.document_number,
         trigger_status_id: dto.trigger_status_id,
-        module_id: dto.module_id,
+        module_id: moduleId,
         status_id: 1,
       },
     });
@@ -63,7 +78,7 @@ export class EmailQueueService {
         await this.emailNotificationSenderService.getGroupedApprovalRecipient(
           dto.transaction_id,
           dto.trigger_status_id,
-          dto.module_id,
+          moduleId,
         );
       if (recipient) {
         recipientTo = recipient.to;
@@ -82,7 +97,7 @@ export class EmailQueueService {
     const queueItem = repository.create({
       document_number: dto.document_number,
       transaction_id: dto.transaction_id,
-      module_id: dto.module_id,
+      module_id: moduleId,
       trigger_status_id: dto.trigger_status_id,
       priority: dto.priority ?? 3,
       email_subject: dto.email_subject,
