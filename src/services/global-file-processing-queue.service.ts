@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import PQueue from "p-queue";
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import type PQueue from "p-queue"; // Type-only import avoids CommonJS require() at build
 import logger from "src/config/logger";
 
 /**
@@ -20,21 +20,28 @@ import logger from "src/config/logger";
  * Safe concurrency with 4GB: 2 files = 400MB native + 3.6GB heap = safe
  */
 @Injectable()
-export class GlobalFileProcessingQueueService {
-  private static instance: PQueue;
+export class GlobalFileProcessingQueueService implements OnModuleInit {
+  private static instance: PQueue | null = null;
   private static filesProcessingCount = 0;
   private static totalFilesQueued = 0;
   private static queueWaitTimeMs = 0;
 
   /**
-   * Get or create the global file processing queue
-   * Singleton pattern ensures only ONE queue across entire application
+   * Initializes p-queue asynchronously once during module startup
    */
-  static getInstance(): PQueue {
+  async onModuleInit() {
+    await GlobalFileProcessingQueueService.initQueue();
+  }
+
+  /**
+   * Internal queue loader using dynamic import
+   */
+  static async initQueue(): Promise<PQueue> {
     if (!this.instance) {
-      this.instance = new PQueue({
-        concurrency: 2, // Only 2 files globally at a time
-        timeout: 30000, // 30 second timeout per file
+      const { default: PQueueClass } = await import("p-queue");
+      this.instance = new PQueueClass({
+        concurrency: 2,
+        timeout: 30000,
       });
 
       logger.info(
@@ -45,7 +52,19 @@ export class GlobalFileProcessingQueueService {
   }
 
   /**
-   * Get current queue metrics
+   * Synchronously get the initialized global file processing queue
+   */
+  static getInstance(): PQueue {
+    if (!this.instance) {
+      throw new Error(
+        "[GLOBAL QUEUE] Queue not initialized yet. Ensure GlobalFileProcessingQueueService onModuleInit has executed.",
+      );
+    }
+    return this.instance;
+  }
+
+  /**
+   * Get current queue metrics synchronously
    */
   static getQueueMetrics() {
     const instance = this.getInstance();

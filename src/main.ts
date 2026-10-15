@@ -13,10 +13,12 @@ import { SanitizationPipe } from "./common/sanitization.pipe";
 import logger from "./config/logger";
 import { join } from "path";
 import * as v8 from "v8";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import {
   initializeLogRotation,
   shutdownLogRotation,
 } from "./services/log-rotation.service";
+import { GlobalFileProcessingQueueService } from "./services/global-file-processing-queue.service";
 
 // Platform selection via environment variable
 const USE_FASTIFY = process.env.USE_FASTIFY === "true";
@@ -43,19 +45,15 @@ async function bootstrap() {
     logger.info("⚡ Running with Fastify adapter");
     await setupFastify(app, configService);
   } else {
-    // Express setup with payload limits BEFORE app creation
-    const expressApp = require("express")();
-
-    // Set payload limits FIRST before any middleware (800MB to allow Guard to enforce limits)
-    expressApp.use(json({ limit: "800mb", strict: true }));
-    expressApp.use(
-      urlencoded({ limit: "800mb", extended: true, parameterLimit: 50 }),
-    );
-
-    // Now create the NestJS app
-    app = await NestFactory.create(AppModule, expressApp, {
+    // Create standard NestExpressApplication without instantiating Express manually
+    app = await NestFactory.create<NestExpressApplication>(AppModule, {
       logger: logLevels,
     });
+
+    // Set payload limits directly on the Nest instance
+    app.use(json({ limit: "800mb", strict: true }));
+    app.use(urlencoded({ limit: "800mb", extended: true, parameterLimit: 50 }));
+
     logger.info("🚀 Running with Express adapter");
     await setupExpress(app, configService);
   }
@@ -139,6 +137,9 @@ async function bootstrap() {
   // Initialize log rotation service
   initializeLogRotation();
 
+  // Pre-initialize the dynamic ESM queue
+  await GlobalFileProcessingQueueService.initQueue();
+
   // Graceful shutdown handlers
   process.on("SIGTERM", async () => {
     logger.info("⚠️ SIGTERM received, shutting down gracefully...");
@@ -155,8 +156,10 @@ async function bootstrap() {
   });
 }
 
-// Express-specific setup
-async function setupExpress(app: any, configService: ConfigService) {
+async function setupExpress(
+  app: NestExpressApplication,
+  configService: ConfigService,
+) {
   const cors = require("cors");
   const corsOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
