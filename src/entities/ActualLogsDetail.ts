@@ -30,6 +30,9 @@ export class ActualLogsDetail {
   staff_code: string;
 
   @Column({ length: 255 })
+  dws_no: string;
+
+  @Column({ length: 255 })
   remarks: string;
 
   @Column({nullable:true})

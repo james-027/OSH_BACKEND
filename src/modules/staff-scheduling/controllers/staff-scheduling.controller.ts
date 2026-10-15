@@ -55,16 +55,21 @@ export class StaffSchedulingController {
   @RequirePermissions({ module: "STAFF SCHEDULING", action: "VIEW" })
   async findScheduleHeaderDetails(
     @Query("schedule_header_id") scheduleHeaderId?: string,
+    @Query("attendance_status_id") attendanceStatusId?: string,
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
     const parsedHeaderId = scheduleHeaderId
       ? Number(scheduleHeaderId)
       : undefined;
+    const parsedAttendanceStatusId = attendanceStatusId
+      ? Number(attendanceStatusId)
+      : undefined;
 
     return this.staffSchedulingService.findScheduleHeaderDetails(
       parsedHeaderId,
       accessKeyId,
+      parsedAttendanceStatusId,
     );
   }
 

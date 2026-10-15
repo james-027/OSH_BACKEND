@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNotEmpty,
@@ -41,6 +42,10 @@ export class UpdateSchedulingDetailDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_ot_clearing?: boolean;
 
   @IsNotEmpty()
   @IsDateString()
@@ -112,6 +117,10 @@ export class UpdateScheduleHeaderDto {
   @IsOptional()
   @IsInt()
   shifting_day?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  is_ot_clearing?: boolean;
 
   @IsOptional()
   @IsArray()

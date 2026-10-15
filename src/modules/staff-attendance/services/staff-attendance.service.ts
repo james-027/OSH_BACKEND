@@ -12,7 +12,6 @@ import { ScheduleDetail } from "src/entities/ScheduleDetails";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { Staff } from "src/entities/Staff";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
-import { CreateSchedulingDetailDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { CreateScheduleHeaderDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/UpdateStaffSchedulingDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
@@ -23,6 +22,8 @@ import { ActionLogsService } from "src/modules/actions/services/action-logs.serv
 import { Warehouse } from "src/entities/Warehouse";
 import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
+import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
+import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
 
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -44,6 +45,10 @@ export class StaffAttendanceService {
     private staffWarehouseRepository: Repository<StaffWarehouse>,
     @InjectRepository(Staff)
     private staffRepository: Repository<Staff>,
+    @InjectRepository(TimeKeepingConfig)
+    private timeKeepingRepository: Repository<TimeKeepingConfig>,
+    @InjectRepository(ActualLogsDetail)
+    private actualLogsDetailRepository: Repository<ActualLogsDetail>,
     private usersService: UsersService,
     private actionLogsService: ActionLogsService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
@@ -120,14 +125,16 @@ export class StaffAttendanceService {
         ],
       });
 
-      // Filter based on Schedule Detail attendance status
       const filteredHeaders =
         statusId !== undefined
-          ? scheduleHeaders.filter((header) =>
-              header.details?.some((detail) =>
-                statusId.includes(detail.attendance_status_id),
-              ),
-            )
+          ? scheduleHeaders
+              .map((header) => ({
+                ...header,
+                details: header.details?.filter((detail) =>
+                  statusId.includes(detail.attendance_status_id),
+                ) ?? [],
+              }))
+              .filter((header) => header.details.length > 0)
           : scheduleHeaders;
 
       const mappedHeaders =
@@ -140,20 +147,14 @@ export class StaffAttendanceService {
 
         const firstDetail = originalHeader.details?.[0];
 
-        const detailCount =
-        statusId !== undefined
-          ? originalHeader.details?.filter((detail) =>
-              statusId.includes(detail.attendance_status_id),
-            ).length ?? 0
-          : originalHeader.details?.length ?? 0;
+        const detailCount = originalHeader.details?.length ?? 0;
 
         return {
           ...mappedHeader,
-          entry_no:detailCount,
-          location_name:
-            firstDetail?.location?.location_name ?? null,
-          status_name:
-            firstDetail?.attendanceStatus?.status_name ?? null,
+          entry_no: detailCount,
+          attendance_status_id: firstDetail?.attendance_status_id ,
+          location_name: firstDetail?.location?.location_name ?? null,
+          status_name: firstDetail?.attendanceStatus?.status_name ?? null,
         };
       });
     } catch (error) {
@@ -198,6 +199,56 @@ export class StaffAttendanceService {
       });
 
       return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+    } catch (error) {
+      console.error("Error fetching staff schedule:", error);
+      throw new Error("Failed to fetch staff schedule");
+    }
+  }
+
+  async findAllScheduleDetails(
+    accessKeyId?: number,
+    statusId?: number,
+  ): Promise<any[]> {
+    try {
+
+      const where: any = {
+        attendance_status_id: In([
+          statusId
+        ]),
+      };
+
+      if (accessKeyId !== undefined) {
+        where.scheduleHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
+
+      const scheduleDetail = await this.scheduleDetailRepository.find({
+        where,
+        relations: [
+          "scheduleHeader",
+          "staff",
+          "vendor",
+          "location",
+          "warehouse",
+          "status",
+          "createdBy",
+          "updatedBy",
+          "actualLogsDetail",
+
+        ],
+        order: {
+          overtime: "DESC",
+          scheduleHeader: {
+            schedule_date: "DESC",
+          },
+          id: "ASC",
+        },
+      });
+
+      return this.responseMapperService.mapEntitiesToResponse(
+        scheduleDetail,
+      );
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");
@@ -658,6 +709,7 @@ export class StaffAttendanceService {
     }
   }
 
+
   async update(
     id: number,
     updateScheduleDto: UpdateScheduleHeaderDto,
@@ -670,6 +722,26 @@ export class StaffAttendanceService {
       if (!updatedByUser) {
         throw new BadRequestException("Authenticated user not found");
       }
+
+      // Get the schedule header to retrieve its access_key_id.
+      const existingScheduleHeader =
+        await this.scheduleHeaderRepository.findOne({
+          where: { id },
+        });
+
+      if (!existingScheduleHeader) {
+        throw new NotFoundException(`Schedule Header ${id} not found`);
+      }
+
+      // Get the timekeeping configuration for this schedule header.
+      const timeKeepingConfig = await this.timeKeepingRepository.findOne({
+        where: {
+          access_key_id: existingScheduleHeader.access_key_id,
+        },
+      });
+
+      const fullDutyAutoBreak =
+        Number(timeKeepingConfig?.full_duty_auto_break) || 0;
 
       const scheduleDetailIds = updateScheduleDto.id || [];
 
@@ -685,7 +757,9 @@ export class StaffAttendanceService {
         });
 
         if (existingScheduleDetails.length !== scheduleDetailIds.length) {
-          const foundIds = existingScheduleDetails.map((detail) => detail.id);
+          const foundIds = existingScheduleDetails.map(
+            (detail) => detail.id,
+          );
 
           const invalidIds = scheduleDetailIds.filter(
             (detailId) => !foundIds.includes(detailId),
@@ -721,46 +795,158 @@ export class StaffAttendanceService {
             continue;
           }
 
-          const actualLogsDetail = scheduleDetail.actualLogsDetail;
+          let actualLogsDetail = scheduleDetail.actualLogsDetail;
+
+          // Handle overtime clearing independently of justification logs.
+          if (updateDetail.is_ot_clearing === true) {
+            scheduleDetail.overtime_in = null;
+            scheduleDetail.overtime_out = null;
+            scheduleDetail.ot_clearing_approved = true;
+          } else if (updateDetail.is_ot_clearing === false) {
+            actualLogsDetail = scheduleDetail.actual_logs_detail_id
+              ? await this.actualLogsDetailRepository.findOne({
+                  where: {
+                    id: scheduleDetail.actual_logs_detail_id,
+                  },
+                })
+              : null;
+
+            scheduleDetail.overtime_in =
+              actualLogsDetail?.overtime_in ?? null;
+
+            scheduleDetail.overtime_out =
+              actualLogsDetail?.overtime_out ?? null;
+
+            scheduleDetail.ot_clearing_approved = false;
+          }
 
           let dutyScheduleAutomaticallyUpdated = false;
 
-          if (updateDetail.just_time_in) {
+          // Update justification time in only when a non-null value is provided.
+          if (updateDetail.just_time_in != null) {
             const justTimeIn = new Date(updateDetail.just_time_in);
 
             scheduleDetail.just_time_in = justTimeIn;
             scheduleDetail.duty_start_time = justTimeIn;
 
             dutyScheduleAutomaticallyUpdated = true;
-          } else {
-            scheduleDetail.just_time_in = actualLogsDetail?.time_in ?? null;
           }
 
-          if (updateDetail.just_break_out) {
+          // Update justification break out only when a non-null value is provided.
+          if (updateDetail.just_break_out != null) {
             scheduleDetail.just_break_out = new Date(
               updateDetail.just_break_out,
             );
-          } else {
-            scheduleDetail.just_break_out = actualLogsDetail?.break_out ?? null;
           }
 
-          if (updateDetail.just_break_in) {
-            scheduleDetail.just_break_in = new Date(updateDetail.just_break_in);
-          } else {
-            scheduleDetail.just_break_in = actualLogsDetail?.break_in ?? null;
+          // Update justification break in only when a non-null value is provided.
+          if (updateDetail.just_break_in != null) {
+            scheduleDetail.just_break_in = new Date(
+              updateDetail.just_break_in,
+            );
           }
 
-          if (updateDetail.just_time_out) {
+          // Update justification time out only when a non-null value is provided.
+          if (updateDetail.just_time_out != null) {
             const justTimeOut = new Date(updateDetail.just_time_out);
 
             scheduleDetail.just_time_out = justTimeOut;
             scheduleDetail.duty_end_time = justTimeOut;
 
             dutyScheduleAutomaticallyUpdated = true;
-          } else {
-            scheduleDetail.just_time_out = actualLogsDetail?.time_out ?? null;
           }
 
+          // Calculate regular and overtime when justification times are updated.
+          if (
+            dutyScheduleAutomaticallyUpdated &&
+            scheduleDetail.just_time_in &&
+            scheduleDetail.just_time_out
+          ) {
+            const timeIn = new Date(scheduleDetail.just_time_in);
+            const timeOut = new Date(scheduleDetail.just_time_out);
+
+            if (
+              !Number.isNaN(timeIn.getTime()) &&
+              !Number.isNaN(timeOut.getTime()) &&
+              timeOut.getTime() >= timeIn.getTime()
+            ) {
+              const totalMinutes = Math.round(
+                (timeOut.getTime() - timeIn.getTime()) /
+                  (1000 * 60),
+              );
+
+              const breakOut = scheduleDetail.just_break_out
+                ? new Date(scheduleDetail.just_break_out)
+                : null;
+
+              const breakIn = scheduleDetail.just_break_in
+                ? new Date(scheduleDetail.just_break_in)
+                : null;
+
+              const hasCompleteBreakLogs =
+                !!breakOut &&
+                !!breakIn &&
+                !Number.isNaN(breakOut.getTime()) &&
+                !Number.isNaN(breakIn.getTime()) &&
+                breakIn.getTime() >= breakOut.getTime();
+
+              let breakMinutes = 0;
+
+              if (hasCompleteBreakLogs) {
+                // Use the actual break duration when both break logs exist.
+                breakMinutes = Math.round(
+                  (breakIn.getTime() - breakOut.getTime()) /
+                    (1000 * 60),
+                );
+              } else {
+                // Otherwise, use the configured automatic break deduction.
+                breakMinutes = Math.max(fullDutyAutoBreak, 0);
+              }
+
+              const workingMinutes = Math.max(
+                totalMinutes - breakMinutes,
+                0,
+              );
+
+              // First 8 hours are regular; the excess is overtime.
+              const regularMinutes = Math.min(
+                workingMinutes,
+                8 * 60,
+              );
+
+              const overtimeMinutes = Math.max(
+                workingMinutes - 8 * 60,
+                0,
+              );
+
+              // Decimal hour values.
+              scheduleDetail.regular = Number(
+                (regularMinutes / 60).toFixed(2),
+              );
+
+              scheduleDetail.overtime = Number(
+                (overtimeMinutes / 60).toFixed(2),
+              );
+
+              // Convert minutes to HH:mm:ss.
+              const formatHours = (minutes: number): string => {
+                const hours = Math.floor(minutes / 60);
+                const remainingMinutes = minutes % 60;
+
+                return `${String(hours).padStart(2, "0")}:${String(
+                  remainingMinutes,
+                ).padStart(2, "0")}:00`;
+              };
+
+              scheduleDetail.regular_hours =
+                formatHours(regularMinutes);
+
+              scheduleDetail.overtime_hours =
+                formatHours(overtimeMinutes);
+            }
+          }
+
+          // Update system remarks only when justification time in/out is updated.
           if (dutyScheduleAutomaticallyUpdated) {
             scheduleDetail.system_remarks =
               "AUTO UPDATE DUTY SCHED BASED ON JUSTIFICATION";
@@ -862,6 +1048,7 @@ export class StaffAttendanceService {
       throw new Error("Failed to update staff attendance");
     }
   }
+
 
   async postSchedule(
     updateScheduleDto: UpdateScheduleHeaderDto,

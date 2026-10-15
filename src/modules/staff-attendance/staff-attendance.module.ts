@@ -21,6 +21,8 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
 import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
+import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
+import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
 
 
 @Module({
@@ -35,6 +37,8 @@ import { ScheduleHeader } from "src/entities/ScheduleHeader";
       Warehouse,
       Action,
       Staff,
+      ActualLogsDetail,
+      TimeKeepingConfig,
       Vendor,
       TransactionSequence,
       StaffHistory,

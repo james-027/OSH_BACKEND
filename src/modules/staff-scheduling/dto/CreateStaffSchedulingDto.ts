@@ -20,6 +20,14 @@ export class CreateSchedulingDetailDto {
   schedule_header_id?: number;
 
   @IsOptional()
+  @IsString()
+  dws_no?: string;
+  
+  @IsOptional()
+  @IsString()
+  staff_code?: string;
+
+  @IsOptional()
   @IsInt()
   actual_logs_detail_id?: number;
 
