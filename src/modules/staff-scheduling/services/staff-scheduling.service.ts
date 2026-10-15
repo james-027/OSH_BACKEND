@@ -180,7 +180,7 @@ export class StaffSchedulingService {
           "actualLogsDetail",
         ],
         order: {
-          id: "ASC",
+          overtime:"DESC"
         },
       });
 
