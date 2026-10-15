@@ -881,6 +881,7 @@ export class StaffsService {
     id: number,
     updateStaffTransferDto: UpdateStaffTransferDto,
     userId: number,
+    allowSameDetails: boolean = false,
   ): Promise<any> {
     try {
       const safeDate = (value: any) => {
@@ -921,8 +922,10 @@ export class StaffsService {
       const isVendorChanged = staff.vendor_id !== newVendorId;
       const isLocationChanged = staff.location_id !== newLocationId;
 
-      if (!isVendorChanged && !isLocationChanged) {
-        return this.responseMapperService.mapEntityToResponse(staff);
+      if (!allowSameDetails) {
+        if (!isVendorChanged && !isLocationChanged) {
+          return this.responseMapperService.mapEntityToResponse(staff);
+        }
       }
 
       const effectivityDate = this.safeDate(
@@ -1711,7 +1714,6 @@ export class StaffsService {
           where: { id },
         });
 
-
         await this.staffHistoriesRepository.save({
           staff_id: updatedStaff.id,
           old_dws_code: updatedStaff.old_dws_code,
@@ -1882,7 +1884,6 @@ export class StaffsService {
 
           continue;
         }
-
 
         const locationValue = this.normalizeValue(row["Location"]);
         const positionValue = this.normalizeValue(row["Position"]);
@@ -2592,12 +2593,11 @@ export class StaffsService {
 
         const location = await this.locationRepository
           .createQueryBuilder("location")
-          .where(
-            "REPLACE(UPPER(location.location_name), ' ', '') = :value",
-            { value: locationValue },
-          )
+          .where("REPLACE(UPPER(location.location_name), ' ', '') = :value", {
+            value: locationValue,
+          })
           .getOne();
-   
+
         let allowedLocationIds: number[] | undefined = undefined;
 
         if (userId && roleId) {
@@ -2624,7 +2624,6 @@ export class StaffsService {
           continue;
         }
 
-
         const vendorValue = this.normalizeValue(row["New Agency"]);
 
         const vendor = await this.vendorRepository
@@ -2635,8 +2634,6 @@ export class StaffsService {
           )
           .getOne();
 
-
-
         if (!vendor) {
           errors.push({
             row: i + 2,
@@ -2646,7 +2643,7 @@ export class StaffsService {
         }
 
         const staffCode = row["Staff Code"];
-        const dwsCode = row["DWS Code"];
+        const dwsCode = row["DWS Code"].trim();
 
         let existingRecord = null;
 
@@ -2663,7 +2660,6 @@ export class StaffsService {
             },
           });
         }
-
 
         if (!existingRecord) {
           errors.push({
@@ -2682,7 +2678,12 @@ export class StaffsService {
           effectivity_date: row["Effectivity Date"],
         };
 
-        const result = await this.staffTransfer(existingRecord.id, dto, userId);
+        const result = await this.staffTransfer(
+          existingRecord.id,
+          dto,
+          userId,
+          true, // ALLOWED SAME DETAILS
+        );
         try {
           await this.actionLogsService.logAction({
             module_name: this.module_name,
@@ -4305,10 +4306,9 @@ export class StaffsService {
   }
 
   private normalizeValue = (value: any): string => {
-          return String(value || "")
-            .trim()
-            .toUpperCase()
-            .replace(/\s+/g, "");
-        };
-
+    return String(value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
+  };
 }
