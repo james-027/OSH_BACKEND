@@ -43,6 +43,9 @@ export class TimeKeepingConfig {
   @Column({ type: 'boolean', default: false })
   cash_bond: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  ot_field_clearing: boolean;
+
   @Column({ nullable: true })
   created_by: number;
 

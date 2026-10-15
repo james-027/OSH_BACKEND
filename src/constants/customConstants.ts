@@ -45,6 +45,7 @@ export const STATUS_IDS = {
   POSTED : 4,
   VALIDATED : 40,
   COMPUTED : 41,
+  FOR_REVIEW : 42,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -74,6 +75,7 @@ export const ACCESS_KEY_IDS = {
 export const LOGS_TYPE_ID = {
   POS_FETCH: 1,
   CC_FETCH: 2,
+  FST_FETCH: 3,
 } as const;
 
 export const ACCESS_PROCESS = {

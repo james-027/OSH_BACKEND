@@ -51,6 +51,7 @@ import { PayrollDetails } from "src/entities/PayrollDetails";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { SssConfigs } from "src/entities/SssConfig";
+import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 
 @Injectable()
 export class StaffSchedulingService {
@@ -79,6 +80,8 @@ export class StaffSchedulingService {
     private actualLogsHeaderRepository: Repository<ActualLogsHeader>,
     @InjectRepository(ActualLogsDetail)
     private actualLogsDetailRepository: Repository<ActualLogsDetail>,
+    @InjectRepository(TimeKeepingConfig)
+    private timeKeepingRepository: Repository<TimeKeepingConfig>,
     private usersService: UsersService,
     private actionLogsService: ActionLogsService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
@@ -136,6 +139,7 @@ export class StaffSchedulingService {
   async findScheduleHeaderDetails(
     scheduleHeaderId?: number,
     accessKeyId?: number,
+    attendanceStatusId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -144,13 +148,25 @@ export class StaffSchedulingService {
         where.schedule_header_id = scheduleHeaderId;
       }
 
+      if (attendanceStatusId !== undefined) {
+        where.attendance_status_id = attendanceStatusId;
+      }
+
       if (accessKeyId !== undefined) {
         where.scheduleHeader = {
           access_key_id: accessKeyId,
         };
       }
 
-      const scheduleDetail = await this.scheduleDetailRepository.find({
+      const timeKeepingConfig = await this.timeKeepingRepository.findOne({
+        where: {
+          access_key_id: accessKeyId,
+        },
+      });
+
+      const isOtEnabled = timeKeepingConfig?.ot_field_clearing ?? false;
+
+      const scheduleDetails = await this.scheduleDetailRepository.find({
         where,
         relations: [
           "scheduleHeader",
@@ -164,12 +180,23 @@ export class StaffSchedulingService {
           "actualLogsDetail",
         ],
         order: {
-          id: "ASC",
+          overtime:"DESC"
         },
       });
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+
+      const mappedDetails =
+        this.responseMapperService.mapEntitiesToResponse(scheduleDetails);
+
+      return mappedDetails.map((detail) => ({
+        ...detail,
+        is_ot_clearing:
+          // isOtEnabled &&
+          // detail.attendance_status_id === STATUS_IDS.VALIDATED,
+          isOtEnabled,
+      }));
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
+
       throw new Error("Failed to fetch staff schedule");
     }
   }
@@ -570,7 +597,7 @@ export class StaffSchedulingService {
                   shifting_day: createScheduleDto.shifting_day,
                   status_id: statusID,
                   attendance_status_id: isAutoEnrollSchedule
-                    ? STATUS_IDS.VALIDATED
+                    ? STATUS_IDS.FOR_REVIEW
                     : null,
                   attendance_ts: isAutoEnrollSchedule ? new Date() : null,
                   access_key_id: accessKeyId,
@@ -687,6 +714,7 @@ export class StaffSchedulingService {
                     actualLogsDetailDto = {
                       staff_id: detail.staff_id,
                       staff_code: staff.staff_code || staff.code,
+                      dws_no: detail.dws_no,
                       remarks: detail.remarks || "Auto-synced from DWS log",
                       warehouse_id: detail.warehouse_id,
                       location_id: staff.location_id,
@@ -781,7 +809,7 @@ export class StaffSchedulingService {
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
-                    attendance_status_id: STATUS_IDS.VALIDATED,
+                    attendance_status_id: STATUS_IDS.FOR_REVIEW,
                     access_key_id: accessKeyId,
                     // ==========================================
                     // DWS ACTUAL TIME DATA
@@ -2577,28 +2605,22 @@ export class StaffSchedulingService {
 
     for (const record of apiRecords) {
       const crewId = Number(record["CREW_ID"]);
-
       const dutyDate = record["SCHEDULE_DATE"] || scheduleDateStr;
+      const dwsLogNo = record["NO"] || "";
 
       const staff = staffMap.get(crewId);
 
       if (!staff) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: Staff not found. CREW_ID=${crewId}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: Staff not found. CREW_ID=${crewId}`,
         );
-
         continue;
       }
 
       if (staff.status_id !== STATUS_IDS.ACTIVE) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: Staff is not ACTIVE. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STATUS_ID=${staff.status_id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: Staff is not ACTIVE. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STATUS_ID=${staff.status_id}`,
         );
-
         continue;
       }
 
@@ -2615,11 +2637,8 @@ export class StaffSchedulingService {
 
       if (!staffWarehouse) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: No active/approved StaffWarehouse assignment found. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: No active/approved StaffWarehouse assignment found. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
         );
-
         continue;
       }
 
@@ -2635,61 +2654,43 @@ export class StaffSchedulingService {
 
       if (!effectivityDate) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse has no effectivity date. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse has no effectivity date. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
         );
-
         continue;
       }
 
       if (scheduleDate.isBefore(effectivityDate)) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse assignment is not yet effective. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, EFFECTIVITY_DATE=${staffWarehouse.effectivity_date}, SCHEDULE_DATE=${dutyDate}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse assignment is not yet effective. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, EFFECTIVITY_DATE=${staffWarehouse.effectivity_date}, SCHEDULE_DATE=${dutyDate}`,
         );
-
         continue;
       }
 
       if (endDate && scheduleDate.isAfter(endDate)) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse assignment already ended. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, END_DATE=${staffWarehouse.end_date}, SCHEDULE_DATE=${dutyDate}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse assignment already ended. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}, END_DATE=${staffWarehouse.end_date}, SCHEDULE_DATE=${dutyDate}`,
         );
-
         continue;
       }
 
       if (!staffWarehouse.warehouse_id) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse has no warehouse assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse has no warehouse assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
         );
-
         continue;
       }
 
       if (!staffWarehouse.location_id) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse has no location assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse has no location assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
         );
-
         continue;
       }
 
       if (!staffWarehouse.vendor_id) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: StaffWarehouse has no vendor assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: StaffWarehouse has no vendor assignment. CREW_ID=${crewId}, STAFF_ID=${staff.id}, STAFF_WAREHOUSE_ID=${staffWarehouse.id}`,
         );
-
         continue;
       }
 
@@ -2701,118 +2702,98 @@ export class StaffSchedulingService {
 
       if (!scheduleStartValue || !scheduleEndValue) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: Missing duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: Missing duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
         );
-
         continue;
       }
 
-      const startTimeOnly = dayjs(
-        `${dutyDate} ${String(scheduleStartValue).trim()}`,
-      );
+      const dutyStartDate = dayjs(dutyDate).format("YYYY-MM-DD");
 
-      const endTimeOnly = dayjs(
-        `${dutyDate} ${String(scheduleEndValue).trim()}`,
-      );
+      // Parse the complete date-time values returned by DWS.
+      // Do not reconstruct their dates using SCHEDULE_DATE.
+      const startTime = this.parseDwsFullDateTime(scheduleStartValue);
 
-      if (!startTimeOnly.isValid() || !endTimeOnly.isValid()) {
-        logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: Invalid duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
-        );
-
-        continue;
-      }
-
-      const isOvernightShift =
-        endTimeOnly.isBefore(startTimeOnly) ||
-        endTimeOnly.isSame(startTimeOnly);
-
-      const dutyStartDate = isOvernightShift
-        ? dayjs(dutyDate).subtract(1, "day").format("YYYY-MM-DD")
-        : dayjs(dutyDate).format("YYYY-MM-DD");
-
-      const startTime = this.parseDwsDateTime(
-        dutyStartDate,
-        scheduleStartValue,
-      );
-
-      let endTime = this.parseDwsDateTime(dutyDate, scheduleEndValue);
+      const endTime = this.parseDwsFullDateTime(scheduleEndValue);
 
       if (!startTime || !endTime) {
         logger.warn(
-          `[StaffSchedulingService] Skipping DWS record #${
-            record["NO"] || ""
-          }: Invalid parsed duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}`,
+          `[StaffSchedulingService] Skipping DWS record #${dwsLogNo}: Invalid parsed duty start/end time. CREW_ID=${crewId}, STAFF_ID=${staff.id}, START=${scheduleStartValue}, END=${scheduleEndValue}`,
         );
-
         continue;
       }
 
-      if (isOvernightShift && !dayjs(endTime).isAfter(dayjs(startTime))) {
-        endTime = dayjs(endTime).add(1, "day").toDate();
-      }
+      // Determine whether the shift crosses midnight for logging
+      // and other existing logic only. Do not modify either timestamp.
+      const isOvernightShift =
+        dayjs(endTime).format("YYYY-MM-DD") !==
+        dayjs(startTime).format("YYYY-MM-DD");
 
-      const timeInDate = isOvernightShift ? dutyStartDate : dutyDate;
+      // Attendance timestamps already contain their actual dates.
+      const time_in = this.parseDwsFullDateTime(record["TIME_IN"]);
+      let time_out = this.parseDwsFullDateTime(record["TIME_OUT"]);
 
-      let time_in = this.parseDwsDateTime(timeInDate, record["TIME_IN"]);
+      const breakStart = this.parseDwsFullDateTime(record["BREAK_IN"]);
 
-      let time_out = this.parseDwsDateTime(dutyDate, record["TIME_OUT"]);
+      const breakEnd = this.parseDwsFullDateTime(record["BREAK_OUT"]);
 
-      let breakStart = this.parseDwsDateTime(timeInDate, record["BREAK_IN"]);
+      const overtimeIn = this.parseDwsFullDateTime(record["OVERTIME_IN"]);
 
-      let breakEnd = this.parseDwsDateTime(dutyDate, record["BREAK_OUT"]);
+      const overtimeOut = this.parseDwsFullDateTime(record["OVERTIME_OUT"]);
 
-      let overtimeIn = this.parseDwsDateTime(timeInDate, record["OVERTIME_IN"]);
-
-      let overtimeOut = this.parseDwsDateTime(dutyDate, record["OVERTIME_OUT"]);
-
+      // Preserve the original attendance timestamps before any deduction.
       const origTimeIn = time_in;
       const origTimeOut = time_out;
       const origBreakIn = breakStart;
       const origBreakOut = breakEnd;
 
-      if (isOvernightShift) {
-        const adjustIfNextDay = (value: Date | null): Date | null => {
-          if (!value) {
-            return null;
-          }
+      logger.info(
+        `[DWS TRACE] ${JSON.stringify({
+          dwsLogNo,
+          crewId,
+          staffId: staff.id,
+          dutyDate,
+          dutyStartDate,
+          scheduleStart: scheduleStartValue,
+          scheduleEnd: scheduleEndValue,
+          isOvernightShift,
+          dutyStart: startTime.toISOString(),
+          dutyEnd: endTime.toISOString(),
+          timeIn: time_in?.toISOString() ?? null,
+          timeOut: time_out?.toISOString() ?? null,
+        })}`,
+      );
 
-          const parsed = dayjs(value);
-
-          if (parsed.isBefore(dayjs(startTime))) {
-            return parsed.add(1, "day").toDate();
-          }
-
-          return value;
-        };
-
-        time_in = time_in ? adjustIfNextDay(time_in) : null;
-
-        time_out = time_out ? adjustIfNextDay(time_out) : null;
-
-        breakStart = breakStart ? adjustIfNextDay(breakStart) : null;
-
-        breakEnd = breakEnd ? adjustIfNextDay(breakEnd) : null;
-
-        overtimeIn = overtimeIn ? adjustIfNextDay(overtimeIn) : null;
-
-        overtimeOut = overtimeOut ? adjustIfNextDay(overtimeOut) : null;
-      }
-
+      /*
+       * Keep the existing automatic one-hour deduction rule.
+       * It should not trigger for the supplied log #119280,
+       * because 15:14 to 23:04 is only 7 hours and 50 minutes.
+       */
       if (time_in && time_out) {
         const durationMinutes = dayjs(time_out).diff(dayjs(time_in), "minute");
 
         const hasCompleteBreak = !!breakStart && !!breakEnd;
 
-        if (durationMinutes > 9 * 60 && !hasCompleteBreak) {
+        const shouldDeductOneHour =
+          durationMinutes > 9 * 60 && !hasCompleteBreak;
+
+        logger.info(
+          `[DWS DURATION] ${JSON.stringify({
+            dwsLogNo,
+            staffId: staff.id,
+            timeIn: time_in.toISOString(),
+            timeOut: time_out.toISOString(),
+            durationMinutes,
+            hasCompleteBreak,
+            shouldDeductOneHour,
+          })}`,
+        );
+
+        if (shouldDeductOneHour) {
           time_out = dayjs(time_out).subtract(1, "hour").toDate();
 
-          logger.warn(
+          logger.info(
             `[StaffSchedulingService] Automatically deducted 1 hour. ` +
+              `DWS_LOG=${dwsLogNo}, ` +
               `CREW_ID=${crewId}, ` +
               `STAFF_ID=${staff.id}, ` +
               `ORIG_TIME_IN=${origTimeIn?.toISOString() || "NULL"}, ` +
@@ -2822,19 +2803,25 @@ export class StaffSchedulingService {
         }
       }
 
-      const regularHours = record["REGULAR_HOURS"]
-        ? Number(record["REGULAR_HOURS"])
-        : 0;
+      const regularHours =
+        record["REGULAR_HOURS"] != null && record["REGULAR_HOURS"] !== ""
+          ? Number(record["REGULAR_HOURS"])
+          : 0;
 
-      const breakHours = record["BREAK_HOURS"]
-        ? Number(record["BREAK_HOURS"])
-        : 0;
+      const breakHours =
+        record["BREAK_HOURS"] != null && record["BREAK_HOURS"] !== ""
+          ? Number(record["BREAK_HOURS"])
+          : 0;
 
-      const overtimeHours = record["OVERTIME_HOURS"]
-        ? Number(record["OVERTIME_HOURS"])
-        : 0;
+      const overtimeHours =
+        record["OVERTIME_HOURS"] != null && record["OVERTIME_HOURS"] !== ""
+          ? Number(record["OVERTIME_HOURS"])
+          : 0;
 
-      const twh = record["NO_OF_HOURS"] ? Number(record["NO_OF_HOURS"]) : 0;
+      const twh =
+        record["NO_OF_HOURS"] != null && record["NO_OF_HOURS"] !== ""
+          ? Number(record["NO_OF_HOURS"])
+          : 0;
 
       const nightShiftStart = time_in ?? startTime;
       const nightShiftEnd = time_out ?? endTime;
@@ -2847,6 +2834,7 @@ export class StaffSchedulingService {
 
       details.push({
         staff_id: staff.id,
+        staff_code: staff.staff_code,
 
         warehouse_id: staffWarehouse.warehouse_id,
         location_id: staffWarehouse.location_id,
@@ -2857,24 +2845,23 @@ export class StaffSchedulingService {
         duty_start_time: startTime.toISOString(),
         duty_end_time: endTime.toISOString(),
 
+        /*
+         * These fields are retained here because the existing
+         * upsert may use them to transfer attendance to
+         * ActualLogsDetail. Ensure the upsert does not copy
+         * DWS values into ScheduleDetail justification fields.
+         */
         just_time_in: time_in ? time_in.toISOString() : undefined,
-
         just_time_out: time_out ? time_out.toISOString() : undefined,
-
         just_break_in: breakStart ? breakStart.toISOString() : undefined,
-
         just_break_out: breakEnd ? breakEnd.toISOString() : undefined,
 
         orig_time_in: origTimeIn ? origTimeIn.toISOString() : undefined,
-
         orig_time_out: origTimeOut ? origTimeOut.toISOString() : undefined,
-
         orig_break_in: origBreakIn ? origBreakIn.toISOString() : undefined,
-
         orig_break_out: origBreakOut ? origBreakOut.toISOString() : undefined,
 
         overtime_in: overtimeIn ? overtimeIn.toISOString() : undefined,
-
         overtime_out: overtimeOut ? overtimeOut.toISOString() : undefined,
 
         regular: regularHours,
@@ -2883,8 +2870,9 @@ export class StaffSchedulingService {
         twh,
         night_shift,
         night_shift_hrs,
+        dws_no: dwsLogNo,
 
-        remarks: `Auto-synced from DWS log #${record["NO"] || ""}`,
+        remarks: `Auto-synced from DWS log #${dwsLogNo}`,
       });
     }
 
@@ -2916,7 +2904,6 @@ export class StaffSchedulingService {
         logger.warn(
           `[StaffSchedulingService] Skipping detail without DWS schedule date. STAFF_ID=${detail.staff_id}`,
         );
-
         continue;
       }
 
@@ -2938,7 +2925,6 @@ export class StaffSchedulingService {
     }
 
     const accessKeyId = ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS;
-
     const results: any[] = [];
 
     for (const [
@@ -2987,6 +2973,634 @@ export class StaffSchedulingService {
     };
   }
 
+
+  private async upsertDwsSchedules(
+    scheduleDateStr: string,
+    details: CreateSchedulingDetailDto[],
+    userId: number,
+    accessKeyId: number,
+  ): Promise<any> {
+    if (!details || details.length === 0) {
+      return null;
+    }
+
+    // Group by location, vendor, and duty date.
+    const detailsByLocationAndDate = new Map<
+      string,
+      {
+        locationId: number;
+        vendorId: number;
+        scheduleDate: string;
+        details: CreateSchedulingDetailDto[];
+      }
+    >();
+
+    for (const detail of details) {
+      const locationId = Number(detail.location_id);
+      const vendorId = Number(detail.vendor_id);
+
+      if (!locationId || !vendorId || !detail.duty_start_time) {
+        continue;
+      }
+
+      const dutyScheduleDate = dayjs(detail.duty_start_time).format(
+        "YYYY-MM-DD",
+      );
+
+      const groupKey = `${locationId}_${vendorId}_${dutyScheduleDate}`;
+
+      if (!detailsByLocationAndDate.has(groupKey)) {
+        detailsByLocationAndDate.set(groupKey, {
+          locationId,
+          vendorId,
+          scheduleDate: dutyScheduleDate,
+          details: [],
+        });
+      }
+
+      detailsByLocationAndDate.get(groupKey)!.details.push(detail);
+    }
+
+    if (detailsByLocationAndDate.size === 0) {
+      return null;
+    }
+
+    const results: any[] = [];
+
+    const getDutyKey = (
+      staffId: number,
+      dutyStartTime: Date | string,
+      dutyEndTime: Date | string,
+    ): string => {
+      return [
+        Number(staffId),
+        dayjs(dutyStartTime).format("YYYY-MM-DD HH:mm:ss"),
+        dayjs(dutyEndTime).format("YYYY-MM-DD HH:mm:ss"),
+      ].join("_");
+    };
+
+    // Get or create an Actual Logs Header for DWS records.
+    const getOrCreateActualLogsHeader = async () => {
+      let actualLogsHeader =
+        await this.actualLogsHeaderRepository.findOne({
+          where: {
+            access_key_id: accessKeyId,
+          },
+          order: {
+            id: "DESC",
+          },
+        });
+
+      if (!actualLogsHeader) {
+        const actualLogsHeaderDto: CreateActualLogsHeaderDto = {
+          tagging: "DWS DAILY AUTOMATED SYNC",
+          logs_type_id: LOGS_TYPE_ID.FST_FETCH,
+          access_key_id: accessKeyId,
+          status_id: STATUS_IDS.ACTIVE,
+          created_by: userId,
+          updated_by: userId,
+        };
+
+        actualLogsHeader =
+          this.actualLogsHeaderRepository.create(actualLogsHeaderDto);
+
+        actualLogsHeader =
+          await this.actualLogsHeaderRepository.save(actualLogsHeader);
+      }
+
+      return actualLogsHeader;
+    };
+
+    // Create an Actual Logs Detail from the incoming DWS record.
+    const createActualLogsDetail = async (
+      dwsDetail: CreateSchedulingDetailDto,
+      scheduleDate: string,
+      incomingDwsNo: string,
+    ) => {
+      const actualLogsHeader = await getOrCreateActualLogsHeader();
+
+      const staff = await this.staffRepository.findOne({
+        where: {
+          id: dwsDetail.staff_id,
+        },
+      });
+
+      const actualLogsDetailDto: CreateActualLogsDetailDto = {
+        staff_id: dwsDetail.staff_id,
+        staff_code: staff?.staff_code || dwsDetail.staff_code || "",
+        remarks: dwsDetail.remarks || "Auto-synced from DWS",
+        dws_no: incomingDwsNo || null,
+
+        warehouse_id: dwsDetail.warehouse_id,
+        location_id: dwsDetail.location_id,
+        service_provider_id: dwsDetail.vendor_id,
+        access_key_id: accessKeyId,
+        logs_date: scheduleDate,
+
+        time_in: dwsDetail.just_time_in,
+        time_out: dwsDetail.just_time_out,
+        break_in: dwsDetail.just_break_in,
+        break_out: dwsDetail.just_break_out,
+
+        overtime_in: dwsDetail.overtime_in,
+        overtime_out: dwsDetail.overtime_out,
+
+        orig_time_in: dwsDetail.orig_time_in,
+        orig_time_out: dwsDetail.orig_time_out,
+        orig_break_in: dwsDetail.orig_break_in,
+        orig_break_out: dwsDetail.orig_break_out,
+
+        regular: Number(dwsDetail.regular || 0),
+        break_hours: Number(dwsDetail.break_hours || 0),
+        overtime: Number(dwsDetail.overtime || 0),
+        twh: Number(dwsDetail.twh || 0),
+
+        created_by: userId,
+        updated_by: userId,
+        status_id: STATUS_IDS.ACTIVE,
+      };
+
+      const actualLogsDetail =
+        this.actualLogsDetailRepository.create(actualLogsDetailDto);
+
+      actualLogsDetail.actual_header_id = actualLogsHeader.id;
+
+      return await this.actualLogsDetailRepository.save(actualLogsDetail);
+    };
+
+    for (const {
+      locationId,
+      vendorId,
+      scheduleDate,
+      details: locationDetails,
+    } of detailsByLocationAndDate.values()) {
+      try {
+        const existingHeaders = await this.scheduleHeaderRepository
+          .createQueryBuilder("header")
+          .leftJoinAndSelect("header.details", "detail")
+          .leftJoinAndSelect(
+            "detail.actualLogsDetail",
+            "actualLogsDetail",
+          )
+          .where("DATE(header.schedule_date) = DATE(:scheduleDate)", {
+            scheduleDate,
+          })
+          .andWhere("header.access_key_id = :accessKeyId", {
+            accessKeyId,
+          })
+          .getMany();
+
+        // Match the header by location AND vendor.
+        const existingHeader = existingHeaders.find((header) =>
+          (header.details || []).some(
+            (detail) =>
+              Number(detail.location_id) === locationId &&
+              Number(detail.vendor_id) === vendorId,
+          ),
+        );
+
+        // Create a new schedule header when no matching header exists.
+        if (!existingHeader) {
+          const headerDto: CreateScheduleHeaderDto = {
+            schedule_date: scheduleDate,
+            entry_no: locationDetails.length,
+            reason: "DWS Daily Automated Sync",
+            shifting_day: 1,
+            details: locationDetails,
+          };
+
+          const created = await this.create(
+            headerDto,
+            userId,
+            accessKeyId,
+          );
+
+          const scheduleWithRelations =
+            await this.scheduleHeaderRepository.findOne({
+              where: {
+                id: created.id,
+              },
+              relations: [
+                "details",
+                "details.staff",
+                "details.vendor",
+                "details.location",
+                "details.warehouse",
+                "details.workingDays",
+                "details.actualLogsDetail",
+              ],
+            });
+
+          if (!scheduleWithRelations) {
+            throw new Error(
+              `Failed to retrieve created schedule header ${created.id}`,
+            );
+          }
+
+          const response = this.responseMapperService.mapEntityToResponse(
+            scheduleWithRelations,
+          );
+
+          try {
+            this.sseEventEmitter.emitUpdate(
+              "staff_scheduling",
+              response.id,
+              response,
+            );
+
+            this.sseEventEmitter.emitUpdate(
+              "staff_attendance",
+              response.id,
+              response,
+            );
+          } catch (err) {
+            logger.error(
+              `SSE event failed for Schedule ${response.id}:`,
+              err,
+            );
+          }
+
+          results.push({
+            action: "CREATE",
+            location_id: locationId,
+            vendor_id: vendorId,
+            schedule_date: scheduleDate,
+            header_id: created.id,
+            updated_details: 0,
+            created_details: locationDetails.length,
+          });
+
+          logger.info(
+            `[StaffSchedulingService] DWS schedule created. ` +
+              `DATE=${scheduleDate}, ` +
+              `LOCATION_ID=${locationId}, ` +
+              `VENDOR_ID=${vendorId}, ` +
+              `HEADER_ID=${created.id}, ` +
+              `CREATED=${locationDetails.length}`,
+          );
+
+          continue;
+        }
+
+        const existingDetails = existingHeader.details || [];
+
+        const existingDetailMap = new Map<string, ScheduleDetail>();
+        const existingDwsNoMap = new Map<string, ScheduleDetail>();
+
+        // Index existing details by DWS NO and duty key.
+        for (const existingDetail of existingDetails) {
+          const storedDwsNo = String(
+            existingDetail.actualLogsDetail?.dws_no ?? "",
+          ).trim();
+
+          if (storedDwsNo && !existingDwsNoMap.has(storedDwsNo)) {
+            existingDwsNoMap.set(storedDwsNo, existingDetail);
+          }
+
+          if (
+            existingDetail.staff_id &&
+            existingDetail.duty_start_time &&
+            existingDetail.duty_end_time
+          ) {
+            const key = getDutyKey(
+              Number(existingDetail.staff_id),
+              existingDetail.duty_start_time,
+              existingDetail.duty_end_time,
+            );
+
+            if (!existingDetailMap.has(key)) {
+              existingDetailMap.set(key, existingDetail);
+            }
+          }
+        }
+
+        let updatedCount = 0;
+        let createdCount = 0;
+
+        for (const dwsDetail of locationDetails) {
+          const staffId = Number(dwsDetail.staff_id);
+
+          if (
+            !staffId ||
+            !dwsDetail.duty_start_time ||
+            !dwsDetail.duty_end_time
+          ) {
+            continue;
+          }
+
+          const incomingDwsNo = String(dwsDetail.dws_no ?? "").trim();
+
+          const dutyKey = getDutyKey(
+            staffId,
+            dwsDetail.duty_start_time,
+            dwsDetail.duty_end_time,
+          );
+
+          // Priority 1: Match by DWS NO.
+          let existingDetail: ScheduleDetail | undefined;
+
+          if (incomingDwsNo) {
+            existingDetail = existingDwsNoMap.get(incomingDwsNo);
+          }
+
+          // Priority 2: Match by staff ID and duty times.
+          if (!existingDetail) {
+            existingDetail = existingDetailMap.get(dutyKey);
+          }
+
+          if (existingDetail) {
+            // Update the linked Actual Logs Detail.
+            let actualLogsDetail = existingDetail.actual_logs_detail_id
+              ? await this.actualLogsDetailRepository.findOne({
+                  where: {
+                    id: existingDetail.actual_logs_detail_id,
+                  },
+                })
+              : null;
+
+            if (actualLogsDetail) {
+              const actualLogsDto: CreateActualLogsDetailDto = {
+                staff_id: dwsDetail.staff_id,
+                staff_code:
+                  actualLogsDetail.staff_code ||
+                  dwsDetail.staff_code ||
+                  "",
+                remarks:
+                  dwsDetail.remarks || actualLogsDetail.remarks,
+                dws_no: incomingDwsNo || actualLogsDetail.dws_no,
+
+                warehouse_id: dwsDetail.warehouse_id,
+                location_id: dwsDetail.location_id,
+                service_provider_id: dwsDetail.vendor_id,
+                access_key_id: accessKeyId,
+                logs_date: scheduleDate,
+
+                time_in: dwsDetail.just_time_in,
+                time_out: dwsDetail.just_time_out,
+                break_in: dwsDetail.just_break_in,
+                break_out: dwsDetail.just_break_out,
+
+                overtime_in: dwsDetail.overtime_in,
+                overtime_out: dwsDetail.overtime_out,
+
+                orig_time_in: dwsDetail.orig_time_in,
+                orig_time_out: dwsDetail.orig_time_out,
+                orig_break_in: dwsDetail.orig_break_in,
+                orig_break_out: dwsDetail.orig_break_out,
+
+                regular: Number(dwsDetail.regular || 0),
+                break_hours: Number(dwsDetail.break_hours || 0),
+                overtime: Number(dwsDetail.overtime || 0),
+                twh: Number(dwsDetail.twh || 0),
+
+                updated_by: userId,
+                status_id: STATUS_IDS.ACTIVE,
+              };
+
+              Object.assign(actualLogsDetail, actualLogsDto);
+
+              actualLogsDetail =
+                await this.actualLogsDetailRepository.save(
+                  actualLogsDetail,
+                );
+            } else {
+              // Re-create and link Actual Logs when the relation is missing.
+              actualLogsDetail = await createActualLogsDetail(
+                dwsDetail,
+                scheduleDate,
+                incomingDwsNo,
+              );
+
+              existingDetail.actual_logs_detail_id =
+                actualLogsDetail.id;
+            }
+
+            // Update the existing Schedule Detail.
+            existingDetail.duty_start_time = new Date(
+              dwsDetail.duty_start_time,
+            );
+
+            existingDetail.duty_end_time = new Date(
+              dwsDetail.duty_end_time,
+            );
+
+            existingDetail.overtime_in = dwsDetail.overtime_in
+              ? new Date(dwsDetail.overtime_in)
+              : null;
+
+            existingDetail.overtime_out = dwsDetail.overtime_out
+              ? new Date(dwsDetail.overtime_out)
+              : null;
+
+            existingDetail.vendor_id = dwsDetail.vendor_id;
+            existingDetail.location_id = dwsDetail.location_id;
+            existingDetail.warehouse_id = dwsDetail.warehouse_id;
+            existingDetail.remarks = dwsDetail.remarks;
+
+            existingDetail.regular = Number(dwsDetail.regular || 0);
+            existingDetail.break_hours = String(
+              dwsDetail.break_hours || 0,
+            );
+            existingDetail.overtime = Number(dwsDetail.overtime || 0);
+            existingDetail.twh = Number(dwsDetail.twh || 0);
+
+            existingDetail.night_shift_hrs =
+              dwsDetail.night_shift_hrs || "00:00:00";
+
+            existingDetail.night_shift = Number(
+              dwsDetail.night_shift || 0,
+            );
+
+            // Recompute schedule detail after DWS data changes.
+            existingDetail.cron_computed = false;
+            existingDetail.updated_by = userId;
+
+            await this.scheduleDetailRepository.save(existingDetail);
+
+            // Refresh indexes in case duty times or DWS NO changed.
+            const updatedDutyKey = getDutyKey(
+              staffId,
+              existingDetail.duty_start_time,
+              existingDetail.duty_end_time,
+            );
+
+            existingDetailMap.set(updatedDutyKey, existingDetail);
+
+            if (incomingDwsNo) {
+              existingDwsNoMap.set(incomingDwsNo, existingDetail);
+            }
+
+            const savedDwsNo = String(
+              actualLogsDetail.dws_no ?? "",
+            ).trim();
+
+            if (savedDwsNo) {
+              existingDwsNoMap.set(savedDwsNo, existingDetail);
+            }
+
+            updatedCount++;
+            continue;
+          }
+
+          // No existing detail matched: create Actual Logs and Schedule Detail.
+          const savedActualLogsDetail = await createActualLogsDetail(
+            dwsDetail,
+            scheduleDate,
+            incomingDwsNo,
+          );
+
+          const scheduleDetail = this.scheduleDetailRepository.create({
+            schedule_header_id: existingHeader.id,
+            staff_id: dwsDetail.staff_id,
+            actual_logs_detail_id: savedActualLogsDetail.id,
+
+            vendor_id: dwsDetail.vendor_id,
+            location_id: dwsDetail.location_id,
+            warehouse_id: dwsDetail.warehouse_id,
+            remarks: dwsDetail.remarks,
+
+            duty_start_time: new Date(dwsDetail.duty_start_time),
+            duty_end_time: new Date(dwsDetail.duty_end_time),
+
+            // Keep justification fields separate from DWS attendance.
+            just_time_in: null,
+            just_time_out: null,
+            just_break_in: null,
+            just_break_out: null,
+
+            overtime_in: dwsDetail.overtime_in
+              ? new Date(dwsDetail.overtime_in)
+              : null,
+
+            overtime_out: dwsDetail.overtime_out
+              ? new Date(dwsDetail.overtime_out)
+              : null,
+
+            regular: Number(dwsDetail.regular || 0),
+            break_hours: String(dwsDetail.break_hours || 0),
+            overtime: Number(dwsDetail.overtime || 0),
+            twh: Number(dwsDetail.twh || 0),
+
+            night_shift_hrs: String(
+              dwsDetail.night_shift_hrs || "00:00:00",
+            ),
+
+            night_shift: Number(dwsDetail.night_shift || 0),
+
+            working_day_id:
+              dwsDetail.working_day_id ||
+              WORKING_DAY_IDS.REGULAR_DAY,
+
+            status_id: STATUS_IDS.ACTIVE,
+            attendance_status_id: STATUS_IDS.FOR_REVIEW,
+            cron_computed: false,
+
+            created_by: userId,
+            updated_by: userId,
+          });
+
+          const savedScheduleDetail =
+            await this.scheduleDetailRepository.save(scheduleDetail);
+
+          // Add the new record to indexes to prevent duplicate processing
+          // within the same incoming batch.
+          if (incomingDwsNo) {
+            existingDwsNoMap.set(
+              incomingDwsNo,
+              savedScheduleDetail,
+            );
+          }
+
+          existingDetailMap.set(
+            getDutyKey(
+              staffId,
+              savedScheduleDetail.duty_start_time,
+              savedScheduleDetail.duty_end_time,
+            ),
+            savedScheduleDetail,
+          );
+
+          existingDetails.push(savedScheduleDetail);
+          createdCount++;
+        }
+
+        // Keep the header count aligned with its loaded details.
+        existingHeader.entry_no = existingDetails.length;
+        existingHeader.updated_by = userId;
+
+        await this.scheduleHeaderRepository.save(existingHeader);
+
+        results.push({
+          action: "UPDATE",
+          location_id: locationId,
+          vendor_id: vendorId,
+          schedule_date: scheduleDate,
+          header_id: existingHeader.id,
+          updated_details: updatedCount,
+          created_details: createdCount,
+        });
+
+        logger.info(
+          `[StaffSchedulingService] DWS schedule upserted. ` +
+            `DATE=${scheduleDate}, ` +
+            `SYNC_DATE=${scheduleDateStr}, ` +
+            `LOCATION_ID=${locationId}, ` +
+            `VENDOR_ID=${vendorId}, ` +
+            `HEADER_ID=${existingHeader.id}, ` +
+            `UPDATED=${updatedCount}, ` +
+            `CREATED=${createdCount}`,
+        );
+      } catch (error) {
+        logger.error(
+          `[StaffSchedulingService] DWS upsert failed. ` +
+            `DATE=${scheduleDate}, ` +
+            `SYNC_DATE=${scheduleDateStr}, ` +
+            `LOCATION_ID=${locationId}, ` +
+            `VENDOR_ID=${vendorId}`,
+          error,
+        );
+
+        results.push({
+          action: "ERROR",
+          location_id: locationId,
+          vendor_id: vendorId,
+          schedule_date: scheduleDate,
+          error:
+            error instanceof Error
+              ? error.message
+              : String(error),
+        });
+      }
+    }
+
+    return {
+      schedule_date: scheduleDateStr,
+      processed_locations: results.length,
+      results,
+    };
+  }
+
+  private parseDwsFullDateTime(value: any): Date | null {
+  if (value == null || String(value).trim() === "") {
+  return null;
+  }
+
+  const input = String(value).trim();
+
+  const formats = [
+  "YYYY-MM-DD hh A",
+  "YYYY-MM-DD hh:mm A",
+  "YYYY-MM-DD HH",
+  "YYYY-MM-DD HH:mm",
+  "YYYY-MM-DDTHH:mm",
+  "YYYY-MM-DDTHH:mm.SSS",
+  ];
+
+  const parsed = dayjs(input, formats, true);
+
+  return parsed.isValid() ? parsed.toDate() : null;
+  }
+
   private filterInternalScheduleCollisions(
     details: CreateSchedulingDetailDto[],
   ): CreateSchedulingDetailDto[] {
@@ -3011,40 +3625,6 @@ export class StaffSchedulingService {
     return accepted;
   }
 
-  private parseDwsDateTime(
-    dateStr: string,
-    timeStr: string,
-    nextDayIfEarlier: boolean = false,
-    referenceTimeStr?: string,
-  ): Date | null {
-    if (!dateStr || !timeStr) return null;
-
-    const date = String(dateStr).trim();
-    const time = String(timeStr).trim();
-
-    const parsed = dayjs(`${date} ${time}`, "YYYY-MM-DD hh:mm A", true);
-
-    if (!parsed.isValid()) {
-      return null;
-    }
-
-    // For overnight schedules:
-    // If the actual time is earlier than the schedule start time,
-    // it belongs to the following day.
-    if (nextDayIfEarlier && referenceTimeStr) {
-      const reference = dayjs(
-        `${date} ${String(referenceTimeStr).trim()}`,
-        "YYYY-MM-DD hh:mm A",
-        true,
-      );
-
-      if (reference.isValid() && parsed.isBefore(reference)) {
-        return parsed.add(1, "day").toDate();
-      }
-    }
-
-    return parsed.toDate();
-  }
 
   public async calculateNightShift(
     startTime: Date | null | undefined,
@@ -3054,25 +3634,24 @@ export class StaffSchedulingService {
     night_shift_hrs: string;
     night_shift: number;
   }> {
+    const zeroResult = {
+      night_shift_hrs: "00:00:00",
+      night_shift: 0,
+    };
+
     if (!startTime || !endTime) {
-      return {
-        night_shift_hrs: "00:00:00",
-        night_shift: 0,
-      };
+      return zeroResult;
     }
 
     const start = dayjs(startTime);
-    let end = dayjs(endTime);
+    const end = dayjs(endTime);
 
-    if (!start.isValid() || !end.isValid()) {
-      return {
-        night_shift_hrs: "00:00:00",
-        night_shift: 0,
-      };
-    }
-
-    if (!end.isAfter(start)) {
-      end = end.add(1, "day");
+    if (
+      !start.isValid() ||
+      !end.isValid() ||
+      !end.isAfter(start)
+    ) {
+      return zeroResult;
     }
 
     const scheduleDay = dayjs(scheduleDate).startOf("day");
@@ -3083,11 +3662,14 @@ export class StaffSchedulingService {
 
     let totalSeconds = 0;
 
-    // Check night-shift windows across the dates covered by the duty.
     let currentDay = start.startOf("day").subtract(1, "day");
     const lastDay = end.startOf("day");
+    const nextMorning = scheduleDay.add(1, "day");
 
-    while (currentDay.isBefore(lastDay) || currentDay.isSame(lastDay, "day")) {
+    while (
+      currentDay.isBefore(lastDay) ||
+      currentDay.isSame(lastDay, "day")
+    ) {
       const windowStart = currentDay
         .hour(nightStartHour)
         .minute(0)
@@ -3101,18 +3683,20 @@ export class StaffSchedulingService {
         .second(0)
         .millisecond(0);
 
-      // Only count night hours belonging to the schedule date's
-      // night window and the following morning.
-      const nextMorning = scheduleDay.add(1, "day");
-
+      // Only count the schedule date's night window
+      // and the following morning's night-shift hours.
       const isRelevantWindow =
         windowStart.isSame(scheduleDay, "day") ||
         windowStart.isSame(nextMorning, "day");
 
       if (isRelevantWindow) {
-        const overlapStart = start.isAfter(windowStart) ? start : windowStart;
+        const overlapStart = start.isAfter(windowStart)
+          ? start
+          : windowStart;
 
-        const overlapEnd = end.isBefore(windowEnd) ? end : windowEnd;
+        const overlapEnd = end.isBefore(windowEnd)
+          ? end
+          : windowEnd;
 
         if (overlapEnd.isAfter(overlapStart)) {
           totalSeconds += overlapEnd.diff(overlapStart, "second");
@@ -3503,7 +4087,7 @@ export class StaffSchedulingService {
           rd_special_holiday_amount: toFixed(
             staffSummary.rd_special_holiday_amount,
           ),
-           regular_day_amount: toFixed(staffSummary.regular_day_amount),
+          regular_day_amount: toFixed(staffSummary.regular_day_amount),
           /* * OT AMOUNTS */ ot_regular_amount: toFixed(
             staffSummary.ot_regular_amount,
           ),
@@ -3733,643 +4317,5 @@ export class StaffSchedulingService {
         `Failed to fetch staff payroll report: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-  }
-
-  private async upsertDwsSchedules(
-    scheduleDateStr: string,
-    details: CreateSchedulingDetailDto[],
-    userId: number,
-    accessKeyId: number,
-  ): Promise<any> {
-    if (!details || details.length === 0) {
-      return null;
-    }
-
-    /*
-     * ============================================================
-     * GROUP DWS DETAILS BY LOCATION AND DUTY DATE
-     * ============================================================
-     *
-     * The sync date can be different from the actual DWS duty date
-     * for overnight schedules.
-     *
-     * Example:
-     * sync date       = 2026-09-21
-     * duty start      = 2026-09-20 23:00
-     * header date     = 2026-09-20
-     *
-     * Therefore, use the actual duty_start_time date.
-     */
-
-    const detailsByLocationAndDate = new Map<
-      string,
-      {
-        locationId: number;
-        scheduleDate: string;
-        details: CreateSchedulingDetailDto[];
-      }
-    >();
-
-    for (const detail of details) {
-      const locationId = Number(detail.location_id);
-
-      if (!locationId) {
-        continue;
-      }
-
-      if (!detail.duty_start_time) {
-        continue;
-      }
-
-      const dutyScheduleDate = dayjs(detail.duty_start_time).format(
-        "YYYY-MM-DD",
-      );
-
-      const groupKey = `${locationId}_${dutyScheduleDate}`;
-
-      if (!detailsByLocationAndDate.has(groupKey)) {
-        detailsByLocationAndDate.set(groupKey, {
-          locationId,
-          scheduleDate: dutyScheduleDate,
-          details: [],
-        });
-      }
-
-      detailsByLocationAndDate.get(groupKey)!.details.push(detail);
-    }
-
-    if (detailsByLocationAndDate.size === 0) {
-      return null;
-    }
-
-    const results: any[] = [];
-
-    /*
-     * ============================================================
-     * PROCESS EACH LOCATION / DUTY DATE
-     * ============================================================
-     */
-
-    for (const {
-      locationId,
-      scheduleDate,
-      details: locationDetails,
-    } of detailsByLocationAndDate.values()) {
-      try {
-        /*
-         * ========================================================
-         * FIND EXISTING DWS SCHEDULE HEADER
-         * ========================================================
-         *
-         * Match using the ACTUAL DWS DUTY DATE, not the sync date.
-         */
-
-        const existingHeaders = await this.scheduleHeaderRepository
-          .createQueryBuilder("header")
-          .leftJoinAndSelect("header.details", "detail")
-          .where("DATE(header.schedule_date) = DATE(:scheduleDate)", {
-            scheduleDate,
-          })
-          .andWhere("header.access_key_id = :accessKeyId", {
-            accessKeyId,
-          })
-          .getMany();
-
-        const existingHeader = existingHeaders.find((header) =>
-          (header.details || []).some(
-            (detail) => Number(detail.location_id) === Number(locationId),
-          ),
-        );
-
-        /*
-         * ========================================================
-         * CREATE NEW HEADER
-         * ========================================================
-         */
-
-        if (!existingHeader) {
-          const headerDto: CreateScheduleHeaderDto = {
-            schedule_date: scheduleDate,
-            entry_no: locationDetails.length,
-            reason: "DWS Daily Automated Sync",
-            shifting_day: 1,
-            details: locationDetails,
-          };
-
-          const created = await this.create(headerDto, userId, accessKeyId);
-
-          /*
-           * ========================================================
-           * LOAD CREATED SCHEDULE WITH RELATIONS
-           * ========================================================
-           */
-
-          const scheduleWithRelations =
-            await this.scheduleHeaderRepository.findOne({
-              where: {
-                id: created.id,
-              },
-              relations: [
-                "details",
-                "details.staff",
-                "details.vendor",
-                "details.location",
-                "details.warehouse",
-                "details.workingDays",
-                "details.actualLogsDetail",
-              ],
-            });
-
-          if (!scheduleWithRelations) {
-            throw new Error(
-              `Failed to retrieve created schedule header ${created.id}`,
-            );
-          }
-
-          /*
-           * ========================================================
-           * SSE
-           * ========================================================
-           */
-
-          const response = this.responseMapperService.mapEntityToResponse(
-            scheduleWithRelations,
-          );
-
-          try {
-            this.sseEventEmitter.emitUpdate(
-              "staff_scheduling",
-              response.id,
-              response,
-            );
-
-            this.sseEventEmitter.emitUpdate(
-              "staff_attendance",
-              response.id,
-              response,
-            );
-          } catch (err) {
-            logger.error(`SSE event failed for Schedule ${response.id}:`, err);
-          }
-
-          results.push({
-            action: "CREATE",
-            location_id: locationId,
-            schedule_date: scheduleDate,
-            header_id: created.id,
-            updated_details: 0,
-            created_details: locationDetails.length,
-          });
-
-          logger.info(
-            `[StaffSchedulingService] DWS schedule created. ` +
-              `DATE=${scheduleDate}, ` +
-              `LOCATION_ID=${locationId}, ` +
-              `HEADER_ID=${created.id}, ` +
-              `CREATED=${locationDetails.length}`,
-          );
-
-          continue;
-        }
-
-        /*
-         * ========================================================
-         * EXISTING HEADER
-         * ========================================================
-         */
-
-        const existingDetails = existingHeader.details || [];
-
-        /*
-         * Map:
-         *
-         * staff_id -> ScheduleDetail
-         */
-
-        const existingDetailMap = new Map<number, ScheduleDetail>();
-
-        for (const existingDetail of existingDetails) {
-          if (existingDetail.staff_id) {
-            existingDetailMap.set(
-              Number(existingDetail.staff_id),
-              existingDetail,
-            );
-          }
-        }
-
-        let updatedCount = 0;
-        let createdCount = 0;
-
-        /*
-         * ========================================================
-         * PROCESS EACH DWS DETAIL
-         * ========================================================
-         */
-
-        for (const dwsDetail of locationDetails) {
-          const staffId = Number(dwsDetail.staff_id);
-
-          if (!staffId) {
-            continue;
-          }
-
-          const existingDetail = existingDetailMap.get(staffId);
-
-          /*
-           * ======================================================
-           * UPDATE EXISTING DETAIL
-           * ======================================================
-           */
-
-          if (existingDetail) {
-            /*
-             * ----------------------------------------------------
-             * UPDATE ACTUAL LOG DETAIL
-             * ----------------------------------------------------
-             */
-
-            if (existingDetail.actual_logs_detail_id) {
-              const actualLogsDetail =
-                await this.actualLogsDetailRepository.findOne({
-                  where: {
-                    id: existingDetail.actual_logs_detail_id,
-                  },
-                });
-
-              if (actualLogsDetail) {
-                const actualLogsDto: CreateActualLogsDetailDto = {
-                  staff_id: dwsDetail.staff_id,
-
-                  staff_code: actualLogsDetail.staff_code,
-
-                  remarks: dwsDetail.remarks || actualLogsDetail.remarks,
-
-                  warehouse_id: dwsDetail.warehouse_id,
-
-                  location_id: dwsDetail.location_id,
-
-                  service_provider_id: dwsDetail.vendor_id,
-
-                  access_key_id: accessKeyId,
-
-                  logs_date: scheduleDate,
-
-                  time_in: dwsDetail.just_time_in,
-
-                  time_out: dwsDetail.just_time_out,
-
-                  break_in: dwsDetail.just_break_in,
-
-                  break_out: dwsDetail.just_break_out,
-
-                  overtime_in: dwsDetail.overtime_in,
-
-                  overtime_out: dwsDetail.overtime_out,
-
-                  orig_time_in: dwsDetail.orig_time_in,
-
-                  orig_time_out: dwsDetail.orig_time_out,
-
-                  orig_break_in: dwsDetail.orig_break_in,
-
-                  orig_break_out: dwsDetail.orig_break_out,
-
-                  regular: Number(dwsDetail.regular || 0),
-
-                  break_hours: Number(dwsDetail.break_hours || 0),
-
-                  overtime: Number(dwsDetail.overtime || 0),
-
-                  twh: Number(dwsDetail.twh || 0),
-
-                  updated_by: userId,
-
-                  status_id: STATUS_IDS.ACTIVE,
-                };
-
-                Object.assign(actualLogsDetail, actualLogsDto);
-
-                await this.actualLogsDetailRepository.save(actualLogsDetail);
-              }
-            }
-
-            /*
-             * ----------------------------------------------------
-             * UPDATE SCHEDULE DETAIL
-             * ----------------------------------------------------
-             */
-
-            existingDetail.duty_start_time = new Date(
-              dwsDetail.duty_start_time,
-            );
-
-            existingDetail.duty_end_time = new Date(dwsDetail.duty_end_time);
-
-            existingDetail.overtime_in = dwsDetail.overtime_in
-              ? new Date(dwsDetail.overtime_in)
-              : null;
-
-            existingDetail.overtime_out = dwsDetail.overtime_out
-              ? new Date(dwsDetail.overtime_out)
-              : null;
-
-            existingDetail.vendor_id = dwsDetail.vendor_id;
-
-            existingDetail.location_id = dwsDetail.location_id;
-
-            existingDetail.warehouse_id = dwsDetail.warehouse_id;
-
-            existingDetail.remarks = dwsDetail.remarks;
-
-            existingDetail.regular = Number(dwsDetail.regular || 0);
-
-            existingDetail.break_hours = String(dwsDetail.break_hours || 0);
-
-            existingDetail.overtime = Number(dwsDetail.overtime || 0);
-
-            existingDetail.twh = Number(dwsDetail.twh || 0);
-
-            existingDetail.night_shift_hrs = dwsDetail.night_shift_hrs || "0";
-
-            existingDetail.night_shift = Number(dwsDetail.night_shift || 0);
-
-            /*
-             * DWS changed the schedule/log information.
-             * Run schedule computation again.
-             */
-
-            existingDetail.cron_computed = false;
-
-            existingDetail.updated_by = userId;
-
-            await this.scheduleDetailRepository.save(existingDetail);
-
-            updatedCount++;
-
-            continue;
-          }
-
-          /*
-           * ======================================================
-           * CREATE NEW DETAIL
-           * ======================================================
-           */
-
-          /*
-           * ------------------------------------------------------
-           * FIND/CREATE ACTUAL LOG HEADER
-           * ------------------------------------------------------
-           */
-
-          let actualLogsHeader = await this.actualLogsHeaderRepository.findOne({
-            where: {
-              access_key_id: accessKeyId,
-            },
-            order: {
-              id: "DESC",
-            },
-          });
-
-          if (!actualLogsHeader) {
-            const actualLogsHeaderDto: CreateActualLogsHeaderDto = {
-              tagging: "DWS DAILY AUTOMATED SYNC",
-
-              logs_type_id: LOGS_TYPE_ID.CC_FETCH,
-
-              access_key_id: accessKeyId,
-
-              status_id: STATUS_IDS.ACTIVE,
-
-              created_by: userId,
-
-              updated_by: userId,
-            };
-
-            actualLogsHeader =
-              this.actualLogsHeaderRepository.create(actualLogsHeaderDto);
-
-            actualLogsHeader =
-              await this.actualLogsHeaderRepository.save(actualLogsHeader);
-          }
-
-          /*
-           * ------------------------------------------------------
-           * CREATE ACTUAL LOG DETAIL
-           * ------------------------------------------------------
-           */
-
-          const actualLogsDetailDto: CreateActualLogsDetailDto = {
-            staff_id: dwsDetail.staff_id,
-
-            staff_code: "",
-
-            remarks: dwsDetail.remarks || "Auto-synced from DWS",
-
-            warehouse_id: dwsDetail.warehouse_id,
-
-            location_id: dwsDetail.location_id,
-
-            service_provider_id: dwsDetail.vendor_id,
-
-            access_key_id: accessKeyId,
-
-            logs_date: scheduleDate,
-
-            time_in: dwsDetail.just_time_in,
-
-            time_out: dwsDetail.just_time_out,
-
-            break_in: dwsDetail.just_break_in,
-
-            break_out: dwsDetail.just_break_out,
-
-            overtime_in: dwsDetail.overtime_in,
-
-            overtime_out: dwsDetail.overtime_out,
-
-            orig_time_in: dwsDetail.orig_time_in,
-
-            orig_time_out: dwsDetail.orig_time_out,
-
-            orig_break_in: dwsDetail.orig_break_in,
-
-            orig_break_out: dwsDetail.orig_break_out,
-
-            regular: Number(dwsDetail.regular || 0),
-
-            break_hours: Number(dwsDetail.break_hours || 0),
-
-            overtime: Number(dwsDetail.overtime || 0),
-
-            twh: Number(dwsDetail.twh || 0),
-
-            created_by: userId,
-
-            updated_by: userId,
-
-            status_id: STATUS_IDS.ACTIVE,
-          };
-
-          /*
-           * Get staff_code.
-           */
-
-          const staff = await this.staffRepository.findOne({
-            where: {
-              id: dwsDetail.staff_id,
-            },
-          });
-
-          if (staff) {
-            actualLogsDetailDto.staff_code = staff.staff_code;
-          }
-
-          const actualLogsDetail =
-            this.actualLogsDetailRepository.create(actualLogsDetailDto);
-
-          actualLogsDetail.actual_header_id = actualLogsHeader.id;
-
-          const savedActualLogsDetail =
-            await this.actualLogsDetailRepository.save(actualLogsDetail);
-
-          /*
-           * ------------------------------------------------------
-           * CREATE SCHEDULE DETAIL
-           * ------------------------------------------------------
-           */
-
-          const scheduleDetail = this.scheduleDetailRepository.create({
-            schedule_header_id: existingHeader.id,
-
-            staff_id: dwsDetail.staff_id,
-
-            actual_logs_detail_id: savedActualLogsDetail.id,
-
-            vendor_id: dwsDetail.vendor_id,
-
-            location_id: dwsDetail.location_id,
-
-            warehouse_id: dwsDetail.warehouse_id,
-
-            remarks: dwsDetail.remarks,
-
-            duty_start_time: new Date(dwsDetail.duty_start_time),
-
-            duty_end_time: new Date(dwsDetail.duty_end_time),
-
-            just_time_in: dwsDetail.just_time_in
-              ? new Date(dwsDetail.just_time_in)
-              : null,
-
-            just_time_out: dwsDetail.just_time_out
-              ? new Date(dwsDetail.just_time_out)
-              : null,
-
-            just_break_in: dwsDetail.just_break_in
-              ? new Date(dwsDetail.just_break_in)
-              : null,
-
-            just_break_out: dwsDetail.just_break_out
-              ? new Date(dwsDetail.just_break_out)
-              : null,
-
-            overtime_in: dwsDetail.overtime_in
-              ? new Date(dwsDetail.overtime_in)
-              : null,
-
-            overtime_out: dwsDetail.overtime_out
-              ? new Date(dwsDetail.overtime_out)
-              : null,
-
-            regular: Number(dwsDetail.regular || 0),
-
-            break_hours: String(dwsDetail.break_hours || 0),
-
-            overtime: Number(dwsDetail.overtime || 0),
-
-            twh: Number(dwsDetail.twh || 0),
-
-            night_shift_hrs: String(dwsDetail.night_shift_hrs || 0.0),
-
-            night_shift: Number(dwsDetail.night_shift || 0),
-
-            working_day_id:
-              dwsDetail.working_day_id || WORKING_DAY_IDS.REGULAR_DAY,
-
-            status_id: STATUS_IDS.ACTIVE,
-
-            attendance_status_id: STATUS_IDS.VALIDATED,
-
-            cron_computed: false,
-
-            created_by: userId,
-
-            updated_by: userId,
-          });
-
-          await this.scheduleDetailRepository.save(scheduleDetail);
-
-          createdCount++;
-        }
-
-        /*
-         * ========================================================
-         * UPDATE HEADER
-         * ========================================================
-         *
-         * We do NOT delete details that DWS did not return.
-         */
-
-        existingHeader.entry_no =
-          existingDetails.length +
-          locationDetails.filter(
-            (detail) => !existingDetailMap.has(Number(detail.staff_id)),
-          ).length;
-
-        existingHeader.updated_by = userId;
-
-        await this.scheduleHeaderRepository.save(existingHeader);
-
-        results.push({
-          action: "UPDATE",
-          location_id: locationId,
-          schedule_date: scheduleDate,
-          header_id: existingHeader.id,
-          updated_details: updatedCount,
-          created_details: createdCount,
-        });
-
-        logger.info(
-          `[StaffSchedulingService] DWS schedule upserted. ` +
-            `DATE=${scheduleDate}, ` +
-            `SYNC_DATE=${scheduleDateStr}, ` +
-            `LOCATION_ID=${locationId}, ` +
-            `HEADER_ID=${existingHeader.id}, ` +
-            `UPDATED=${updatedCount}, ` +
-            `CREATED=${createdCount}`,
-        );
-      } catch (error) {
-        logger.error(
-          `[StaffSchedulingService] DWS upsert failed. ` +
-            `DATE=${scheduleDate}, ` +
-            `SYNC_DATE=${scheduleDateStr}, ` +
-            `LOCATION_ID=${locationId}`,
-          error,
-        );
-
-        results.push({
-          action: "ERROR",
-          location_id: locationId,
-          schedule_date: scheduleDate,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    return {
-      schedule_date: scheduleDateStr,
-      processed_locations: results.length,
-      results,
-    };
   }
 }

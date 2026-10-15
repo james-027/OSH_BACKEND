@@ -31,6 +31,7 @@ import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { ActualLogsHeader } from "src/entities/ActualLogsHeader";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 
 
 
@@ -57,6 +58,7 @@ import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
       StaffHistory,
       Status,
       RegularHoliday,
+      TimeKeepingConfig,
       LogsType,
       PayrollDetails
     ]),

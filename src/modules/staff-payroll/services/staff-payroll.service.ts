@@ -14,7 +14,11 @@ import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayr
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS,DAYS_FACTOR_RATE,WORKING_DAY_IDS } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  ACTION_IDS,
+  WORKING_DAY_IDS,
+} from "src/constants/customConstants";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { FindStaffPayrollDetailsDto } from "src/modules/staff-payroll/dto/FindStaffPayrollDetailsDto";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
@@ -37,55 +41,59 @@ const customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(utc);
 dayjs.extend(customParseFormat);
 
-import * as ExcelJS from 'exceljs';
+import * as ExcelJS from "exceljs";
 
 // --- Shared Style Constants ---
 const borderThin: Partial<ExcelJS.Borders> = {
-  top: { style: 'thin', color: { argb: 'FF000000' } },
-  left: { style: 'thin', color: { argb: 'FF000000' } },
-  bottom: { style: 'thin', color: { argb: 'FF000000' } },
-  right: { style: 'thin', color: { argb: 'FF000000' } },
+  top: { style: "thin", color: { argb: "FF000000" } },
+  left: { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  right: { style: "thin", color: { argb: "FF000000" } },
 };
 
 const S_CYAN_FILL: ExcelJS.FillPattern = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FF9CD6F0' },
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF9CD6F0" },
 };
 
 const S_GREEN_FILL: ExcelJS.FillPattern = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FF76D776' },
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF76D776" },
 };
 
 const S_YELLOW_FILL: ExcelJS.FillPattern = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FFFAFD32' },
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFFAFD32" },
 };
 
 const S_OFF_FILL: ExcelJS.FillPattern = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FF7F7F7F' },
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF7F7F7F" },
 };
 
 const parseNum = (val: any): number => {
-  if (val === null || val === undefined || val === '' || isNaN(Number(val))) return 0;
+  if (val === null || val === undefined || val === "" || isNaN(Number(val)))
+    return 0;
   return Number(val);
 };
 
 const fmtMoney = (val: any): string => {
   const n = parseNum(val);
   return n === 0
-    ? '-'
-    : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    ? "-"
+    : n.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 };
 
 const fmtHours = (val: any): string => {
   const n = parseNum(val);
-  return n === 0 ? '-' : n.toFixed(2);
+  return n === 0 ? "-" : n.toFixed(2);
 };
 
 @Injectable()
@@ -119,7 +127,6 @@ export class StaffPayrollService {
     private actionLogsService: ActionLogsService,
     private payrollComputationService: PayrollComputationService,
   ) {}
-
 
   private readonly module_name = "STAFF PAYROLL";
 
@@ -391,7 +398,7 @@ export class StaffPayrollService {
             planned_duty_start_time: scheduleDetail.planned_duty_start_time,
 
             planned_duty_end_time: scheduleDetail.planned_duty_end_time,
-            
+
             schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
 
             just_time_in: scheduleDetail.just_time_in,
@@ -439,15 +446,15 @@ export class StaffPayrollService {
         const savedPayrollDetails =
           await this.payrollDetailRepository.save(payrollDetails);
 
-        await this.scheduleDetailRepository.update(
-          {
-            id: In(details.map((detail) => detail.id)),
-          },
-          {
-            attendance_status_id: STATUS_IDS.COMPUTED,
-            updated_by: userId,
-          },
-        );
+        // await this.scheduleDetailRepository.update(
+        //   {
+        //     id: In(details.map((detail) => detail.id)),
+        //   },
+        //   {
+        //     attendance_status_id: STATUS_IDS.COMPUTED,
+        //     updated_by: userId,
+        //   },
+        // );
 
         // ========================================================
         // RESULT
@@ -511,7 +518,7 @@ export class StaffPayrollService {
             response.id,
             response,
           );
-            this.sseEventEmitter.emitUpdate(
+          this.sseEventEmitter.emitUpdate(
             "staff_attendance",
             response.id,
             response,
@@ -521,6 +528,30 @@ export class StaffPayrollService {
         }
 
         generatedPayrolls.push(response);
+      }
+
+      // ============================================================
+      // UPDATE SCHEDULE HEADERS PAYROLL AUDIT FIELDS
+      // ============================================================
+
+      const scheduleHeaderIds = [
+        ...new Set(
+          scheduleDetails
+            .map((detail) => detail.scheduleHeader?.id)
+            .filter((id): id is number => id !== undefined && id !== null),
+        ),
+      ];
+
+      if (scheduleHeaderIds.length > 0) {
+        await this.scheduleHeaderRepository.update(
+          {
+            id: In(scheduleHeaderIds),
+          },
+          {
+            payroll_ts: new Date(),
+            payroll_updated_by: userId,
+          },
+        );
       }
 
       return {
@@ -539,9 +570,9 @@ export class StaffPayrollService {
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
-          attendance_status_id: In([
+        attendance_status_id: In([
           STATUS_IDS.VALIDATED,
-          // STATUS_IDS.COMPUTED,
+          STATUS_IDS.FOR_REVIEW,
         ]),
         cron_computed: false,
       };
@@ -559,11 +590,11 @@ export class StaffPayrollService {
       });
 
       if (!allScheduleDetails.length) {
-          return {
-            message: "No schedule details found for computation.",
-            computed: 0,
-            details: [],
-          };
+        return {
+          message: "No schedule details found for computation.",
+          computed: 0,
+          details: [],
+        };
       }
 
       /*
@@ -616,15 +647,10 @@ export class StaffPayrollService {
               scheduleDetail.duty_end_time ??
               null;
 
-              const scheduleDate =
-                scheduleDetail.scheduleHeader?.schedule_date;
+            const scheduleDate = scheduleDetail.scheduleHeader?.schedule_date;
 
             const { night_shift_hrs, night_shift } =
-              await this.calculateNightShift(
-                timeIn,
-                timeOut,
-                scheduleDate,
-              );
+              await this.calculateNightShift(timeIn, timeOut, scheduleDate);
 
             const breakOut =
               scheduleDetail.just_break_out ?? actualLogs?.break_out ?? null;
@@ -632,9 +658,8 @@ export class StaffPayrollService {
             const breakIn =
               scheduleDetail.just_break_in ?? actualLogs?.break_in ?? null;
 
-            const overtimeIn = actualLogs?.overtime_in ?? null;
-
-            const overtimeOut = actualLogs?.overtime_out ?? null;
+            const overtimeIn = scheduleDetail.overtime_in ?? null;
+            const overtimeOut = scheduleDetail.overtime_out ?? null;
 
             /*
              * If there is no time in AND no time out,
@@ -795,18 +820,43 @@ export class StaffPayrollService {
              * If either overtime value is missing:
              * overtime = 0
              */
+
+            const totalEligibleSeconds = Math.max(regularSeconds, 0);
+            const eightHoursInSeconds = 8 * 60 * 60;
+
+            regularSeconds = Math.min(
+              totalEligibleSeconds,
+              eightHoursInSeconds,
+            );
+
             let overtimeSeconds = 0;
 
             if (overtimeIn && overtimeOut) {
+              // Use the recorded overtime interval from ScheduleDetail.
               overtimeSeconds = await this.calculateTimeDifference(
                 overtimeIn,
                 overtimeOut,
               );
 
-              if (overtimeSeconds < 0) {
-                overtimeSeconds = 0;
-              }
+              // Cap regular hours at 8 hours when recorded OT exists.
+              regularSeconds = Math.min(
+                totalEligibleSeconds,
+                eightHoursInSeconds,
+              );
+            } else {
+              // Fall back to automatically calculating overtime beyond 8 hours.
+              regularSeconds = Math.min(
+                totalEligibleSeconds,
+                eightHoursInSeconds,
+              );
+
+              overtimeSeconds = Math.max(
+                totalEligibleSeconds - eightHoursInSeconds,
+                0,
+              );
             }
+
+            overtimeSeconds = Math.max(overtimeSeconds, 0);
 
             /*
              * =====================================================
@@ -1002,31 +1052,29 @@ export class StaffPayrollService {
     )}`;
   }
 
-
   async autoPayrollComputation(): Promise<any> {
     try {
-      const postedPayrollDetails =
-        await this.payrollDetailRepository.find({
-          where: {
-            payrollHeader: {
-              status_id: STATUS_IDS.POSTED,
-              cron_computed: false,
-            },
+      const postedPayrollDetails = await this.payrollDetailRepository.find({
+        where: {
+          payrollHeader: {
+            status_id: STATUS_IDS.POSTED,
+            cron_computed: false,
           },
-          relations: [
-            "payrollHeader",
-            "scheduleDetail",
-            "staff",
-            "warehouse",
-            "location",
-            "vendor",
-            "workingDays",
-          ],
-          order: {
-            payroll_header_id: "ASC",
-            id: "ASC",
-          },
-        });
+        },
+        relations: [
+          "payrollHeader",
+          "scheduleDetail",
+          "staff",
+          "warehouse",
+          "location",
+          "vendor",
+          "workingDays",
+        ],
+        order: {
+          payroll_header_id: "ASC",
+          id: "ASC",
+        },
+      });
 
       if (!postedPayrollDetails.length) {
         logger.info(
@@ -1038,26 +1086,15 @@ export class StaffPayrollService {
         ...new Set(
           postedPayrollDetails
             .map((detail) => detail.staff_id)
-            .filter(
-              (id) =>
-                id !== null &&
-                id !== undefined,
-            ),
+            .filter((id) => id !== null && id !== undefined),
         ),
       ];
 
       const accessKeyIds = [
         ...new Set(
           postedPayrollDetails
-            .map(
-              (detail) =>
-                detail.payrollHeader?.access_key_id,
-            )
-            .filter(
-              (id) =>
-                id !== null &&
-                id !== undefined,
-            ),
+            .map((detail) => detail.payrollHeader?.access_key_id)
+            .filter((id) => id !== null && id !== undefined),
         ),
       ];
 
@@ -1066,17 +1103,15 @@ export class StaffPayrollService {
        * STAFF VENDOR SALARIES
        * ============================================================
        */
-      const staffVendorSalaries =
-        await this.staffVendorSalaryRepository.find({
-          where: {
-            staff_id: In(staffIds),
-            access_key_id: In(accessKeyIds),
-            status_id: STATUS_IDS.ACTIVE,
-          },
-        });
+      const staffVendorSalaries = await this.staffVendorSalaryRepository.find({
+        where: {
+          staff_id: In(staffIds),
+          access_key_id: In(accessKeyIds),
+          status_id: STATUS_IDS.ACTIVE,
+        },
+      });
 
-      const staffVendorMap =
-        new Map<string, any>();
+      const staffVendorMap = new Map<string, any>();
 
       for (const staffVendor of staffVendorSalaries) {
         staffVendorMap.set(
@@ -1096,34 +1131,22 @@ export class StaffPayrollService {
       const staffVendorIds = [
         ...new Set(
           staffVendorSalaries
-            .map(
-              (staffVendor) =>
-                staffVendor.id,
-            )
-            .filter(
-              (id) =>
-                id !== null &&
-                id !== undefined,
-            ),
+            .map((staffVendor) => staffVendor.id)
+            .filter((id) => id !== null && id !== undefined),
         ),
       ];
 
-      const staffSalaries =
-        await this.staffSalaryRepository.find({
-          where: {
-            staff_vendor_id: In(staffVendorIds),
-            status_id: STATUS_IDS.ACTIVE,
-          },
-        });
+      const staffSalaries = await this.staffSalaryRepository.find({
+        where: {
+          staff_vendor_id: In(staffVendorIds),
+          status_id: STATUS_IDS.ACTIVE,
+        },
+      });
 
-      const staffSalaryMap =
-        new Map<number, any>();
+      const staffSalaryMap = new Map<number, any>();
 
       for (const staffSalary of staffSalaries) {
-        staffSalaryMap.set(
-          staffSalary.staff_vendor_id,
-          staffSalary,
-        );
+        staffSalaryMap.set(staffSalary.staff_vendor_id, staffSalary);
       }
 
       /**
@@ -1131,29 +1154,23 @@ export class StaffPayrollService {
        * SSS CONFIG
        * ============================================================
        */
-      const sssConfigs =
-        await this.sssConfigRepository.find();
+      const sssConfigs = await this.sssConfigRepository.find();
 
       /**
        * ============================================================
        * TIME KEEPING CONFIG
        * ============================================================
        */
-      const timeKeepingConfigs =
-        await this.timeKeepingRepository.find({
-          where: {
-            access_key_id: In(accessKeyIds),
-          },
-        });
+      const timeKeepingConfigs = await this.timeKeepingRepository.find({
+        where: {
+          access_key_id: In(accessKeyIds),
+        },
+      });
 
-      const timeKeepingMap =
-        new Map<number, any>();
+      const timeKeepingMap = new Map<number, any>();
 
       for (const timeKeeping of timeKeepingConfigs) {
-        timeKeepingMap.set(
-          timeKeeping.access_key_id,
-          timeKeeping,
-        );
+        timeKeepingMap.set(timeKeeping.access_key_id, timeKeeping);
       }
 
       /**
@@ -1161,41 +1178,33 @@ export class StaffPayrollService {
        * COMPUTATION
        * ============================================================
        */
-      const computedDetailsByHeader =
-        new Map<number, PayrollDetails[]>();
+      const computedDetailsByHeader = new Map<number, PayrollDetails[]>();
 
       let computedCount = 0;
 
       for (const detail of postedPayrollDetails) {
-        const payrollHeader =
-          detail.payrollHeader;
+        const payrollHeader = detail.payrollHeader;
 
         if (!payrollHeader) {
           continue;
         }
 
-        const staffId =
-          detail.staff_id;
+        const staffId = detail.staff_id;
 
         if (!staffId) {
           continue;
         }
 
-        const accessKeyId =
-          payrollHeader.access_key_id;
+        const accessKeyId = payrollHeader.access_key_id;
 
         /**
          * ----------------------------------------------------------
          * FIND STAFF VENDOR
          * ----------------------------------------------------------
          */
-        const staffVendorKey =
-          `${staffId}-${detail.vendor_id}-${detail.location_id}`;
+        const staffVendorKey = `${staffId}-${detail.vendor_id}-${detail.location_id}`;
 
-        const staffVendor =
-          staffVendorMap.get(
-            staffVendorKey,
-          );
+        const staffVendor = staffVendorMap.get(staffVendorKey);
 
         if (!staffVendor) {
           logger.warn(
@@ -1214,10 +1223,7 @@ export class StaffPayrollService {
          * StaffVendorSalary.id
          * ----------------------------------------------------------
          */
-        const staffSalary =
-          staffSalaryMap.get(
-            staffVendor.id,
-          );
+        const staffSalary = staffSalaryMap.get(staffVendor.id);
 
         if (!staffSalary) {
           logger.warn(
@@ -1232,10 +1238,7 @@ export class StaffPayrollService {
          * SALARY RATE
          * ----------------------------------------------------------
          */
-        const salaryRate =
-          Number(
-            staffSalary.salary_rate,
-          ) || 0;
+        const salaryRate = Number(staffSalary.salary_rate) || 0;
 
         if (!salaryRate) {
           continue;
@@ -1246,10 +1249,7 @@ export class StaffPayrollService {
          * TIME KEEPING
          * ----------------------------------------------------------
          */
-        const timeKeeping =
-          timeKeepingMap.get(
-            accessKeyId,
-          );
+        const timeKeeping = timeKeepingMap.get(accessKeyId);
 
         /**
          * ----------------------------------------------------------
@@ -1257,45 +1257,32 @@ export class StaffPayrollService {
          * ----------------------------------------------------------
          */
         const computedValues =
-          this.payrollComputationService.computePayrollDetail(
-            {
-              detail,
-              payrollHeader,
-              salaryRate,
-              staffSalary,
-              sssConfigs,
-              timeKeeping,
-            },
-          );
+          this.payrollComputationService.computePayrollDetail({
+            detail,
+            payrollHeader,
+            salaryRate,
+            staffSalary,
+            sssConfigs,
+            timeKeeping,
+          });
 
         if (!computedValues) {
           continue;
         }
 
-        Object.assign(
-          detail,
-          computedValues,
-        );
+        Object.assign(detail, computedValues);
 
         payrollHeader.cron_computed = true;
 
-        await this.payrollDetailRepository.save(
-          detail,
-        );
+        await this.payrollDetailRepository.save(detail);
 
-        const headerId =
-          detail.payroll_header_id;
+        const headerId = detail.payroll_header_id;
 
         if (!computedDetailsByHeader.has(headerId)) {
-          computedDetailsByHeader.set(
-            headerId,
-            [],
-          );
+          computedDetailsByHeader.set(headerId, []);
         }
 
-        computedDetailsByHeader
-          .get(headerId)!
-          .push(detail);
+        computedDetailsByHeader.get(headerId)!.push(detail);
 
         computedCount++;
       }
@@ -1305,42 +1292,26 @@ export class StaffPayrollService {
        * COMPUTE PAYROLL HEADER TOTALS
        * ============================================================
        */
-      for (
-        const [
-          headerId,
-          details,
-        ] of computedDetailsByHeader
-      ) {
-        const payrollHeader =
-          postedPayrollDetails.find(
-            (detail) =>
-              detail.payroll_header_id ===
-              headerId,
-          )?.payrollHeader;
+      for (const [headerId, details] of computedDetailsByHeader) {
+        const payrollHeader = postedPayrollDetails.find(
+          (detail) => detail.payroll_header_id === headerId,
+        )?.payrollHeader;
 
         if (!payrollHeader) {
           continue;
         }
 
         const headerTotals =
-          this.payrollComputationService.computePayrollHeaderTotals(
-            details,
-          );
+          this.payrollComputationService.computePayrollHeaderTotals(details);
 
-        Object.assign(
-          payrollHeader,
-          headerTotals,
-        );
+        Object.assign(payrollHeader, headerTotals);
 
-        await this.payrollHeaderRepository.save(
-          payrollHeader,
-        );
+        await this.payrollHeaderRepository.save(payrollHeader);
       }
 
       return {
         success: true,
-        message:
-          "Payroll computation completed successfully.",
+        message: "Payroll computation completed successfully.",
         total: computedCount,
       };
     } catch (error) {
@@ -1353,41 +1324,41 @@ export class StaffPayrollService {
   }
 
   async postPayroll(
-      updatePayrollDto: UpdatePayrollHeaderDto,
-      userId: number,
-    ): Promise<any> {
-      try {
-        const payrollIds = updatePayrollDto.id;
-  
-        if (!payrollIds?.length) {
-          throw new BadRequestException(
-            "At least one Payroll Header ID is required.",
-          );
-        }
-  
-        const payrollHeaders = await this.payrollHeaderRepository.find({
-          where: {
-            id: In(payrollIds),
-          },
-          relations: ["status", "createdBy", "updatedBy"],
-        });
-  
-        const foundIds = payrollHeaders.map((payroll) => payroll.id);
-  
-        const missingIds = payrollIds.filter(
-          (payrollId) => !foundIds.includes(payrollId),
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollIds = updatePayrollDto.id;
+
+      if (!payrollIds?.length) {
+        throw new BadRequestException(
+          "At least one Payroll Header ID is required.",
         );
-  
-        if (missingIds.length > 0) {
-          throw new NotFoundException(
-            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
-          );
-        }
-  
-        const updatedPayrollHeaders =
+      }
+
+      const payrollHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(payrollIds),
+        },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      const foundIds = payrollHeaders.map((payroll) => payroll.id);
+
+      const missingIds = payrollIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
+      );
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
-            // Update Schedule Headers
+            // Update Payroll Headers to POSTED
             await transactionalEntityManager.update(
               PayrollHeader,
               {
@@ -1399,7 +1370,43 @@ export class StaffPayrollService {
                 modified_at: new Date(),
               },
             );
-  
+
+            // Get schedule detail IDs associated with the selected payroll headers
+            const payrollDetails = await transactionalEntityManager.find(
+              PayrollDetails,
+              {
+                where: {
+                  payroll_header_id: In(payrollIds),
+                },
+                select: ["id", "schedule_detail_id"],
+              },
+            );
+
+            const scheduleDetailIds = [
+              ...new Set(
+                payrollDetails
+                  .map((detail) => detail.schedule_detail_id)
+                  .filter(
+                    (id): id is number => id !== undefined && id !== null,
+                  ),
+              ),
+            ];
+
+            // Update associated Schedule Details to COMPUTED
+            if (scheduleDetailIds.length > 0) {
+              await transactionalEntityManager.update(
+                ScheduleDetail,
+                {
+                  id: In(scheduleDetailIds),
+                },
+                {
+                  attendance_status_id: STATUS_IDS.COMPUTED,
+                  updated_by: userId,
+                },
+              );
+            }
+
+            // Retrieve updated Payroll Headers
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
               {
@@ -1409,106 +1416,107 @@ export class StaffPayrollService {
                 relations: ["status", "createdBy", "updatedBy"],
               },
             );
-  
+
             return updatedHeaders;
           },
         );
-  
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "Staff Payroll Service",
-            method: "",
-            raw_data: JSON.stringify(updatedPayrollHeaders),
-            description: `Posted Payroll Headers: ${payrollIds.join(", ")}`,
-            status_id: 1,
-          },
-          userId,
-        );
-  
-        const responses = updatedPayrollHeaders.map((schedule) =>
-          this.responseMapperService.mapEntityToResponse(schedule),
-        );
-  
-        try {
-          for (const payroll of updatedPayrollHeaders) {
-            await this.actionLogsService.logAction({
-              module_name: this.module_name,
-              ref_id: payroll.id,
-              action_id: ACTION_IDS.POST,
-              description: `Post Payroll`,
-              raw_data: JSON.stringify(payroll),
-              created_by: userId,
-            });
-          }
-        } catch (err) {
-          logger.error("Action log failed for Post Payroll:", err);
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "Staff Payroll Service",
+          method: "",
+          raw_data: JSON.stringify(updatedPayrollHeaders),
+          description: `Posted Payroll Headers: ${payrollIds.join(", ")}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      const responses = updatedPayrollHeaders.map((payroll) =>
+        this.responseMapperService.mapEntityToResponse(payroll),
+      );
+
+      try {
+        for (const payroll of updatedPayrollHeaders) {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: payroll.id,
+            action_id: ACTION_IDS.POST,
+            description: `Post Payroll`,
+            raw_data: JSON.stringify(payroll),
+            created_by: userId,
+          });
         }
-  
-        for (const response of responses) {
-          try {
-            this.sseEventEmitter.emitUpdate(
-              "staff_attendance",
-              response.id,
-              response,
-            );
-            this.sseEventEmitter.emitUpdate(
-              "staff_payroll",
-              response.id,
-              response,
-            );
-          } catch (err) {
-            logger.error("SSE event failed:", err);
-          }
-        }
-  
-        return responses;
-      } catch (error) {
-        if (
-          error instanceof NotFoundException ||
-          error instanceof BadRequestException
-        ) {
-          throw error;
-        }
-  
-        logger.error("Failed to post payroll headers:", error);
-  
-        throw new Error("Failed to post payroll headers");
+      } catch (err) {
+        logger.error("Action log failed for Post Payroll:", err);
       }
+
+      for (const response of responses) {
+        try {
+          this.sseEventEmitter.emitUpdate(
+            "staff_attendance",
+            response.id,
+            response,
+          );
+
+          this.sseEventEmitter.emitUpdate(
+            "staff_payroll",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to post payroll headers:", error);
+
+      throw new Error("Failed to post payroll headers");
     }
+  }
 
   async revertPayroll(
-      updatePayrollDto: UpdatePayrollHeaderDto,
-      userId: number,
-    ): Promise<any> {
-      try {
-        const payrollIds = updatePayrollDto.id;
-  
-        if (!payrollIds?.length) {
-          throw new BadRequestException(
-            "At least one Payroll Header ID is required.",
-          );
-        }
-  
-        const payrollHeaders = await this.payrollHeaderRepository.find({
-          where: {
-            id: In(payrollIds),
-          },
-          relations: ["status", "createdBy", "updatedBy"],
-        });
-  
-        const foundIds = payrollHeaders.map((payroll) => payroll.id);
-  
-        const missingIds = payrollIds.filter(
-          (payrollId) => !foundIds.includes(payrollId),
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollIds = updatePayrollDto.id;
+
+      if (!payrollIds?.length) {
+        throw new BadRequestException(
+          "At least one Payroll Header ID is required.",
         );
-  
-        if (missingIds.length > 0) {
-          throw new NotFoundException(
-            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
-          );
-        }
-  
-        const updatedPayrollHeaders =
+      }
+
+      const payrollHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(payrollIds),
+        },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      const foundIds = payrollHeaders.map((payroll) => payroll.id);
+
+      const missingIds = payrollIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
+      );
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
             // Update Payroll Headers
@@ -1524,7 +1532,42 @@ export class StaffPayrollService {
                 modified_at: new Date(),
               },
             );
-  
+
+            // Get schedule detail IDs from the selected payroll details
+            const payrollDetails = await transactionalEntityManager.find(
+              PayrollDetails,
+              {
+                where: {
+                  payroll_header_id: In(payrollIds),
+                },
+                select: ["schedule_detail_id"],
+              },
+            );
+
+            const scheduleDetailIds = [
+              ...new Set(
+                payrollDetails
+                  .map((detail) => detail.schedule_detail_id)
+                  .filter((id) => id != null),
+              ),
+            ];
+
+            // Reset attendance status to VALIDATED for the related schedule details
+            if (scheduleDetailIds.length > 0) {
+              await transactionalEntityManager.update(
+                ScheduleDetail,
+                {
+                  id: In(scheduleDetailIds),
+                },
+                {
+                  attendance_status_id: STATUS_IDS.VALIDATED,
+                  cron_computed: false,
+                  updated_by: userId,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
               {
@@ -1534,106 +1577,106 @@ export class StaffPayrollService {
                 relations: ["status", "createdBy", "updatedBy"],
               },
             );
-  
+
             return updatedHeaders;
           },
         );
-  
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "Staff Payroll Service",
-            method: "",
-            raw_data: JSON.stringify(updatedPayrollHeaders),
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "Staff Payroll Service",
+          method: "",
+          raw_data: JSON.stringify(updatedPayrollHeaders),
+          description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      const responses = updatedPayrollHeaders.map((schedule) =>
+        this.responseMapperService.mapEntityToResponse(schedule),
+      );
+
+      try {
+        for (const payroll of updatedPayrollHeaders) {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: payroll.id,
+            action_id: ACTION_IDS.REVERT,
             description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
-            status_id: 1,
-          },
-          userId,
-        );
-  
-        const responses = updatedPayrollHeaders.map((schedule) =>
-          this.responseMapperService.mapEntityToResponse(schedule),
-        );
-  
-        try {
-          for (const payroll of updatedPayrollHeaders) {
-            await this.actionLogsService.logAction({
-              module_name: this.module_name,
-              ref_id: payroll.id,
-              action_id: ACTION_IDS.REVERT,
-              description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
-              raw_data: JSON.stringify(payroll),
-              created_by: userId,
-            });
-          }
-        } catch (err) {
-          logger.error("Action log failed for Revert Payroll:", err);
+            raw_data: JSON.stringify(payroll),
+            created_by: userId,
+          });
         }
-  
-        for (const response of responses) {
-          try {
-            this.sseEventEmitter.emitUpdate(
-              "staff_attendance",
-              response.id,
-              response,
-            );
-            this.sseEventEmitter.emitUpdate(
-              "staff_payroll",
-              response.id,
-              response,
-            );
-          } catch (err) {
-            logger.error("SSE event failed:", err);
-          }
-        }
-  
-        return responses;
-      } catch (error) {
-        if (
-          error instanceof NotFoundException ||
-          error instanceof BadRequestException
-        ) {
-          throw error;
-        }
-  
-        logger.error("Failed to revert payroll headers:", error);
-  
-        throw new Error("Failed to revert payroll headers");
+      } catch (err) {
+        logger.error("Action log failed for Revert Payroll:", err);
       }
+
+      for (const response of responses) {
+        try {
+          this.sseEventEmitter.emitUpdate(
+            "staff_attendance",
+            response.id,
+            response,
+          );
+          this.sseEventEmitter.emitUpdate(
+            "staff_payroll",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to revert payroll headers:", error);
+
+      throw new Error("Failed to revert payroll headers");
     }
+  }
 
   async cancelPayroll(
-      updatePayrollDto: UpdatePayrollHeaderDto,
-      userId: number,
-    ): Promise<any> {
-      try {
-        const payrollIds = updatePayrollDto.id;
-  
-        if (!payrollIds?.length) {
-          throw new BadRequestException(
-            "At least one Payroll Header ID is required.",
-          );
-        }
-  
-        const payrollHeaders = await this.payrollHeaderRepository.find({
-          where: {
-            id: In(payrollIds),
-          },
-          relations: ["status", "createdBy", "updatedBy"],
-        });
-  
-        const foundIds = payrollHeaders.map((payroll) => payroll.id);
-  
-        const missingIds = payrollIds.filter(
-          (payrollId) => !foundIds.includes(payrollId),
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollIds = updatePayrollDto.id;
+
+      if (!payrollIds?.length) {
+        throw new BadRequestException(
+          "At least one Payroll Header ID is required.",
         );
-  
-        if (missingIds.length > 0) {
-          throw new NotFoundException(
-            `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
-          );
-        }
-  
-        const updatedPayrollHeaders =
+      }
+
+      const payrollHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(payrollIds),
+        },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      const foundIds = payrollHeaders.map((payroll) => payroll.id);
+
+      const missingIds = payrollIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
+      );
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
             // Update Payroll Headers
@@ -1649,7 +1692,42 @@ export class StaffPayrollService {
                 modified_at: new Date(),
               },
             );
-  
+
+                        // Get schedule detail IDs from the selected payroll details
+            const payrollDetails = await transactionalEntityManager.find(
+              PayrollDetails,
+              {
+                where: {
+                  payroll_header_id: In(payrollIds),
+                },
+                select: ["schedule_detail_id"],
+              },
+            );
+
+            const scheduleDetailIds = [
+              ...new Set(
+                payrollDetails
+                  .map((detail) => detail.schedule_detail_id)
+                  .filter((id) => id != null),
+              ),
+            ];
+
+            // Reset attendance status to VALIDATED for the related schedule details
+            if (scheduleDetailIds.length > 0) {
+              await transactionalEntityManager.update(
+                ScheduleDetail,
+                {
+                  id: In(scheduleDetailIds),
+                },
+                {
+                  attendance_status_id: STATUS_IDS.VALIDATED,
+                  cron_computed: false,
+                  updated_by: userId,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
               {
@@ -1659,78 +1737,77 @@ export class StaffPayrollService {
                 relations: ["status", "createdBy", "updatedBy"],
               },
             );
-  
+
             return updatedHeaders;
           },
         );
-  
-        await this.userAuditTrailCreateService.create(
-          {
-            service: "Staff Payroll Service",
-            method: "",
-            raw_data: JSON.stringify(updatedPayrollHeaders),
-            description: `Cancelled Payroll Remarks: ${updatePayrollDto.remarks}`,
-            status_id: 1,
-          },
-          userId,
-        );
-  
-        const responses = updatedPayrollHeaders.map((schedule) =>
-          this.responseMapperService.mapEntityToResponse(schedule),
-        );
-  
-        try {
-          for (const payroll of updatedPayrollHeaders) {
-            await this.actionLogsService.logAction({
-              module_name: this.module_name,
-              ref_id: payroll.id,
-              action_id: ACTION_IDS.CANCEL,
-              description: `Cancel Payroll Remarks: ${updatePayrollDto.remarks}`,
-              raw_data: JSON.stringify(payroll),
-              created_by: userId,
-            });
-          }
-        } catch (err) {
-          logger.error("Action log failed for cancel Payroll:", err);
-        }
-  
-        for (const response of responses) {
-          try {
-            this.sseEventEmitter.emitUpdate(
-              "staff_attendance",
-              response.id,
-              response,
-            );
-            this.sseEventEmitter.emitUpdate(
-              "staff_payroll",
-              response.id,
-              response,
-            );
-          } catch (err) {
-            logger.error("SSE event failed:", err);
-          }
-        }
-  
-        return responses;
-      } catch (error) {
-        if (
-          error instanceof NotFoundException ||
-          error instanceof BadRequestException
-        ) {
-          throw error;
-        }
-  
-        logger.error("Failed to cancel payroll headers:", error);
-  
-        throw new Error("Failed to cancel payroll headers");
-      }
-    }
 
-    async findOneHistory(ref_id: number) {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "Staff Payroll Service",
+          method: "",
+          raw_data: JSON.stringify(updatedPayrollHeaders),
+          description: `Cancelled Payroll Remarks: ${updatePayrollDto.remarks}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      const responses = updatedPayrollHeaders.map((schedule) =>
+        this.responseMapperService.mapEntityToResponse(schedule),
+      );
+
+      try {
+        for (const payroll of updatedPayrollHeaders) {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: payroll.id,
+            action_id: ACTION_IDS.CANCEL,
+            description: `Cancel Payroll Remarks: ${updatePayrollDto.remarks}`,
+            raw_data: JSON.stringify(payroll),
+            created_by: userId,
+          });
+        }
+      } catch (err) {
+        logger.error("Action log failed for cancel Payroll:", err);
+      }
+
+      for (const response of responses) {
+        try {
+          this.sseEventEmitter.emitUpdate(
+            "staff_attendance",
+            response.id,
+            response,
+          );
+          this.sseEventEmitter.emitUpdate(
+            "staff_payroll",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to cancel payroll headers:", error);
+
+      throw new Error("Failed to cancel payroll headers");
+    }
+  }
+
+  async findOneHistory(ref_id: number) {
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
-  
   async findPayrollHeaderDetails(
     payrollHeaderId?: number,
     accessKeyId?: number,
@@ -1786,92 +1863,82 @@ export class StaffPayrollService {
         night_shift: 0,
       };
     }
-  
+
     const start = dayjs(startTime);
     let end = dayjs(endTime);
-  
+
     if (!start.isValid() || !end.isValid()) {
       return {
         night_shift_hrs: "00:00:00",
         night_shift: 0,
       };
     }
-  
+
     if (!end.isAfter(start)) {
       end = end.add(1, "day");
     }
-  
+
     const scheduleDay = dayjs(scheduleDate).startOf("day");
-  
+
     // Night shift: 10:00 PM to 6:00 AM.
     const nightStartHour = 22;
     const nightEndHour = 6;
-  
+
     let totalSeconds = 0;
-  
+
     // Check night-shift windows across the dates covered by the duty.
     let currentDay = start.startOf("day").subtract(1, "day");
     const lastDay = end.startOf("day");
-  
-    while (
-      currentDay.isBefore(lastDay) ||
-      currentDay.isSame(lastDay, "day")
-    ) {
+
+    while (currentDay.isBefore(lastDay) || currentDay.isSame(lastDay, "day")) {
       const windowStart = currentDay
         .hour(nightStartHour)
         .minute(0)
         .second(0)
         .millisecond(0);
-  
+
       const windowEnd = currentDay
         .add(1, "day")
         .hour(nightEndHour)
         .minute(0)
         .second(0)
         .millisecond(0);
-  
+
       // Only count night hours belonging to the schedule date's
       // night window and the following morning.
       const nextMorning = scheduleDay.add(1, "day");
-  
+
       const isRelevantWindow =
         windowStart.isSame(scheduleDay, "day") ||
         windowStart.isSame(nextMorning, "day");
-  
+
       if (isRelevantWindow) {
-        const overlapStart = start.isAfter(windowStart)
-          ? start
-          : windowStart;
-  
-        const overlapEnd = end.isBefore(windowEnd)
-          ? end
-          : windowEnd;
-  
+        const overlapStart = start.isAfter(windowStart) ? start : windowStart;
+
+        const overlapEnd = end.isBefore(windowEnd) ? end : windowEnd;
+
         if (overlapEnd.isAfter(overlapStart)) {
           totalSeconds += overlapEnd.diff(overlapStart, "second");
         }
       }
-  
+
       currentDay = currentDay.add(1, "day");
     }
-  
+
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-  
+
     return {
       night_shift_hrs: [
         String(hours).padStart(2, "0"),
         String(minutes).padStart(2, "0"),
         String(seconds).padStart(2, "0"),
       ].join(":"),
-  
+
       night_shift: Number((totalSeconds / 3600).toFixed(2)),
     };
   }
-
-
-
 
   async generatePayrollReport(
     accessKeyId?: number,
@@ -2058,8 +2125,7 @@ export class StaffPayrollService {
         const totalDays = Number(detail.total_day_work ?? 0);
         const workingDayId = Number(detail.working_day_id ?? 0);
 
-        const periodStaffKey =
-          `${vendorId}-${warehouseId ?? "no-warehouse"}-${staffId ?? `no-staff-${detail.id}`}`;
+        const periodStaffKey = `${vendorId}-${warehouseId ?? "no-warehouse"}-${staffId ?? `no-staff-${detail.id}`}`;
 
         if (!periodWarehouseMap.has(periodStaffKey)) {
           periodWarehouseMap.set(periodStaffKey, {
@@ -2095,11 +2161,25 @@ export class StaffPayrollService {
         periodStaff.total_ot_hours += overtimeHours;
         periodStaff.total_number_of_days += totalDays;
 
-        if ([3, 5].includes(workingDayId)) {
+        if (
+          (
+            [
+              WORKING_DAY_IDS.SPECIAL_HOLIDAY,
+              WORKING_DAY_IDS.REST_DAY_SPECIAL_HOLIDAY,
+            ] as number[]
+          ).includes(workingDayId)
+        ) {
           periodStaff.total_special_holiday_hours += actualHours;
         }
 
-        if ([2, 4].includes(workingDayId)) {
+        if (
+          (
+            [
+              WORKING_DAY_IDS.REGULAR_HOLIDAY,
+              WORKING_DAY_IDS.REST_DAY_REGULAR_HOLIDAY,
+            ] as number[]
+          ).includes(workingDayId)
+        ) {
           periodStaff.total_regular_holiday_hours += actualHours;
         }
 
@@ -2181,17 +2261,30 @@ export class StaffPayrollService {
         const staffGroup = warehouseGroup._staffMap.get(staffKey);
         const budgethours = 24; // HARD-CODED BUDGET HOURS FOR NOW - For Sir Alj
 
-
         warehouseGroup.total_actual_hours += actualHours;
         warehouseGroup.total_hours += actualHours;
         warehouseGroup.total_number_of_days += totalDays;
         warehouseGroup.total_ot_hours += overtimeHours;
 
-        if ([3, 5].includes(workingDayId)) {
+        if (
+          (
+            [
+              WORKING_DAY_IDS.SPECIAL_HOLIDAY,
+              WORKING_DAY_IDS.REST_DAY_SPECIAL_HOLIDAY,
+            ] as number[]
+          ).includes(workingDayId)
+        ) {
           warehouseGroup.total_special_holiday_hours += actualHours;
         }
 
-        if ([2, 4].includes(workingDayId)) {
+        if (
+          (
+            [
+              WORKING_DAY_IDS.REGULAR_HOLIDAY,
+              WORKING_DAY_IDS.REST_DAY_REGULAR_HOLIDAY,
+            ] as number[]
+          ).includes(workingDayId)
+        ) {
           warehouseGroup.total_regular_holiday_hours += actualHours;
         }
 
@@ -2254,8 +2347,12 @@ export class StaffPayrollService {
           ot_rest_day_amount: round2(detail.ot_rest_day_amount),
           ot_special_holiday_amount: round2(detail.ot_special_holiday_amount),
           ot_regular_holiday_amount: round2(detail.ot_regular_holiday_amount),
-          ot_rd_regular_holiday_amount: round2(detail.ot_rd_regular_holiday_amount),
-          ot_rd_special_holiday_amount: round2(detail.ot_rd_special_holiday_amount),
+          ot_rd_regular_holiday_amount: round2(
+            detail.ot_rd_regular_holiday_amount,
+          ),
+          ot_rd_special_holiday_amount: round2(
+            detail.ot_rd_special_holiday_amount,
+          ),
 
           salary_rate: round2(detail.salary_rate),
           hour_rate: round2(detail.hour_rate),
@@ -2310,8 +2407,7 @@ export class StaffPayrollService {
         periodStaff.total_lates = round2(
           Math.max(
             0,
-            8 * periodStaff.total_number_of_days -
-              periodStaff.total_hours,
+            8 * periodStaff.total_number_of_days - periodStaff.total_hours,
           ),
         );
       }
@@ -2321,46 +2417,44 @@ export class StaffPayrollService {
       const vendors = Array.from(vendorMap.values()).map((vendorGroup) => {
         const dates = Array.from(vendorGroup._dateMap.values()).map(
           (dateGroup: any) => {
-            const warehouses = Array.from(
-              dateGroup._warehouseMap.values(),
-            ).map((warehouseGroup: any) => {
-              warehouseGroup.staff = Array.from(
-                warehouseGroup._staffMap.values(),
-              );
+            const warehouses = Array.from(dateGroup._warehouseMap.values()).map(
+              (warehouseGroup: any) => {
+                warehouseGroup.staff = Array.from(
+                  warehouseGroup._staffMap.values(),
+                );
 
-              warehouseGroup.total_actual_hours = round2(
-                warehouseGroup.total_actual_hours,
-              );
-              warehouseGroup.total_hours = round2(
-                warehouseGroup.total_hours,
-              );
-              warehouseGroup.total_number_of_days = round2(
-                warehouseGroup.total_number_of_days,
-              );
-              warehouseGroup.total_ot_hours = round2(
-                warehouseGroup.total_ot_hours,
-              );
-              warehouseGroup.total_special_holiday_hours = round2(
-                warehouseGroup.total_special_holiday_hours,
-              );
-              warehouseGroup.total_regular_holiday_hours = round2(
-                warehouseGroup.total_regular_holiday_hours,
-              );
-              warehouseGroup.total_lates = round2(
-                Math.max(
-                  0,
-                  8 * warehouseGroup.total_number_of_days -
-                    warehouseGroup.total_hours,
-                ),
-              );
-              warehouseGroup.budget_hours = round2(
-                warehouseGroup.budget_hours,
-              );
+                warehouseGroup.total_actual_hours = round2(
+                  warehouseGroup.total_actual_hours,
+                );
+                warehouseGroup.total_hours = round2(warehouseGroup.total_hours);
+                warehouseGroup.total_number_of_days = round2(
+                  warehouseGroup.total_number_of_days,
+                );
+                warehouseGroup.total_ot_hours = round2(
+                  warehouseGroup.total_ot_hours,
+                );
+                warehouseGroup.total_special_holiday_hours = round2(
+                  warehouseGroup.total_special_holiday_hours,
+                );
+                warehouseGroup.total_regular_holiday_hours = round2(
+                  warehouseGroup.total_regular_holiday_hours,
+                );
+                warehouseGroup.total_lates = round2(
+                  Math.max(
+                    0,
+                    8 * warehouseGroup.total_number_of_days -
+                      warehouseGroup.total_hours,
+                  ),
+                );
+                warehouseGroup.budget_hours = round2(
+                  warehouseGroup.budget_hours,
+                );
 
-              delete warehouseGroup._staffMap;
+                delete warehouseGroup._staffMap;
 
-              return warehouseGroup;
-            });
+                return warehouseGroup;
+              },
+            );
 
             dateGroup.warehouses = warehouses;
             delete dateGroup._warehouseMap;
@@ -2405,13 +2499,13 @@ export class StaffPayrollService {
     );
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'SWP Payroll System';
+    workbook.creator = "SWP Payroll System";
     workbook.created = new Date();
 
     const vendors = reportData?.vendors || [];
     if (vendors.length === 0) {
-      const ws = workbook.addWorksheet('No Data');
-      ws.addRow(['No payroll data found for the selected criteria.']);
+      const ws = workbook.addWorksheet("No Data");
+      ws.addRow(["No payroll data found for the selected criteria."]);
       return workbook;
     }
 
@@ -2422,7 +2516,8 @@ export class StaffPayrollService {
         if (d.schedule_date) {
           dateMap.set(
             d.schedule_date,
-            d.schedule_day || dayjs(d.schedule_date).format('dddd').toUpperCase(),
+            d.schedule_day ||
+              dayjs(d.schedule_date).format("dddd").toUpperCase(),
           );
         }
       });
@@ -2459,7 +2554,9 @@ export class StaffPayrollService {
           }
 
           wh.staff?.forEach((st: any) => {
-            let existingStaff = targetWh.staff.find((s: any) => s.staff_id === st.staff_id);
+            let existingStaff = targetWh.staff.find(
+              (s: any) => s.staff_id === st.staff_id,
+            );
             if (!existingStaff) {
               existingStaff = {
                 staff_id: st.staff_id,
@@ -2480,9 +2577,11 @@ export class StaffPayrollService {
 
       // 3. Render worksheets
       warehouseMap.forEach((warehouse: any) => {
-        const cleanSheetName = (warehouse.warehouse_code || `Store_${warehouse.warehouse_id}`)
+        const cleanSheetName = (
+          warehouse.warehouse_code || `Store_${warehouse.warehouse_id}`
+        )
           .substring(0, 31)
-          .replace(/[\\/?*[\]]/g, '');
+          .replace(/[\\/?*[\]]/g, "");
 
         const ws = workbook.addWorksheet(cleanSheetName, {
           views: [{ showGridLines: true }],
@@ -2515,88 +2614,304 @@ export class StaffPayrollService {
 
         // --- ROW 1: TITLE ---
         ws.mergeCells(1, 5, 1, 7);
-        setCell(1, 5, 'SWP PAYROLL REPORT', { name: 'Arial', size: 14, bold: true }, { horizontal: 'center', vertical: 'middle' }, undefined, false);
+        setCell(
+          1,
+          5,
+          "SWP PAYROLL REPORT",
+          { name: "Arial", size: 14, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          undefined,
+          false,
+        );
 
         // --- ROWS 3-5: METADATA 1 ---
-        const fromStr = `FROM : ${dayjs(dateFrom).format('MMMM DD, YYYY').toUpperCase()}`;
-        const toStr = `TO: ${dayjs(dateTo).format('MMMM DD, YYYY').toUpperCase()}`;
+        const fromStr = `FROM : ${dayjs(dateFrom).format("MMMM DD, YYYY").toUpperCase()}`;
+        const toStr = `TO: ${dayjs(dateTo).format("MMMM DD, YYYY").toUpperCase()}`;
 
-        setCell(3, 1, 'PERIOD COVERED:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(3, 2, fromStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(3, 3, toStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          3,
+          1,
+          "PERIOD COVERED:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          3,
+          2,
+          fromStr,
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          3,
+          3,
+          toStr,
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
 
-        setCell(4, 1, 'AGENCY & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(4, 2, String(vendor.vendor_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(4, 3, String(vendor.vendor_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          4,
+          1,
+          "AGENCY & CODE:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          4,
+          2,
+          String(vendor.vendor_code || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          4,
+          3,
+          String(vendor.vendor_name || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
 
-        setCell(5, 1, 'SHIP TO & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(5, 2, String(warehouse.warehouse_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(5, 3, String(warehouse.warehouse_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          5,
+          1,
+          "SHIP TO & CODE:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          5,
+          2,
+          String(warehouse.warehouse_code || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          5,
+          3,
+          String(warehouse.warehouse_name || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
 
         // --- ROWS 7-9: TABLE 1 HEADERS ---
         const rH1 = 7;
         const rH2 = 8;
         const rH3 = 9;
 
-        setCell(rH1, 2, 'EMPLOYEE NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH2, 2, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH3, 2, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+        setCell(
+          rH1,
+          2,
+          "EMPLOYEE NAME:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(
+          rH2,
+          2,
+          "ID NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(
+          rH3,
+          2,
+          "DWS NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
 
-        setCell(rH1, 1, '', undefined, undefined, S_CYAN_FILL);
-        setCell(rH2, 1, '', undefined, undefined, S_CYAN_FILL);
-        setCell(rH3, 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(rH1, 1, "", undefined, undefined, S_CYAN_FILL);
+        setCell(rH2, 1, "", undefined, undefined, S_CYAN_FILL);
+        setCell(rH3, 1, "", undefined, undefined, S_CYAN_FILL);
 
         for (let i = 0; i < numStaffCols; i++) {
           const col = 3 + i;
           const st = staffList[i];
-          setCell(rH1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rH2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rH3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(
+            rH1,
+            col,
+            st ? st.staff_name : `DISER ${i + 1}`,
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rH2,
+            col,
+            st ? st.old_dws_code : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rH3,
+            col,
+            st ? st.contact_number || "--" : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
         }
 
-        setCell(rH1, cTotHours + 1, 'TOTAL ACTUAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH2, cTotHours + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rH1,
+          cTotHours + 1,
+          "TOTAL ACTUAL STAFFING",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(
+          rH2,
+          cTotHours + 1,
+          "HOURS",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(rH3, cTotHours + 1, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rH1, cTotHours + 1, rH2, cTotHours + 1);
 
-        setCell(rH1, cBudget + 1, 'BUDGET TOTAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH2, cBudget + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH3, cBudget + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rH1,
+          cBudget + 1,
+          "BUDGET TOTAL STAFFING",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(
+          rH2,
+          cBudget + 1,
+          "HOURS",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(rH3, cBudget + 1, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rH1, cBudget + 1, rH2, cBudget + 1);
 
-        setCell(rH1, cTotStaff + 1, 'TOTAL', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rH2, cTotStaff + 1, '', undefined, undefined, S_CYAN_FILL);
-        setCell(rH3, cTotStaff + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rH1,
+          cTotStaff + 1,
+          "TOTAL",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(rH2, cTotStaff + 1, "", undefined, undefined, S_CYAN_FILL);
+        setCell(rH3, cTotStaff + 1, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rH1, cTotStaff + 1, rH3, cTotStaff + 1);
 
         // --- TABLE 1: SCHEDULE ROWS ---
         let curRow = 10;
         allDateKeys.forEach((dKey, dIdx) => {
-          setCell(curRow, 1, dIdx + 1, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
-          setCell(curRow, 2, dKey.day, { name: 'Arial', size: 8 }, { horizontal: 'left', vertical: 'middle' });
+          setCell(
+            curRow,
+            1,
+            dIdx + 1,
+            { name: "Arial", size: 8 },
+            { horizontal: "center", vertical: "middle" },
+          );
+          setCell(
+            curRow,
+            2,
+            dKey.day,
+            { name: "Arial", size: 8 },
+            { horizontal: "left", vertical: "middle" },
+          );
 
           for (let i = 0; i < numStaffCols; i++) {
             const col = 3 + i;
             const st = staffList[i];
-            const det = st?.details?.find((item: any) => item.schedule_date === dKey.date);
+            const det = st?.details?.find(
+              (item: any) => item.schedule_date === dKey.date,
+            );
 
             if (det && det.duty_start_time && det.duty_end_time) {
-              const tIn = dayjs(det.duty_start_time).format('h:mm A');
-              const tOut = dayjs(det.duty_end_time).format('h:mm A');
-              setCell(curRow, col, `${tIn}\n${tOut}`, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle', wrapText: true });
+              const tIn = dayjs(det.duty_start_time).format("h:mm A");
+              const tOut = dayjs(det.duty_end_time).format("h:mm A");
+              setCell(
+                curRow,
+                col,
+                `${tIn}\n${tOut}`,
+                { name: "Arial", size: 8 },
+                { horizontal: "center", vertical: "middle", wrapText: true },
+              );
             } else {
-              setCell(curRow, col, 'OFF', { name: 'Arial', size: 8, bold: true, color: { argb: 'FFFFFFFF' } }, { horizontal: 'center', vertical: 'middle' }, S_OFF_FILL);
+              setCell(
+                curRow,
+                col,
+                "OFF",
+                {
+                  name: "Arial",
+                  size: 8,
+                  bold: true,
+                  color: { argb: "FFFFFFFF" },
+                },
+                { horizontal: "center", vertical: "middle" },
+                S_OFF_FILL,
+              );
             }
           }
 
           const dateSummary = warehouse.dailySummaries?.get(dKey.date);
-          const actualHours = dateSummary?.total_actual_hours !== undefined ? fmtHours(dateSummary.total_actual_hours) : '-';
-          const staffCount = dateSummary?.total_staff_count !== undefined ? dateSummary.total_staff_count : 0;
-          const budgetHours = dateSummary?.total_budget_hours !== undefined ? dateSummary.total_budget_hours : 0;
+          const actualHours =
+            dateSummary?.total_actual_hours !== undefined
+              ? fmtHours(dateSummary.total_actual_hours)
+              : "-";
+          const staffCount =
+            dateSummary?.total_staff_count !== undefined
+              ? dateSummary.total_staff_count
+              : 0;
+          const budgetHours =
+            dateSummary?.total_budget_hours !== undefined
+              ? dateSummary.total_budget_hours
+              : 0;
 
-          setCell(curRow, cTotHours + 1, actualHours, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
-          setCell(curRow, cBudget + 1, budgetHours, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
-          setCell(curRow, cTotStaff + 1, staffCount, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+          setCell(
+            curRow,
+            cTotHours + 1,
+            actualHours,
+            { name: "Arial", size: 8 },
+            { horizontal: "right", vertical: "middle" },
+          );
+          setCell(
+            curRow,
+            cBudget + 1,
+            budgetHours,
+            { name: "Arial", size: 8 },
+            { horizontal: "right", vertical: "middle" },
+          );
+          setCell(
+            curRow,
+            cTotStaff + 1,
+            staffCount,
+            { name: "Arial", size: 8 },
+            { horizontal: "center", vertical: "middle" },
+          );
 
           curRow++;
         });
@@ -2604,26 +2919,98 @@ export class StaffPayrollService {
         // 3 Blank bordered rows
         for (let k = 0; k < 3; k++) {
           for (let c = 1; c <= totalCols; c++) {
-            setCell(curRow, c, '', undefined, undefined, undefined, true);
+            setCell(curRow, c, "", undefined, undefined, undefined, true);
           }
           curRow++;
         }
         curRow += 2; // Spacing
 
         // --- SECTION 2: METADATA 2 ---
-        setCell(curRow, 1, 'PERIOD COVERED:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 2, fromStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 3, toStr, { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          curRow,
+          1,
+          "PERIOD COVERED:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          2,
+          fromStr,
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          3,
+          toStr,
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
         curRow++;
 
-        setCell(curRow, 1, 'AGENCY & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 2, String(vendor.vendor_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 3, String(vendor.vendor_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          curRow,
+          1,
+          "AGENCY & CODE:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          2,
+          String(vendor.vendor_code || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          3,
+          String(vendor.vendor_name || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
         curRow++;
 
-        setCell(curRow, 1, 'SHIP TO & CODE:', { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 2, String(warehouse.warehouse_code || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
-        setCell(curRow, 3, String(warehouse.warehouse_name || ''), { name: 'Arial', size: 9, bold: true }, { vertical: 'middle' }, undefined, false);
+        setCell(
+          curRow,
+          1,
+          "SHIP TO & CODE:",
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          2,
+          String(warehouse.warehouse_code || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
+        setCell(
+          curRow,
+          3,
+          String(warehouse.warehouse_name || ""),
+          { name: "Arial", size: 9, bold: true },
+          { vertical: "middle" },
+          undefined,
+          false,
+        );
         curRow += 2;
 
         // --- TABLE 2: WORKING HOURS HEADERS ---
@@ -2631,61 +3018,155 @@ export class StaffPayrollService {
         const rT2_2 = curRow + 1;
         const rT2_3 = curRow + 2;
 
-        setCell(rT2_1, 1, 'DISER NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT2_1, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT2_1,
+          1,
+          "DISER NAME:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT2_1, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT2_1, 1, rT2_1, 2);
 
-        setCell(rT2_2, 1, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT2_2, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT2_2,
+          1,
+          "ID NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT2_2, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT2_2, 1, rT2_2, 2);
 
-        setCell(rT2_3, 1, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT2_3, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT2_3,
+          1,
+          "DWS NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT2_3, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT2_3, 1, rT2_3, 2);
 
         for (let i = 0; i < numStaffCols; i++) {
           const col = 3 + i;
           const st = staffList[i];
-          setCell(rT2_1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rT2_2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rT2_3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(
+            rT2_1,
+            col,
+            st ? st.staff_name : `DISER ${i + 1}`,
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rT2_2,
+            col,
+            st ? st.old_dws_code : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rT2_3,
+            col,
+            st ? st.contact_number || "--" : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
         }
 
-        setCell(rT2_1, cTotHours + 1, 'TOTAL ACTUAL STAFFING', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rT2_2, cTotHours + 1, 'HOURS', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-        setCell(rT2_3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT2_1,
+          cTotHours + 1,
+          "TOTAL ACTUAL STAFFING",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(
+          rT2_2,
+          cTotHours + 1,
+          "HOURS",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle", wrapText: true },
+          S_CYAN_FILL,
+        );
+        setCell(rT2_3, cTotHours + 1, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT2_1, cTotHours + 1, rT2_3, cTotHours + 1);
 
         curRow += 3;
 
         // Table 2 Days
         allDateKeys.forEach((dKey, dIdx) => {
-          setCell(curRow, 1, dIdx + 1, { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
-          setCell(curRow, 2, dKey.day, { name: 'Arial', size: 8 }, { horizontal: 'left', vertical: 'middle' });
+          setCell(
+            curRow,
+            1,
+            dIdx + 1,
+            { name: "Arial", size: 8 },
+            { horizontal: "center", vertical: "middle" },
+          );
+          setCell(
+            curRow,
+            2,
+            dKey.day,
+            { name: "Arial", size: 8 },
+            { horizontal: "left", vertical: "middle" },
+          );
 
           let dayTot = 0;
           for (let i = 0; i < numStaffCols; i++) {
             const col = 3 + i;
             const st = staffList[i];
-            const det = st?.details?.find((item: any) => item.schedule_date === dKey.date);
+            const det = st?.details?.find(
+              (item: any) => item.schedule_date === dKey.date,
+            );
             const hrs = parseNum(det?.regular);
 
             if (hrs > 0) {
-              setCell(curRow, col, hrs.toFixed(2), { name: 'Arial', size: 8 }, { horizontal: 'center', vertical: 'middle' });
+              setCell(
+                curRow,
+                col,
+                hrs.toFixed(2),
+                { name: "Arial", size: 8 },
+                { horizontal: "center", vertical: "middle" },
+              );
               dayTot += hrs;
             } else {
-              setCell(curRow, col, 'OFF', { name: 'Arial', size: 8, bold: true, color: { argb: 'FFFFFFFF' } }, { horizontal: 'center', vertical: 'middle' }, S_OFF_FILL);
+              setCell(
+                curRow,
+                col,
+                "OFF",
+                {
+                  name: "Arial",
+                  size: 8,
+                  bold: true,
+                  color: { argb: "FFFFFFFF" },
+                },
+                { horizontal: "center", vertical: "middle" },
+                S_OFF_FILL,
+              );
             }
           }
 
-          setCell(curRow, cTotHours + 1, fmtHours(dayTot), { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          setCell(
+            curRow,
+            cTotHours + 1,
+            fmtHours(dayTot),
+            { name: "Arial", size: 8 },
+            { horizontal: "right", vertical: "middle" },
+          );
           curRow++;
         });
 
         // 3 Blank rows
         for (let k = 0; k < 3; k++) {
           for (let c = 1; c <= cTotHours + 1; c++) {
-            setCell(curRow, c, '', undefined, undefined, undefined, true);
+            setCell(curRow, c, "", undefined, undefined, undefined, true);
           }
           curRow++;
         }
@@ -2693,30 +3174,85 @@ export class StaffPayrollService {
 
         // Table 2 Summaries
         const summaryRows = [
-          { label: 'TOTAL HOURS', field: 'regular', fmt: fmtHours },
-          { label: 'NUMBER OF DAYS', field: 'total_day_work', fmt: (val: any) => parseNum(val) === 0 ? '' : String(Math.round(parseNum(val))) },
-          { label: 'TOTAL OT HOURS', field: 'overtime', fmt: fmtHours, green: true },
-          { label: 'TOTAL SPH HOURS', field: 'special_holiday', fmt: fmtHours, green: true },
-          { label: 'TOTAL RH HOURS', field: 'regular_holiday', fmt: fmtHours, green: true },
-          { label: 'TOTAL LATES', field: 'break', fmt: fmtHours },
+          { label: "TOTAL HOURS", field: "regular", fmt: fmtHours },
+          {
+            label: "NUMBER OF DAYS",
+            field: "total_day_work",
+            fmt: (val: any) =>
+              parseNum(val) === 0 ? "" : String(Math.round(parseNum(val))),
+          },
+          {
+            label: "TOTAL OT HOURS",
+            field: "overtime",
+            fmt: fmtHours,
+            green: true,
+          },
+          {
+            label: "TOTAL SPH HOURS",
+            field: "special_holiday",
+            fmt: fmtHours,
+            green: true,
+          },
+          {
+            label: "TOTAL RH HOURS",
+            field: "regular_holiday",
+            fmt: fmtHours,
+            green: true,
+          },
+          { label: "TOTAL LATES", field: "break", fmt: fmtHours },
         ];
 
         summaryRows.forEach((s) => {
-          setCell(curRow, 1, s.label, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, s.green ? S_GREEN_FILL : undefined);
-          setCell(curRow, 2, '', undefined, undefined, s.green ? S_GREEN_FILL : undefined);
+          setCell(
+            curRow,
+            1,
+            s.label,
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle" },
+            s.green ? S_GREEN_FILL : undefined,
+          );
+          setCell(
+            curRow,
+            2,
+            "",
+            undefined,
+            undefined,
+            s.green ? S_GREEN_FILL : undefined,
+          );
           ws.mergeCells(curRow, 1, curRow, 2);
 
           let rowSum = 0;
           for (let i = 0; i < numStaffCols; i++) {
             const col = 3 + i;
             const st = staffList[i];
-            const sum = st?.details?.reduce((acc: number, item: any) => acc + parseNum(item[s.field]), 0) || 0;
-            const formattedVal = sum > 0 ? (s.field === 'total_day_work' ? String(Math.round(sum)) : sum.toFixed(2)) : '';
-            setCell(curRow, col, formattedVal, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+            const sum =
+              st?.details?.reduce(
+                (acc: number, item: any) => acc + parseNum(item[s.field]),
+                0,
+              ) || 0;
+            const formattedVal =
+              sum > 0
+                ? s.field === "total_day_work"
+                  ? String(Math.round(sum))
+                  : sum.toFixed(2)
+                : "";
+            setCell(
+              curRow,
+              col,
+              formattedVal,
+              { name: "Arial", size: 8 },
+              { horizontal: "right", vertical: "middle" },
+            );
             rowSum += sum;
           }
 
-          setCell(curRow, cTotHours + 1, s.fmt(rowSum), { name: 'Arial', size: 8, bold: true }, { horizontal: 'right', vertical: 'middle' });
+          setCell(
+            curRow,
+            cTotHours + 1,
+            s.fmt(rowSum),
+            { name: "Arial", size: 8, bold: true },
+            { horizontal: "right", vertical: "middle" },
+          );
           curRow++;
         });
         curRow++;
@@ -2726,37 +3262,90 @@ export class StaffPayrollService {
         const rT3_2 = curRow + 1;
         const rT3_3 = curRow + 2;
 
-        setCell(rT3_1, 1, 'DISER NAME:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT3_1, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT3_1,
+          1,
+          "DISER NAME:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT3_1, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT3_1, 1, rT3_1, 2);
 
-        setCell(rT3_2, 1, 'ID NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT3_2, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT3_2,
+          1,
+          "ID NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT3_2, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT3_2, 1, rT3_2, 2);
 
-        setCell(rT3_3, 1, 'DWS NO:', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT3_3, 2, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT3_3,
+          1,
+          "DWS NO:",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT3_3, 2, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT3_3, 1, rT3_3, 2);
 
         for (let i = 0; i < numStaffCols; i++) {
           const col = 3 + i;
           const st = staffList[i];
-          setCell(rT3_1, col, st ? st.staff_name : `DISER ${i + 1}`, { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rT3_2, col, st ? st.old_dws_code : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
-          setCell(rT3_3, col, st ? st.contact_number || '--' : '', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle', wrapText: true }, S_CYAN_FILL);
+          setCell(
+            rT3_1,
+            col,
+            st ? st.staff_name : `DISER ${i + 1}`,
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rT3_2,
+            col,
+            st ? st.old_dws_code : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
+          setCell(
+            rT3_3,
+            col,
+            st ? st.contact_number || "--" : "",
+            { name: "Arial", size: 8.5, bold: true },
+            { horizontal: "center", vertical: "middle", wrapText: true },
+            S_CYAN_FILL,
+          );
         }
 
-        setCell(rT3_1, cTotHours + 1, 'TOTAL', { name: 'Arial', size: 8.5, bold: true }, { horizontal: 'center', vertical: 'middle' }, S_CYAN_FILL);
-        setCell(rT3_2, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
-        setCell(rT3_3, cTotHours + 1, '', undefined, undefined, S_CYAN_FILL);
+        setCell(
+          rT3_1,
+          cTotHours + 1,
+          "TOTAL",
+          { name: "Arial", size: 8.5, bold: true },
+          { horizontal: "center", vertical: "middle" },
+          S_CYAN_FILL,
+        );
+        setCell(rT3_2, cTotHours + 1, "", undefined, undefined, S_CYAN_FILL);
+        setCell(rT3_3, cTotHours + 1, "", undefined, undefined, S_CYAN_FILL);
         ws.mergeCells(rT3_1, cTotHours + 1, rT3_3, cTotHours + 1);
 
         curRow += 3;
 
         // Rate Rows
         const staffSalaryRates: number[] = staffList.map((st: any) => {
-          const found = st.details?.find((d: any) => parseNum(d.salary_rate) > 0);
-          return parseNum(found ? found.salary_rate : st.details?.[0]?.salary_rate);
+          const found = st.details?.find(
+            (d: any) => parseNum(d.salary_rate) > 0,
+          );
+          return parseNum(
+            found ? found.salary_rate : st.details?.[0]?.salary_rate,
+          );
         });
 
         const staffHourRates: number[] = staffList.map((st: any) => {
@@ -2767,60 +3356,123 @@ export class StaffPayrollService {
         const nonZeroSalaryRates = staffSalaryRates.filter((r) => r > 0);
         const nonZeroHourRates = staffHourRates.filter((r) => r > 0);
 
-        const allSalarySame = nonZeroSalaryRates.length > 0 && nonZeroSalaryRates.every((r) => r === nonZeroSalaryRates[0]);
-        const allHourSame = nonZeroHourRates.length > 0 && nonZeroHourRates.every((r) => r === nonZeroHourRates[0]);
+        const allSalarySame =
+          nonZeroSalaryRates.length > 0 &&
+          nonZeroSalaryRates.every((r) => r === nonZeroSalaryRates[0]);
+        const allHourSame =
+          nonZeroHourRates.length > 0 &&
+          nonZeroHourRates.every((r) => r === nonZeroHourRates[0]);
 
         // Daily Rate
-        setCell(curRow, 1, 'DAILY RATE', { name: 'Arial', size: 8, bold: true }, { vertical: 'middle' });
-        setCell(curRow, 2, '', undefined, undefined);
+        setCell(
+          curRow,
+          1,
+          "DAILY RATE",
+          { name: "Arial", size: 8, bold: true },
+          { vertical: "middle" },
+        );
+        setCell(curRow, 2, "", undefined, undefined);
         ws.mergeCells(curRow, 1, curRow, 2);
 
         for (let i = 0; i < numStaffCols; i++) {
           const col = 3 + i;
-          const val = allSalarySame ? (i === 0 ? fmtMoney(nonZeroSalaryRates[0]) : '') : (staffSalaryRates[i] ? fmtMoney(staffSalaryRates[i]) : '-');
-          setCell(curRow, col, val, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          const val = allSalarySame
+            ? i === 0
+              ? fmtMoney(nonZeroSalaryRates[0])
+              : ""
+            : staffSalaryRates[i]
+              ? fmtMoney(staffSalaryRates[i])
+              : "-";
+          setCell(
+            curRow,
+            col,
+            val,
+            { name: "Arial", size: 8 },
+            { horizontal: "right", vertical: "middle" },
+          );
         }
-        setCell(curRow, cTotHours + 1, '', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        setCell(
+          curRow,
+          cTotHours + 1,
+          "",
+          { name: "Arial", size: 8 },
+          { horizontal: "right", vertical: "middle" },
+        );
         curRow++;
 
         // Hourly Rate
-        setCell(curRow, 1, 'HOURLY RATE', { name: 'Arial', size: 8, bold: true }, { vertical: 'middle' });
-        setCell(curRow, 2, '', undefined, undefined);
+        setCell(
+          curRow,
+          1,
+          "HOURLY RATE",
+          { name: "Arial", size: 8, bold: true },
+          { vertical: "middle" },
+        );
+        setCell(curRow, 2, "", undefined, undefined);
         ws.mergeCells(curRow, 1, curRow, 2);
 
         for (let i = 0; i < numStaffCols; i++) {
           const col = 3 + i;
-          const val = allHourSame ? (i === 0 ? fmtMoney(nonZeroHourRates[0]) : '') : (staffHourRates[i] ? fmtMoney(staffHourRates[i]) : '-');
-          setCell(curRow, col, val, { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+          const val = allHourSame
+            ? i === 0
+              ? fmtMoney(nonZeroHourRates[0])
+              : ""
+            : staffHourRates[i]
+              ? fmtMoney(staffHourRates[i])
+              : "-";
+          setCell(
+            curRow,
+            col,
+            val,
+            { name: "Arial", size: 8 },
+            { horizontal: "right", vertical: "middle" },
+          );
         }
-        setCell(curRow, cTotHours + 1, '', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' });
+        setCell(
+          curRow,
+          cTotHours + 1,
+          "",
+          { name: "Arial", size: 8 },
+          { horizontal: "right", vertical: "middle" },
+        );
         curRow++;
 
         // Billing Breakdown Rows
         const billingRows = [
-          { label: 'BASIC RATE', field: 'regular_amount' },
-          { label: '13th MONTH', field: 'thirteen_month_pay' },
-          { label: 'NET AMT-DISER', field: 'gross_pay', green: true },
-          { label: 'SSS-EC', field: 'sss_share' },
-          { label: 'EC-ER', field: 'ec_share' },
-          { label: 'PHIC', field: 'phil_health_share' },
-          { label: 'PAG-IBIG-ER', field: 'pag_ibig_share' },
-          { label: 'TOTAL GOVT CONTRI', field: 'total_govt_share' },
-          { label: 'TOTAL W/ GOVT CONTRI', field: 'total_payroll' },
-          { label: 'ASF', field: 'asf' },
-          { label: 'TOTAL W/ ASF', field: 'total_asf' },
-          { label: 'VAT', field: 'vat' },
-          { label: 'TOTAL W/ VAT', field: 'total_with_vat' },
-          { label: 'TAX', field: 'tax' },
-          { label: 'NET OF TAX', field: 'net_of_tax' },
-          { label: 'CASH BOND', field: 'cash_bond' },
-          { label: 'TOTAL BILLING', field: 'total_billing', yellow: true },
+          { label: "BASIC RATE", field: "regular_amount" },
+          { label: "13th MONTH", field: "thirteen_month_pay" },
+          { label: "NET AMT-DISER", field: "gross_pay", green: true },
+          { label: "SSS-EC", field: "sss_share" },
+          { label: "EC-ER", field: "ec_share" },
+          { label: "PHIC", field: "phil_health_share" },
+          { label: "PAG-IBIG-ER", field: "pag_ibig_share" },
+          { label: "TOTAL GOVT CONTRI", field: "total_govt_share" },
+          { label: "TOTAL W/ GOVT CONTRI", field: "total_payroll" },
+          { label: "ASF", field: "asf" },
+          { label: "TOTAL W/ ASF", field: "total_asf" },
+          { label: "VAT", field: "vat" },
+          { label: "TOTAL W/ VAT", field: "total_with_vat" },
+          { label: "TAX", field: "tax" },
+          { label: "NET OF TAX", field: "net_of_tax" },
+          { label: "CASH BOND", field: "cash_bond" },
+          { label: "TOTAL BILLING", field: "total_billing", yellow: true },
         ];
 
         billingRows.forEach((item) => {
-          const fill = item.yellow ? S_YELLOW_FILL : item.green ? S_GREEN_FILL : undefined;
-          setCell(curRow, 1, item.label, { name: 'Arial', size: 8.5, bold: true }, { vertical: 'middle' }, fill);
-          setCell(curRow, 2, '', undefined, undefined, fill);
+          const fill = item.yellow
+            ? S_YELLOW_FILL
+            : item.green
+              ? S_GREEN_FILL
+              : undefined;
+          setCell(
+            curRow,
+            1,
+            item.label,
+            { name: "Arial", size: 8.5, bold: true },
+            { vertical: "middle" },
+            fill,
+          );
+          setCell(curRow, 2, "", undefined, undefined, fill);
           ws.mergeCells(curRow, 1, curRow, 2);
 
           let rowSum = 0;
@@ -2828,15 +3480,40 @@ export class StaffPayrollService {
             const col = 3 + i;
             const st = staffList[i];
             if (!st) {
-              setCell(curRow, col, '-', { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' }, fill);
+              setCell(
+                curRow,
+                col,
+                "-",
+                { name: "Arial", size: 8 },
+                { horizontal: "right", vertical: "middle" },
+                fill,
+              );
               continue;
             }
-            const sum = st.details?.reduce((acc: number, d: any) => acc + parseNum(d[item.field]), 0) || 0;
-            setCell(curRow, col, fmtMoney(sum), { name: 'Arial', size: 8 }, { horizontal: 'right', vertical: 'middle' }, fill);
+            const sum =
+              st.details?.reduce(
+                (acc: number, d: any) => acc + parseNum(d[item.field]),
+                0,
+              ) || 0;
+            setCell(
+              curRow,
+              col,
+              fmtMoney(sum),
+              { name: "Arial", size: 8 },
+              { horizontal: "right", vertical: "middle" },
+              fill,
+            );
             rowSum += sum;
           }
 
-          setCell(curRow, cTotHours + 1, fmtMoney(rowSum), { name: 'Arial', size: 8, bold: true }, { horizontal: 'right', vertical: 'middle' }, fill);
+          setCell(
+            curRow,
+            cTotHours + 1,
+            fmtMoney(rowSum),
+            { name: "Arial", size: 8, bold: true },
+            { horizontal: "right", vertical: "middle" },
+            fill,
+          );
           curRow++;
         });
 
@@ -2845,9 +3522,9 @@ export class StaffPayrollService {
         setCell(
           curRow,
           1,
-          '** THIS IS A SYSTEM GENERATED REPORT **',
-          { name: 'Arial', size: 8.5, bold: true, color: { argb: 'FFFF0000' } },
-          { vertical: 'middle' },
+          "** THIS IS A SYSTEM GENERATED REPORT **",
+          { name: "Arial", size: 8.5, bold: true, color: { argb: "FFFF0000" } },
+          { vertical: "middle" },
           undefined,
           false,
         );
@@ -2866,5 +3543,4 @@ export class StaffPayrollService {
 
     return workbook;
   }
-
 }

@@ -36,7 +36,7 @@ import {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class StaffAttendanceController {
   constructor(
-    private readonly staffSchedulingService: StaffAttendanceService,
+    private readonly staffAttendanceService: StaffAttendanceService,
   ) {}
 
   @Get()
@@ -46,10 +46,9 @@ export class StaffAttendanceController {
       ? statusId.split(",").map(Number)
       : undefined;
     const accessKeyId = req?.user?.current_access_key;
-    return this.staffSchedulingService.findAll(parsedStatusId, accessKeyId);
+    return this.staffAttendanceService.findAll(parsedStatusId, accessKeyId);
   }
 
-  // Placed before :id to prevent collision
   @Get("details")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
   async findScheduleHeaderDetails(
@@ -61,9 +60,26 @@ export class StaffAttendanceController {
       ? Number(scheduleHeaderId)
       : undefined;
 
-    return this.staffSchedulingService.findScheduleHeaderDetails(
+    return this.staffAttendanceService.findScheduleHeaderDetails(
       parsedHeaderId,
       accessKeyId,
+    );
+  }
+
+  @Get("schedule-details")
+  @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
+  async findScheduleDetails(
+    @Query("attendance_status_id") attendanceStatusId?: string,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+        const parsedStatusId = attendanceStatusId
+      ? Number(attendanceStatusId)
+      : undefined;
+
+    return this.staffAttendanceService.findAllScheduleDetails(
+      accessKeyId,
+      parsedStatusId
     );
   }
 
@@ -71,13 +87,13 @@ export class StaffAttendanceController {
   @Get("history/:id")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
-    return this.staffSchedulingService.findOneHistory(id);
+    return this.staffAttendanceService.findOneHistory(id);
   }
 
   @Get(":id")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.staffSchedulingService.findOne(id);
+    return this.staffAttendanceService.findOne(id);
   }
 
   @Post()
@@ -88,7 +104,7 @@ export class StaffAttendanceController {
   ) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
-    return this.staffSchedulingService.create(
+    return this.staffAttendanceService.create(
       createScheduleHeader,
       userId,
       accessKeyId,
@@ -123,7 +139,7 @@ async uploadExcel(
   const userId = req.user.id;
   const accessKeyId = req.user.current_access_key;
 
-  return this.staffSchedulingService.uploadExcel(
+  return this.staffAttendanceService.uploadExcel(
     file,
     scheduleDate,
     userId,
@@ -138,7 +154,7 @@ async uploadExcel(
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffSchedulingService.postSchedule(
+    return this.staffAttendanceService.postSchedule(
       updateScheduleDto,
       userId,
     );
@@ -151,7 +167,7 @@ async uploadExcel(
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffSchedulingService.cancelSchedule(
+    return this.staffAttendanceService.cancelSchedule(
       updateScheduleDto,
       userId,
     );
@@ -164,7 +180,7 @@ async uploadExcel(
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffSchedulingService.revertSchedule(
+    return this.staffAttendanceService.revertSchedule(
       updateScheduleDto,
       userId,
     );
@@ -178,7 +194,7 @@ async uploadExcel(
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffSchedulingService.update(
+    return this.staffAttendanceService.update(
       id,
       updateScheduleDto,
       userId,

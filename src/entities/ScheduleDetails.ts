@@ -115,6 +115,9 @@ export class ScheduleDetail {
   @Column({ type: 'boolean', default: false })
   cron_computed: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  ot_clearing_approved: boolean;
+
   @Column({ nullable: true })
   created_by: number;
 

@@ -16,6 +16,10 @@ export class CreateActualLogsDetailDto {
   @IsString()
   staff_code: string;
 
+  @IsOptional()
+  @IsString()
+  dws_no?: string;
+
   @IsNotEmpty()
   @IsString()
   remarks: string;
