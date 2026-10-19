@@ -900,10 +900,7 @@ export class StaffPayrollService {
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
-        attendance_status_id: In([
-          STATUS_IDS.VALIDATED,
-          STATUS_IDS.FOR_REVIEW,
-        ]),
+        attendance_status_id: In([STATUS_IDS.VALIDATED, STATUS_IDS.FOR_REVIEW]),
         cron_computed: false,
       };
 
@@ -2023,7 +2020,7 @@ export class StaffPayrollService {
               },
             );
 
-                        // Get schedule detail IDs from the selected payroll details
+            // Get schedule detail IDs from the selected payroll details
             const payrollDetails = await transactionalEntityManager.find(
               PayrollDetails,
               {
@@ -2371,6 +2368,7 @@ export class StaffPayrollService {
         "payrollDetail.cash_bond",
         "payrollDetail.total_billing",
         "payrollDetail.ec",
+        "payrollDetail.trans_budget_hours",
         "staff.id",
         "staff.first_name",
         "staff.last_name",
@@ -2430,6 +2428,26 @@ export class StaffPayrollService {
 
       const details = await query.getMany();
 
+      // Budget hours from payroll_details.trans_budget_hours — deduped per warehouse+vendor+date.
+      const budgetHourByGroupMap = new Map<string, number>();
+      for (const d of details as any[]) {
+        const vid = (d.vendor as any)?.id ?? d.vendor_id;
+        const wid = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _sd = d.schedule_date as unknown as string | Date;
+        let dateIso = "";
+        if (_sd != null) {
+          if (typeof _sd === "string" && (_sd as string).length === 10)
+            dateIso = _sd as string;
+          else if (typeof _sd === "string")
+            dateIso = (_sd as string).split("T")[0];
+          else dateIso = formatDateToString(_sd as Date);
+        }
+        const key = `${vid}-${wid}-${dateIso}`;
+        if (!budgetHourByGroupMap.has(key) && d.trans_budget_hours != null) {
+          budgetHourByGroupMap.set(key, Number(d.trans_budget_hours));
+        }
+      }
+
       const vendorMap = new Map<number, any>();
       const periodWarehouseMap = new Map<string, any>();
 
@@ -2440,7 +2458,7 @@ export class StaffPayrollService {
         const vendorId = detail.vendor?.id ?? detail.vendor_id;
 
         const scheduleDate = detail.schedule_date
-          ? new Date(detail.schedule_date).toISOString().split("T")[0]
+          ? formatDateToString(new Date(detail.schedule_date as any))
           : null;
 
         const warehouseId = detail.warehouse?.id ?? detail.warehouse_id;
@@ -2589,7 +2607,9 @@ export class StaffPayrollService {
         }
 
         const staffGroup = warehouseGroup._staffMap.get(staffKey);
-        const budgethours = 24; // HARD-CODED BUDGET HOURS FOR NOW - For Sir Alj
+        const scheduleDateIso = scheduleDate ?? "";
+        const budgetHourKey = `${vendorId}-${warehouseId ?? ""}-${scheduleDateIso}`;
+        const budgethours = budgetHourByGroupMap.get(budgetHourKey) ?? 0;
 
         warehouseGroup.total_actual_hours += actualHours;
         warehouseGroup.total_hours += actualHours;
