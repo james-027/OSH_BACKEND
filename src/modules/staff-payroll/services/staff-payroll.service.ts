@@ -624,6 +624,279 @@ export class StaffPayrollService {
     }
   }
 
+  /**
+   * Re-computes payroll details for an existing payroll header.
+   * Soft-deactivates current payroll_details (status_id = 2) and creates fresh
+   * payroll_details based on the latest schedule details for the period.
+   */
+  async reComputePayroll(
+    payrollHeaderId: number,
+    accessKeyId: number,
+    userId: number,
+  ): Promise<any> {
+    try {
+      // ============================================================
+      // 1. FETCH AND VALIDATE EXISTING PAYROLL HEADER
+      // ============================================================
+
+      const existingHeader = await this.payrollHeaderRepository.findOne({
+        where: {
+          id: payrollHeaderId,
+          access_key_id: accessKeyId,
+        },
+        relations: ["details"],
+      });
+
+      if (!existingHeader) {
+        throw new NotFoundException(
+          `Payroll header with ID ${payrollHeaderId} not found.`,
+        );
+      }
+
+      // ============================================================
+      // 2. SOFT-DEACTIVATE CURRENT PAYROLL DETAILS (status_id = 2)
+      // ============================================================
+
+      await this.payrollDetailRepository.update(
+        {
+          payroll_header_id: payrollHeaderId,
+        },
+        {
+          status_id: STATUS_IDS.INACTIVE, // 2
+          updated_by: userId,
+        },
+      );
+
+      // ============================================================
+      // 3. RECONSTRUCT SCHEDULE FILTER FROM EXISTING HEADER
+      // ============================================================
+
+      const payrollDateFrom = existingHeader.payroll_date_from;
+      const payrollDateTo = existingHeader.payroll_date_to;
+
+      // Extract unique vendor and location IDs from active or existing details
+      const vendorIds = [
+        ...new Set(
+          existingHeader.details
+            ?.map((d) => d.vendor_id)
+            .filter((id): id is number => id !== null && id !== undefined),
+        ),
+      ];
+
+      const locationIds = [
+        ...new Set(
+          existingHeader.details
+            ?.map((d) => d.location_id)
+            .filter((id): id is number => id !== null && id !== undefined),
+        ),
+      ];
+
+      const where: any = {
+        scheduleHeader: {
+          access_key_id: accessKeyId,
+          schedule_date: Between(payrollDateFrom, payrollDateTo),
+        },
+        attendance_status_id: STATUS_IDS.VALIDATED,
+        cron_computed: true,
+      };
+
+      if (locationIds.length > 0) {
+        where.location_id = In(locationIds);
+      }
+
+      if (vendorIds.length > 0) {
+        where.vendor_id = In(vendorIds);
+      }
+
+      // ============================================================
+      // 4. RE-FETCH VALIDATED SCHEDULE DETAILS
+      // ============================================================
+
+      const scheduleDetails = await this.scheduleDetailRepository.find({
+        where,
+        relations: [
+          "scheduleHeader",
+          "staff",
+          "warehouse",
+          "vendor",
+          "location",
+          "workingDays",
+          "actualLogsDetail",
+        ],
+      });
+
+      if (!scheduleDetails.length) {
+        return {
+          message:
+            "No validated and computed schedule details found for re-computation.",
+          data: null,
+        };
+      }
+
+      // ============================================================
+      // 5. FETCH BUDGET HOURS & CREATE NEW PAYROLL DETAILS
+      // ============================================================
+      const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
+
+      const budgetHourMap =
+        await this.warehouseBudgetHoursService.getBudgetHoursMap(
+          budgetHourParams,
+        );
+
+      const newPayrollDetails = scheduleDetails.map((scheduleDetail) => {
+        const scheduleDateIso = scheduleDetail.scheduleHeader?.schedule_date;
+        const budgetHourKey = `${scheduleDetail.vendor_id}-${scheduleDetail.warehouse_id ?? ""}-${scheduleDateIso ?? ""}`;
+        const budgetRow = budgetHourMap.get(budgetHourKey);
+        const budgethours = budgetRow ? Number(budgetRow.budget_hours) : 0;
+
+        return this.payrollDetailRepository.create({
+          payroll_header_id: existingHeader.id,
+          schedule_detail_id: scheduleDetail.id,
+          staff_id: scheduleDetail.staff_id,
+          staff_code: scheduleDetail.staff?.staff_code || "",
+          vendor_id: scheduleDetail.vendor_id,
+          location_id: scheduleDetail.location_id,
+          warehouse_id: scheduleDetail.warehouse_id,
+          warehouse_ifs: scheduleDetail.warehouse?.warehouse_ifs || "",
+          duty_start_time: scheduleDetail.duty_start_time,
+          duty_end_time: scheduleDetail.duty_end_time,
+          planned_duty_start_time: scheduleDetail.planned_duty_start_time,
+          planned_duty_end_time: scheduleDetail.planned_duty_end_time,
+          schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
+          just_time_in: scheduleDetail.just_time_in,
+          overtime_in: scheduleDetail.overtime_in,
+          overtime_out: scheduleDetail.overtime_out,
+          just_time_out: scheduleDetail.just_time_out,
+          just_break_out: scheduleDetail.just_break_out,
+          just_break_in: scheduleDetail.just_break_in,
+          actual_time_in: scheduleDetail.actualLogsDetail?.time_in,
+          actual_time_out: scheduleDetail.actualLogsDetail?.time_out,
+          actual_break_in: scheduleDetail.actualLogsDetail?.break_in,
+          actual_break_out: scheduleDetail.actualLogsDetail?.break_out,
+          add_ot: scheduleDetail.add_ot,
+          working_day_id: scheduleDetail.working_day_id,
+          status_id: STATUS_IDS.ACTIVE, // 1
+          attendance_status_id: scheduleDetail.attendance_status_id,
+          just_remarks: scheduleDetail.just_remarks,
+          regular: scheduleDetail.regular,
+          overtime: scheduleDetail.overtime,
+          twh: scheduleDetail.twh,
+          break: scheduleDetail.break,
+          night_shift_hrs: scheduleDetail.night_shift_hrs,
+          night_shift: scheduleDetail.night_shift,
+          payroll_remarks: scheduleDetail.payroll_remarks,
+          regular_hours: scheduleDetail.regular_hours,
+          overtime_hours: scheduleDetail.overtime_hours,
+          twh_hours: scheduleDetail.twh_hours,
+          break_hours: scheduleDetail.break_hours,
+          created_by: userId,
+          trans_budget_hours: budgethours,
+        });
+      });
+
+      await this.payrollDetailRepository.save(newPayrollDetails);
+
+      // ============================================================
+      // 6. UPDATE AUDIT FIELDS ON SCHEDULE HEADERS
+      // ============================================================
+
+      const scheduleHeaderIds = [
+        ...new Set(
+          scheduleDetails
+            .map((detail) => detail.scheduleHeader?.id)
+            .filter((id): id is number => id !== undefined && id !== null),
+        ),
+      ];
+
+      if (scheduleHeaderIds.length > 0) {
+        await this.scheduleHeaderRepository.update(
+          {
+            id: In(scheduleHeaderIds),
+          },
+          {
+            payroll_ts: new Date(),
+            payroll_updated_by: userId,
+          },
+        );
+      }
+
+      // ============================================================
+      // 7. AUDIT TRAIL, ACTION LOGS & RESPONSE MAPPER
+      // ============================================================
+
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "StaffPayrollService",
+          method: "reComputePayroll",
+          raw_data: JSON.stringify({ payrollHeaderId }),
+          description: `Re-computed payroll ${existingHeader.payroll_invoice}`,
+          status_id: 1,
+        },
+        userId,
+      );
+
+      const updatedPayrollWithRelations =
+        await this.payrollHeaderRepository.findOne({
+          where: {
+            id: existingHeader.id,
+          },
+          relations: [
+            "status",
+            "createdBy",
+            "updatedBy",
+            "details",
+            "details.staff",
+            "details.vendor",
+            "details.location",
+            "details.warehouse",
+            "details.status",
+          ],
+        });
+
+      if (!updatedPayrollWithRelations) {
+        throw new Error("Failed to retrieve re-computed staff payroll");
+      }
+
+      try {
+        await this.actionLogsService.logAction({
+          module_name: this.module_name,
+          ref_id: existingHeader.id,
+          action_id: ACTION_IDS.EDIT,
+          description: `Re-computed Payroll ${existingHeader.payroll_invoice}`,
+          raw_data: JSON.stringify({
+            payrollHeaderId,
+            newDetailsCount: newPayrollDetails.length,
+          }),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for Re-compute Staff payroll:", err);
+      }
+
+      const response = this.responseMapperService.mapEntityToResponse(
+        updatedPayrollWithRelations,
+      );
+
+      // Trigger real-time updates
+      try {
+        this.sseEventEmitter.emitUpdate("staff_payroll", response.id, response);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return {
+        message: "Payroll re-computed successfully.",
+        data: response,
+      };
+    } catch (error) {
+      console.error("Error re-computing payroll:", error);
+
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to re-compute payroll",
+      );
+    }
+  }
+
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
