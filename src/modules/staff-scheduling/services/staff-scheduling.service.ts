@@ -812,7 +812,9 @@ export class StaffSchedulingService {
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
-                    attendance_status_id: STATUS_IDS.FOR_REVIEW,
+                    attendance_status_id: isAutoEnrollSchedule
+                      ? STATUS_IDS.FOR_REVIEW
+                      : STATUS_IDS.PENDING,
                     access_key_id: accessKeyId,
                     // ==========================================
                     // DWS ACTUAL TIME DATA
@@ -831,6 +833,15 @@ export class StaffSchedulingService {
                     // }),
                     created_by: userId,
                     updated_by: userId,
+                    overtime_in: detail.overtime_in
+                      ? new Date(detail.overtime_in).toISOString()
+                      : undefined,
+
+                    overtime_out: detail.overtime_out
+                      ? new Date(detail.overtime_out).toISOString()
+                      : undefined,
+                    ot_clearing_approved:
+                      detail.overtime_in && detail.overtime_out ? true : false,
                   },
                 );
 
@@ -3395,6 +3406,8 @@ export class StaffSchedulingService {
             // Recompute schedule detail after DWS data changes.
             existingDetail.cron_computed = false;
             existingDetail.updated_by = userId;
+            existingDetail.ot_clearing_approved =
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false;
 
             await this.scheduleDetailRepository.save(existingDetail);
 
@@ -3473,6 +3486,8 @@ export class StaffSchedulingService {
 
             created_by: userId,
             updated_by: userId,
+            ot_clearing_approved:
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false,
           });
 
           const savedScheduleDetail =
