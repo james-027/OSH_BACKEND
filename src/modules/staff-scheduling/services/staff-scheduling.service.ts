@@ -113,6 +113,7 @@ export class StaffSchedulingService {
           "updatedBy",
           "details",
           "details.location",
+          "details.vendor",
         ],
       });
 
@@ -128,6 +129,7 @@ export class StaffSchedulingService {
           ...mappedHeader,
 
           location_name: firstDetail?.location?.location_name ?? null,
+          vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
         };
       });
     } catch (error) {
