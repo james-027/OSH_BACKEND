@@ -592,7 +592,14 @@ export class StaffsService {
   private safeDate = (value: any) => {
     if (!value || value === "") return null;
 
-    const date = new Date(value);
+    // If value is a string formatted as 'YYYY-MM-DD' without time,
+    // append 'T00:00:00' to force local timezone parsing instead of UTC.
+    let dateInput = value;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      dateInput = `${value.trim()}T00:00:00`;
+    }
+
+    const date = new Date(dateInput);
 
     if (isNaN(date.getTime())) {
       throw new BadRequestException(`Invalid date: ${value}`);
