@@ -146,10 +146,15 @@ export class StaffPayrollService {
 
       const payrollHeaders = await this.payrollHeaderRepository.find({
         where,
-        relations: ["status", "createdBy", "updatedBy"],
+        relations: ["status", "createdBy", "updatedBy", "details"],
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(payrollHeaders);
+      const headersWithCount = payrollHeaders.map((header) => ({
+        ...header,
+        no_of_entries: header.details ? header.details.length : 0,
+      }));
+
+      return this.responseMapperService.mapEntitiesToResponse(headersWithCount);
     } catch (error) {
       console.error("Error fetching payroll header:", error);
 
