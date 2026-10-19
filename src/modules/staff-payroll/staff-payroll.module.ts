@@ -27,6 +27,7 @@ import { StaffSalary } from "src/entities/StaffSalary";
 import { ActionsModule } from "../actions/actions.module";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { WarehousesModule } from "../warehouses/warehouses.module";
 
 
 
@@ -53,6 +54,7 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
     UsersModule,
     SSEModule,
     ActionsModule,
+    WarehousesModule,
 
   ],
   controllers: [StaffPayrollController],
