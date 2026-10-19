@@ -122,6 +122,7 @@ export class StaffAttendanceService {
           "details",
           "details.location",
           "details.attendanceStatus",
+          "details.vendor",
         ],
       });
 
@@ -130,17 +131,16 @@ export class StaffAttendanceService {
           ? scheduleHeaders
               .map((header) => ({
                 ...header,
-                details: header.details?.filter((detail) =>
-                  statusId.includes(detail.attendance_status_id),
-                ) ?? [],
+                details:
+                  header.details?.filter((detail) =>
+                    statusId.includes(detail.attendance_status_id),
+                  ) ?? [],
               }))
               .filter((header) => header.details.length > 0)
           : scheduleHeaders;
 
       const mappedHeaders =
-        this.responseMapperService.mapEntitiesToResponse(
-          filteredHeaders,
-        );
+        this.responseMapperService.mapEntitiesToResponse(filteredHeaders);
 
       return mappedHeaders.map((mappedHeader, index) => {
         const originalHeader = filteredHeaders[index];
@@ -152,8 +152,9 @@ export class StaffAttendanceService {
         return {
           ...mappedHeader,
           entry_no: detailCount,
-          attendance_status_id: firstDetail?.attendance_status_id ,
+          attendance_status_id: firstDetail?.attendance_status_id,
           location_name: firstDetail?.location?.location_name ?? null,
+          vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
           status_name: firstDetail?.attendanceStatus?.status_name ?? null,
         };
       });
@@ -210,11 +211,8 @@ export class StaffAttendanceService {
     statusId?: number,
   ): Promise<any[]> {
     try {
-
       const where: any = {
-        attendance_status_id: In([
-          statusId
-        ]),
+        attendance_status_id: In([statusId]),
       };
 
       if (accessKeyId !== undefined) {
@@ -235,7 +233,6 @@ export class StaffAttendanceService {
           "createdBy",
           "updatedBy",
           "actualLogsDetail",
-
         ],
         order: {
           overtime: "DESC",
@@ -246,9 +243,7 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(
-        scheduleDetail,
-      );
+      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");
@@ -709,7 +704,6 @@ export class StaffAttendanceService {
     }
   }
 
-
   async update(
     id: number,
     updateScheduleDto: UpdateScheduleHeaderDto,
@@ -757,9 +751,7 @@ export class StaffAttendanceService {
         });
 
         if (existingScheduleDetails.length !== scheduleDetailIds.length) {
-          const foundIds = existingScheduleDetails.map(
-            (detail) => detail.id,
-          );
+          const foundIds = existingScheduleDetails.map((detail) => detail.id);
 
           const invalidIds = scheduleDetailIds.filter(
             (detailId) => !foundIds.includes(detailId),
@@ -811,8 +803,7 @@ export class StaffAttendanceService {
                 })
               : null;
 
-            scheduleDetail.overtime_in =
-              actualLogsDetail?.overtime_in ?? null;
+            scheduleDetail.overtime_in = actualLogsDetail?.overtime_in ?? null;
 
             scheduleDetail.overtime_out =
               actualLogsDetail?.overtime_out ?? null;
@@ -841,9 +832,7 @@ export class StaffAttendanceService {
 
           // Update justification break in only when a non-null value is provided.
           if (updateDetail.just_break_in != null) {
-            scheduleDetail.just_break_in = new Date(
-              updateDetail.just_break_in,
-            );
+            scheduleDetail.just_break_in = new Date(updateDetail.just_break_in);
           }
 
           // Update justification time out only when a non-null value is provided.
@@ -871,8 +860,7 @@ export class StaffAttendanceService {
               timeOut.getTime() >= timeIn.getTime()
             ) {
               const totalMinutes = Math.round(
-                (timeOut.getTime() - timeIn.getTime()) /
-                  (1000 * 60),
+                (timeOut.getTime() - timeIn.getTime()) / (1000 * 60),
               );
 
               const breakOut = scheduleDetail.just_break_out
@@ -895,34 +883,22 @@ export class StaffAttendanceService {
               if (hasCompleteBreakLogs) {
                 // Use the actual break duration when both break logs exist.
                 breakMinutes = Math.round(
-                  (breakIn.getTime() - breakOut.getTime()) /
-                    (1000 * 60),
+                  (breakIn.getTime() - breakOut.getTime()) / (1000 * 60),
                 );
               } else {
                 // Otherwise, use the configured automatic break deduction.
                 breakMinutes = Math.max(fullDutyAutoBreak, 0);
               }
 
-              const workingMinutes = Math.max(
-                totalMinutes - breakMinutes,
-                0,
-              );
+              const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
 
               // First 8 hours are regular; the excess is overtime.
-              const regularMinutes = Math.min(
-                workingMinutes,
-                8 * 60,
-              );
+              const regularMinutes = Math.min(workingMinutes, 8 * 60);
 
-              const overtimeMinutes = Math.max(
-                workingMinutes - 8 * 60,
-                0,
-              );
+              const overtimeMinutes = Math.max(workingMinutes - 8 * 60, 0);
 
               // Decimal hour values.
-              scheduleDetail.regular = Number(
-                (regularMinutes / 60).toFixed(2),
-              );
+              scheduleDetail.regular = Number((regularMinutes / 60).toFixed(2));
 
               scheduleDetail.overtime = Number(
                 (overtimeMinutes / 60).toFixed(2),
@@ -938,11 +914,9 @@ export class StaffAttendanceService {
                 ).padStart(2, "0")}:00`;
               };
 
-              scheduleDetail.regular_hours =
-                formatHours(regularMinutes);
+              scheduleDetail.regular_hours = formatHours(regularMinutes);
 
-              scheduleDetail.overtime_hours =
-                formatHours(overtimeMinutes);
+              scheduleDetail.overtime_hours = formatHours(overtimeMinutes);
             }
           }
 
@@ -1048,7 +1022,6 @@ export class StaffAttendanceService {
       throw new Error("Failed to update staff attendance");
     }
   }
-
 
   async postSchedule(
     updateScheduleDto: UpdateScheduleHeaderDto,
