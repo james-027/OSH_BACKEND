@@ -34,6 +34,8 @@ import { PayrollComputationService } from "src/modules/staff-payroll/services/pa
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { formatDateToString } from "src/utils/date.utils";
+import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
@@ -119,6 +121,7 @@ export class StaffPayrollService {
     private sssConfigRepository: Repository<SssConfigs>,
     @InjectRepository(StaffVendorSalary)
     private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
+    private warehouseBudgetHoursService: WarehouseBudgetHoursService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -241,6 +244,40 @@ export class StaffPayrollService {
     }
   }
 
+  /**
+   * Extracts and formats parameter objects required by warehouseBudgetHoursService.getBudgetHoursMap().
+   * Centralizes vendor, warehouse, and date extraction to avoid redundant mapping logic.
+   */
+  private extractBudgetHourParams(scheduleDetails: any[]): Array<{
+    vendor_id: number;
+    warehouse_id: number;
+    date: string;
+  }> {
+    return scheduleDetails.map((d) => {
+      const vendorId = (d.vendor as any)?.id ?? (d as any).vendor_id;
+      const warehouseId = (d.warehouse as any)?.id ?? (d as any).warehouse_id;
+      const _dSd = d.scheduleHeader?.schedule_date as unknown as string | Date;
+
+      let dateIso: string | null = null;
+
+      if (_dSd != null) {
+        if (typeof _dSd === "string" && (_dSd as string).length === 10) {
+          dateIso = _dSd as string;
+        } else if (typeof _dSd === "string") {
+          dateIso = (_dSd as string).split("T")[0];
+        } else {
+          dateIso = formatDateToString(_dSd as Date);
+        }
+      }
+
+      return {
+        vendor_id: vendorId,
+        warehouse_id: warehouseId,
+        date: dateIso ?? "",
+      };
+    });
+  }
+
   async computePayroll(
     accessKeyId: number,
     createPayroll: CreatePayrollHeaderDto,
@@ -328,6 +365,16 @@ export class StaffPayrollService {
       }
 
       // ============================================================
+      // 3.1 FETCH BUDGET HOURS
+      // ============================================================
+      const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
+
+      const budgetHourMap =
+        await this.warehouseBudgetHoursService.getBudgetHoursMap(
+          budgetHourParams,
+        );
+
+      // ============================================================
       // 4. CREATE PAYROLL HEADER + PAYROLL DETAILS
       // ============================================================
 
@@ -379,6 +426,10 @@ export class StaffPayrollService {
         // ========================================================
 
         const payrollDetails = details.map((scheduleDetail) => {
+          const scheduleDateIso = scheduleDetail.scheduleHeader?.schedule_date;
+          const budgetHourKey = `${scheduleDetail.vendor_id}-${scheduleDetail.warehouse_id ?? ""}-${scheduleDateIso ?? ""}`;
+          const budgetRow = budgetHourMap.get(budgetHourKey);
+          const budgethours = budgetRow ? Number(budgetRow.budget_hours) : 0;
           return this.payrollDetailRepository.create({
             payroll_header_id: savedPayrollHeader.id,
 
@@ -408,8 +459,8 @@ export class StaffPayrollService {
 
             just_time_in: scheduleDetail.just_time_in,
 
-            overtime_in: scheduleDetail.actualLogsDetail?.overtime_in,
-            overtime_out: scheduleDetail.actualLogsDetail?.overtime_out,
+            overtime_in: scheduleDetail.overtime_in,
+            overtime_out: scheduleDetail.overtime_out,
             just_time_out: scheduleDetail.just_time_out,
             just_break_out: scheduleDetail.just_break_out,
             just_break_in: scheduleDetail.just_break_in,
@@ -445,6 +496,7 @@ export class StaffPayrollService {
             break_hours: scheduleDetail.break_hours,
 
             created_by: userId,
+            trans_budget_hours: budgethours,
           });
         });
 
