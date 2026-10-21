@@ -1822,9 +1822,12 @@ export class StaffPayrollService {
           : null;
 
         const salaryRate = Number(warehouseSalary?.salary) || 0;
+        const salaryRateEffectivity: Date | null = warehouseSalary?.date_from
+          ? dayjs(warehouseSalary.date_from).toDate()
+          : null;
 
         if (!salaryRate) {
-          const msg = `No warehouse salary found for warehouse = [${detail.warehouse_id} - ${detail.warehouse?.warehouse_ifs}], vendor_id = [${detail.vendor_id} - ${detail.vendor?.service_provider_code}], position = [${detail.staff?.position_id} - ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`;
+          const msg = `No store salary found for store = [(#${detail.warehouse_id}) ${detail.warehouse?.warehouse_ifs} - ${detail.warehouse?.warehouse_name}], vendor = [(#${detail.vendor_id}) ${detail.vendor?.service_provider_code} - ${detail.vendor?.service_provider_name}], position = [(#${detail.staff?.position_id}) ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`;
           logger.warn(`[PayrollComputation] ${msg}`);
 
           errorLogsMap.set(detail.id, {
@@ -1867,6 +1870,7 @@ export class StaffPayrollService {
               staffSalary,
               sssConfigs,
               timeKeeping,
+              salaryRateEffectivity,
             });
 
           if (!computedValues) {
@@ -2594,7 +2598,7 @@ export class StaffPayrollService {
             log.payrollDetail?.schedule_date ||
             parsedRowData?.schedule_date ||
             null,
-          payrollDetail: log.payrollDetail,
+          // payrollDetail: log.payrollDetail,
         };
       });
     } catch (error) {

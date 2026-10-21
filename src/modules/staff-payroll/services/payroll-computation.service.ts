@@ -23,6 +23,7 @@ export class PayrollComputationService {
     staffSalary,
     sssConfigs,
     timeKeeping,
+    salaryRateEffectivity,
   }: {
     detail: PayrollDetails;
     payrollHeader: PayrollHeader;
@@ -30,6 +31,7 @@ export class PayrollComputationService {
     staffSalary?: any;
     sssConfigs: SssConfigs[];
     timeKeeping?: any;
+    salaryRateEffectivity?: Date | null;
   }): Partial<PayrollDetails> | null {
     if (!salaryRate) {
       return null;
@@ -44,7 +46,7 @@ export class PayrollComputationService {
     const regular = Number(detail.regular) || 0;
     const overtime = Number(detail.overtime) || 0;
     const nightShift = Number(detail.night_shift) || 0;
-   const nightShiftAmount = (salaryRate * 0.10 / 8) * nightShift;
+    const nightShiftAmount = ((salaryRate * 0.1) / 8) * nightShift;
 
     /**
      * ----------------------------------------------------------
@@ -65,7 +67,6 @@ export class PayrollComputationService {
     let otRegularHolidayAmount = 0;
     let otRdRegularHolidayAmount = 0;
     let otRdSpecialHolidayAmount = 0;
-
 
     switch (detail.working_day_id) {
       case WORKING_DAY_IDS.REGULAR_DAY:
@@ -132,13 +133,7 @@ export class PayrollComputationService {
       otRdRegularHolidayAmount +
       otRdSpecialHolidayAmount;
 
-
-    const grossPay =
-      regularDayAmount +
-      overtimeAmount +
-      nightShiftAmount;
-
-    
+    const grossPay = regularDayAmount + overtimeAmount + nightShiftAmount;
 
     /**
      * ----------------------------------------------------------
@@ -173,17 +168,16 @@ export class PayrollComputationService {
 
     const netAmtDiser = grossPay + thirteenMonthPay;
 
-
     /**
      * ----------------------------------------------------------
      * GOVERNMENT CONTRIBUTIONS
      * ----------------------------------------------------------
      */
-      const { sssShare, ec } = this.computeSssShare(
-        salaryRate,
-        totalDayWorkFraction,
-        sssConfigs,
-      );
+    const { sssShare, ec } = this.computeSssShare(
+      salaryRate,
+      totalDayWorkFraction,
+      sssConfigs,
+    );
 
     const pagIbigShare = this.computePagIbigShare(
       staffSalary,
@@ -197,10 +191,7 @@ export class PayrollComputationService {
     );
 
     const totalGovtShare =
-    sssShare +
-    pagIbigShare +
-    philHealthShare +
-    thirteenMonthPay;
+      sssShare + pagIbigShare + philHealthShare + thirteenMonthPay;
 
     /**
      * ----------------------------------------------------------
@@ -266,7 +257,7 @@ export class PayrollComputationService {
       ec: ec,
       pag_ibig_share: pagIbigShare,
       phil_health_share: philHealthShare,
-      
+
       total_govt_share: Number(totalGovtShare.toFixed(2)),
 
       total_payroll: billingValues.totalPayroll,
@@ -280,6 +271,7 @@ export class PayrollComputationService {
       net_of_tax: billingValues.netOfTax,
       cash_bond: billingValues.cashBond,
       total_billing: billingValues.totalBilling,
+      salary_rate_effectivity: salaryRateEffectivity,
     };
   }
 
@@ -297,17 +289,11 @@ export class PayrollComputationService {
    * BASIC PAY COMPUTATION
    * ============================================================
    */
-  private computeRegularAmount(
-    regular: number,
-    salaryRate: number,
-  ): number {
+  private computeRegularAmount(regular: number, salaryRate: number): number {
     return (regular * salaryRate) / 8;
   }
 
-  private computeOvertimeAmount(
-    overtime: number,
-    salaryRate: number,
-  ): number {
+  private computeOvertimeAmount(overtime: number, salaryRate: number): number {
     const hourRate = salaryRate / 8;
     return overtime * hourRate * 1.25;
   }
@@ -456,9 +442,9 @@ export class PayrollComputationService {
     const sampleMpf = withMpfEc / DAYS_FACTOR_RATE.DAYS;
 
     return {
-    sssShare: sampleMpf * totalDayWorkFraction,
-    ec,
-  };
+      sssShare: sampleMpf * totalDayWorkFraction,
+      ec,
+    };
   }
 
   /**
@@ -491,9 +477,7 @@ export class PayrollComputationService {
       Number(staffSalary?.phil_health_contri_perc) || 0;
 
     const philHealthDailyRate =
-      Math.round(
-        ((salaryRate * (philHealthContriPerc / 100)) / 2) * 100,
-      ) / 100;
+      Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) / 100;
 
     return philHealthDailyRate * totalDayWorkFraction;
   }
@@ -642,19 +626,26 @@ export class PayrollComputationService {
       totalRestDayAmount += Number(detail.rest_day_amount) || 0;
       totalSpecialHolidayAmount += Number(detail.special_holiday_amount) || 0;
       totalRegularHolidayAmount += Number(detail.regular_holiday_amount) || 0;
-      totalRegularHolidayOffAmount += Number(detail.regular_holiday_off_amount) || 0;
-      totalRdRegularHolidayAmount += Number(detail.rd_regular_holiday_amount) || 0;
-      totalRdSpecialHolidayAmount += Number(detail.rd_special_holiday_amount) || 0;
+      totalRegularHolidayOffAmount +=
+        Number(detail.regular_holiday_off_amount) || 0;
+      totalRdRegularHolidayAmount +=
+        Number(detail.rd_regular_holiday_amount) || 0;
+      totalRdSpecialHolidayAmount +=
+        Number(detail.rd_special_holiday_amount) || 0;
 
       totalRegularDayAmount += Number(detail.regular_day_amount) || 0;
 
       // Sum Overtime Pay Amounts
       totalOtRegularAmount += Number(detail.ot_regular_amount) || 0;
       totalOtRestDayAmount += Number(detail.ot_rest_day_amount) || 0;
-      totalOtSpecialHolidayAmount += Number(detail.ot_special_holiday_amount) || 0;
-      totalOtRegularHolidayAmount += Number(detail.ot_regular_holiday_amount) || 0;
-      totalOtRdRegularHolidayAmount += Number(detail.ot_rd_regular_holiday_amount) || 0;
-      totalOtRdSpecialHolidayAmount += Number(detail.ot_rd_special_holiday_amount) || 0;
+      totalOtSpecialHolidayAmount +=
+        Number(detail.ot_special_holiday_amount) || 0;
+      totalOtRegularHolidayAmount +=
+        Number(detail.ot_regular_holiday_amount) || 0;
+      totalOtRdRegularHolidayAmount +=
+        Number(detail.ot_rd_regular_holiday_amount) || 0;
+      totalOtRdSpecialHolidayAmount +=
+        Number(detail.ot_rd_special_holiday_amount) || 0;
       totalOvertimeAmount += Number(detail.overtime_amount) || 0;
 
       totalNightShift += Number(detail.night_shift) || 0;

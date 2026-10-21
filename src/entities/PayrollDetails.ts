@@ -513,4 +513,7 @@ export class PayrollDetails {
 
   @Column("decimal", { precision: 10, scale: 2, nullable: true })
   trans_budget_hours: number;
+
+  @Column({ type: "date", nullable: true })
+  salary_rate_effectivity: Date;
 }
