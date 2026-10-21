@@ -139,6 +139,22 @@ export class StaffPayrollController {
     );
   }
 
+  @Get("view-payroll-error-details")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async findPayrollErrorDetails(
+    @Query("payroll_header_id") payrollHeaderId?: string,
+    @Query("id") id?: string,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const targetHeaderId = Number(payrollHeaderId || id);
+
+    return this.staffPayrollService.findPayrollErrorDetails(
+      targetHeaderId,
+      accessKeyId,
+    );
+  }
+
   @Post("payroll-reports")
   @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
   async getPayrollReport(

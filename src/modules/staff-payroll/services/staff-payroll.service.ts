@@ -2524,6 +2524,85 @@ export class StaffPayrollService {
     }
   }
 
+  async findPayrollErrorDetails(
+    payrollHeaderId: number,
+    accessKeyId?: number,
+  ): Promise<any[]> {
+    try {
+      if (!payrollHeaderId) {
+        throw new BadRequestException("payroll_header_id is required.");
+      }
+      const where: any = {
+        payroll_header_id: payrollHeaderId,
+      };
+
+      if (accessKeyId !== undefined) {
+        where.payrollHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
+
+      const logs = await this.payrollLogRepository.find({
+        where,
+        relations: [
+          "payrollHeader",
+          "payrollDetail",
+          "payrollDetail.staff",
+          "payrollDetail.staff.position",
+          "payrollDetail.warehouse",
+          "payrollDetail.vendor",
+          "payrollDetail.location",
+        ],
+        order: {
+          id: "ASC",
+        },
+      });
+
+      return logs.map((log) => {
+        let parsedRowData = null;
+        if (log.row_data) {
+          try {
+            parsedRowData = JSON.parse(log.row_data);
+          } catch {
+            parsedRowData = log.row_data;
+          }
+        }
+
+        return {
+          id: log.id,
+          payroll_header_id: log.payroll_header_id,
+          payroll_detail_id: log.payroll_detail_id,
+          error_type: log.error_type,
+          message: log.message,
+          row_data: parsedRowData,
+          created_at: log.created_at,
+          staff_id:
+            log.payrollDetail?.staff_id || parsedRowData?.staff_id || null,
+          staff_code:
+            log.payrollDetail?.staff?.staff_code ||
+            parsedRowData?.staff_code ||
+            "",
+          staff_name: log.payrollDetail?.staff
+            ? `${log.payrollDetail.staff.first_name} ${log.payrollDetail.staff.last_name}`
+            : "",
+          position_name:
+            log.payrollDetail?.staff?.position?.position_name || "",
+          warehouse_name: log.payrollDetail?.warehouse?.warehouse_name || "",
+          warehouse_ifs: log.payrollDetail?.warehouse?.warehouse_ifs || "",
+          vendor_name: log.payrollDetail?.vendor?.service_provider_name || "",
+          schedule_date:
+            log.payrollDetail?.schedule_date ||
+            parsedRowData?.schedule_date ||
+            null,
+          payrollDetail: log.payrollDetail,
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching payroll error logs:", error);
+      throw new Error("Failed to fetch payroll error logs");
+    }
+  }
+
   public async calculateNightShift(
     startTime: Date | null | undefined,
     endTime: Date | null | undefined,
