@@ -328,7 +328,7 @@ export class WarehouseSalariesService {
   }
 
   /**
-   * Generic reusable lookup for active/approved warehouse salaries per warehouse/vendor/position/date.
+   * Generic reusable lookup for approved warehouse salaries per warehouse/vendor/position/date.
    * Returns a map keyed by `${vendor_id}-${warehouse_id}-${position_id}-${YYYY-MM-DD}` -> WarehouseSalary.
    */
   async getSalariesMap(
@@ -358,14 +358,22 @@ export class WarehouseSalariesService {
       .where("ws.vendor_id IN (:...vendorIds)", { vendorIds })
       .andWhere("ws.warehouse_id IN (:...warehouseIds)", { warehouseIds })
       .andWhere("ws.status_id IN (:...statusIds)", {
-        statusIds: [STATUS_IDS.APPROVED, STATUS_IDS.ACTIVE],
+        statusIds: [STATUS_IDS.APPROVED],
       })
       .getMany();
 
     const map = new Map<string, WarehouseSalary>();
     for (const row of filtered) {
-      const dateFrom = row.date_from as unknown as string;
-      const dateTo = row.date_to as unknown as string;
+      const dateFrom = row.date_from
+        ? typeof row.date_from === "string" && row.date_from.length >= 10
+          ? (row.date_from as string).slice(0, 10)
+          : dayjs(row.date_from).format("YYYY-MM-DD")
+        : "";
+      const dateTo = row.date_to
+        ? typeof row.date_to === "string" && row.date_to.length >= 10
+          ? (row.date_to as string).slice(0, 10)
+          : dayjs(row.date_to).format("YYYY-MM-DD")
+        : "";
       for (const k of [...keys]) {
         const [dvId, dwId, dPosId, ...dRest] = k.split("-");
         const dIso = dRest.join("-");
