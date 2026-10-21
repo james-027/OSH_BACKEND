@@ -111,6 +111,7 @@ import { PayrollHeader } from "../entities/PayrollHeader";
 import { TimeKeepingConfig } from "../entities/TimeKeepingConfig";
 import { SssConfigs } from "../entities/SssConfig";
 import { WarehouseBudgetHour } from "../entities/WarehouseBudgetHour";
+import { WarehouseSalary } from "../entities/WarehouseSalary";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -225,6 +226,7 @@ export const entities = [
   TimeKeepingConfig,
   SssConfigs,
   WarehouseBudgetHour,
+  WarehouseSalary,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI

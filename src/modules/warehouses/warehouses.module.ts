@@ -43,7 +43,11 @@ import { CacheInvalidationModule } from "../cache/cache.module";
 import { WarehouseBudgetHoursController } from "./controllers/warehouse-budget-hours.controller";
 import { WarehouseBudgetHoursService } from "./services/warehouse-budget-hours.service";
 import { WarehouseBudgetHour } from "src/entities/WarehouseBudgetHour";
+import { WarehouseSalariesController } from "./controllers/warehouse-salaries.controller";
+import { WarehouseSalariesService } from "./services/warehouse-salaries.service";
+import { WarehouseSalary } from "src/entities/WarehouseSalary";
 import { Vendor } from "src/entities/Vendor";
+import { Position } from "src/entities/Position";
 
 @Module({
   imports: [
@@ -62,7 +66,9 @@ import { Vendor } from "src/entities/Vendor";
       Action,
       TransactionSequence,
       WarehouseBudgetHour,
+      WarehouseSalary,
       Vendor,
+      Position,
     ]),
     UsersModule,
     StatusModule,
@@ -85,6 +91,7 @@ import { Vendor } from "src/entities/Vendor";
     WarehouseEmployeesController,
     WarehouseDwhController,
     WarehouseBudgetHoursController,
+    WarehouseSalariesController,
   ],
   providers: [
     WarehousesService,
@@ -95,9 +102,9 @@ import { Vendor } from "src/entities/Vendor";
     WarehouseEmployeesService,
     WarehouseDwhService,
     UserAuditTrailCreateService,
-    UserAuditTrailCreateService,
     CommonUtilitiesService,
     WarehouseBudgetHoursService,
+    WarehouseSalariesService,
   ],
   exports: [
     WarehousesService,
@@ -108,6 +115,7 @@ import { Vendor } from "src/entities/Vendor";
     WarehouseEmployeesService,
     WarehouseDwhService,
     WarehouseBudgetHoursService,
+    WarehouseSalariesService,
   ],
 })
 export class WarehousesModule {}
