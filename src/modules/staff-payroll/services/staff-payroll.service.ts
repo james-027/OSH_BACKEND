@@ -36,6 +36,7 @@ import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { formatDateToString } from "src/utils/date.utils";
 import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
+import { WarehouseSalariesService } from "src/modules/warehouses/services/warehouse-salaries.service";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
@@ -122,6 +123,7 @@ export class StaffPayrollService {
     @InjectRepository(StaffVendorSalary)
     private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
     private warehouseBudgetHoursService: WarehouseBudgetHoursService,
+    private warehouseSalariesService: WarehouseSalariesService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -1535,6 +1537,29 @@ export class StaffPayrollService {
        * COMPUTATION
        * ============================================================
        */
+      /**
+       * ============================================================
+       * WAREHOUSE SALARIES MAP
+       * ============================================================
+       */
+      const warehouseSalaryRequests = postedPayrollDetails
+        .filter((d) => d.warehouse_id && d.vendor_id && d.schedule_date)
+        .map((d) => ({
+          warehouse_id: d.warehouse_id,
+          vendor_id: d.vendor_id,
+          position_id: d.staff?.position_id,
+          date:
+            typeof d.schedule_date === "string" &&
+            (d.schedule_date as string).length >= 10
+              ? (d.schedule_date as string).slice(0, 10)
+              : dayjs(d.schedule_date).format("YYYY-MM-DD"),
+        }));
+
+      const warehouseSalaryMap =
+        await this.warehouseSalariesService.getSalariesMap(
+          warehouseSalaryRequests,
+        );
+
       const computedDetailsByHeader = new Map<number, PayrollDetails[]>();
 
       let computedCount = 0;
@@ -1595,9 +1620,26 @@ export class StaffPayrollService {
          * SALARY RATE
          * ----------------------------------------------------------
          */
-        const salaryRate = Number(staffSalary.salary_rate) || 0;
+        const scheduleDateStr = detail.schedule_date
+          ? typeof detail.schedule_date === "string" &&
+            (detail.schedule_date as string).length >= 10
+            ? (detail.schedule_date as string).slice(0, 10)
+            : dayjs(detail.schedule_date).format("YYYY-MM-DD")
+          : null;
+
+        const posKey =
+          detail.staff?.position_id != null ? detail.staff.position_id : "any";
+        const warehouseSalaryKey = `${detail.vendor_id}-${detail.warehouse_id}-${posKey}-${scheduleDateStr}`;
+        const warehouseSalary = scheduleDateStr
+          ? warehouseSalaryMap.get(warehouseSalaryKey)
+          : null;
+
+        const salaryRate = Number(warehouseSalary?.salary) || 0;
 
         if (!salaryRate) {
+          logger.warn(
+            `[PayrollComputation] No warehouse salary found for warehouse = [${detail.warehouse_id} - ${detail.warehouse?.warehouse_ifs}], vendor_id = [${detail.vendor_id} - ${detail.vendor?.service_provider_code}], position = [${detail.staff?.position_id} - ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`,
+          );
           continue;
         }
 
