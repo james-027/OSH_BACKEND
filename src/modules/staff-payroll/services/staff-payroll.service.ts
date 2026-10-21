@@ -154,7 +154,11 @@ export class StaffPayrollService {
 
       const headersWithCount = payrollHeaders.map((header) => ({
         ...header,
-        no_of_entries: header.details ? header.details.length : 0,
+        no_of_entries: header.details
+          ? header.details.filter(
+              (detail) => detail.status_id === STATUS_IDS.ACTIVE,
+            ).length
+          : 0,
       }));
 
       return this.responseMapperService.mapEntitiesToResponse(headersWithCount);
@@ -1412,6 +1416,7 @@ export class StaffPayrollService {
             status_id: STATUS_IDS.POSTED,
             cron_computed: false,
           },
+          status_id: STATUS_IDS.ACTIVE,
         },
         relations: [
           "payrollHeader",
@@ -1661,6 +1666,12 @@ export class StaffPayrollService {
         await this.payrollHeaderRepository.save(payrollHeader);
       }
 
+      try {
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
       return {
         success: true,
         message: "Payroll computation completed successfully.",
@@ -1803,23 +1814,12 @@ export class StaffPayrollService {
         logger.error("Action log failed for Post Payroll:", err);
       }
 
-      for (const response of responses) {
         try {
-          this.sseEventEmitter.emitUpdate(
-            "staff_attendance",
-            response.id,
-            response,
-          );
-
-          this.sseEventEmitter.emitUpdate(
-            "staff_payroll",
-            response.id,
-            response,
-          );
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
         } catch (err) {
           logger.error("SSE event failed:", err);
         }
-      }
 
       return responses;
     } catch (error) {
@@ -2165,7 +2165,7 @@ export class StaffPayrollService {
     accessKeyId?: number,
   ): Promise<any[]> {
     try {
-      const where: any = {};
+      const where: any = { status_id: STATUS_IDS.ACTIVE };
 
       if (payrollHeaderId !== undefined) {
         where.payroll_header_id = payrollHeaderId;
@@ -2410,9 +2410,13 @@ export class StaffPayrollService {
         "warehouse.warehouse_ifs",
       ]);
 
-      query.andWhere("payrollHeader.status_id = :postedStatus", {
+      query.andWhere(
+        "payrollHeader.status_id = :postedStatus AND payrollDetail.status_id = :activeStatus",
+        {
         postedStatus: STATUS_IDS.POSTED,
-      });
+          activeStatus: STATUS_IDS.ACTIVE,
+        },
+      );
 
       if (accessKeyId) {
         query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
