@@ -212,6 +212,7 @@ export class StaffPayrollService {
         relations: [
           "scheduleHeader",
           "staff",
+          "staff.position",
           "warehouse",
           "vendor",
           "workingDays",
@@ -235,6 +236,141 @@ export class StaffPayrollService {
       const scheduleDetails = allScheduleDetails.filter(
         (detail) => detail.cron_computed === true,
       );
+
+      if (scheduleDetails.length === 0) {
+        return this.responseMapperService.mapEntitiesToResponse([]);
+      }
+
+      // ============================================================
+      // VALIDATE WAREHOUSE BUDGET HOURS & SALARIES
+      // ============================================================
+      const budgetHourRequests: Array<{
+        vendor_id: number;
+        warehouse_id: number;
+        date: string;
+      }> = [];
+
+      const warehouseSalaryRequests: Array<{
+        vendor_id: number;
+        warehouse_id: number;
+        position_id?: number;
+        date: string;
+      }> = [];
+
+      for (const d of scheduleDetails) {
+        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _dSd = d.scheduleHeader?.schedule_date as unknown as
+          | string
+          | Date;
+
+        let dateIso: string | null = null;
+        if (_dSd != null) {
+          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
+            dateIso = (_dSd as string).slice(0, 10);
+          } else {
+            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+          }
+        }
+
+        if (vendorId != null && warehouseId != null && dateIso) {
+          budgetHourRequests.push({
+            vendor_id: vendorId,
+            warehouse_id: warehouseId,
+            date: dateIso,
+          });
+
+          warehouseSalaryRequests.push({
+            vendor_id: vendorId,
+            warehouse_id: warehouseId,
+            position_id: d.staff?.position_id,
+            date: dateIso,
+          });
+        }
+      }
+
+      const [budgetHourMap, warehouseSalaryMap] = await Promise.all([
+        this.warehouseBudgetHoursService.getBudgetHoursMap(budgetHourRequests),
+        this.warehouseSalariesService.getSalariesMap(warehouseSalaryRequests),
+      ]);
+
+      const missingBudgetHoursMap = new Map<string, any>();
+      const missingSalariesMap = new Map<string, any>();
+
+      for (const d of scheduleDetails) {
+        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _dSd = d.scheduleHeader?.schedule_date as unknown as
+          | string
+          | Date;
+
+        let dateIso: string | null = null;
+        if (_dSd != null) {
+          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
+            dateIso = (_dSd as string).slice(0, 10);
+          } else {
+            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+          }
+        }
+
+        const warehouseName =
+          d.warehouse?.warehouse_name || `Warehouse #${warehouseId ?? "N/A"}`;
+        const warehouseIfs = d.warehouse?.warehouse_ifs || "";
+        const vendorName =
+          d.vendor?.service_provider_name || `Vendor #${vendorId ?? "N/A"}`;
+        const positionId = d.staff?.position_id ?? null;
+        const positionName =
+          d.staff?.position?.position_name ||
+          (positionId ? `Position #${positionId}` : "Any Position");
+
+        // 1. Check Budget Hours
+        const budgetKey = `${vendorId}-${warehouseId}-${dateIso}`;
+        const budgetRow = dateIso ? budgetHourMap.get(budgetKey) : null;
+        const hasBudget = budgetRow && Number(budgetRow.budget_hours) > 0;
+
+        if (!hasBudget && !missingBudgetHoursMap.has(budgetKey)) {
+          missingBudgetHoursMap.set(budgetKey, {
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+            warehouse_ifs: warehouseIfs,
+            vendor_id: vendorId,
+            vendor_name: vendorName,
+            date: dateIso,
+          });
+        }
+
+        // 2. Check Warehouse Salary
+        const posKey = positionId != null ? positionId : "any";
+        const salaryKey = `${vendorId}-${warehouseId}-${posKey}-${dateIso}`;
+        const salaryRow = dateIso ? warehouseSalaryMap.get(salaryKey) : null;
+        const hasSalary = salaryRow && Number(salaryRow.salary) > 0;
+
+        if (!hasSalary && !missingSalariesMap.has(salaryKey)) {
+          missingSalariesMap.set(salaryKey, {
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+            warehouse_ifs: warehouseIfs,
+            vendor_id: vendorId,
+            vendor_name: vendorName,
+            position_id: positionId,
+            position_name: positionName,
+            date: dateIso,
+          });
+        }
+      }
+
+      const missingBudgetHours = Array.from(missingBudgetHoursMap.values());
+      const missingSalaries = Array.from(missingSalariesMap.values());
+
+      if (missingBudgetHours.length > 0 || missingSalaries.length > 0) {
+        return {
+          message:
+            "Cannot proceed with computation. Some warehouses do not have budget hours or salary rate configured for the selected period.",
+          data: [],
+          missing_budget_hours: missingBudgetHours,
+          missing_salaries: missingSalaries,
+        };
+      }
 
       // Sort warehouse alphabetically
       scheduleDetails.sort((a, b) =>
