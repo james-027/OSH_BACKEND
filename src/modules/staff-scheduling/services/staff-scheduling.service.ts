@@ -3741,9 +3741,13 @@ export class StaffSchedulingService {
         .leftJoinAndSelect("payrollDetail.workingDays", "workingDay")
         .leftJoinAndSelect("payrollDetail.createdBy", "createdBy")
         .leftJoinAndSelect("payrollDetail.updatedBy", "updatedBy");
-      query.andWhere("payrollHeader.status_id = :postedStatus", {
-        postedStatus: STATUS_IDS.POSTED,
-      });
+      query.andWhere(
+        "payrollHeader.status_id = :postedStatus AND payrollDetail.status_id = :activeStatus",
+        {
+          postedStatus: STATUS_IDS.POSTED,
+          activeStatus: STATUS_IDS.ACTIVE,
+        },
+      );
       if (payrollHeaderId !== undefined) {
         query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
           payrollHeaderId,
