@@ -1563,6 +1563,7 @@ export class StaffPayrollService {
           "payrollHeader",
           "scheduleDetail",
           "staff",
+          "staff.position",
           "warehouse",
           "location",
           "vendor",
@@ -1890,8 +1891,6 @@ export class StaffPayrollService {
 
           Object.assign(detail, computedValues);
 
-          payrollHeader.cron_computed = true;
-
           await this.payrollDetailRepository.save(detail);
 
           computedDetailIds.push(detail.id);
@@ -1961,19 +1960,38 @@ export class StaffPayrollService {
        * COMPUTE PAYROLL HEADER TOTALS
        * ============================================================
        */
-      for (const [headerId, details] of computedDetailsByHeader) {
-        const payrollHeader = postedPayrollDetails.find(
-          (detail) => detail.payroll_header_id === headerId,
-        )?.payrollHeader;
+      const headerIdsWithErrors = new Set<number>();
+      for (const errLog of errorLogsMap.values()) {
+        if (errLog.payroll_header_id) {
+          headerIdsWithErrors.add(errLog.payroll_header_id);
+        }
+      }
 
-        if (!payrollHeader) {
-          continue;
+      const headersMap = new Map<number, PayrollHeader>();
+      for (const detail of postedPayrollDetails) {
+        if (detail.payrollHeader && !headersMap.has(detail.payroll_header_id)) {
+          headersMap.set(detail.payroll_header_id, detail.payrollHeader);
+        }
+      }
+
+      for (const [headerId, payrollHeader] of headersMap) {
+        const hasError = headerIdsWithErrors.has(headerId);
+
+        payrollHeader.has_payroll_computation_error = hasError;
+
+        if (!hasError && computedDetailsByHeader.has(headerId)) {
+          payrollHeader.cron_computed = true;
+        } else {
+          payrollHeader.cron_computed = false;
         }
 
-        const headerTotals =
-          this.payrollComputationService.computePayrollHeaderTotals(details);
+        if (computedDetailsByHeader.has(headerId)) {
+          const details = computedDetailsByHeader.get(headerId)!;
+          const headerTotals =
+            this.payrollComputationService.computePayrollHeaderTotals(details);
 
-        Object.assign(payrollHeader, headerTotals);
+          Object.assign(payrollHeader, headerTotals);
+        }
 
         await this.payrollHeaderRepository.save(payrollHeader);
       }
