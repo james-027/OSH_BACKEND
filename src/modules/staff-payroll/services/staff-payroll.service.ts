@@ -37,6 +37,7 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { formatDateToString } from "src/utils/date.utils";
 import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
 import { WarehouseSalariesService } from "src/modules/warehouses/services/warehouse-salaries.service";
+import { PayrollLog } from "src/entities/payrollLog";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
@@ -122,6 +123,8 @@ export class StaffPayrollService {
     private sssConfigRepository: Repository<SssConfigs>,
     @InjectRepository(StaffVendorSalary)
     private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
+    @InjectRepository(PayrollLog)
+    private payrollLogRepository: Repository<PayrollLog>,
     private warehouseBudgetHoursService: WarehouseBudgetHoursService,
     private warehouseSalariesService: WarehouseSalariesService,
     private usersService: UsersService,
@@ -1700,6 +1703,9 @@ export class StaffPayrollService {
 
       let computedCount = 0;
 
+      const errorLogsMap = new Map<number, Partial<PayrollLog>>();
+      const computedDetailIds: number[] = [];
+
       for (const detail of postedPayrollDetails) {
         const payrollHeader = detail.payrollHeader;
 
@@ -1710,6 +1716,19 @@ export class StaffPayrollService {
         const staffId = detail.staff_id;
 
         if (!staffId) {
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_ID",
+            message: `Payroll detail #${detail.id} has no staff_id assigned`,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              payroll_header_id: payrollHeader.id,
+              vendor_id: detail.vendor_id,
+              warehouse_id: detail.warehouse_id,
+              location_id: detail.location_id,
+            }),
+          });
           continue;
         }
 
@@ -1725,9 +1744,24 @@ export class StaffPayrollService {
         const staffVendor = staffVendorMap.get(staffVendorKey);
 
         if (!staffVendor) {
-          logger.warn(
-            `[PayrollComputation] No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`,
-          );
+          const msg = `No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_VENDOR",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              location_id: detail.location_id,
+              warehouse_id: detail.warehouse_id,
+              schedule_date: detail.schedule_date,
+            }),
+          });
 
           continue;
         }
@@ -1744,9 +1778,25 @@ export class StaffPayrollService {
         const staffSalary = staffSalaryMap.get(staffVendor.id);
 
         if (!staffSalary) {
-          logger.warn(
-            `[PayrollComputation] No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`,
-          );
+          const msg = `No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_SALARY",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_vendor_id: staffVendor.id,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              location_id: detail.location_id,
+              warehouse_id: detail.warehouse_id,
+              schedule_date: detail.schedule_date,
+            }),
+          });
 
           continue;
         }
@@ -1773,9 +1823,25 @@ export class StaffPayrollService {
         const salaryRate = Number(warehouseSalary?.salary) || 0;
 
         if (!salaryRate) {
-          logger.warn(
-            `[PayrollComputation] No warehouse salary found for warehouse = [${detail.warehouse_id} - ${detail.warehouse?.warehouse_ifs}], vendor_id = [${detail.vendor_id} - ${detail.vendor?.service_provider_code}], position = [${detail.staff?.position_id} - ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`,
-          );
+          const msg = `No warehouse salary found for warehouse = [${detail.warehouse_id} - ${detail.warehouse?.warehouse_ifs}], vendor_id = [${detail.vendor_id} - ${detail.vendor?.service_provider_code}], position = [${detail.staff?.position_id} - ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_WAREHOUSE_SALARY",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              warehouse_id: detail.warehouse_id,
+              position_id: detail.staff?.position_id,
+              schedule_date: scheduleDateStr,
+            }),
+          });
+
           continue;
         }
 
@@ -1791,37 +1857,105 @@ export class StaffPayrollService {
          * COMPUTE PAYROLL DETAIL
          * ----------------------------------------------------------
          */
-        const computedValues =
-          this.payrollComputationService.computePayrollDetail({
-            detail,
-            payrollHeader,
-            salaryRate,
-            staffSalary,
-            sssConfigs,
-            timeKeeping,
+        try {
+          const computedValues =
+            this.payrollComputationService.computePayrollDetail({
+              detail,
+              payrollHeader,
+              salaryRate,
+              staffSalary,
+              sssConfigs,
+              timeKeeping,
+            });
+
+          if (!computedValues) {
+            const msg = `Computation returned null or zero values for detail_id=${detail.id}`;
+            logger.warn(`[PayrollComputation] ${msg}`);
+
+            errorLogsMap.set(detail.id, {
+              payroll_header_id: payrollHeader.id,
+              payroll_detail_id: detail.id,
+              error_type: "COMPUTATION_FAILED",
+              message: msg,
+              row_data: JSON.stringify({
+                detail_id: detail.id,
+                staff_id: staffId,
+                salary_rate: salaryRate,
+                schedule_date: scheduleDateStr,
+              }),
+            });
+
+            continue;
+          }
+
+          Object.assign(detail, computedValues);
+
+          payrollHeader.cron_computed = true;
+
+          await this.payrollDetailRepository.save(detail);
+
+          computedDetailIds.push(detail.id);
+
+          const headerId = detail.payroll_header_id;
+
+          if (!computedDetailsByHeader.has(headerId)) {
+            computedDetailsByHeader.set(headerId, []);
+          }
+
+          computedDetailsByHeader.get(headerId)!.push(detail);
+
+          computedCount++;
+        } catch (compErr: any) {
+          const msg = `Exception computing detail #${detail.id}: ${compErr?.message || compErr}`;
+          logger.error(`[PayrollComputation] ${msg}`, compErr);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "COMPUTATION_EXCEPTION",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              error: String(compErr?.stack || compErr),
+            }),
           });
 
-        if (!computedValues) {
           continue;
         }
-
-        Object.assign(detail, computedValues);
-
-        payrollHeader.cron_computed = true;
-
-        await this.payrollDetailRepository.save(detail);
-
-        const headerId = detail.payroll_header_id;
-
-        if (!computedDetailsByHeader.has(headerId)) {
-          computedDetailsByHeader.set(headerId, []);
-        }
-
-        computedDetailsByHeader.get(headerId)!.push(detail);
-
-        computedCount++;
       }
 
+      /**
+       * ============================================================
+       * BULK UPSERT / CLEANUP PAYROLL LOGS (Fast High-Performance)
+       * ============================================================
+       */
+      if (errorLogsMap.size > 0) {
+        try {
+          await this.payrollLogRepository.upsert(
+            Array.from(errorLogsMap.values()),
+            ["payroll_detail_id"],
+          );
+        } catch (logErr) {
+          logger.error(
+            "[PayrollComputation] Failed to upsert payroll error logs:",
+            logErr,
+          );
+        }
+      }
+
+      if (computedDetailIds.length > 0) {
+        try {
+          await this.payrollLogRepository.delete({
+            payroll_detail_id: In(computedDetailIds),
+          });
+        } catch (delErr) {
+          logger.error(
+            "[PayrollComputation] Failed to clear resolved payroll error logs:",
+            delErr,
+          );
+        }
+      }
       /**
        * ============================================================
        * COMPUTE PAYROLL HEADER TOTALS
