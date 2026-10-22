@@ -37,7 +37,7 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { formatDateToString } from "src/utils/date.utils";
 import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
 import { WarehouseSalariesService } from "src/modules/warehouses/services/warehouse-salaries.service";
-import { PayrollLog } from "src/entities/payrollLog";
+import { PayrollLog } from "src/entities/PayrollLog";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");

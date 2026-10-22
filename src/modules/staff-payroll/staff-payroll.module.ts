@@ -28,7 +28,7 @@ import { ActionsModule } from "../actions/actions.module";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { WarehousesModule } from "../warehouses/warehouses.module";
-import { PayrollLog } from "src/entities/payrollLog";
+import { PayrollLog } from "src/entities/PayrollLog";
 
 @Module({
   imports: [

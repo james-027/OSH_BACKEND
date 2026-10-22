@@ -112,7 +112,7 @@ import { TimeKeepingConfig } from "../entities/TimeKeepingConfig";
 import { SssConfigs } from "../entities/SssConfig";
 import { WarehouseBudgetHour } from "../entities/WarehouseBudgetHour";
 import { WarehouseSalary } from "../entities/WarehouseSalary";
-import { PayrollLog } from "../entities/payrollLog";
+import { PayrollLog } from "../entities/PayrollLog";
 
 // All entities in one place for easy maintenance
 export const entities = [
