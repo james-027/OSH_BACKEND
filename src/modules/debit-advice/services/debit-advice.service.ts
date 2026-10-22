@@ -943,7 +943,7 @@ export class DebitAdviceService {
         const remarks = getExcelValue(row, "REMARKS") ?? "";
         const amountValue = getExcelValue(row, "AMOUNT");
         const amount = Number(amountValue);
-
+        const approvedBy = String(getExcelValue(row, "APPROVED BY") ?? "").trim();
         /*
          * SEQUENCE
          */
@@ -1119,10 +1119,11 @@ export class DebitAdviceService {
             transaction_date: normalizedTransactionDate,
             status_id: 4,
             quarter: 1,
-            remarks: "",
+             remarks: String(remarks ?? "").trim(),
             location_id: locationId,
             approval: 0,
             createdBy: { id: userId } as any,
+            approved_by: approvedBy,
             requestor_id: userId,
 
             line: [],
@@ -1389,7 +1390,7 @@ export class DebitAdviceService {
                   await this.debitAdviceGLItemsRepository.save(savedGL);
                 }
               }
-
+              
               created_documents.push(reloadedDebitAdvice);
               
               // ============================================
