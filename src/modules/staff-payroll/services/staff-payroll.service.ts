@@ -2770,6 +2770,7 @@ export class StaffPayrollService {
         "payrollDetail.ot_rd_special_holiday_amount",
         "payrollDetail.net_amt_diser",
         "payrollDetail.salary_rate",
+        "payrollDetail.salary_rate_effectivity",
         "payrollDetail.hour_rate",
         "payrollDetail.regular_day",
         "payrollDetail.special_holiday",
@@ -3139,6 +3140,7 @@ export class StaffPayrollService {
             detail.ot_rd_special_holiday_amount,
           ),
 
+          salary_rate_effectivity: detail.salary_rate_effectivity,
           salary_rate: round2(detail.salary_rate),
           hour_rate: round2(detail.hour_rate),
 
