@@ -717,7 +717,7 @@ export class StaffSchedulingService {
                     actualLogsDetailDto = {
                       staff_id: detail.staff_id,
                       staff_code: staff.staff_code || staff.code,
-                      dws_no: detail.dws_no,
+                      dws_no: detail.dws_no || null,
                       remarks: detail.remarks || "Auto-synced from DWS log",
                       warehouse_id: detail.warehouse_id,
                       location_id: staff.location_id,

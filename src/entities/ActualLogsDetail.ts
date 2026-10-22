@@ -29,7 +29,7 @@ export class ActualLogsDetail {
   @Column({ length: 255 })
   staff_code: string;
 
-  @Column({ length: 255 })
+  @Column({ nullable:true,length: 255 })
   dws_no: string;
 
   @Column({ length: 255 })
