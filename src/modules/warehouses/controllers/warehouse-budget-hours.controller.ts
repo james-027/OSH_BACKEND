@@ -143,8 +143,8 @@ export class WarehouseBudgetHoursController {
       requiredFields: {
         "STORE BOS CODE": { format: "uppercase-trim" },
         "STORE NAME": { format: "uppercase-trim" },
-        "SERVICE PROVIDER CODE": { format: "uppercase-trim" },
-        "SERVICE PROVIDER NAME": { format: "trim" },
+        "AGENCY CODE": { format: "uppercase-trim" },
+        "AGENCY NAME": { format: "trim" },
         "DATE FROM": { format: "trim" },
         "DATE TO": { format: "trim" },
         "BUDGET HOURS": { format: "number-trim" },
@@ -169,8 +169,8 @@ export class WarehouseBudgetHoursController {
         budget_date_to: formattedRow["DATE TO"],
         warehouse_ifs: formattedRow["STORE BOS CODE"],
         store_name: formattedRow["STORE NAME"],
-        service_provider_code: formattedRow["SERVICE PROVIDER CODE"],
-        service_provider_name: formattedRow["SERVICE PROVIDER NAME"],
+        agency_code: formattedRow["AGENCY CODE"],
+        agency_name: formattedRow["AGENCY NAME"],
         status,
         __rowNum__: idx + 2,
       };
