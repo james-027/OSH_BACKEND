@@ -1562,11 +1562,13 @@ export class ReqTransactionHeadersService {
                 const existingEndDate = new Date(existingReqEnd);
 
                 if (
-                  (newStart >= existingStartDate &&
-                    newEnd <= existingEndDate) ||
-                  (newStart >= existingStartDate &&
-                    newStart <= existingEndDate) ||
-                  (newEnd >= existingStartDate && newEnd <= existingEndDate)
+                  // (newStart >= existingStartDate &&
+                  //   newEnd <= existingEndDate) ||
+                  // (newStart >= existingStartDate &&
+                  //   newStart <= existingEndDate) ||
+                  // (newEnd >= existingStartDate && newEnd <= existingEndDate)
+                  existingStartDate <= newEnd &&
+                  existingEndDate >= newStart // Overlapping periods
                 ) {
                   errors.push({
                     warehouse_name: `${warehouse.warehouse_ifs} - ${warehouse.warehouse_name}`,

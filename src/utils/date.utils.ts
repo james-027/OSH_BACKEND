@@ -413,3 +413,85 @@ export function getMonthNumber(excelDate: any): number {
   }
   return 0;
 }
+
+/**
+ * Safely converts string dates (e.g. "01/13/2026"), JS Dates, or Excel serial numbers into YYYY-MM-DD.
+ */
+export function parseExcelDateToYMD(
+  value: any,
+  format: string = "YYYY-MM-DD",
+): string | null {
+  if (value === null || value === undefined) return null;
+
+  // Case 1: JS Date object
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const strValue = String(value).trim();
+  if (strValue === "") return null;
+
+  // Case 2: Excel Serial Number (e.g. 46188, or string "46188", "46188.0")
+  if (typeof value === "number" || /^\d+(\.\d+)?$/.test(strValue)) {
+    const num = Number(value);
+    if (!isNaN(num) && num > 0) {
+      try {
+        const XLSX = require("xlsx");
+        const parsed = XLSX.SSF.parse_date_code(num);
+        if (parsed) {
+          const year = parsed.y;
+          const month = String(parsed.m).padStart(2, "0");
+          const day = String(parsed.d).padStart(2, "0");
+          return `${year}-${month}-${day}`;
+        }
+      } catch (error) {
+        // Fallback to UTC calculation if XLSX SSF fails
+        const dayjs = require("dayjs");
+        const utc = require("dayjs/plugin/utc");
+        dayjs.extend(utc);
+        const dateFromSerial = new Date((num - 25569) * 86400 * 1000);
+        return dayjs.utc(dateFromSerial).format(format);
+      }
+    }
+  }
+
+  // Case 3: Parse standard string date formats (e.g. "6/15/2026", "06/15/2026", "2026-06-15", etc.)
+  const dayjs = require("dayjs");
+  const customParseFormat = require("dayjs/plugin/customParseFormat");
+  dayjs.extend(customParseFormat);
+
+  const commonFormats = [
+    "YYYY-MM-DD",
+    "YYYY/MM/DD",
+    "MM/DD/YYYY",
+    "M/D/YYYY",
+    "MM-DD-YYYY",
+    "M-D-YYYY",
+    "YYYY-M-D",
+    "YYYY/M/D",
+    "MMMM D, YYYY",
+    "MMM D, YYYY",
+    "DD/MM/YYYY",
+    "D/M/YYYY",
+  ];
+
+  for (const fmt of commonFormats) {
+    const parsedDate = dayjs(strValue, fmt, true);
+    if (parsedDate.isValid()) {
+      return parsedDate.format(format);
+    }
+  }
+
+  // Case 4: Fallback standard Day.js parsing
+  const fallbackDate = dayjs(strValue);
+  if (fallbackDate.isValid()) {
+    return fallbackDate.format(format);
+  }
+
+  // Kung hindi talaga ma-parse, mag-throw ng error
+  throw new Error(`Invalid date format received from Excel: "${value}"`);
+}

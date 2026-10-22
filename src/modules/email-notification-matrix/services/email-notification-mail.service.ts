@@ -46,10 +46,15 @@ export class EmailNotificationMailService {
       host: config.smtp_server,
       port: Number(config.smtp_port),
       secure: config.smtp_security?.toUpperCase() === "SSL",
+      name: process.env.SMTP_EHLO_NAME || "yourdomain.com",
       auth: {
         user: config.smtp_username,
         pass: config.smtp_password,
       },
+      // Enable connection pooling to handle high volumes efficiently (up to 10k/day)
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
     });
 
     try {

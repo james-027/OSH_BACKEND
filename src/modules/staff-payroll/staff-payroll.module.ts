@@ -27,8 +27,8 @@ import { StaffSalary } from "src/entities/StaffSalary";
 import { ActionsModule } from "../actions/actions.module";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
-
-
+import { WarehousesModule } from "../warehouses/warehouses.module";
+import { PayrollLog } from "src/entities/PayrollLog";
 
 @Module({
   imports: [
@@ -48,12 +48,13 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
       AppModule,
       Action,
       Location,
-      SyncLog
+      SyncLog,
+      PayrollLog,
     ]),
     UsersModule,
     SSEModule,
     ActionsModule,
-
+    WarehousesModule,
   ],
   controllers: [StaffPayrollController],
   providers: [
@@ -63,7 +64,7 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
     PayrollComputationScheduler,
     ResponseMapperService,
     PayrollComputationService,
-    CommonUtilitiesService
+    CommonUtilitiesService,
   ],
   exports: [StaffPayrollService],
 })

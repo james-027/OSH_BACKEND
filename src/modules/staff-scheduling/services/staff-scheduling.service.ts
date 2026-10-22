@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource, In, Not, EntityManager, Raw } from "typeorm";
@@ -112,6 +113,7 @@ export class StaffSchedulingService {
           "updatedBy",
           "details",
           "details.location",
+          "details.vendor",
         ],
       });
 
@@ -127,6 +129,7 @@ export class StaffSchedulingService {
           ...mappedHeader,
 
           location_name: firstDetail?.location?.location_name ?? null,
+          vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
         };
       });
     } catch (error) {
@@ -180,7 +183,7 @@ export class StaffSchedulingService {
           "actualLogsDetail",
         ],
         order: {
-          overtime:"DESC"
+          overtime: "DESC",
         },
       });
 
@@ -636,13 +639,13 @@ export class StaffSchedulingService {
               if (isAutoEnrollSchedule) {
                 logsType = await this.logsTypeRepository.findOne({
                   where: {
-                    id: LOGS_TYPE_ID.CC_FETCH,
+                    id: LOGS_TYPE_ID.FST_FETCH,
                   },
                 });
 
                 const actualLogsHeaderDto: CreateActualLogsHeaderDto = {
                   tagging: logsType.description,
-                  logs_type_id: LOGS_TYPE_ID.CC_FETCH,
+                  logs_type_id: LOGS_TYPE_ID.FST_FETCH,
                   created_by: userId,
                   updated_by: userId,
                   access_key_id: accessKeyId,
@@ -809,7 +812,9 @@ export class StaffSchedulingService {
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
                     status_id: STATUS_IDS.ACTIVE,
-                    attendance_status_id: STATUS_IDS.FOR_REVIEW,
+                    attendance_status_id: isAutoEnrollSchedule
+                      ? STATUS_IDS.FOR_REVIEW
+                      : STATUS_IDS.PENDING,
                     access_key_id: accessKeyId,
                     // ==========================================
                     // DWS ACTUAL TIME DATA
@@ -828,6 +833,15 @@ export class StaffSchedulingService {
                     // }),
                     created_by: userId,
                     updated_by: userId,
+                    overtime_in: detail.overtime_in
+                      ? new Date(detail.overtime_in).toISOString()
+                      : undefined,
+
+                    overtime_out: detail.overtime_out
+                      ? new Date(detail.overtime_out).toISOString()
+                      : undefined,
+                    ot_clearing_approved:
+                      detail.overtime_in && detail.overtime_out ? true : false,
                   },
                 );
 
@@ -982,7 +996,9 @@ export class StaffSchedulingService {
         logger.error(errorStack);
       }
 
-      throw error;
+      throw new InternalServerErrorException({
+        description: errorMessage || "Failed to create staff scheduling.",
+      });
     }
   }
 
@@ -2973,7 +2989,6 @@ export class StaffSchedulingService {
     };
   }
 
-
   private async upsertDwsSchedules(
     scheduleDateStr: string,
     details: CreateSchedulingDetailDto[],
@@ -3041,15 +3056,14 @@ export class StaffSchedulingService {
 
     // Get or create an Actual Logs Header for DWS records.
     const getOrCreateActualLogsHeader = async () => {
-      let actualLogsHeader =
-        await this.actualLogsHeaderRepository.findOne({
-          where: {
-            access_key_id: accessKeyId,
-          },
-          order: {
-            id: "DESC",
-          },
-        });
+      let actualLogsHeader = await this.actualLogsHeaderRepository.findOne({
+        where: {
+          access_key_id: accessKeyId,
+        },
+        order: {
+          id: "DESC",
+        },
+      });
 
       if (!actualLogsHeader) {
         const actualLogsHeaderDto: CreateActualLogsHeaderDto = {
@@ -3138,10 +3152,7 @@ export class StaffSchedulingService {
         const existingHeaders = await this.scheduleHeaderRepository
           .createQueryBuilder("header")
           .leftJoinAndSelect("header.details", "detail")
-          .leftJoinAndSelect(
-            "detail.actualLogsDetail",
-            "actualLogsDetail",
-          )
+          .leftJoinAndSelect("detail.actualLogsDetail", "actualLogsDetail")
           .where("DATE(header.schedule_date) = DATE(:scheduleDate)", {
             scheduleDate,
           })
@@ -3169,11 +3180,7 @@ export class StaffSchedulingService {
             details: locationDetails,
           };
 
-          const created = await this.create(
-            headerDto,
-            userId,
-            accessKeyId,
-          );
+          const created = await this.create(headerDto, userId, accessKeyId);
 
           const scheduleWithRelations =
             await this.scheduleHeaderRepository.findOne({
@@ -3214,10 +3221,7 @@ export class StaffSchedulingService {
               response,
             );
           } catch (err) {
-            logger.error(
-              `SSE event failed for Schedule ${response.id}:`,
-              err,
-            );
+            logger.error(`SSE event failed for Schedule ${response.id}:`, err);
           }
 
           results.push({
@@ -3322,11 +3326,8 @@ export class StaffSchedulingService {
               const actualLogsDto: CreateActualLogsDetailDto = {
                 staff_id: dwsDetail.staff_id,
                 staff_code:
-                  actualLogsDetail.staff_code ||
-                  dwsDetail.staff_code ||
-                  "",
-                remarks:
-                  dwsDetail.remarks || actualLogsDetail.remarks,
+                  actualLogsDetail.staff_code || dwsDetail.staff_code || "",
+                remarks: dwsDetail.remarks || actualLogsDetail.remarks,
                 dws_no: incomingDwsNo || actualLogsDetail.dws_no,
 
                 warehouse_id: dwsDetail.warehouse_id,
@@ -3360,9 +3361,7 @@ export class StaffSchedulingService {
               Object.assign(actualLogsDetail, actualLogsDto);
 
               actualLogsDetail =
-                await this.actualLogsDetailRepository.save(
-                  actualLogsDetail,
-                );
+                await this.actualLogsDetailRepository.save(actualLogsDetail);
             } else {
               // Re-create and link Actual Logs when the relation is missing.
               actualLogsDetail = await createActualLogsDetail(
@@ -3371,8 +3370,7 @@ export class StaffSchedulingService {
                 incomingDwsNo,
               );
 
-              existingDetail.actual_logs_detail_id =
-                actualLogsDetail.id;
+              existingDetail.actual_logs_detail_id = actualLogsDetail.id;
             }
 
             // Update the existing Schedule Detail.
@@ -3380,9 +3378,7 @@ export class StaffSchedulingService {
               dwsDetail.duty_start_time,
             );
 
-            existingDetail.duty_end_time = new Date(
-              dwsDetail.duty_end_time,
-            );
+            existingDetail.duty_end_time = new Date(dwsDetail.duty_end_time);
 
             existingDetail.overtime_in = dwsDetail.overtime_in
               ? new Date(dwsDetail.overtime_in)
@@ -3398,22 +3394,20 @@ export class StaffSchedulingService {
             existingDetail.remarks = dwsDetail.remarks;
 
             existingDetail.regular = Number(dwsDetail.regular || 0);
-            existingDetail.break_hours = String(
-              dwsDetail.break_hours || 0,
-            );
+            existingDetail.break_hours = String(dwsDetail.break_hours || 0);
             existingDetail.overtime = Number(dwsDetail.overtime || 0);
             existingDetail.twh = Number(dwsDetail.twh || 0);
 
             existingDetail.night_shift_hrs =
               dwsDetail.night_shift_hrs || "00:00:00";
 
-            existingDetail.night_shift = Number(
-              dwsDetail.night_shift || 0,
-            );
+            existingDetail.night_shift = Number(dwsDetail.night_shift || 0);
 
             // Recompute schedule detail after DWS data changes.
             existingDetail.cron_computed = false;
             existingDetail.updated_by = userId;
+            existingDetail.ot_clearing_approved =
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false;
 
             await this.scheduleDetailRepository.save(existingDetail);
 
@@ -3430,9 +3424,7 @@ export class StaffSchedulingService {
               existingDwsNoMap.set(incomingDwsNo, existingDetail);
             }
 
-            const savedDwsNo = String(
-              actualLogsDetail.dws_no ?? "",
-            ).trim();
+            const savedDwsNo = String(actualLogsDetail.dws_no ?? "").trim();
 
             if (savedDwsNo) {
               existingDwsNoMap.set(savedDwsNo, existingDetail);
@@ -3481,15 +3473,12 @@ export class StaffSchedulingService {
             overtime: Number(dwsDetail.overtime || 0),
             twh: Number(dwsDetail.twh || 0),
 
-            night_shift_hrs: String(
-              dwsDetail.night_shift_hrs || "00:00:00",
-            ),
+            night_shift_hrs: String(dwsDetail.night_shift_hrs || "00:00:00"),
 
             night_shift: Number(dwsDetail.night_shift || 0),
 
             working_day_id:
-              dwsDetail.working_day_id ||
-              WORKING_DAY_IDS.REGULAR_DAY,
+              dwsDetail.working_day_id || WORKING_DAY_IDS.REGULAR_DAY,
 
             status_id: STATUS_IDS.ACTIVE,
             attendance_status_id: STATUS_IDS.FOR_REVIEW,
@@ -3497,6 +3486,8 @@ export class StaffSchedulingService {
 
             created_by: userId,
             updated_by: userId,
+            ot_clearing_approved:
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false,
           });
 
           const savedScheduleDetail =
@@ -3505,10 +3496,7 @@ export class StaffSchedulingService {
           // Add the new record to indexes to prevent duplicate processing
           // within the same incoming batch.
           if (incomingDwsNo) {
-            existingDwsNoMap.set(
-              incomingDwsNo,
-              savedScheduleDetail,
-            );
+            existingDwsNoMap.set(incomingDwsNo, savedScheduleDetail);
           }
 
           existingDetailMap.set(
@@ -3565,10 +3553,7 @@ export class StaffSchedulingService {
           location_id: locationId,
           vendor_id: vendorId,
           schedule_date: scheduleDate,
-          error:
-            error instanceof Error
-              ? error.message
-              : String(error),
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -3581,24 +3566,24 @@ export class StaffSchedulingService {
   }
 
   private parseDwsFullDateTime(value: any): Date | null {
-  if (value == null || String(value).trim() === "") {
-  return null;
-  }
+    if (value == null || String(value).trim() === "") {
+      return null;
+    }
 
-  const input = String(value).trim();
+    const input = String(value).trim();
 
-  const formats = [
-  "YYYY-MM-DD hh A",
-  "YYYY-MM-DD hh:mm A",
-  "YYYY-MM-DD HH",
-  "YYYY-MM-DD HH:mm",
-  "YYYY-MM-DDTHH:mm",
-  "YYYY-MM-DDTHH:mm.SSS",
-  ];
+    const formats = [
+      "YYYY-MM-DD hh A",
+      "YYYY-MM-DD hh:mm A",
+      "YYYY-MM-DD HH",
+      "YYYY-MM-DD HH:mm",
+      "YYYY-MM-DDTHH:mm",
+      "YYYY-MM-DDTHH:mm.SSS",
+    ];
 
-  const parsed = dayjs(input, formats, true);
+    const parsed = dayjs(input, formats, true);
 
-  return parsed.isValid() ? parsed.toDate() : null;
+    return parsed.isValid() ? parsed.toDate() : null;
   }
 
   private filterInternalScheduleCollisions(
@@ -3625,7 +3610,6 @@ export class StaffSchedulingService {
     return accepted;
   }
 
-
   public async calculateNightShift(
     startTime: Date | null | undefined,
     endTime: Date | null | undefined,
@@ -3646,11 +3630,7 @@ export class StaffSchedulingService {
     const start = dayjs(startTime);
     const end = dayjs(endTime);
 
-    if (
-      !start.isValid() ||
-      !end.isValid() ||
-      !end.isAfter(start)
-    ) {
+    if (!start.isValid() || !end.isValid() || !end.isAfter(start)) {
       return zeroResult;
     }
 
@@ -3666,10 +3646,7 @@ export class StaffSchedulingService {
     const lastDay = end.startOf("day");
     const nextMorning = scheduleDay.add(1, "day");
 
-    while (
-      currentDay.isBefore(lastDay) ||
-      currentDay.isSame(lastDay, "day")
-    ) {
+    while (currentDay.isBefore(lastDay) || currentDay.isSame(lastDay, "day")) {
       const windowStart = currentDay
         .hour(nightStartHour)
         .minute(0)
@@ -3690,13 +3667,9 @@ export class StaffSchedulingService {
         windowStart.isSame(nextMorning, "day");
 
       if (isRelevantWindow) {
-        const overlapStart = start.isAfter(windowStart)
-          ? start
-          : windowStart;
+        const overlapStart = start.isAfter(windowStart) ? start : windowStart;
 
-        const overlapEnd = end.isBefore(windowEnd)
-          ? end
-          : windowEnd;
+        const overlapEnd = end.isBefore(windowEnd) ? end : windowEnd;
 
         if (overlapEnd.isAfter(overlapStart)) {
           totalSeconds += overlapEnd.diff(overlapStart, "second");
@@ -3768,9 +3741,13 @@ export class StaffSchedulingService {
         .leftJoinAndSelect("payrollDetail.workingDays", "workingDay")
         .leftJoinAndSelect("payrollDetail.createdBy", "createdBy")
         .leftJoinAndSelect("payrollDetail.updatedBy", "updatedBy");
-      query.andWhere("payrollHeader.status_id = :postedStatus", {
-        postedStatus: STATUS_IDS.POSTED,
-      });
+      query.andWhere(
+        "payrollHeader.status_id = :postedStatus AND payrollDetail.status_id = :activeStatus",
+        {
+          postedStatus: STATUS_IDS.POSTED,
+          activeStatus: STATUS_IDS.ACTIVE,
+        },
+      );
       if (payrollHeaderId !== undefined) {
         query.andWhere("payrollDetail.payroll_header_id = :payrollHeaderId", {
           payrollHeaderId,

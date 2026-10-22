@@ -40,6 +40,14 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEModule } from "../sse/sse.module";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { CacheInvalidationModule } from "../cache/cache.module";
+import { WarehouseBudgetHoursController } from "./controllers/warehouse-budget-hours.controller";
+import { WarehouseBudgetHoursService } from "./services/warehouse-budget-hours.service";
+import { WarehouseBudgetHour } from "src/entities/WarehouseBudgetHour";
+import { WarehouseSalariesController } from "./controllers/warehouse-salaries.controller";
+import { WarehouseSalariesService } from "./services/warehouse-salaries.service";
+import { WarehouseSalary } from "src/entities/WarehouseSalary";
+import { Vendor } from "src/entities/Vendor";
+import { Position } from "src/entities/Position";
 
 @Module({
   imports: [
@@ -57,6 +65,10 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       UserAuditTrail,
       Action,
       TransactionSequence,
+      WarehouseBudgetHour,
+      WarehouseSalary,
+      Vendor,
+      Position,
     ]),
     UsersModule,
     StatusModule,
@@ -78,6 +90,8 @@ import { CacheInvalidationModule } from "../cache/cache.module";
     WarehouseHurdleCategoriesController,
     WarehouseEmployeesController,
     WarehouseDwhController,
+    WarehouseBudgetHoursController,
+    WarehouseSalariesController,
   ],
   providers: [
     WarehousesService,
@@ -88,8 +102,9 @@ import { CacheInvalidationModule } from "../cache/cache.module";
     WarehouseEmployeesService,
     WarehouseDwhService,
     UserAuditTrailCreateService,
-    UserAuditTrailCreateService,
     CommonUtilitiesService,
+    WarehouseBudgetHoursService,
+    WarehouseSalariesService,
   ],
   exports: [
     WarehousesService,
@@ -99,6 +114,8 @@ import { CacheInvalidationModule } from "../cache/cache.module";
     WarehouseHurdleCategoriesService,
     WarehouseEmployeesService,
     WarehouseDwhService,
+    WarehouseBudgetHoursService,
+    WarehouseSalariesService,
   ],
 })
 export class WarehousesModule {}

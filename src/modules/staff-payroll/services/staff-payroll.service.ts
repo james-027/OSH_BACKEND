@@ -34,6 +34,10 @@ import { PayrollComputationService } from "src/modules/staff-payroll/services/pa
 import { buildReqTransHeaderGroupKey } from "src/config/cache.config";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
+import { formatDateToString } from "src/utils/date.utils";
+import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
+import { WarehouseSalariesService } from "src/modules/warehouses/services/warehouse-salaries.service";
+import { PayrollLog } from "src/entities/PayrollLog";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
@@ -119,6 +123,10 @@ export class StaffPayrollService {
     private sssConfigRepository: Repository<SssConfigs>,
     @InjectRepository(StaffVendorSalary)
     private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
+    @InjectRepository(PayrollLog)
+    private payrollLogRepository: Repository<PayrollLog>,
+    private warehouseBudgetHoursService: WarehouseBudgetHoursService,
+    private warehouseSalariesService: WarehouseSalariesService,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -146,10 +154,19 @@ export class StaffPayrollService {
 
       const payrollHeaders = await this.payrollHeaderRepository.find({
         where,
-        relations: ["status", "createdBy", "updatedBy"],
+        relations: ["status", "createdBy", "updatedBy", "details"],
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(payrollHeaders);
+      const headersWithCount = payrollHeaders.map((header) => ({
+        ...header,
+        no_of_entries: header.details
+          ? header.details.filter(
+              (detail) => detail.status_id === STATUS_IDS.ACTIVE,
+            ).length
+          : 0,
+      }));
+
+      return this.responseMapperService.mapEntitiesToResponse(headersWithCount);
     } catch (error) {
       console.error("Error fetching payroll header:", error);
 
@@ -198,6 +215,7 @@ export class StaffPayrollService {
         relations: [
           "scheduleHeader",
           "staff",
+          "staff.position",
           "warehouse",
           "vendor",
           "workingDays",
@@ -222,6 +240,145 @@ export class StaffPayrollService {
         (detail) => detail.cron_computed === true,
       );
 
+      if (scheduleDetails.length === 0) {
+        return this.responseMapperService.mapEntitiesToResponse([]);
+      }
+
+      // ============================================================
+      // VALIDATE WAREHOUSE BUDGET HOURS & SALARIES
+      // ============================================================
+      const budgetHourRequests: Array<{
+        vendor_id: number;
+        warehouse_id: number;
+        date: string;
+      }> = [];
+
+      const warehouseSalaryRequests: Array<{
+        vendor_id: number;
+        warehouse_id: number;
+        position_id?: number;
+        date: string;
+      }> = [];
+
+      for (const d of scheduleDetails) {
+        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _dSd = d.scheduleHeader?.schedule_date as unknown as
+          | string
+          | Date;
+
+        let dateIso: string | null = null;
+        if (_dSd != null) {
+          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
+            dateIso = (_dSd as string).slice(0, 10);
+          } else {
+            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+          }
+        }
+
+        if (vendorId != null && warehouseId != null && dateIso) {
+          budgetHourRequests.push({
+            vendor_id: vendorId,
+            warehouse_id: warehouseId,
+            date: dateIso,
+          });
+
+          warehouseSalaryRequests.push({
+            vendor_id: vendorId,
+            warehouse_id: warehouseId,
+            position_id: d.staff?.position_id,
+            date: dateIso,
+          });
+        }
+      }
+
+      const [budgetHourMap, warehouseSalaryMap] = await Promise.all([
+        this.warehouseBudgetHoursService.getBudgetHoursMap(budgetHourRequests),
+        this.warehouseSalariesService.getSalariesMap(warehouseSalaryRequests),
+      ]);
+
+      const missingBudgetHoursMap = new Map<string, any>();
+      const missingSalariesMap = new Map<string, any>();
+
+      for (const d of scheduleDetails) {
+        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _dSd = d.scheduleHeader?.schedule_date as unknown as
+          | string
+          | Date;
+
+        let dateIso: string | null = null;
+        if (_dSd != null) {
+          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
+            dateIso = (_dSd as string).slice(0, 10);
+          } else {
+            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+          }
+        }
+
+        const warehouseName =
+          d.warehouse?.warehouse_name || `Warehouse #${warehouseId ?? "N/A"}`;
+        const warehouseIfs = d.warehouse?.warehouse_ifs || "";
+        const vendorName =
+          d.vendor?.service_provider_name || `Vendor #${vendorId ?? "N/A"}`;
+        const vendorAbbr =
+          d.vendor?.service_provider_code || `Vendor #${vendorId ?? "N/A"}`;
+        const positionId = d.staff?.position_id ?? null;
+        const positionName =
+          d.staff?.position?.position_name ||
+          (positionId ? `Position #${positionId}` : "Any Position");
+
+        // 1. Check Budget Hours
+        const budgetKey = `${vendorId}-${warehouseId}-${dateIso}`;
+        const budgetRow = dateIso ? budgetHourMap.get(budgetKey) : null;
+        const hasBudget = budgetRow && Number(budgetRow.budget_hours) > 0;
+
+        if (!hasBudget && !missingBudgetHoursMap.has(budgetKey)) {
+          missingBudgetHoursMap.set(budgetKey, {
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+            warehouse_ifs: warehouseIfs,
+            vendor_id: vendorId,
+            vendor_name: vendorName,
+            vendor_abbr: vendorAbbr,
+            date: dateIso,
+          });
+        }
+
+        // 2. Check Warehouse Salary
+        const posKey = positionId != null ? positionId : "any";
+        const salaryKey = `${vendorId}-${warehouseId}-${posKey}-${dateIso}`;
+        const salaryRow = dateIso ? warehouseSalaryMap.get(salaryKey) : null;
+        const hasSalary = salaryRow && Number(salaryRow.salary) > 0;
+
+        if (!hasSalary && !missingSalariesMap.has(salaryKey)) {
+          missingSalariesMap.set(salaryKey, {
+            warehouse_id: warehouseId,
+            warehouse_name: warehouseName,
+            warehouse_ifs: warehouseIfs,
+            vendor_id: vendorId,
+            vendor_abbr: vendorAbbr,
+            vendor_name: vendorName,
+            position_id: positionId,
+            position_name: positionName,
+            date: dateIso,
+          });
+        }
+      }
+
+      const missingBudgetHours = Array.from(missingBudgetHoursMap.values());
+      const missingSalaries = Array.from(missingSalariesMap.values());
+
+      if (missingBudgetHours.length > 0 || missingSalaries.length > 0) {
+        return {
+          message:
+            "Cannot proceed with computation. Some warehouses do not have budget hours or salary rate configured for the selected period.",
+          data: [],
+          missing_budget_hours: missingBudgetHours,
+          missing_salaries: missingSalaries,
+        };
+      }
+
       // Sort warehouse alphabetically
       scheduleDetails.sort((a, b) =>
         (a.warehouse?.warehouse_name || "").localeCompare(
@@ -234,6 +391,40 @@ export class StaffPayrollService {
       console.error("Error fetching payroll details:", error);
       throw new Error("Failed to fetch payroll details");
     }
+  }
+
+  /**
+   * Extracts and formats parameter objects required by warehouseBudgetHoursService.getBudgetHoursMap().
+   * Centralizes vendor, warehouse, and date extraction to avoid redundant mapping logic.
+   */
+  private extractBudgetHourParams(scheduleDetails: any[]): Array<{
+    vendor_id: number;
+    warehouse_id: number;
+    date: string;
+  }> {
+    return scheduleDetails.map((d) => {
+      const vendorId = (d.vendor as any)?.id ?? (d as any).vendor_id;
+      const warehouseId = (d.warehouse as any)?.id ?? (d as any).warehouse_id;
+      const _dSd = d.scheduleHeader?.schedule_date as unknown as string | Date;
+
+      let dateIso: string | null = null;
+
+      if (_dSd != null) {
+        if (typeof _dSd === "string" && (_dSd as string).length === 10) {
+          dateIso = _dSd as string;
+        } else if (typeof _dSd === "string") {
+          dateIso = (_dSd as string).split("T")[0];
+        } else {
+          dateIso = formatDateToString(_dSd as Date);
+        }
+      }
+
+      return {
+        vendor_id: vendorId,
+        warehouse_id: warehouseId,
+        date: dateIso ?? "",
+      };
+    });
   }
 
   async computePayroll(
@@ -323,6 +514,16 @@ export class StaffPayrollService {
       }
 
       // ============================================================
+      // 3.1 FETCH BUDGET HOURS
+      // ============================================================
+      const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
+
+      const budgetHourMap =
+        await this.warehouseBudgetHoursService.getBudgetHoursMap(
+          budgetHourParams,
+        );
+
+      // ============================================================
       // 4. CREATE PAYROLL HEADER + PAYROLL DETAILS
       // ============================================================
 
@@ -374,6 +575,10 @@ export class StaffPayrollService {
         // ========================================================
 
         const payrollDetails = details.map((scheduleDetail) => {
+          const scheduleDateIso = scheduleDetail.scheduleHeader?.schedule_date;
+          const budgetHourKey = `${scheduleDetail.vendor_id}-${scheduleDetail.warehouse_id ?? ""}-${scheduleDateIso ?? ""}`;
+          const budgetRow = budgetHourMap.get(budgetHourKey);
+          const budgethours = budgetRow ? Number(budgetRow.budget_hours) : 0;
           return this.payrollDetailRepository.create({
             payroll_header_id: savedPayrollHeader.id,
 
@@ -403,8 +608,8 @@ export class StaffPayrollService {
 
             just_time_in: scheduleDetail.just_time_in,
 
-            overtime_in: scheduleDetail.actualLogsDetail?.overtime_in,
-            overtime_out: scheduleDetail.actualLogsDetail?.overtime_out,
+            overtime_in: scheduleDetail.overtime_in,
+            overtime_out: scheduleDetail.overtime_out,
             just_time_out: scheduleDetail.just_time_out,
             just_break_out: scheduleDetail.just_break_out,
             just_break_in: scheduleDetail.just_break_in,
@@ -440,6 +645,7 @@ export class StaffPayrollService {
             break_hours: scheduleDetail.break_hours,
 
             created_by: userId,
+            trans_budget_hours: budgethours,
           });
         });
 
@@ -567,13 +773,308 @@ export class StaffPayrollService {
     }
   }
 
+  /**
+   * Re-computes payroll details for multiple existing payroll headers.
+   * Soft-deactivates current payroll_details (status_id = 2) for each header
+   * and creates fresh payroll_details based on the latest schedule details.
+   */
+  async reComputePayroll(
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    accessKeyId: number,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollHeaderIds = updatePayrollDto.id;
+      if (!payrollHeaderIds || payrollHeaderIds.length === 0) {
+        throw new BadRequestException(
+          "At least one payroll header ID must be provided.",
+        );
+      }
+
+      // ============================================================
+      // 1. FETCH AND VALIDATE EXISTING PAYROLL HEADERS IN BULK
+      // ============================================================
+
+      const existingHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(payrollHeaderIds),
+          access_key_id: accessKeyId,
+        },
+        relations: ["details"],
+      });
+
+      if (!existingHeaders.length) {
+        throw new NotFoundException("No matching payroll headers found.");
+      }
+
+      const foundIds = existingHeaders.map((payroll) => payroll.id);
+
+      const missingIds = payrollHeaderIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
+      );
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const recomputedPayrolls: any[] = [];
+
+      // ============================================================
+      // 2. LOOP THROUGH EACH PAYROLL HEADER FOR RE-COMPUTATION
+      // ============================================================
+
+      for (const existingHeader of existingHeaders) {
+        // --- Step A: Soft-deactivate current payroll details (status_id = 2) if the payroll_header.is_reverted is true ---
+        if (!existingHeader.is_reverted) {
+          continue; // Skip if the payroll header is not marked for re-computation
+        }
+        await this.payrollDetailRepository.update(
+          {
+            payroll_header_id: existingHeader.id,
+          },
+          {
+            status_id: STATUS_IDS.INACTIVE, // 2
+            updated_by: userId,
+          },
+        );
+
+        // --- Step B: Reconstruct schedule filter for this header ---
+        const payrollDateFrom = existingHeader.payroll_date_from;
+        const payrollDateTo = existingHeader.payroll_date_to;
+
+        const vendorIds = [
+          ...new Set(
+            existingHeader.details
+              ?.map((d) => d.vendor_id)
+              .filter((id): id is number => id !== null && id !== undefined),
+          ),
+        ];
+
+        const locationIds = [
+          ...new Set(
+            existingHeader.details
+              ?.map((d) => d.location_id)
+              .filter((id): id is number => id !== null && id !== undefined),
+          ),
+        ];
+
+        const where: any = {
+          scheduleHeader: {
+            access_key_id: accessKeyId,
+            schedule_date: Between(payrollDateFrom, payrollDateTo),
+          },
+          attendance_status_id: STATUS_IDS.VALIDATED,
+          cron_computed: true,
+        };
+
+        if (locationIds.length > 0) {
+          where.location_id = In(locationIds);
+        }
+
+        if (vendorIds.length > 0) {
+          where.vendor_id = In(vendorIds);
+        }
+
+        // --- Step C: Re-fetch validated schedule details ---
+        const scheduleDetails = await this.scheduleDetailRepository.find({
+          where,
+          relations: [
+            "scheduleHeader",
+            "staff",
+            "warehouse",
+            "vendor",
+            "location",
+            "workingDays",
+            "actualLogsDetail",
+          ],
+        });
+
+        if (!scheduleDetails.length) {
+          logger.warn(
+            `No schedule details found for re-computing payroll header ID ${existingHeader.id}.`,
+          );
+          continue;
+        }
+
+        // --- Step D: Fetch budget hours using centralized helper ---
+        const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
+
+        const budgetHourMap =
+          await this.warehouseBudgetHoursService.getBudgetHoursMap(
+            budgetHourParams,
+          );
+
+        // --- Step E: Create new active payroll details ---
+        const newPayrollDetails = scheduleDetails.map((scheduleDetail) => {
+          const scheduleDateIso = scheduleDetail.scheduleHeader?.schedule_date;
+          const budgetHourKey = `${scheduleDetail.vendor_id}-${scheduleDetail.warehouse_id ?? ""}-${scheduleDateIso ?? ""}`;
+          const budgetRow = budgetHourMap.get(budgetHourKey);
+          const budgethours = budgetRow ? Number(budgetRow.budget_hours) : 0;
+
+          return this.payrollDetailRepository.create({
+            payroll_header_id: existingHeader.id,
+            schedule_detail_id: scheduleDetail.id,
+            staff_id: scheduleDetail.staff_id,
+            staff_code: scheduleDetail.staff?.staff_code || "",
+            vendor_id: scheduleDetail.vendor_id,
+            location_id: scheduleDetail.location_id,
+            warehouse_id: scheduleDetail.warehouse_id,
+            warehouse_ifs: scheduleDetail.warehouse?.warehouse_ifs || "",
+            duty_start_time: scheduleDetail.duty_start_time,
+            duty_end_time: scheduleDetail.duty_end_time,
+            planned_duty_start_time: scheduleDetail.planned_duty_start_time,
+            planned_duty_end_time: scheduleDetail.planned_duty_end_time,
+            schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
+            just_time_in: scheduleDetail.just_time_in,
+            overtime_in: scheduleDetail.overtime_in,
+            overtime_out: scheduleDetail.overtime_out,
+            just_time_out: scheduleDetail.just_time_out,
+            just_break_out: scheduleDetail.just_break_out,
+            just_break_in: scheduleDetail.just_break_in,
+            actual_time_in: scheduleDetail.actualLogsDetail?.time_in,
+            actual_time_out: scheduleDetail.actualLogsDetail?.time_out,
+            actual_break_in: scheduleDetail.actualLogsDetail?.break_in,
+            actual_break_out: scheduleDetail.actualLogsDetail?.break_out,
+            add_ot: scheduleDetail.add_ot,
+            working_day_id: scheduleDetail.working_day_id,
+            status_id: STATUS_IDS.ACTIVE,
+            attendance_status_id: scheduleDetail.attendance_status_id,
+            just_remarks: scheduleDetail.just_remarks,
+            regular: scheduleDetail.regular,
+            overtime: scheduleDetail.overtime,
+            twh: scheduleDetail.twh,
+            break: scheduleDetail.break,
+            night_shift_hrs: scheduleDetail.night_shift_hrs,
+            night_shift: scheduleDetail.night_shift,
+            payroll_remarks: scheduleDetail.payroll_remarks,
+            regular_hours: scheduleDetail.regular_hours,
+            overtime_hours: scheduleDetail.overtime_hours,
+            twh_hours: scheduleDetail.twh_hours,
+            break_hours: scheduleDetail.break_hours,
+            created_by: userId,
+            trans_budget_hours: budgethours,
+          });
+        });
+
+        await this.payrollDetailRepository.save(newPayrollDetails);
+
+        // --- Step F: Update schedule header audit timestamps ---
+        const scheduleHeaderIds = [
+          ...new Set(
+            scheduleDetails
+              .map((detail) => detail.scheduleHeader?.id)
+              .filter((id): id is number => id !== undefined && id !== null),
+          ),
+        ];
+
+        if (scheduleHeaderIds.length > 0) {
+          await this.scheduleHeaderRepository.update(
+            {
+              id: In(scheduleHeaderIds),
+            },
+            {
+              payroll_ts: new Date(),
+              payroll_updated_by: userId,
+            },
+          );
+        }
+
+        // --- Step G: User Audit Trail & Action Logs ---
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffPayrollService",
+            method: "reComputePayroll",
+            raw_data: JSON.stringify({ payrollHeaderId: existingHeader.id }),
+            description: `Re-computed payroll ${existingHeader.payroll_invoice} with reamrks: ${updatePayrollDto.remarks || ""}`,
+            status_id: 1,
+          },
+          userId,
+        );
+
+        const updatedPayrollWithRelations =
+          await this.payrollHeaderRepository.findOne({
+            where: {
+              id: existingHeader.id,
+            },
+            relations: [
+              "status",
+              "createdBy",
+              "updatedBy",
+              "details",
+              "details.staff",
+              "details.vendor",
+              "details.location",
+              "details.warehouse",
+              "details.status",
+            ],
+          });
+
+        if (updatedPayrollWithRelations) {
+          try {
+            await this.actionLogsService.logAction({
+              module_name: this.module_name,
+              ref_id: existingHeader.id,
+              action_id: ACTION_IDS.EDIT,
+              description: `Re-computed Payroll ${existingHeader.payroll_invoice} with remarks: ${updatePayrollDto.remarks || ""}`,
+              raw_data: JSON.stringify({
+                payrollHeaderId: existingHeader.id,
+                newDetailsCount: newPayrollDetails.length,
+              }),
+              created_by: userId,
+            });
+          } catch (err) {
+            logger.error(
+              "Action log failed for Re-compute Staff payroll:",
+              err,
+            );
+          }
+
+          const response = this.responseMapperService.mapEntityToResponse(
+            updatedPayrollWithRelations,
+          );
+
+          recomputedPayrolls.push(response);
+        }
+      }
+
+      if (recomputedPayrolls.length > 0) {
+        await this.payrollHeaderRepository.update(
+          {
+            id: In(payrollHeaderIds),
+          },
+          {
+            status_id: STATUS_IDS.POSTED,
+            updated_by: userId,
+            modified_at: new Date(),
+          },
+        );
+      }
+
+      try {
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return {
+        message: "Payroll headers re-computed successfully.",
+        data: recomputedPayrolls,
+      };
+    } catch (error) {
+      console.error("Error re-computing payroll:", error);
+
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to re-compute payroll",
+      );
+    }
+  }
+
   async autoComputationScheduleDetails(): Promise<any> {
     try {
       const where: any = {
-        attendance_status_id: In([
-          STATUS_IDS.VALIDATED,
-          STATUS_IDS.FOR_REVIEW,
-        ]),
+        attendance_status_id: In([STATUS_IDS.VALIDATED, STATUS_IDS.FOR_REVIEW]),
         cron_computed: false,
       };
 
@@ -1060,11 +1561,13 @@ export class StaffPayrollService {
             status_id: STATUS_IDS.POSTED,
             cron_computed: false,
           },
+          status_id: STATUS_IDS.ACTIVE,
         },
         relations: [
           "payrollHeader",
           "scheduleDetail",
           "staff",
+          "staff.position",
           "warehouse",
           "location",
           "vendor",
@@ -1178,9 +1681,35 @@ export class StaffPayrollService {
        * COMPUTATION
        * ============================================================
        */
+      /**
+       * ============================================================
+       * WAREHOUSE SALARIES MAP
+       * ============================================================
+       */
+      const warehouseSalaryRequests = postedPayrollDetails
+        .filter((d) => d.warehouse_id && d.vendor_id && d.schedule_date)
+        .map((d) => ({
+          warehouse_id: d.warehouse_id,
+          vendor_id: d.vendor_id,
+          position_id: d.staff?.position_id,
+          date:
+            typeof d.schedule_date === "string" &&
+            (d.schedule_date as string).length >= 10
+              ? (d.schedule_date as string).slice(0, 10)
+              : dayjs(d.schedule_date).format("YYYY-MM-DD"),
+        }));
+
+      const warehouseSalaryMap =
+        await this.warehouseSalariesService.getSalariesMap(
+          warehouseSalaryRequests,
+        );
+
       const computedDetailsByHeader = new Map<number, PayrollDetails[]>();
 
       let computedCount = 0;
+
+      const errorLogsMap = new Map<number, Partial<PayrollLog>>();
+      const computedDetailIds: number[] = [];
 
       for (const detail of postedPayrollDetails) {
         const payrollHeader = detail.payrollHeader;
@@ -1192,6 +1721,19 @@ export class StaffPayrollService {
         const staffId = detail.staff_id;
 
         if (!staffId) {
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_ID",
+            message: `Payroll detail #${detail.id} has no staff_id assigned`,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              payroll_header_id: payrollHeader.id,
+              vendor_id: detail.vendor_id,
+              warehouse_id: detail.warehouse_id,
+              location_id: detail.location_id,
+            }),
+          });
           continue;
         }
 
@@ -1207,9 +1749,24 @@ export class StaffPayrollService {
         const staffVendor = staffVendorMap.get(staffVendorKey);
 
         if (!staffVendor) {
-          logger.warn(
-            `[PayrollComputation] No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`,
-          );
+          const msg = `No active staff vendor salary found for staff_id=${staffId}, vendor_id=${detail.vendor_id}, location_id=${detail.location_id}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_VENDOR",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              location_id: detail.location_id,
+              warehouse_id: detail.warehouse_id,
+              schedule_date: detail.schedule_date,
+            }),
+          });
 
           continue;
         }
@@ -1226,9 +1783,25 @@ export class StaffPayrollService {
         const staffSalary = staffSalaryMap.get(staffVendor.id);
 
         if (!staffSalary) {
-          logger.warn(
-            `[PayrollComputation] No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`,
-          );
+          const msg = `No active staff salary found for staff_vendor_id=${staffVendor.id}, staff_id=${staffId}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_STAFF_SALARY",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_vendor_id: staffVendor.id,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              location_id: detail.location_id,
+              warehouse_id: detail.warehouse_id,
+              schedule_date: detail.schedule_date,
+            }),
+          });
 
           continue;
         }
@@ -1238,9 +1811,45 @@ export class StaffPayrollService {
          * SALARY RATE
          * ----------------------------------------------------------
          */
-        const salaryRate = Number(staffSalary.salary_rate) || 0;
+        const scheduleDateStr = detail.schedule_date
+          ? typeof detail.schedule_date === "string" &&
+            (detail.schedule_date as string).length >= 10
+            ? (detail.schedule_date as string).slice(0, 10)
+            : dayjs(detail.schedule_date).format("YYYY-MM-DD")
+          : null;
+
+        const posKey =
+          detail.staff?.position_id != null ? detail.staff.position_id : "any";
+        const warehouseSalaryKey = `${detail.vendor_id}-${detail.warehouse_id}-${posKey}-${scheduleDateStr}`;
+        const warehouseSalary = scheduleDateStr
+          ? warehouseSalaryMap.get(warehouseSalaryKey)
+          : null;
+
+        const salaryRate = Number(warehouseSalary?.salary) || 0;
+        const salaryRateEffectivity: Date | null = warehouseSalary?.date_from
+          ? dayjs(warehouseSalary.date_from).toDate()
+          : null;
 
         if (!salaryRate) {
+          const msg = `No store salary found for store = [(#${detail.warehouse_id}) ${detail.warehouse?.warehouse_ifs} - ${detail.warehouse?.warehouse_name}], vendor = [(#${detail.vendor_id}) ${detail.vendor?.service_provider_code} - ${detail.vendor?.service_provider_name}], position = [(#${detail.staff?.position_id}) ${detail.staff?.position?.position_name}], schedule_date=${scheduleDateStr}`;
+          logger.warn(`[PayrollComputation] ${msg}`);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "MISSING_WAREHOUSE_SALARY",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              staff_code: detail.staff_code,
+              vendor_id: detail.vendor_id,
+              warehouse_id: detail.warehouse_id,
+              position_id: detail.staff?.position_id,
+              schedule_date: scheduleDateStr,
+            }),
+          });
+
           continue;
         }
 
@@ -1256,57 +1865,149 @@ export class StaffPayrollService {
          * COMPUTE PAYROLL DETAIL
          * ----------------------------------------------------------
          */
-        const computedValues =
-          this.payrollComputationService.computePayrollDetail({
-            detail,
-            payrollHeader,
-            salaryRate,
-            staffSalary,
-            sssConfigs,
-            timeKeeping,
+        try {
+          const computedValues =
+            this.payrollComputationService.computePayrollDetail({
+              detail,
+              payrollHeader,
+              salaryRate,
+              staffSalary,
+              sssConfigs,
+              timeKeeping,
+              salaryRateEffectivity,
+            });
+
+          if (!computedValues) {
+            const msg = `Computation returned null or zero values for detail_id=${detail.id}`;
+            logger.warn(`[PayrollComputation] ${msg}`);
+
+            errorLogsMap.set(detail.id, {
+              payroll_header_id: payrollHeader.id,
+              payroll_detail_id: detail.id,
+              error_type: "COMPUTATION_FAILED",
+              message: msg,
+              row_data: JSON.stringify({
+                detail_id: detail.id,
+                staff_id: staffId,
+                salary_rate: salaryRate,
+                schedule_date: scheduleDateStr,
+              }),
+            });
+
+            continue;
+          }
+
+          Object.assign(detail, computedValues);
+
+          await this.payrollDetailRepository.save(detail);
+
+          computedDetailIds.push(detail.id);
+
+          const headerId = detail.payroll_header_id;
+
+          if (!computedDetailsByHeader.has(headerId)) {
+            computedDetailsByHeader.set(headerId, []);
+          }
+
+          computedDetailsByHeader.get(headerId)!.push(detail);
+
+          computedCount++;
+        } catch (compErr: any) {
+          const msg = `Exception computing detail #${detail.id}: ${compErr?.message || compErr}`;
+          logger.error(`[PayrollComputation] ${msg}`, compErr);
+
+          errorLogsMap.set(detail.id, {
+            payroll_header_id: payrollHeader.id,
+            payroll_detail_id: detail.id,
+            error_type: "COMPUTATION_EXCEPTION",
+            message: msg,
+            row_data: JSON.stringify({
+              detail_id: detail.id,
+              staff_id: staffId,
+              error: String(compErr?.stack || compErr),
+            }),
           });
 
-        if (!computedValues) {
           continue;
         }
-
-        Object.assign(detail, computedValues);
-
-        payrollHeader.cron_computed = true;
-
-        await this.payrollDetailRepository.save(detail);
-
-        const headerId = detail.payroll_header_id;
-
-        if (!computedDetailsByHeader.has(headerId)) {
-          computedDetailsByHeader.set(headerId, []);
-        }
-
-        computedDetailsByHeader.get(headerId)!.push(detail);
-
-        computedCount++;
       }
 
+      /**
+       * ============================================================
+       * BULK UPSERT / CLEANUP PAYROLL LOGS (Fast High-Performance)
+       * ============================================================
+       */
+      if (errorLogsMap.size > 0) {
+        try {
+          await this.payrollLogRepository.upsert(
+            Array.from(errorLogsMap.values()),
+            ["payroll_detail_id"],
+          );
+        } catch (logErr) {
+          logger.error(
+            "[PayrollComputation] Failed to upsert payroll error logs:",
+            logErr,
+          );
+        }
+      }
+
+      if (computedDetailIds.length > 0) {
+        try {
+          await this.payrollLogRepository.delete({
+            payroll_detail_id: In(computedDetailIds),
+          });
+        } catch (delErr) {
+          logger.error(
+            "[PayrollComputation] Failed to clear resolved payroll error logs:",
+            delErr,
+          );
+        }
+      }
       /**
        * ============================================================
        * COMPUTE PAYROLL HEADER TOTALS
        * ============================================================
        */
-      for (const [headerId, details] of computedDetailsByHeader) {
-        const payrollHeader = postedPayrollDetails.find(
-          (detail) => detail.payroll_header_id === headerId,
-        )?.payrollHeader;
+      const headerIdsWithErrors = new Set<number>();
+      for (const errLog of errorLogsMap.values()) {
+        if (errLog.payroll_header_id) {
+          headerIdsWithErrors.add(errLog.payroll_header_id);
+        }
+      }
 
-        if (!payrollHeader) {
-          continue;
+      const headersMap = new Map<number, PayrollHeader>();
+      for (const detail of postedPayrollDetails) {
+        if (detail.payrollHeader && !headersMap.has(detail.payroll_header_id)) {
+          headersMap.set(detail.payroll_header_id, detail.payrollHeader);
+        }
+      }
+
+      for (const [headerId, payrollHeader] of headersMap) {
+        const hasError = headerIdsWithErrors.has(headerId);
+
+        payrollHeader.has_payroll_computation_error = hasError;
+
+        if (!hasError && computedDetailsByHeader.has(headerId)) {
+          payrollHeader.cron_computed = true;
+        } else {
+          payrollHeader.cron_computed = false;
         }
 
-        const headerTotals =
-          this.payrollComputationService.computePayrollHeaderTotals(details);
+        if (computedDetailsByHeader.has(headerId)) {
+          const details = computedDetailsByHeader.get(headerId)!;
+          const headerTotals =
+            this.payrollComputationService.computePayrollHeaderTotals(details);
 
-        Object.assign(payrollHeader, headerTotals);
+          Object.assign(payrollHeader, headerTotals);
+        }
 
         await this.payrollHeaderRepository.save(payrollHeader);
+      }
+
+      try {
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
 
       return {
@@ -1451,22 +2152,11 @@ export class StaffPayrollService {
         logger.error("Action log failed for Post Payroll:", err);
       }
 
-      for (const response of responses) {
-        try {
-          this.sseEventEmitter.emitUpdate(
-            "staff_attendance",
-            response.id,
-            response,
-          );
-
-          this.sseEventEmitter.emitUpdate(
-            "staff_payroll",
-            response.id,
-            response,
-          );
-        } catch (err) {
-          logger.error("SSE event failed:", err);
-        }
+      try {
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
 
       return responses;
@@ -1527,6 +2217,9 @@ export class StaffPayrollService {
               },
               {
                 status_id: STATUS_IDS.PENDING,
+                is_reverted: true,
+                remarks: updatePayrollDto.remarks,
+                total_billing: null,
                 cron_computed: false,
                 updated_by: userId,
                 modified_at: new Date(),
@@ -1612,21 +2305,11 @@ export class StaffPayrollService {
         logger.error("Action log failed for Revert Payroll:", err);
       }
 
-      for (const response of responses) {
-        try {
-          this.sseEventEmitter.emitUpdate(
-            "staff_attendance",
-            response.id,
-            response,
-          );
-          this.sseEventEmitter.emitUpdate(
-            "staff_payroll",
-            response.id,
-            response,
-          );
-        } catch (err) {
-          logger.error("SSE event failed:", err);
-        }
+      try {
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
       }
 
       return responses;
@@ -1693,7 +2376,7 @@ export class StaffPayrollService {
               },
             );
 
-                        // Get schedule detail IDs from the selected payroll details
+            // Get schedule detail IDs from the selected payroll details
             const payrollDetails = await transactionalEntityManager.find(
               PayrollDetails,
               {
@@ -1813,7 +2496,7 @@ export class StaffPayrollService {
     accessKeyId?: number,
   ): Promise<any[]> {
     try {
-      const where: any = {};
+      const where: any = { status_id: STATUS_IDS.ACTIVE };
 
       if (payrollHeaderId !== undefined) {
         where.payroll_header_id = payrollHeaderId;
@@ -1846,6 +2529,85 @@ export class StaffPayrollService {
     } catch (error) {
       console.error("Error fetching payroll details:", error);
       throw new Error("Failed to fetch payroll details");
+    }
+  }
+
+  async findPayrollErrorDetails(
+    payrollHeaderId: number,
+    accessKeyId?: number,
+  ): Promise<any[]> {
+    try {
+      if (!payrollHeaderId) {
+        throw new BadRequestException("payroll_header_id is required.");
+      }
+      const where: any = {
+        payroll_header_id: payrollHeaderId,
+      };
+
+      if (accessKeyId !== undefined) {
+        where.payrollHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
+
+      const logs = await this.payrollLogRepository.find({
+        where,
+        relations: [
+          "payrollHeader",
+          "payrollDetail",
+          "payrollDetail.staff",
+          "payrollDetail.staff.position",
+          "payrollDetail.warehouse",
+          "payrollDetail.vendor",
+          "payrollDetail.location",
+        ],
+        order: {
+          id: "ASC",
+        },
+      });
+
+      return logs.map((log) => {
+        let parsedRowData = null;
+        if (log.row_data) {
+          try {
+            parsedRowData = JSON.parse(log.row_data);
+          } catch {
+            parsedRowData = log.row_data;
+          }
+        }
+
+        return {
+          id: log.id,
+          payroll_header_id: log.payroll_header_id,
+          payroll_detail_id: log.payroll_detail_id,
+          error_type: log.error_type,
+          message: log.message,
+          row_data: parsedRowData,
+          created_at: log.created_at,
+          staff_id:
+            log.payrollDetail?.staff_id || parsedRowData?.staff_id || null,
+          staff_code:
+            log.payrollDetail?.staff?.staff_code ||
+            parsedRowData?.staff_code ||
+            "",
+          staff_name: log.payrollDetail?.staff
+            ? `${log.payrollDetail.staff.first_name} ${log.payrollDetail.staff.last_name}`
+            : "",
+          position_name:
+            log.payrollDetail?.staff?.position?.position_name || "",
+          warehouse_name: log.payrollDetail?.warehouse?.warehouse_name || "",
+          warehouse_ifs: log.payrollDetail?.warehouse?.warehouse_ifs || "",
+          vendor_name: log.payrollDetail?.vendor?.service_provider_name || "",
+          schedule_date:
+            log.payrollDetail?.schedule_date ||
+            parsedRowData?.schedule_date ||
+            null,
+          // payrollDetail: log.payrollDetail,
+        };
+      });
+    } catch (error) {
+      console.error("Error fetching payroll error logs:", error);
+      throw new Error("Failed to fetch payroll error logs");
     }
   }
 
@@ -2012,6 +2774,7 @@ export class StaffPayrollService {
         "payrollDetail.ot_rd_special_holiday_amount",
         "payrollDetail.net_amt_diser",
         "payrollDetail.salary_rate",
+        "payrollDetail.salary_rate_effectivity",
         "payrollDetail.hour_rate",
         "payrollDetail.regular_day",
         "payrollDetail.special_holiday",
@@ -2041,6 +2804,7 @@ export class StaffPayrollService {
         "payrollDetail.cash_bond",
         "payrollDetail.total_billing",
         "payrollDetail.ec",
+        "payrollDetail.trans_budget_hours",
         "staff.id",
         "staff.first_name",
         "staff.last_name",
@@ -2057,9 +2821,13 @@ export class StaffPayrollService {
         "warehouse.warehouse_ifs",
       ]);
 
-      query.andWhere("payrollHeader.status_id = :postedStatus", {
-        postedStatus: STATUS_IDS.POSTED,
-      });
+      query.andWhere(
+        "payrollHeader.status_id = :postedStatus AND payrollDetail.status_id = :activeStatus",
+        {
+          postedStatus: STATUS_IDS.POSTED,
+          activeStatus: STATUS_IDS.ACTIVE,
+        },
+      );
 
       if (accessKeyId) {
         query.andWhere("payrollHeader.access_key_id = :accessKeyId", {
@@ -2100,6 +2868,26 @@ export class StaffPayrollService {
 
       const details = await query.getMany();
 
+      // Budget hours from payroll_details.trans_budget_hours — deduped per warehouse+vendor+date.
+      const budgetHourByGroupMap = new Map<string, number>();
+      for (const d of details as any[]) {
+        const vid = (d.vendor as any)?.id ?? d.vendor_id;
+        const wid = (d.warehouse as any)?.id ?? d.warehouse_id;
+        const _sd = d.schedule_date as unknown as string | Date;
+        let dateIso = "";
+        if (_sd != null) {
+          if (typeof _sd === "string" && (_sd as string).length === 10)
+            dateIso = _sd as string;
+          else if (typeof _sd === "string")
+            dateIso = (_sd as string).split("T")[0];
+          else dateIso = formatDateToString(_sd as Date);
+        }
+        const key = `${vid}-${wid}-${dateIso}`;
+        if (!budgetHourByGroupMap.has(key) && d.trans_budget_hours != null) {
+          budgetHourByGroupMap.set(key, Number(d.trans_budget_hours));
+        }
+      }
+
       const vendorMap = new Map<number, any>();
       const periodWarehouseMap = new Map<string, any>();
 
@@ -2110,7 +2898,7 @@ export class StaffPayrollService {
         const vendorId = detail.vendor?.id ?? detail.vendor_id;
 
         const scheduleDate = detail.schedule_date
-          ? new Date(detail.schedule_date).toISOString().split("T")[0]
+          ? formatDateToString(new Date(detail.schedule_date as any))
           : null;
 
         const warehouseId = detail.warehouse?.id ?? detail.warehouse_id;
@@ -2259,7 +3047,9 @@ export class StaffPayrollService {
         }
 
         const staffGroup = warehouseGroup._staffMap.get(staffKey);
-        const budgethours = 24; // HARD-CODED BUDGET HOURS FOR NOW - For Sir Alj
+        const scheduleDateIso = scheduleDate ?? "";
+        const budgetHourKey = `${vendorId}-${warehouseId ?? ""}-${scheduleDateIso}`;
+        const budgethours = budgetHourByGroupMap.get(budgetHourKey) ?? 0;
 
         warehouseGroup.total_actual_hours += actualHours;
         warehouseGroup.total_hours += actualHours;
@@ -2354,6 +3144,7 @@ export class StaffPayrollService {
             detail.ot_rd_special_holiday_amount,
           ),
 
+          salary_rate_effectivity: detail.salary_rate_effectivity,
           salary_rate: round2(detail.salary_rate),
           hour_rate: round2(detail.hour_rate),
 

@@ -65,6 +65,21 @@ export class StaffPayrollController {
     );
   }
 
+  @Patch("recompute-staff-payroll")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "ADD" })
+  async reComputePayroll(
+    @Body() updatePayrollHeaderDto: UpdatePayrollHeaderDto,
+    @Request() req: any,
+  ) {
+    const accessKeyId = req.user.current_access_key;
+    const userId = req.user.id;
+    return this.staffPayrollService.reComputePayroll(
+      updatePayrollHeaderDto,
+      accessKeyId,
+      userId,
+    );
+  }
+
   @Get("history/:id")
   @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
@@ -78,10 +93,7 @@ export class StaffPayrollController {
     @Request() req: any,
   ) {
     const userId = req.user.id;
-    return this.staffPayrollService.postPayroll(
-      updatePayrollHeaderDto,
-      userId,
-    );
+    return this.staffPayrollService.postPayroll(updatePayrollHeaderDto, userId);
   }
 
   @Patch("revert-payroll")
@@ -123,6 +135,22 @@ export class StaffPayrollController {
 
     return this.staffPayrollService.findPayrollHeaderDetails(
       parsedHeaderId,
+      accessKeyId,
+    );
+  }
+
+  @Get("view-payroll-error-details")
+  @RequirePermissions({ module: "STAFF PAYROLL", action: "VIEW" })
+  async findPayrollErrorDetails(
+    @Query("payroll_header_id") payrollHeaderId?: string,
+    @Query("id") id?: string,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const targetHeaderId = Number(payrollHeaderId || id);
+
+    return this.staffPayrollService.findPayrollErrorDetails(
+      targetHeaderId,
       accessKeyId,
     );
   }

@@ -5,6 +5,10 @@ export class CreateWarehouseEmployeeDto {
   @IsInt()
   warehouse_id: number;
 
+  @IsOptional()
+  @IsInt()
+  assigned_ac?: number | null;
+
   @IsNotEmpty()
   @IsInt()
   assigned_ss: number;

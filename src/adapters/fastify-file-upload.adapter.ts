@@ -89,7 +89,7 @@ export class FastifyFileUploadAdapter implements FileUploadAdapter {
     const dest =
       typeof destination === "function"
         ? await new Promise<string>((resolve) =>
-            destination(mockRequest, data, (err: any, path: string) =>
+            destination(mockRequest, { ...data, originalname: data.filename }, (err: any, path: string) =>
               resolve(path)
             )
           )

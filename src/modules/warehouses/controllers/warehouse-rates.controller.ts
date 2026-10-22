@@ -19,9 +19,9 @@ import { RequirePermissions } from "../../../decorators/permissions.decorator";
 import { WarehouseRatesService } from "../services/warehouse-rates.service";
 import { CreateWarehouseRateDto } from "../dto/CreateWarehouseRateDto";
 import { UpdateWarehouseRateDto } from "../dto/UpdateWarehouseRateDto";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, diskStorage } from "src/adapters";
 import * as XLSX from "xlsx";
-import { diskStorage } from "multer";
+
 import * as fs from "fs";
 import { extname } from "path";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";

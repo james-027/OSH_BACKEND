@@ -41,11 +41,11 @@ export const STATUS_IDS = {
   WITH_ASSIGNMENT: 21,
   TEMPORARY_ASSIGNMENT: 26,
   REJECTED: 15,
-  TRAINEE : 20,
-  POSTED : 4,
-  VALIDATED : 40,
-  COMPUTED : 41,
-  FOR_REVIEW : 42,
+  TRAINEE: 20,
+  POSTED: 4,
+  VALIDATED: 40,
+  COMPUTED: 41,
+  FOR_REVIEW: 42,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -54,16 +54,15 @@ export const POS_AVAILABILITY_IDS = {
   WITHOUT_POS: 2,
 } as const;
 
-
 // ============= WORKING DAY =============
 export const WORKING_DAY_IDS = {
-REGULAR_DAY : 1,
-REGULAR_HOLIDAY : 2,
-SPECIAL_HOLIDAY : 3,
-REST_DAY_REGULAR_HOLIDAY : 4,
-REST_DAY_SPECIAL_HOLIDAY : 5,
-REGULAR_HOLIDAY_OFF :6,
-REST_DAY: 7
+  REGULAR_DAY: 1,
+  REGULAR_HOLIDAY: 2,
+  SPECIAL_HOLIDAY: 3,
+  REST_DAY_REGULAR_HOLIDAY: 4,
+  REST_DAY_SPECIAL_HOLIDAY: 5,
+  REGULAR_HOLIDAY_OFF: 6,
+  REST_DAY: 7,
 } as const;
 // ============= ACCESS KEY =============
 export const ACCESS_KEY_IDS = {
@@ -79,7 +78,7 @@ export const LOGS_TYPE_ID = {
 } as const;
 
 export const ACCESS_PROCESS = {
-    AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
+  AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
 };
 
 export const STATUS_NAMES = {

@@ -139,8 +139,7 @@ export class PayrollDetails {
   @Column({
     type: "tinyint",
     nullable: true,
-    comment:
-      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
+    comment: "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
   shift_type: number;
 
@@ -264,37 +263,103 @@ export class PayrollDetails {
   @Column({ type: "date", nullable: true })
   schedule_date: Date;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   night_shift_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   regular_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   rest_day_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   special_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   regular_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   regular_holiday_off_amount: number;
-  
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   regular_day_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   rd_regular_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   rd_special_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_regular_amount: number;
-  
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   net_amt_diser: number;
 
   @Column({
@@ -305,22 +370,58 @@ export class PayrollDetails {
   })
   ec: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_rest_day_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_special_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_regular_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_rd_regular_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   ot_rd_special_holiday_amount: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, default: 0 })
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    default: 0,
+  })
   overtime_amount: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
@@ -409,4 +510,10 @@ export class PayrollDetails {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_billing: number;
+
+  @Column("decimal", { precision: 10, scale: 2, nullable: true })
+  trans_budget_hours: number;
+
+  @Column({ type: "date", nullable: true })
+  salary_rate_effectivity: Date;
 }
