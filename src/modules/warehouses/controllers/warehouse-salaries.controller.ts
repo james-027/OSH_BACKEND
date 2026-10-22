@@ -17,9 +17,9 @@ import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
 import { WarehouseSalariesService } from "../services/warehouse-salaries.service";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, diskStorage } from "src/adapters";
 import * as XLSX from "xlsx";
-import { diskStorage } from "multer";
+
 import * as fs from "fs";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 import { BadRequestException } from "@nestjs/common/exceptions";

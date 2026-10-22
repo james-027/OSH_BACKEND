@@ -17,9 +17,9 @@ import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
 import { WarehouseBudgetHoursService } from "../services/warehouse-budget-hours.service";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, diskStorage } from "src/adapters";
 import * as XLSX from "xlsx";
-import { diskStorage } from "multer";
+
 import * as fs from "fs";
 import { extname } from "path";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
@@ -147,7 +147,7 @@ export class WarehouseBudgetHoursController {
         "AGENCY NAME": { format: "trim" },
         "DATE FROM": { format: "trim" },
         "DATE TO": { format: "trim" },
-        "BUDGET HOURS": { format: "number-trim" },
+        "BUDGET HOURS PER DAY": { format: "number-trim" },
         STATUS: { format: "uppercase-trim" },
       },
     };
@@ -164,13 +164,13 @@ export class WarehouseBudgetHoursController {
         if (s === "ACTIVE" || s === "INACTIVE") status = s;
       }
       return {
-        budget_hours: formattedRow["BUDGET HOURS"],
+        budget_hours: formattedRow["BUDGET HOURS PER DAY"],
         budget_date_from: formattedRow["DATE FROM"],
         budget_date_to: formattedRow["DATE TO"],
         warehouse_ifs: formattedRow["STORE BOS CODE"],
         store_name: formattedRow["STORE NAME"],
-        agency_code: formattedRow["AGENCY CODE"],
-        agency_name: formattedRow["AGENCY NAME"],
+        service_provider_code: formattedRow["AGENCY CODE"],
+        service_provider_name: formattedRow["AGENCY NAME"],
         status,
         __rowNum__: idx + 2,
       };
