@@ -421,34 +421,73 @@ export function parseExcelDateToYMD(
   value: any,
   format: string = "YYYY-MM-DD",
 ): string | null {
-  const dayjs = require("dayjs");
-  const utc = require("dayjs/plugin/utc");
-  dayjs.extend(utc);
+  if (value === null || value === undefined) return null;
 
-  if (!value) return null;
-
-  // Case 1: Kung ang value ay Excel Serial Number (e.g. 45292)
-  if (typeof value === "number") {
-    // Ang Excel serial date 25569 ay Jan 1, 1970 (Unix epoch start)
-    const dateFromSerial = new Date((value - 25569) * 86400 * 1000);
-    return dayjs.utc(dateFromSerial).format(format);
+  // Case 1: JS Date object
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
 
   const strValue = String(value).trim();
+  if (strValue === "") return null;
 
-  // Case 2: Subukang i-parse gamit ang explicit formats (MM/DD/YYYY, M/D/YYYY, YYYY-MM-DD)
-  const parsedDate = dayjs.utc(
-    strValue,
-    ["MM/DD/YYYY", "M/D/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"],
-    true, // strict parsing mode
-  );
-
-  if (parsedDate.isValid()) {
-    return parsedDate.format(format);
+  // Case 2: Excel Serial Number (e.g. 46188, or string "46188", "46188.0")
+  if (typeof value === "number" || /^\d+(\.\d+)?$/.test(strValue)) {
+    const num = Number(value);
+    if (!isNaN(num) && num > 0) {
+      try {
+        const XLSX = require("xlsx");
+        const parsed = XLSX.SSF.parse_date_code(num);
+        if (parsed) {
+          const year = parsed.y;
+          const month = String(parsed.m).padStart(2, "0");
+          const day = String(parsed.d).padStart(2, "0");
+          return `${year}-${month}-${day}`;
+        }
+      } catch (error) {
+        // Fallback to UTC calculation if XLSX SSF fails
+        const dayjs = require("dayjs");
+        const utc = require("dayjs/plugin/utc");
+        dayjs.extend(utc);
+        const dateFromSerial = new Date((num - 25569) * 86400 * 1000);
+        return dayjs.utc(dateFromSerial).format(format);
+      }
+    }
   }
 
-  // Case 3: Fallback sa standard Day.js / JS Date parsing
-  const fallbackDate = dayjs.utc(strValue);
+  // Case 3: Parse standard string date formats (e.g. "6/15/2026", "06/15/2026", "2026-06-15", etc.)
+  const dayjs = require("dayjs");
+  const customParseFormat = require("dayjs/plugin/customParseFormat");
+  dayjs.extend(customParseFormat);
+
+  const commonFormats = [
+    "YYYY-MM-DD",
+    "YYYY/MM/DD",
+    "MM/DD/YYYY",
+    "M/D/YYYY",
+    "MM-DD-YYYY",
+    "M-D-YYYY",
+    "YYYY-M-D",
+    "YYYY/M/D",
+    "MMMM D, YYYY",
+    "MMM D, YYYY",
+    "DD/MM/YYYY",
+    "D/M/YYYY",
+  ];
+
+  for (const fmt of commonFormats) {
+    const parsedDate = dayjs(strValue, fmt, true);
+    if (parsedDate.isValid()) {
+      return parsedDate.format(format);
+    }
+  }
+
+  // Case 4: Fallback standard Day.js parsing
+  const fallbackDate = dayjs(strValue);
   if (fallbackDate.isValid()) {
     return fallbackDate.format(format);
   }

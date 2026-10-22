@@ -908,6 +908,13 @@ export class WarehouseSalariesService {
       }
       try {
         const formattedDateFrom = parseExcelDateToYMD(row.date_from);
+        if (!formattedDateFrom) {
+          errors.push({
+            row: row.__rowNum__,
+            error: `Missing or invalid EFFECTIVITY DATE FROM for STORE IFS ${row.warehouse_ifs} (${row.store_name}).`,
+          });
+          continue;
+        }
 
         const outcome = await this.processEffectiveSalary(
           warehouse.id,
