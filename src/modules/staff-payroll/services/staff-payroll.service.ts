@@ -358,6 +358,7 @@ export class StaffPayrollService {
             warehouse_ifs: warehouseIfs,
             vendor_id: vendorId,
             vendor_abbr: vendorAbbr,
+            vendor_name: vendorName,
             position_id: positionId,
             position_name: positionName,
             date: dateIso,
