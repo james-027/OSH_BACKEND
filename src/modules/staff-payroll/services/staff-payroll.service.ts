@@ -321,6 +321,8 @@ export class StaffPayrollService {
         const warehouseIfs = d.warehouse?.warehouse_ifs || "";
         const vendorName =
           d.vendor?.service_provider_name || `Vendor #${vendorId ?? "N/A"}`;
+        const vendorAbbr =
+          d.vendor?.service_provider_code || `Vendor #${vendorId ?? "N/A"}`;
         const positionId = d.staff?.position_id ?? null;
         const positionName =
           d.staff?.position?.position_name ||
@@ -338,6 +340,7 @@ export class StaffPayrollService {
             warehouse_ifs: warehouseIfs,
             vendor_id: vendorId,
             vendor_name: vendorName,
+            vendor_abbr: vendorAbbr,
             date: dateIso,
           });
         }
@@ -354,7 +357,7 @@ export class StaffPayrollService {
             warehouse_name: warehouseName,
             warehouse_ifs: warehouseIfs,
             vendor_id: vendorId,
-            vendor_name: vendorName,
+            vendor_abbr: vendorAbbr,
             position_id: positionId,
             position_name: positionName,
             date: dateIso,
