@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, In } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -14,6 +14,7 @@ import { UpdateStaffSalaryDto } from "src/modules/staff-salaries/dto/UpdateStaff
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
 @Injectable()
 export class StaffSalariesService {
@@ -24,31 +25,41 @@ export class StaffSalariesService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
-      const staffSalaries = await this.staffSalariesRepository.find(
-        {
-          where,
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-            "accessKey",
-          ],
-        },
-      );
 
-      return this.responseMapperService.mapEntitiesToResponse(
-        staffSalaries,
-      );
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
+      }
+      const staffSalaries = await this.staffSalariesRepository.find({
+        where,
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "staff",
+          "vendor",
+          "accessKey",
+        ],
+      });
+
+      return this.responseMapperService.mapEntitiesToResponse(staffSalaries);
     } catch (error) {
       console.error("Error fetching staff salaries:", error);
       throw new Error("Failed to fetch staff salaries");
@@ -57,23 +68,20 @@ export class StaffSalariesService {
 
   async findOne(id: number): Promise<any> {
     try {
-      const staffSalary =
-        await this.staffSalariesRepository.findOne({
-          where: { id },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-            "accessKey",
-          ],
-        });
+      const staffSalary = await this.staffSalariesRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "staff",
+          "vendor",
+          "accessKey",
+        ],
+      });
 
       if (!staffSalary) {
-        throw new NotFoundException(
-          `Staff Salary with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Staff Salary with ID ${id} not found`);
       }
 
       return this.responseMapperService.mapEntityToResponse(staffSalary);
@@ -168,16 +176,13 @@ export class StaffSalariesService {
     userId: number,
   ): Promise<any> {
     try {
-      const staffSalary =
-        await this.staffSalariesRepository.findOne({
-          where: { id },
-          relations: ["createdBy"],
-        });
+      const staffSalary = await this.staffSalariesRepository.findOne({
+        where: { id },
+        relations: ["createdBy"],
+      });
 
       if (!staffSalary) {
-        throw new NotFoundException(
-          `Staff Salary with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Staff Salary with ID ${id} not found`);
       }
 
       const updatedByUser = await this.usersService.findUserById(userId);
@@ -249,23 +254,20 @@ export class StaffSalariesService {
 
   async toggleStatus(id: number, userId: number): Promise<any> {
     try {
-      const staffSalary =
-        await this.staffSalariesRepository.findOne({
-          where: { id },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-            "location",
-          ],
-        });
+      const staffSalary = await this.staffSalariesRepository.findOne({
+        where: { id },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "staff",
+          "vendor",
+          "location",
+        ],
+      });
 
       if (!staffSalary) {
-        throw new NotFoundException(
-          `Staff Salary with ID ${id} not found`,
-        );
+        throw new NotFoundException(`Staff Salary with ID ${id} not found`);
       }
 
       const newStatusId = staffSalary.status_id === 1 ? 2 : 1;
@@ -275,17 +277,10 @@ export class StaffSalariesService {
         status_id: newStatusId,
       });
 
-      const updatedStaffSalary =
-        await this.staffSalariesRepository.findOne({
-          where: { id },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-          ],
-        });
+      const updatedStaffSalary = await this.staffSalariesRepository.findOne({
+        where: { id },
+        relations: ["status", "createdBy", "updatedBy", "staff", "vendor"],
+      });
 
       if (!updatedStaffSalary) {
         throw new Error("Failed to retrieve updated staff salary");
@@ -303,9 +298,8 @@ export class StaffSalariesService {
         userId,
       );
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        updatedStaffSalary,
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(updatedStaffSalary);
 
       // SSE Events
       try {

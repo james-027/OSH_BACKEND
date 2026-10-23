@@ -25,6 +25,7 @@ import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
 
 
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([

@@ -16,10 +16,17 @@ import { CreateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/Create
 import { UpdateStaffWarehouseDto } from "src/modules/staff-warehouses/dto/UpdateStaffWarehouseDto";
 import logger from "../../../config/logger";
 import { In } from "typeorm";
-import { ACTION_IDS, STATUS_IDS, TOGGLE_NAMES,NAMING_CONVENTION } from "src/constants/customConstants";
+import {
+  ACTION_IDS,
+  STATUS_IDS,
+  TOGGLE_NAMES,
+  NAMING_CONVENTION,
+} from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { User } from "src/entities/User";
 import { Warehouse } from "src/entities/Warehouse";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+
 @Injectable()
 export class StaffWarehousesService {
   private readonly entityName = "StaffWarehouse";
@@ -47,6 +54,7 @@ export class StaffWarehousesService {
     private ActionLogsService: ActionLogsService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   private readonly module_name = "STAFF STORE ASSIGNMENTS";
@@ -55,6 +63,8 @@ export class StaffWarehousesService {
     accesskeyId?: number,
     approvalStatusId?: number[],
     warehouseId?: number[],
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -69,16 +79,25 @@ export class StaffWarehousesService {
         where.warehouse_id = In(warehouseId);
       }
 
-        where.staff = {
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
+      }
+
+      where.staff = {
         status_id: STATUS_IDS.ACTIVE,
       };
- 
+
       const records = await this.staffWarehousesRepository.find({
         where,
         relations: this.relationFields,
-        order:{
+        order: {
           modified_at: "DESC",
-        }
+        },
       });
 
       return this.responseMapperService.mapEntitiesToResponse(records);
@@ -332,20 +351,20 @@ export class StaffWarehousesService {
         },
         userId,
       );
-            // Action Log
-            try {
-              await this.ActionLogsService.logAction({
-                module_name: this.module_name, // use your actual module name
-                ref_id: updatedRecord.id,
-                action_id: ACTION_IDS.DEACTIVATE,
-                description: `Deactivated staff ${updatedRecord.staff_code ?? ""}`,
-                raw_data: JSON.stringify(updatedRecord),
-                created_by: userId, 
-              });
-            } catch (err) {
-              logger.error("Action log failed for create:", err);
-              // Don't throw - action log failure shouldn't block creation
-            }
+      // Action Log
+      try {
+        await this.ActionLogsService.logAction({
+          module_name: this.module_name, // use your actual module name
+          ref_id: updatedRecord.id,
+          action_id: ACTION_IDS.DEACTIVATE,
+          description: `Deactivated staff ${updatedRecord.staff_code ?? ""}`,
+          raw_data: JSON.stringify(updatedRecord),
+          created_by: userId,
+        });
+      } catch (err) {
+        logger.error("Action log failed for create:", err);
+        // Don't throw - action log failure shouldn't block creation
+      }
 
       const response =
         this.responseMapperService.mapEntityToResponse(updatedRecord);
@@ -398,7 +417,6 @@ export class StaffWarehousesService {
       await this.ActionLogsService.get_action_id_from_status(
         approval_status_id,
       );
-
 
     for (const id of ids) {
       await this.ActionLogsService.logAction({

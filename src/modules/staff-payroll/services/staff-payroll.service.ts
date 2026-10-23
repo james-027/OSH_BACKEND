@@ -138,7 +138,12 @@ export class StaffPayrollService {
 
   private readonly module_name = "STAFF PAYROLL";
 
-  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    statusId?: number[],
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
     try {
       const where: any = {
         status_id: STATUS_IDS.ACTIVE,
@@ -150,6 +155,18 @@ export class StaffPayrollService {
 
       if (accessKeyId !== undefined && accessKeyId !== null) {
         where.access_key_id = accessKeyId;
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+
+        where.details = {
+          location_id: In(allowedLocationIds),
+        };
       }
 
       const payrollHeaders = await this.payrollHeaderRepository.find({
@@ -181,6 +198,8 @@ export class StaffPayrollService {
   async findStaffPayrollDetails(
     accessKeyId: number,
     findStaffPayrollDetails: FindStaffPayrollDetailsDto,
+    userId: number,
+    roleId: number,
   ): Promise<any> {
     try {
       const { date_from, date_to, location_ids, vendor_ids } =
@@ -2494,6 +2513,8 @@ export class StaffPayrollService {
   async findPayrollHeaderDetails(
     payrollHeaderId?: number,
     accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = { status_id: STATUS_IDS.ACTIVE };
@@ -2506,6 +2527,15 @@ export class StaffPayrollService {
         where.payrollHeader = {
           access_key_id: accessKeyId,
         };
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
       }
 
       const payrollDetail = await this.payrollDetailRepository.find({

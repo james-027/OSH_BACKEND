@@ -52,6 +52,8 @@ export class StaffsController {
     @Query("assign_status_id") assignStatusId?: string,
   ) {
     const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
 
     const parsedStatusId = statusId
       ? statusId.split(",").map(Number)
@@ -65,6 +67,8 @@ export class StaffsController {
       accessKeyId,
       parsedStatusId,
       parsedAssignStatusId,
+      userId,
+      roleId
     );
   }
 

@@ -17,6 +17,8 @@ import { Staff } from "src/entities/Staff";
 import { Vendor } from "src/entities/Vendor";
 import { Location } from "src/entities/Location";
 import { SssConfigs } from "src/entities/SssConfig";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { SssConfigs } from "src/entities/SssConfig";
       SssConfigs,
       UserAuditTrail,
       UserPermissions,
+      TransactionSequence,
       AppModule,
       Action,
     ]),
@@ -41,6 +44,9 @@ import { SssConfigs } from "src/entities/SssConfig";
     StaffVendorSalariesService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+    CommonUtilitiesService
+    
+    
   ],
   exports: [StaffVendorSalariesService],
 })

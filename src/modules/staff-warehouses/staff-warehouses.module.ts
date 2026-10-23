@@ -15,6 +15,10 @@ import { SSEModule } from "../sse/sse.module";
 import { ActionsModule } from "../actions/actions.module";
 import { User } from "src/entities/User";
 import { Warehouse } from "src/entities/Warehouse";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
+
+
 
 @Module({
   imports: [
@@ -26,7 +30,8 @@ import { Warehouse } from "src/entities/Warehouse";
       UserPermissions,
       AppModule,
       Action,
-      Warehouse
+      Warehouse,
+      TransactionSequence
     ]),
     UsersModule,
     SSEModule,
@@ -37,6 +42,7 @@ import { Warehouse } from "src/entities/Warehouse";
     StaffWarehousesService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+    CommonUtilitiesService
   ],
   exports: [StaffWarehousesService],
 })

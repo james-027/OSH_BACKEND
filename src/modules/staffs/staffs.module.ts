@@ -23,15 +23,14 @@ import { Brand } from "src/entities/Brand";
 import { CategoryType } from "src/entities/CategoryType";
 import { ActionsModule } from "../actions/actions.module";
 import { StaffHistory } from "src/entities/StaffHistory";
-import { CommonUtilitiesService } from "src/services/common-utilities.service";
-import { TransactionSequence } from "src/entities/TransactionSequence";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { StaffTraining } from "src/entities/StaffTrainings";
 import { Training } from "src/entities/Training";
 import { StaffTransfers } from "src/entities/StaffTransfers";
 import { Warehouse } from "src/entities/Warehouse";
-import { AccessKeysService } from "src/modules/access-keys/services/access-keys.service";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 
 @Module({

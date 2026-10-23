@@ -24,6 +24,7 @@ import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -54,61 +55,34 @@ export class StaffAttendanceService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
     private readonly dataSource: DataSource,
   ) {}
 
   private readonly module_name = "STAFF ATTENDANCE";
 
-  // async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
-  //   try {
-  //     const where: any = {};
-  //     if (statusId !== undefined) {
-  //       where.attendance_status_id = statusId;
-  //     }
-  //     if (accessKeyId !== undefined) {
-  //       where.access_key_id = accessKeyId;
-  //     }
-  //     const scheduleHeaders = await this.scheduleHeaderRepository.find({
-  //       where,
-  //       order: {
-  //         id: "DESC",
-  //       },
-  //       relations: [
-  //         "createdBy",
-  //         "updatedBy",
-  //         "attendanceStatus",
-  //         "details",
-  //         "details.location",
-  //       ],
-  //     });
-
-  //     const mappedHeaders =
-  //       this.responseMapperService.mapEntitiesToResponse(scheduleHeaders);
-
-  //     return mappedHeaders.map((mappedHeader, index) => {
-  //       const originalHeader = scheduleHeaders[index];
-
-  //       const firstDetail = originalHeader.details?.[0];
-
-  //       return {
-  //         ...mappedHeader,
-
-  //         location_name: firstDetail?.location?.location_name ?? null,
-  //       };
-  //     });
-  //   } catch (error) {
-  //     console.error("Error fetching staff schedule:", error);
-
-  //     throw new Error("Failed to fetch staff schedule");
-  //   }
-  // }
-
-  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    statusId?: number[],
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
     try {
       const where: any = {};
 
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.details = {
+          location_id: In(allowedLocationIds),
+        };
       }
 
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
@@ -168,6 +142,8 @@ export class StaffAttendanceService {
   async findScheduleHeaderDetails(
     scheduleHeaderId?: number,
     accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -182,6 +158,14 @@ export class StaffAttendanceService {
         };
       }
 
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
+      }
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,
         relations: [
@@ -209,6 +193,8 @@ export class StaffAttendanceService {
   async findAllScheduleDetails(
     accessKeyId?: number,
     statusId?: number,
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {
@@ -220,6 +206,14 @@ export class StaffAttendanceService {
           access_key_id: accessKeyId,
         };
       }
+            if (userId && roleId) {
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+        );
+      where.location_id = In(allowedLocationIds);
+    }
 
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,

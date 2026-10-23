@@ -106,12 +106,4 @@ export class StaffSalary {
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   pagibig_number_perc: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
-  pagibig_contri_amount: number;
-
-  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
-  phil_health_contri_amount: number;
-
-  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
-  sss_contri: number;
 }

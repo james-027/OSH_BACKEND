@@ -28,8 +28,10 @@ export class StaffSalariesController {
   @RequirePermissions({ module: "STAFF SALARIES", action: "VIEW" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
 
-    return this.staffSalariesService.findAll(accessKeyId);
+    return this.staffSalariesService.findAll(accessKeyId,userId,roleId);
   }
 
   @Get(":id")

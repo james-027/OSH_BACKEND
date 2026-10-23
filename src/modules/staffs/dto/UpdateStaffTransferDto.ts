@@ -8,10 +8,12 @@ export class UpdateStaffTransferDto {
   location_id: number;
   
   @IsNumber()
-  allowance: number;
+  @IsOptional()
+  allowance?: number;
   
   @IsNumber()
-  salary_rate: number;
+  @IsOptional()
+  salary_rate?: number;
 
   @IsString()
   effectivity_date: string;
