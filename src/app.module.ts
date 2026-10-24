@@ -89,6 +89,7 @@ import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehous
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { ThrottleTrackingMiddleware } from "./middleware/throttle-tracking.middleware";
+import { PhpShieldMiddleware } from "./middleware/php-shield.middleware";
 import { ThrottleTrackerService } from "./services/throttle-tracker.service";
 import { ThrottleTrackingService } from "./guards/throttle-tracking.guard";
 import { TransactionSequence } from "./entities/TransactionSequence";
@@ -286,6 +287,9 @@ export class AppModule implements NestModule, OnModuleInit {
   }
 
   configure(consumer: MiddlewareConsumer) {
+    // Shield all routes against PHP vulnerability exploits & anomalous patterns
+    consumer.apply(PhpShieldMiddleware).forRoutes("*");
+
     // Track throttle attempts globally (run on all routes first)
     consumer.apply(ThrottleTrackingMiddleware).forRoutes("*");
 
