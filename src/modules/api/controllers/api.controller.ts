@@ -15,9 +15,10 @@ import {
 } from "@nestjs/common";
 import { ApiService } from "../services/api.service";
 import { ApiKeyGuard } from "../../../guards/api-key.guard";
+import { PhpShieldGuard } from "../../../guards/php-shield.guard";
 
 @Controller("api")
-@UseGuards(ApiKeyGuard)
+@UseGuards(PhpShieldGuard, ApiKeyGuard)
 export class ApiController {
   constructor(private readonly apiService: ApiService) {}
 

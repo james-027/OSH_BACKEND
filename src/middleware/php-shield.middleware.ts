@@ -69,9 +69,10 @@ export class PhpShieldMiddleware implements NestMiddleware {
           `🛡️ [PHP-SHIELD-BLOCKED] Rejected suspicious request from ${clientIp} to ${url} - Matched pattern: ${pattern.name}`,
         );
 
-        throw new BadRequestException(
-          "Request rejected due to anomalous payload or security pattern violation.",
-        );
+        throw new BadRequestException({
+          status: "error",
+          msg: "Request rejected due to anomalous payload or security pattern violation.",
+        });
       }
     }
 
