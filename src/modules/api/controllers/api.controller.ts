@@ -11,6 +11,7 @@ import {
   HttpException,
   HttpStatus,
   Req,
+  Res,
 } from "@nestjs/common";
 import { ApiService } from "../services/api.service";
 import { ApiKeyGuard } from "../../../guards/api-key.guard";
@@ -52,13 +53,30 @@ export class ApiController {
     @Param("endpoint") endpoint: string,
     @Body() data: any,
     @Req() request: any,
+    @Res({ passthrough: true }) response: any,
   ) {
     try {
-      return await this.apiService.handlePostRequest(
+      const result = await this.apiService.handlePostRequest(
         endpoint,
         data,
         request.apiKey,
       );
+
+      // Transparent passthrough for relayed legacy PHP responses (exact status & exact body)
+      if (
+        result &&
+        typeof result === "object" &&
+        result.__isRelayResponse
+      ) {
+        if (typeof response.status === "function") {
+          response.status(result.statusCode);
+        } else if (typeof response.code === "function") {
+          response.code(result.statusCode);
+        }
+        return result.data;
+      }
+
+      return result;
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
