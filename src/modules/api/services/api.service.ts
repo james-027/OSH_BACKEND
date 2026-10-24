@@ -918,7 +918,8 @@ export class ApiService {
           if (val === "true") val = true;
           else if (val === "false") val = false;
           else if (val === "null") val = null;
-          else if (!isNaN(Number(val)) && match[2] === undefined) val = Number(val);
+          else if (!isNaN(Number(val)) && match[2] === undefined)
+            val = Number(val);
           result[key] = val;
         }
         if (Object.keys(result).length > 0) {
@@ -953,20 +954,28 @@ export class ApiService {
       );
     }
 
+    let targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
+    switch (endpoint) {
+      case "pos-coupon-validate":
+        targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
+        break;
+      case "pos-coupon-redeem":
+        targetUrl = process.env.LEGACY_EVOUCHER_PHP_REDEEM_API_URL || "";
+        break;
+    }
     // 2. Resolve legacy PHP target URL
-    let targetUrl = process.env.LEGACY_PHP_API_URL || "";
 
     if (!targetUrl) {
-      if (process.env.LEGACY_PHP_BASE_URL) {
-        targetUrl = `${process.env.LEGACY_PHP_BASE_URL.replace(/\/+$/, "")}/${endpoint}`;
+      if (process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL) {
+        targetUrl = `${process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL.replace(/\/+$/, "")}/${endpoint}`;
       } else {
         logger.error(
-          `[LEGACY-PHP-RELAY] LEGACY_PHP_API_URL environment variable is not configured.`,
+          `[LEGACY-PHP-RELAY] LEGACY_EVOUCHER_PHP_VALIDATE_API_URL environment variable is not configured.`,
         );
         throw new HttpException(
           {
             status: "error",
-            msg: `Endpoint '${endpoint}' relay failed: LEGACY_PHP_API_URL is not configured`,
+            msg: `Endpoint '${endpoint}' relay failed: LEGACY_EVOUCHER_PHP_VALIDATE_API_URL is not configured`,
           },
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
