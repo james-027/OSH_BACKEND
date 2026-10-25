@@ -74,7 +74,8 @@ export class ApiService {
     endpoint: string,
     method: string,
   ): Promise<boolean> {
-    const access = await this.apiAuthAccessRepository.findOne({
+    // 1. Check exact match first
+    let access = await this.apiAuthAccessRepository.findOne({
       where: {
         api_key_id: apiKeyId,
         controller_url: endpoint,
@@ -83,7 +84,50 @@ export class ApiService {
       },
     });
 
-    return !!access || access?.all_access === 1;
+    if (access) {
+      return true;
+    }
+
+    // 2. Check alternative representations (slash vs hyphen, e.g. "pos-coupon/validate" <-> "pos-coupon-validate")
+    const candidates: string[] = [];
+    if (endpoint.includes("/")) {
+      candidates.push(endpoint.replace(/\//g, "-"));
+    }
+    if (endpoint.includes("-")) {
+      candidates.push(endpoint.replace(/-/g, "/"));
+      const lastHyphen = endpoint.lastIndexOf("-");
+      if (lastHyphen !== -1) {
+        candidates.push(
+          endpoint.substring(0, lastHyphen) +
+            "/" +
+            endpoint.substring(lastHyphen + 1),
+        );
+      }
+    }
+
+    for (const alt of candidates) {
+      access = await this.apiAuthAccessRepository.findOne({
+        where: {
+          api_key_id: apiKeyId,
+          controller_url: alt,
+          api_method: method,
+          status_id: 1,
+        },
+      });
+      if (access) {
+        return true;
+      }
+    }
+
+    // 3. Check if key has all_access = 1
+    const allAccess = await this.apiAuthAccessRepository.findOne({
+      where: [
+        { api_key_id: apiKeyId, all_access: 1, status_id: 1 },
+        { api_key_id: apiKeyId, all_access: 1, api_method: method, status_id: 1 },
+      ],
+    });
+
+    return !!allAccess;
   }
 
   async logApiRequest(
@@ -957,9 +1001,11 @@ export class ApiService {
     let targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
     switch (endpoint) {
       case "pos-coupon-validate":
+      case "pos-coupon/validate":
         targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
         break;
       case "pos-coupon-redeem":
+      case "pos-coupon/redeem":
         targetUrl = process.env.LEGACY_EVOUCHER_PHP_REDEEM_API_URL || "";
         break;
     }
