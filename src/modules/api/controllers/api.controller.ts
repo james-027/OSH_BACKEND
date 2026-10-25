@@ -35,6 +35,9 @@ export class ApiController {
         request.apiKey,
       );
     } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Internal server error";
       const status =
@@ -89,6 +92,9 @@ export class ApiController {
 
       return result;
     } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Internal server error";
       const status =
@@ -129,6 +135,9 @@ export class ApiController {
         request.apiKey,
       );
     } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Internal server error";
       const status =
@@ -156,6 +165,9 @@ export class ApiController {
         request.apiKey,
       );
     } catch (error: unknown) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message =
         error instanceof Error ? error.message : "Internal server error";
       const status =
