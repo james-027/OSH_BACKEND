@@ -49,6 +49,16 @@ export class ApiController {
     }
   }
 
+  @Get(":prefix/:endpoint")
+  async getDataNested(
+    @Param("prefix") prefix: string,
+    @Param("endpoint") endpoint: string,
+    @Query() queryParams: any,
+    @Req() request: any,
+  ) {
+    return this.getData(`${prefix}/${endpoint}`, queryParams, request);
+  }
+
   @Post(":endpoint")
   async createData(
     @Param("endpoint") endpoint: string,
@@ -91,6 +101,17 @@ export class ApiController {
 
       throw new HttpException(message, status);
     }
+  }
+
+  @Post(":prefix/:endpoint")
+  async createDataNested(
+    @Param("prefix") prefix: string,
+    @Param("endpoint") endpoint: string,
+    @Body() data: any,
+    @Req() request: any,
+    @Res({ passthrough: true }) response: any,
+  ) {
+    return this.createData(`${prefix}/${endpoint}`, data, request, response);
   }
 
   @Put(":endpoint/:id")
