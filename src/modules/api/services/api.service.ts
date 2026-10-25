@@ -267,8 +267,14 @@ export class ApiService {
       responseData = await this.createDataByEndpoint(endpoint, data);
     } catch (error) {
       const err = error as any;
-      statusCode = err.status || 500;
-      responseData = { error: err.message };
+      statusCode =
+        typeof err.getStatus === "function"
+          ? err.getStatus()
+          : err.status || 500;
+      responseData =
+        typeof err.getResponse === "function"
+          ? err.getResponse()
+          : { error: err.message };
       await this.logApiRequest(
         apiKeyEntity.id,
         endpoint,
