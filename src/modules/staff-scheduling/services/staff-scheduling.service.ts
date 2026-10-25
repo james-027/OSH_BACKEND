@@ -53,6 +53,8 @@ import { StaffSalary } from "src/entities/StaffSalary";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { SssConfigs } from "src/entities/SssConfig";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+
 
 @Injectable()
 export class StaffSchedulingService {
@@ -88,12 +90,19 @@ export class StaffSchedulingService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
     private readonly dataSource: DataSource,
     private readonly httpService: HttpService,
   ) {}
 
   private readonly module_name = "STAFF SCHEDULING";
-  async findAll(statusId?: number[], accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    statusId?: number[], 
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number
+
+  ): Promise<any[]> {
     try {
       const where: any = {};
       if (statusId !== undefined) {
@@ -102,6 +111,18 @@ export class StaffSchedulingService {
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      if (userId && roleId) {
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+        );
+        where.details = {
+        location_id: In(allowedLocationIds),
+      };
+    }
+
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
         where,
         order: {
@@ -143,6 +164,8 @@ export class StaffSchedulingService {
     scheduleHeaderId?: number,
     accessKeyId?: number,
     attendanceStatusId?: number,
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -153,6 +176,15 @@ export class StaffSchedulingService {
 
       if (attendanceStatusId !== undefined) {
         where.attendance_status_id = attendanceStatusId;
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+          where.location_id = In(allowedLocationIds);
       }
 
       if (accessKeyId !== undefined) {
@@ -717,7 +749,7 @@ export class StaffSchedulingService {
                     actualLogsDetailDto = {
                       staff_id: detail.staff_id,
                       staff_code: staff.staff_code || staff.code,
-                      dws_no: detail.dws_no,
+                      dws_no: detail.dws_no || null,
                       remarks: detail.remarks || "Auto-synced from DWS log",
                       warehouse_id: detail.warehouse_id,
                       location_id: staff.location_id,

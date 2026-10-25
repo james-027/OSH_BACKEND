@@ -11,6 +11,8 @@ import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 
 @Module({
   imports: [
@@ -20,6 +22,7 @@ import { SSEModule } from "../sse/sse.module";
       UserPermissions,
       AppModule,
       Action,
+      TransactionSequence
     ]),
     UsersModule,
     SSEModule,
@@ -29,6 +32,7 @@ import { SSEModule } from "../sse/sse.module";
     StaffSalariesService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+    CommonUtilitiesService
   ],
   exports: [StaffSalariesService],
 })

@@ -193,16 +193,15 @@ export class ResponseMapperService {
       response.staff_vendor_id = latestSalary.staff_vendor_id;
       response.allowance = latestSalary.allowance;
       response.salary_rate = latestSalary.salary_rate;
+      response.phil_health_contri_perc = latestSalary.phil_health_contri_perc || null;
+      response.pagibig_number_perc = latestSalary.pagibig_number_perc || null;
+
     }
 
     // Map brand relation
     if (entity.brand && typeof entity.brand === "object") {
       response.brand_name = entity.brand.brand_name || null;
     }
-
-    // if (entity.staffSalaries && typeof entity.staffSalaries === "object") {
-    //   response.salary_rate = entity.staffSalaries.salary_rate || null;
-    // }
     
     // Map Actual Logs Detail relation
     if (entity.actualLogsDetail && typeof entity.actualLogsDetail === "object") {

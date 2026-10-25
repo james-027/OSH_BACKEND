@@ -34,7 +34,10 @@ export class StaffPayrollController {
       ? statusId.split(",").map(Number)
       : undefined;
     const accessKeyId = req?.user?.current_access_key;
-    return this.staffPayrollService.findAll(parsedStatusId, accessKeyId);
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
+    return this.staffPayrollService.findAll(parsedStatusId, accessKeyId,userId,roleId);
   }
 
   @Post("generate-staff-payroll")
@@ -44,9 +47,13 @@ export class StaffPayrollController {
     @Request() req: any,
   ) {
     const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
     return this.staffPayrollService.findStaffPayrollDetails(
       accessKeyId,
       findStaffPayrollDetails,
+      userId,
+      roleId
     );
   }
 
@@ -129,6 +136,9 @@ export class StaffPayrollController {
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
     const parsedHeaderId = payrollHeaderId
       ? Number(payrollHeaderId)
       : undefined;
@@ -136,6 +146,8 @@ export class StaffPayrollController {
     return this.staffPayrollService.findPayrollHeaderDetails(
       parsedHeaderId,
       accessKeyId,
+      userId,
+      roleId
     );
   }
 

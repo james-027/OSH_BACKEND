@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, QueryRunner } from "typeorm";
@@ -42,7 +43,6 @@ import {
   ACTION_IDS,
   TOGGLE_NAMES,
 } from "src/constants/customConstants";
-import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffTraining } from "src/entities/StaffTrainings";
 import { AccessKey } from "src/entities/AccessKey";
@@ -51,7 +51,7 @@ import { StaffTransfers } from "src/entities/StaffTransfers";
 import { Warehouse } from "src/entities/Warehouse";
 import { Not } from "typeorm";
 import * as XLSX from "xlsx";
-import { throws } from "assert";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
 @Injectable()
 export class StaffsService {
@@ -106,12 +106,23 @@ export class StaffsService {
     accessKeyId?: number,
     statusId?: number[],
     assignStatusId?: number[],
+    userId?: number,
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
 
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
       }
 
       if (statusId && statusId.length > 0) {
@@ -455,28 +466,28 @@ export class StaffsService {
       const savedStaffVendorSalary =
         await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
 
-      let savedStaffSalary: StaffSalary | null = null;
+      // let savedStaffSalary: StaffSalary | null = null;
 
-      if (
-        (createStaffDto.allowance !== undefined &&
-          createStaffDto.allowance !== null) ||
-        (createStaffDto.salary_rate !== undefined &&
-          createStaffDto.salary_rate !== null)
-      ) {
-        const newStaffSalary = this.staffSalaryRepository.create({
-          staff_id: savedStaff.id,
-          staff_vendor_id: newStaffVendorSalary.id,
-          allowance: createStaffDto.allowance,
-          salary_rate: createStaffDto.salary_rate,
-          access_key_id: accessKeyId,
-          status_id: 1,
-          created_by: userId,
-          updated_by: userId,
-        });
+      // if (
+      //   (createStaffDto.allowance !== undefined &&
+      //     createStaffDto.allowance !== null) ||
+      //   (createStaffDto.salary_rate !== undefined &&
+      //     createStaffDto.salary_rate !== null)
+      // ) {
+      //   const newStaffSalary = this.staffSalaryRepository.create({
+      //     staff_id: savedStaff.id,
+      //     staff_vendor_id: newStaffVendorSalary.id,
+      //     allowance: createStaffDto.allowance,
+      //     salary_rate: createStaffDto.salary_rate,
+      //     access_key_id: accessKeyId,
+      //     status_id: 1,
+      //     created_by: userId,
+      //     updated_by: userId,
+      //   });
 
-        const savedStaffSalary =
-          await this.staffSalaryRepository.save(newStaffSalary);
-      }
+      //   const savedStaffSalary =
+      //     await this.staffSalaryRepository.save(newStaffSalary);
+      // }
 
       // Audit trail
       await this.userAuditTrailCreateService.create(
@@ -519,16 +530,17 @@ export class StaffsService {
         },
         userId,
       );
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "StaffsService",
-          method: "create",
-          raw_data: JSON.stringify(savedStaffSalary),
-          description: `Created staff salary${savedStaffSalary.id} `,
-          status_id: 1,
-        },
-        userId,
-      );
+
+      // await this.userAuditTrailCreateService.create(
+      //   {
+      //     service: "StaffsService",
+      //     method: "create",
+      //     raw_data: JSON.stringify(savedStaffSalary),
+      //     description: `Created staff salary${savedStaffSalary.id} `,
+      //     status_id: 1,
+      //   },
+      //   userId,
+      // );
 
       const staffWithRelations = await this.staffsRepository.findOne({
         where: { id: savedStaff.id },
@@ -553,7 +565,7 @@ export class StaffsService {
       // Action Log
       try {
         await this.actionLogsService.logAction({
-          module_name: this.module_name, // use your actual module name
+          module_name: this.module_name,
           ref_id: savedStaff.id,
           action_id: ACTION_IDS.ADD,
           description: `Created staff ${savedStaff.staff_code ?? ""} - ${savedStaff.first_name} ${savedStaff.last_name} | Vendor: ${staffWithRelations.vendor?.service_provider_name ?? "N/A"} | Location: ${staffWithRelations.location?.location_name ?? "N/A"}`,
@@ -562,7 +574,6 @@ export class StaffsService {
         });
       } catch (err) {
         logger.error("Action log failed for create:", err);
-        // Don't throw - action log failure shouldn't block creation
       }
 
       const response =
@@ -570,22 +581,49 @@ export class StaffsService {
 
       // SSE Events
       try {
+        console.log("[SSE CREATE] Emitting events for staff:", response.id);
+
         this.sseEventEmitter.emitCreate("staffs", response.id, response);
+
+        this.sseEventEmitter.emitCreate("staff_brands", response.id, response);
+
+        this.sseEventEmitter.emitCreate(
+          "staff_trainings",
+          response.id,
+          response,
+        );
+
+        this.sseEventEmitter.emitCreate(
+          "staff_category_types",
+          response.id,
+          response,
+        );
+
         this.sseEventEmitter.emitCreate(
           "staff_vendor_salaries",
           response.id,
           response,
         );
       } catch (err) {
-        logger.error("SSE event failed:", err);
+        console.error("[SSE CREATE] Event emission failed:", err);
+        console.error(err instanceof Error ? err.stack : String(err));
       }
 
       return response;
     } catch (error) {
+      console.error("Failed to create staff:", error);
+
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new Error("Failed to create staff");
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      throw new InternalServerErrorException({
+        message: "Failed to create staff",
+        error: errorMessage,
+      });
     }
   }
 

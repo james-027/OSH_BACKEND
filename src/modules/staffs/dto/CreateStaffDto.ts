@@ -50,12 +50,12 @@ export class CreateStaffDto {
   category_type_id!: number;
 
   @IsNumber()
-  @IsNotEmpty()
-  allowance!: number;
+  @IsOptional()
+  allowance?: number;
 
   @IsNumber()
-  @IsNotEmpty()
-  salary_rate!: number;
+  @IsOptional()
+  salary_rate?: number;
 
   @IsInt()
   @IsNotEmpty()

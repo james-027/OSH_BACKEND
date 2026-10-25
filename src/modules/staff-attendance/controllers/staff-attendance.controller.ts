@@ -46,7 +46,10 @@ export class StaffAttendanceController {
       ? statusId.split(",").map(Number)
       : undefined;
     const accessKeyId = req?.user?.current_access_key;
-    return this.staffAttendanceService.findAll(parsedStatusId, accessKeyId);
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
+    return this.staffAttendanceService.findAll(parsedStatusId, accessKeyId,userId,roleId);
   }
 
   @Get("details")
@@ -56,6 +59,8 @@ export class StaffAttendanceController {
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
     const parsedHeaderId = scheduleHeaderId
       ? Number(scheduleHeaderId)
       : undefined;
@@ -63,6 +68,8 @@ export class StaffAttendanceController {
     return this.staffAttendanceService.findScheduleHeaderDetails(
       parsedHeaderId,
       accessKeyId,
+      userId,
+      roleId
     );
   }
 
@@ -73,13 +80,17 @@ export class StaffAttendanceController {
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
         const parsedStatusId = attendanceStatusId
       ? Number(attendanceStatusId)
       : undefined;
 
     return this.staffAttendanceService.findAllScheduleDetails(
       accessKeyId,
-      parsedStatusId
+      parsedStatusId,
+      userId,
+      roleId
     );
   }
 

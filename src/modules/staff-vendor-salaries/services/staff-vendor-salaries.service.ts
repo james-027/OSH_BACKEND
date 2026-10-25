@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository,In} from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -26,6 +26,9 @@ import {
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { SssConfigs } from "src/entities/SssConfig";
 import { GovernmentContributionUtil } from "src/utils/government-contribution-util";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+
+
 
 @Injectable()
 export class StaffVendorSalariesService {
@@ -45,18 +48,32 @@ export class StaffVendorSalariesService {
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
-    
     private actionLogsService: ActionLogsService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
+
   ) {}
 
   private readonly module_name = "STAFF VENDOR SALARIES";
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
+      }
+
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
       }
 
       where.status_id = STATUS_IDS.ACTIVE;
@@ -242,12 +259,12 @@ export class StaffVendorSalariesService {
 
         if (staffSalary) {
           const oldSalaryRate = staffSalary.salary_rate;
-          const oldPagibigContriAmount = staffSalary.pagibig_contri_amount;
+          // const oldPagibigContriAmount = staffSalary.pagibig_contri_amount;
 
           staffSalary.salary_rate = updateStaffVendorSalaryDto.salary_rate;
 
-          staffSalary.pagibig_contri_amount =
-            GovernmentContributionUtil.computePagIbigShare(staffSalary);
+          // staffSalary.pagibig_contri_amount =
+          //   GovernmentContributionUtil.computePagIbigShare(staffSalary);
 
           staffSalary.updated_by = userId;
           staffSalary.access_key_id = accessKeyId;
@@ -262,9 +279,9 @@ export class StaffVendorSalariesService {
               `Salary rate from ${oldSalaryRate} to ${staffSalary.salary_rate}`,
             );
 
-            changes.push(
-              `Pag-IBIG contribution from ${oldPagibigContriAmount} to ${staffSalary.pagibig_contri_amount}`,
-            );
+            // changes.push(
+            //   `Pag-IBIG contribution from ${oldPagibigContriAmount} to ${staffSalary.pagibig_contri_amount}`,
+            // );
 
             await this.actionLogsService.logAction({
               module_name: this.module_name,
@@ -274,8 +291,8 @@ export class StaffVendorSalariesService {
               raw_data: JSON.stringify({
                 old_salary_rate: oldSalaryRate,
                 new_salary_rate: staffSalary.salary_rate,
-                old_pagibig_contri_amount: oldPagibigContriAmount,
-                new_pagibig_contri_amount: staffSalary.pagibig_contri_amount,
+                // old_pagibig_contri_amount: oldPagibigContriAmount,
+                // new_pagibig_contri_amount: staffSalary.pagibig_contri_amount,
                 access_key_id: accessKeyId,
               }),
               created_by: userId,
@@ -294,24 +311,24 @@ export class StaffVendorSalariesService {
             updated_by: userId,
           });
 
-          staffSalary.pagibig_contri_amount =
-            GovernmentContributionUtil.computePagIbigShare(staffSalary);
+          // staffSalary.pagibig_contri_amount =
+          //   GovernmentContributionUtil.computePagIbigShare(staffSalary);
 
-          const savedStaffSalary =
-            await this.staffSalaryRepository.save(staffSalary);
+          // const savedStaffSalary =
+          //   await this.staffSalaryRepository.save(staffSalary);
 
-          try {
-            await this.actionLogsService.logAction({
-              module_name: this.module_name,
-              ref_id: savedStaffSalary.id,
-              action_id: ACTION_IDS.ADD,
-              description: `Created staff salary with salary rate ${savedStaffSalary.salary_rate} and Pag-IBIG contribution ${savedStaffSalary.pagibig_contri_amount}`,
-              raw_data: JSON.stringify(savedStaffSalary),
-              created_by: userId,
-            });
-          } catch (err) {
-            logger.error("Action log failed for create:", err);
-          }
+          // try {
+          //   await this.actionLogsService.logAction({
+          //     module_name: this.module_name,
+          //     ref_id: savedStaffSalary.id,
+          //     action_id: ACTION_IDS.ADD,
+          //     description: `Created staff salary with salary rate ${savedStaffSalary.salary_rate} and Pag-IBIG contribution ${savedStaffSalary.pagibig_contri_amount}`,
+          //     raw_data: JSON.stringify(savedStaffSalary),
+          //     created_by: userId,
+          //   });
+          // } catch (err) {
+          //   logger.error("Action log failed for create:", err);
+          // }
         }
       }
 
@@ -927,5 +944,4 @@ export class StaffVendorSalariesService {
       errors,
     };
   }
-
 }

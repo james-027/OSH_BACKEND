@@ -33,6 +33,8 @@ export class StaffWarehousesController {
     @Query("warehouse_id") warehouseId?: string,
   )  {
     const accessKeyId = req.user.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
 
         const parsedApprovalStatusId = assignStatusId
     ? assignStatusId.split(",").map(Number)
@@ -43,7 +45,7 @@ export class StaffWarehousesController {
     : undefined;
 
 
-    return this.staffWarehousesService.findAll(accessKeyId, parsedApprovalStatusId, parsedWarehouseId);
+    return this.staffWarehousesService.findAll(accessKeyId, parsedApprovalStatusId, parsedWarehouseId,userId,roleId);
   }
 
     @Post("/change-bulk-status")
