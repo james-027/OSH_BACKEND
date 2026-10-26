@@ -65,7 +65,7 @@ export class Warehouse {
   @Column({ default: 8 })
   rem_status_id: number;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   pos_availability_id: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
@@ -88,6 +88,24 @@ export class Warehouse {
 
   @Column({ type: "time", nullable: true })
   ending_time: string;
+
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    default: 0,
+    nullable: true,
+  })
+  latitude: number;
+
+  @Column({
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    default: 0,
+    nullable: true,
+  })
+  longitude: number;
 
   @ManyToOne(() => WarehouseType, { eager: false })
   @JoinColumn({ name: "warehouse_type_id" })
@@ -131,13 +149,13 @@ export class Warehouse {
 
   @OneToMany(
     () => WarehouseRequirement,
-    (warehouseRequirement) => warehouseRequirement.warehouse
+    (warehouseRequirement) => warehouseRequirement.warehouse,
   )
   warehouseRequirements!: WarehouseRequirement[];
 
   @OneToMany(
     () => ReqTransactionHeader,
-    (reqTransactionHeader) => reqTransactionHeader.warehouse
+    (reqTransactionHeader) => reqTransactionHeader.warehouse,
   )
   reqTransactionHeaders!: ReqTransactionHeader[];
 }
