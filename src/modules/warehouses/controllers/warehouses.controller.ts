@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Delete,
   Body,
   Param,
@@ -17,6 +16,7 @@ import { RequirePermissions } from "../../../decorators/permissions.decorator";
 import { WarehousesService } from "../services/warehouses.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
+import { BulkChangeWarehouseStatusDto } from "../dto/BulkChangeWarehouseStatusDto";
 import { CacheCustom } from "src/decorators/cache.decorator";
 import { buildWarehouseKey, CACHE_TTL } from "src/config/cache.config";
 
@@ -25,30 +25,10 @@ import { buildWarehouseKey, CACHE_TTL } from "src/config/cache.config";
 export class WarehousesController {
   constructor(private readonly warehousesService: WarehousesService) {}
 
-  // @Get("/stores/:warehouse_type_id")
-  // // @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
-  // @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
-  // async findAll(
-  //   @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
-  //   @Request() req,
-  // ) {
-  //   const accessKeyId = req.user.current_access_key;
-  //   const userId = req.user?.id;
-  //   const roleId = req.user?.role_id;
-  //   return this.warehousesService.findAll(
-  //     warehouseTypeId,
-  //     accessKeyId,
-  //     userId,
-  //     roleId,
-  //   );
-  // }
-
   @Get("/stores")
   @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
-  async findAll(
-    @Request() req,
-  ) {
+  async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
     const roleId = req.user?.role_id;
@@ -79,6 +59,21 @@ export class WarehousesController {
     );
   }
 
+  @Post("/change-bulk-status")
+  @RequirePermissions({ module: "TAKEOUTSTORES", action: "POST" })
+  async toggleBulkStatus(
+    @Body() bulkStatusDto: BulkChangeWarehouseStatusDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.warehousesService.toggleBulkStatus(
+      bulkStatusDto.ids,
+      bulkStatusDto.status_id,
+      userId,
+      bulkStatusDto.undo_reason,
+    );
+  }
+
   @Get(":id")
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number) {
@@ -96,7 +91,7 @@ export class WarehousesController {
     );
   }
 
-  @Put(":id")
+  @Patch(":id")
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
@@ -107,10 +102,27 @@ export class WarehousesController {
     return this.warehousesService.update(id, updateDto, userId);
   }
 
+  @Patch(":id/change-status")
+  @RequirePermissions({ module: "TAKEOUTSTORES", action: "POST" })
+  async changeStatus(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { status_id: number; undo_reason?: string },
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.warehousesService.changeRemStatus(
+      id,
+      body.status_id,
+      userId,
+      body.undo_reason,
+    );
+  }
+
   @Delete(":id")
   @RequirePermissions({ module: "TAKEOUTSTORES", action: "CANCEL" })
-  async remove(@Param("id", ParseIntPipe) id: number) {
-    return this.warehousesService.remove(id);
+  async remove(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    const userId = req.user?.id;
+    return this.warehousesService.remove(id, userId);
   }
 
   @Patch(":id/toggle-status-activate")
