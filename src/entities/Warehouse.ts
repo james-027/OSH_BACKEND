@@ -92,8 +92,7 @@ export class Warehouse {
   @Column({
     type: "decimal",
     precision: 10,
-    scale: 2,
-    default: 0,
+    scale: 6,
     nullable: true,
   })
   latitude: number;
@@ -101,8 +100,7 @@ export class Warehouse {
   @Column({
     type: "decimal",
     precision: 10,
-    scale: 2,
-    default: 0,
+    scale: 6,
     nullable: true,
   })
   longitude: number;
