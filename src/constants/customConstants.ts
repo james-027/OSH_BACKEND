@@ -46,6 +46,11 @@ export const STATUS_IDS = {
   VALIDATED: 40,
   COMPUTED: 41,
   FOR_REVIEW: 42,
+  OPEN: 8,
+  SOON_TO_OPEN: 9,
+  PERMANENT_CLOSED: 10,
+  CANCELLED_DECLINED: 11,
+  TEMPORARY_CLOSED: 12,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -89,6 +94,11 @@ export const STATUS_NAMES = {
   [STATUS_IDS.INACTIVE]: "Inactive",
   [STATUS_IDS.TERMINATED]: "Terminated",
   [STATUS_IDS.CANCELLED]: "Cancelled",
+  [STATUS_IDS.OPEN]: "Open",
+  [STATUS_IDS.SOON_TO_OPEN]: "Soon to Open",
+  [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
+  [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
+  [STATUS_IDS.TEMPORARY_CLOSED]: "Temporary Closed",
 } as const;
 
 export const TOGGLE_NAMES = {
@@ -96,6 +106,11 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.FOR_APPROVAL]: "For Approval",
   [STATUS_IDS.APPROVED]: "Approved",
   [STATUS_IDS.INACTIVE]: "Inactive",
+  [STATUS_IDS.OPEN]: "Open",
+  [STATUS_IDS.SOON_TO_OPEN]: "Soon to Open",
+  [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
+  [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
+  [STATUS_IDS.TEMPORARY_CLOSED]: "Temporary Closed",
 } as const;
 
 // ============= WAREHOUSE REM STATUS =============
