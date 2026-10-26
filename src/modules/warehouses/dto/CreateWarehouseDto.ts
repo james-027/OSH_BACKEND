@@ -5,6 +5,7 @@ import {
   IsInt,
   Min,
   IsOptional,
+  IsNumber,
 } from "class-validator";
 
 export class CreateWarehouseDto {
@@ -37,9 +38,15 @@ export class CreateWarehouseDto {
   @Min(1, { message: "Location ID must be a positive integer" })
   location_id!: number;
 
+  @IsOptional()
+  @IsInt({ message: "Segment ID must be an integer" })
+  @Min(1, { message: "Segment ID must be a positive integer" })
+  segment_id?: number;
+
+  @IsOptional()
   @IsInt({ message: "Brand ID must be an integer" })
   @Min(1, { message: "Brand ID must be a positive integer" })
-  brand_id!: number;
+  brand_id?: number;
 
   @IsNotEmpty({ message: "Address is required" })
   @IsString({ message: "Address must be a string" })
@@ -50,6 +57,36 @@ export class CreateWarehouseDto {
   @IsInt({ message: "Status ID must be an integer" })
   @Min(1, { message: "Status ID must be a positive integer" })
   status_id?: number;
+
+  @IsOptional()
+  @IsInt({ message: "REM Status ID must be an integer" })
+  @Min(1, { message: "REM Status ID must be a positive integer" })
+  rem_status_id?: number;
+
+  @IsOptional()
+  @IsInt({ message: "POS Availability ID must be an integer" })
+  @Min(1, { message: "POS Availability ID must be a positive integer" })
+  pos_availability_id?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: "Allowance must be a valid number" })
+  allowance?: number;
+
+  @IsOptional()
+  @IsString({ message: "Start operation must be a string date (YYYY-MM-DD)" })
+  start_operation?: string;
+
+  @IsOptional()
+  @IsString({ message: "End operation must be a string date (YYYY-MM-DD)" })
+  end_operation?: string;
+
+  @IsOptional()
+  @IsString({ message: "Starting time must be a string time (HH:MM:SS)" })
+  starting_time?: string;
+
+  @IsOptional()
+  @IsString({ message: "Ending time must be a string time (HH:MM:SS)" })
+  ending_time?: string;
 
   @IsOptional()
   @IsInt()
