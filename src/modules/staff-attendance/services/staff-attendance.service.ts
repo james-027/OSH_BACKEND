@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In, Not, EntityManager } from "typeorm";
+import { Repository, DataSource, In, Not, EntityManager, LessThanOrEqual, MoreThanOrEqual, Between } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -206,7 +206,8 @@ export class StaffAttendanceService {
           access_key_id: accessKeyId,
         };
       }
-            if (userId && roleId) {
+
+      if (userId && roleId) {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
@@ -243,6 +244,121 @@ export class StaffAttendanceService {
       throw new Error("Failed to fetch staff schedule");
     }
   }
+
+
+
+  
+async generateAttendanceReport(
+  accessKeyId?: number,
+  dateFrom?: string,
+  dateTo?: string,
+  vendorIds?: number[],
+  locationIds?: number[],
+  userId?: number,
+  roleId?: number,
+): Promise<any[]> {
+  try {
+    const where: any = {
+      attendance_status_id: STATUS_IDS.VALIDATED,
+    };
+
+    // Filter by access key through ScheduleHeader
+    if (accessKeyId !== undefined) {
+      where.scheduleHeader = {
+        access_key_id: accessKeyId,
+      };
+    }
+
+    // Filter by schedule date from ScheduleHeader
+    if (dateFrom || dateTo) {
+      where.scheduleHeader = {
+        ...(where.scheduleHeader || {}),
+      };
+
+      if (dateFrom) {
+        where.scheduleHeader.schedule_date = MoreThanOrEqual(
+          dateFrom,
+        );
+      }
+
+      if (dateTo) {
+        where.scheduleHeader.schedule_date = LessThanOrEqual(
+          dateTo,
+        );
+      }
+
+      // Apply both date filters together
+      if (dateFrom && dateTo) {
+        where.scheduleHeader.schedule_date = Between(
+          dateFrom,
+          dateTo,
+        );
+      }
+    }
+
+    // Filter by vendor from ScheduleDetail
+    if (vendorIds && vendorIds.length > 0) {
+      where.vendor_id = In(vendorIds);
+    }
+
+    // Filter by location from ScheduleDetail
+    if (locationIds && locationIds.length > 0) {
+      where.location_id = In(locationIds);
+    }
+
+    // Apply user's allowed location permissions
+    if (userId && roleId) {
+      const allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+        );
+
+      if (where.location_id) {
+        // Intersect selected locations with allowed locations
+        const selectedLocationIds = locationIds || [];
+        const permittedLocationIds = selectedLocationIds.filter(
+          (id) => allowedLocationIds.includes(id),
+        );
+
+        where.location_id = In(permittedLocationIds);
+      } else {
+        where.location_id = In(allowedLocationIds);
+      }
+    }
+
+    const scheduleDetail = await this.scheduleDetailRepository.find({
+      where,
+      relations: [
+        "scheduleHeader",
+        "staff",
+        "vendor",
+        "location",
+        "warehouse",
+        "status",
+        "createdBy",
+        "updatedBy",
+        "actualLogsDetail",
+        "workingDays"
+      ],
+      order: {
+        overtime: "DESC",
+        scheduleHeader: {
+          schedule_date: "DESC",
+        },
+        id: "ASC",
+      },
+    });
+
+    return this.responseMapperService.mapEntitiesToResponse(
+      scheduleDetail,
+    );
+  } catch (error) {
+    console.error("Error generating attendance report:", error);
+    throw new Error("Failed to generate attendance report");
+  }
+}
+
 
   async findOne(id: number): Promise<any> {
     try {
