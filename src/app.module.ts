@@ -129,6 +129,8 @@ import { WorkingDaysModule } from "./modules/working-days/working-days.module";
 import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
 import { HolidaysModule } from "./modules/holidays/holidays.module";
 import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log.module";
+import { Customer } from "./entities/Customer";
+import { CustomerModule } from "./modules/customer/customer.module";
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
@@ -168,6 +170,7 @@ import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log
       ApprovalMatrixLevels,
       EmailQueue,
       MasterDataSyncLog,
+      Customer
     ]),
     // Authentication
     PassportModule,
@@ -246,7 +249,8 @@ import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log
     WorkingDaysModule,
     StaffPayrollModule,
     HolidaysModule,
-    ActualTimeLogsModule
+    ActualTimeLogsModule,
+    CustomerModule
   ],
   providers: [
     EmailService,

@@ -15,7 +15,7 @@ export class WarehouseMasterDataScheduler {
     try {
       const result = await this.warehouseMasterDataService.syncWarehouses();
     
-      console.log(result);
+      // console.log(result);
     } catch (error) {
       logger.error(
         `Warehouse Master Data Scheduler failed: ${

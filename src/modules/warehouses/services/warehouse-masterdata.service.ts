@@ -89,7 +89,7 @@ export class WarehouseMasterDataService {
 
                 // Skip if u_group doesn't match any warehouse_type_abbr in DB
                 if (!warehouseTypeId) {
-                    logger.warn(`Skipping warehouse ${rawCode}: Unknown u_group '${item.u_group}'`);
+                    // logger.warn(`Skipping warehouse ${rawCode}: Unknown u_group '${item.u_group}'`);
                     skippedInvalidGroupCount++;
                     continue;
                 }
