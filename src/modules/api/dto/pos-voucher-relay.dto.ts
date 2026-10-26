@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsString, Matches, MaxLength } from "class-validator";
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  ValidateIf,
+} from "class-validator";
+import { Transform } from "class-transformer";
 
 /**
  * PosVoucherRelayDto
@@ -21,7 +29,8 @@ export class PosVoucherRelayDto {
   @IsNotEmpty()
   @MaxLength(50)
   @Matches(/^[a-zA-Z0-9_-]+$/, {
-    message: "originator must contain only alphanumeric characters, hyphens, or underscores",
+    message:
+      "originator must contain only alphanumeric characters, hyphens, or underscores",
   })
   originator: string;
 
@@ -48,4 +57,23 @@ export class PosVoucherRelayDto {
     message: "voucher_code contains invalid characters",
   })
   voucher_code: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    // Kung ipinasa ang literal na DOM element string or garbage frontend placeholder, gawing null
+    if (
+      typeof value === "string" &&
+      value.trim() === "[object HTMLInputElement]"
+    ) {
+      return null;
+    }
+    return value;
+  })
+  @ValidateIf((_, val) => val !== null && val !== undefined && val !== "")
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[\p{L}\p{N}\s.,'#_/\-]*$/u, {
+    message: "added_info contains invalid characters",
+  })
+  added_info?: string | null;
 }
