@@ -89,6 +89,15 @@ export class CreateWarehouseDto {
   ending_time?: string;
 
   @IsOptional()
+  @IsNumber({}, { message: "Latitude must be a valid number" })
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: "Longitude must be a valid number" })
+  longitude?: number;
+
+  @IsOptional()
   @IsInt()
   access_key_id?: number;
 }
+
