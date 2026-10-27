@@ -98,7 +98,7 @@ export const STATUS_NAMES = {
   [STATUS_IDS.SOON_TO_OPEN]: "Soon to Open",
   [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
   [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
-  [STATUS_IDS.TEMPORARY_CLOSED]: "Temporary Closed",
+  [STATUS_IDS.TEMPORARY_CLOSED]: "Tempo Closed",
 } as const;
 
 export const TOGGLE_NAMES = {
@@ -110,10 +110,18 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.SOON_TO_OPEN]: "Soon to Open",
   [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
   [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
-  [STATUS_IDS.TEMPORARY_CLOSED]: "Temporary Closed",
+  [STATUS_IDS.TEMPORARY_CLOSED]: "Tempo Closed",
 } as const;
 
 // ============= WAREHOUSE REM STATUS =============
+export const WAREHOUSE_REM_STATUS_MAP: Record<string, number> = {
+  OPEN: STATUS_IDS.OPEN,
+  "SOON TO OPEN": STATUS_IDS.SOON_TO_OPEN,
+  "PERMANENT CLOSED": STATUS_IDS.PERMANENT_CLOSED,
+  "CANCELLED/DECLINED": STATUS_IDS.CANCELLED_DECLINED,
+  "TEMPO CLOSED": STATUS_IDS.TEMPORARY_CLOSED,
+};
+
 export const WAREHOUSE_REM_STATUS_IDS = {
   NEEDS_REQUIREMENTS: [8, 9], // Warehouses that need requirement sync
 } as const;
