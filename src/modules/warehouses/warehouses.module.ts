@@ -48,6 +48,8 @@ import { WarehouseSalariesService } from "./services/warehouse-salaries.service"
 import { WarehouseSalary } from "src/entities/WarehouseSalary";
 import { Vendor } from "src/entities/Vendor";
 import { Position } from "src/entities/Position";
+import { PosAvailability } from "src/entities/PosAvailability";
+import { Status } from "src/entities/Status";
 
 @Module({
   imports: [
@@ -69,6 +71,8 @@ import { Position } from "src/entities/Position";
       WarehouseSalary,
       Vendor,
       Position,
+      PosAvailability,
+      Status,
     ]),
     UsersModule,
     StatusModule,

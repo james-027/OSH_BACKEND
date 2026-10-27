@@ -6,6 +6,9 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { Warehouse } from "../../../entities/Warehouse";
+import { WarehouseType } from "../../../entities/WarehouseType";
+import { PosAvailability } from "../../../entities/PosAvailability";
+import { Status } from "../../../entities/Status";
 import { UsersService } from "../../users/services/users.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
@@ -39,6 +42,12 @@ export class WarehousesService {
   constructor(
     @InjectRepository(Warehouse)
     private warehousesRepository: Repository<Warehouse>,
+    @InjectRepository(WarehouseType)
+    private warehouseTypesRepository: Repository<WarehouseType>,
+    @InjectRepository(PosAvailability)
+    private posAvailabilityRepository: Repository<PosAvailability>,
+    @InjectRepository(Status)
+    private statusRepository: Repository<Status>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -66,6 +75,14 @@ export class WarehousesService {
       end_operation: w.end_operation,
       starting_time: w.starting_time,
       ending_time: w.ending_time,
+      latitude:
+        w.latitude !== null && w.latitude !== undefined
+          ? Number(w.latitude)
+          : null,
+      longitude:
+        w.longitude !== null && w.longitude !== undefined
+          ? Number(w.longitude)
+          : null,
       created_at: w.created_at,
       created_by: w.created_by,
       updated_by: w.updated_by,
@@ -191,6 +208,14 @@ export class WarehousesService {
       segment_id: segmentId,
       status_id: createDto.status_id ?? STATUS_IDS.ACTIVE,
       rem_status_id: createDto.rem_status_id ?? STATUS_IDS.OPEN,
+      latitude:
+        createDto.latitude !== undefined && createDto.latitude !== null
+          ? Number(createDto.latitude)
+          : null,
+      longitude:
+        createDto.longitude !== undefined && createDto.longitude !== null
+          ? Number(createDto.longitude)
+          : null,
       access_key_id: createDto.access_key_id,
       created_by: userId,
       updated_by: userId,
@@ -278,6 +303,14 @@ export class WarehousesService {
     };
     if (segmentId !== undefined) {
       updatePayload.segment_id = segmentId;
+    }
+    if (updateDto.latitude !== undefined) {
+      updatePayload.latitude =
+        updateDto.latitude !== null ? Number(updateDto.latitude) : null;
+    }
+    if (updateDto.longitude !== undefined) {
+      updatePayload.longitude =
+        updateDto.longitude !== null ? Number(updateDto.longitude) : null;
     }
 
     await this.warehousesRepository.update(id, updatePayload);
@@ -442,6 +475,15 @@ export class WarehousesService {
       );
     }
 
+    const statusRecord = await this.statusRepository.findOne({
+      where: { id: status_id },
+    });
+    if (!statusRecord) {
+      throw new BadRequestException(
+        `Status with ID ${status_id} does not exist in Status table`,
+      );
+    }
+
     // Bulk update rem_status_id
     await this.warehousesRepository
       .createQueryBuilder()
@@ -454,6 +496,7 @@ export class WarehousesService {
       .execute();
 
     const newStatusName =
+      statusRecord.status_name ??
       (STATUS_NAMES as Record<number, string>)[status_id] ??
       (TOGGLE_NAMES as Record<number, string>)[status_id] ??
       `Status ${status_id}`;
@@ -469,7 +512,10 @@ export class WarehousesService {
       }));
       await this.actionLogsService.logActionBatch(this.moduleName, actionLogs);
     } catch (err) {
-      logger.warn("Failed to write action logs for bulk warehouse status toggle:", err);
+      logger.warn(
+        "Failed to write action logs for bulk warehouse status toggle:",
+        err,
+      );
     }
 
     // Audit trail
@@ -477,7 +523,11 @@ export class WarehousesService {
       {
         service: "WarehousesService",
         method: "toggleBulkStatus",
-        raw_data: JSON.stringify({ ids, rem_status_id: status_id, undo_reason }),
+        raw_data: JSON.stringify({
+          ids,
+          rem_status_id: status_id,
+          undo_reason,
+        }),
         description: `Bulk toggled REM status for warehouse IDs: [${ids.join(", ")}] to ${newStatusName} (status_id: ${status_id})${undo_reason ? ` - Reason: ${undo_reason}` : ""}`,
         status_id: STATUS_IDS.ACTIVE,
       },
@@ -513,5 +563,348 @@ export class WarehousesService {
       undo_reason,
     );
     return results[0];
+  }
+
+  /**
+   * Bulk Upload from Excel with Row-Level Isolation (Uniform pattern matching warehouse-salaries.service)
+   * Resolves text values against PosAvailability repo, WarehouseType repo, and customConstants STATUS_IDS
+   */
+  async bulkUploadFromExcel(
+    records: any[],
+    userId: number,
+    allowedLocationIds?: number[],
+    accessKeyId?: number,
+    filename?: string,
+  ): Promise<any> {
+    const [existingWarehouses, warehouseTypes, posAvailabilities] =
+      await Promise.all([
+        this.warehousesRepository.find(),
+        this.warehouseTypesRepository.find(),
+        this.posAvailabilityRepository.find(),
+      ]);
+
+    const warehouseByIfs = new Map(
+      existingWarehouses.map((w) => [w.warehouse_ifs?.toUpperCase(), w]),
+    );
+    const warehouseByCode = new Map(
+      existingWarehouses.map((w) => [w.warehouse_code?.toUpperCase(), w]),
+    );
+    const warehouseByName = new Map(
+      existingWarehouses.map((w) => [w.warehouse_name?.toUpperCase(), w]),
+    );
+
+    // Map WarehouseType by name, abbr, and id
+    const typeByNameOrAbbr = new Map<string, WarehouseType>();
+    for (const wt of warehouseTypes) {
+      if (wt.warehouse_type_name) {
+        typeByNameOrAbbr.set(wt.warehouse_type_name.trim().toUpperCase(), wt);
+      }
+      if (wt.warehouse_type_abbr) {
+        typeByNameOrAbbr.set(wt.warehouse_type_abbr.trim().toUpperCase(), wt);
+      }
+      typeByNameOrAbbr.set(String(wt.id), wt);
+    }
+
+    // Map PosAvailability by text, stripped text, and id
+    const posByText = new Map<string, PosAvailability>();
+    for (const pa of posAvailabilities) {
+      if (pa.pos_availability) {
+        const clean = pa.pos_availability.trim().toUpperCase();
+        posByText.set(clean, pa);
+        posByText.set(clean.replace(/[\s_-]+/g, ""), pa);
+      }
+      posByText.set(String(pa.id), pa);
+    }
+
+    // Map REM Status strictly to the 5 valid values from CustomConstant
+    const remStatusByText = new Map<string, number>([
+      ["OPEN", STATUS_IDS.OPEN],
+      ["SOON TO OPEN", STATUS_IDS.SOON_TO_OPEN],
+      ["PERMANENT CLOSED", STATUS_IDS.PERMANENT_CLOSED],
+      ["CANCELLED/DECLINED", STATUS_IDS.CANCELLED_DECLINED],
+      ["TEMPO CLOSED", STATUS_IDS.TEMPORARY_CLOSED],
+    ]);
+
+    let inserted_count = 0;
+    let updated_count = 0;
+    const inserted_row_numbers: number[] = [];
+    const updated_row_numbers: number[] = [];
+    const errors: any[] = [];
+    const success: any[] = [];
+
+    for (const row of records) {
+      const rowNum = row.__rowNum__ || 0;
+      const ifsKey = String(row.warehouse_ifs ?? "")
+        .trim()
+        .toUpperCase();
+      const codeKey = String(row.warehouse_code ?? "")
+        .trim()
+        .toUpperCase();
+      const nameKey = String(row.warehouse_name ?? "")
+        .trim()
+        .toUpperCase();
+
+      const existing =
+        warehouseByIfs.get(ifsKey) ||
+        warehouseByCode.get(codeKey) ||
+        warehouseByName.get(nameKey);
+
+      const targetLocationId = Number(row.location_id ?? existing?.location_id);
+
+      // Location permission check
+      if (
+        allowedLocationIds &&
+        allowedLocationIds.length > 0 &&
+        targetLocationId &&
+        !allowedLocationIds.includes(targetLocationId)
+      ) {
+        errors.push({
+          row: rowNum,
+          error: `You do not have permission for Location ID ${targetLocationId} (${row.warehouse_ifs || row.warehouse_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+
+      // Validate and resolve Warehouse Type from text
+      let resolvedWarehouseTypeId = 1;
+      if (
+        row.warehouse_type !== null &&
+        row.warehouse_type !== undefined &&
+        String(row.warehouse_type).trim() !== ""
+      ) {
+        const key = String(row.warehouse_type).trim().toUpperCase();
+        const matched = typeByNameOrAbbr.get(key);
+        if (!matched) {
+          const allowedTypes = Array.from(
+            new Set(
+              warehouseTypes.map(
+                (t) => t.warehouse_type_name || t.warehouse_type_abbr,
+              ),
+            ),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid WAREHOUSE TYPE: '${row.warehouse_type}'. Allowed values: ${allowedTypes.join(", ")}`,
+          });
+          continue;
+        }
+        resolvedWarehouseTypeId = matched.id;
+      } else if (existing) {
+        resolvedWarehouseTypeId = existing.warehouse_type_id;
+      }
+
+      // Validate and resolve POS Availability from text
+      let resolvedPosAvailabilityId: number | null = null;
+      if (
+        row.pos_availability !== null &&
+        row.pos_availability !== undefined &&
+        String(row.pos_availability).trim() !== ""
+      ) {
+        const key = String(row.pos_availability).trim().toUpperCase();
+        const strippedKey = key.replace(/[\s_-]+/g, "");
+        const matched = posByText.get(key) || posByText.get(strippedKey);
+        if (!matched) {
+          const allowedPos = Array.from(
+            new Set(posAvailabilities.map((p) => p.pos_availability)),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid POS AVAILABILITY: '${row.pos_availability}'. Allowed values: ${allowedPos.join(", ")}`,
+          });
+          continue;
+        }
+        resolvedPosAvailabilityId = matched.id;
+      } else if (existing) {
+        resolvedPosAvailabilityId = existing.pos_availability_id;
+      }
+
+      // Validate and resolve REM Status strictly (OPEN, SOON TO OPEN, PERMANENT CLOSED, CANCELLED/DECLINED, TEMPO CLOSED)
+      let resolvedRemStatusId: number = STATUS_IDS.OPEN;
+      if (
+        row.rem_status !== null &&
+        row.rem_status !== undefined &&
+        String(row.rem_status).trim() !== ""
+      ) {
+        const key = String(row.rem_status).trim().toUpperCase();
+        const matched = remStatusByText.get(key);
+        if (!matched) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid REM STATUS: '${row.rem_status}'. Allowed values: OPEN, SOON TO OPEN, PERMANENT CLOSED, CANCELLED/DECLINED, TEMPO CLOSED`,
+          });
+          continue;
+        }
+        resolvedRemStatusId = matched;
+      } else if (existing) {
+        resolvedRemStatusId = existing.rem_status_id ?? STATUS_IDS.OPEN;
+      }
+
+      // Validate and resolve status_id: default to 1 (STATUS_IDS.ACTIVE)
+      let resolvedStatusId: number = 1;
+      if (
+        row.status !== null &&
+        row.status !== undefined &&
+        String(row.status).trim() !== ""
+      ) {
+        const key = String(row.status).trim().toUpperCase();
+        if (key === "INACTIVE" || key === "2") {
+          resolvedStatusId = STATUS_IDS.INACTIVE;
+        } else if (key === "ACTIVE" || key === "1") {
+          resolvedStatusId = STATUS_IDS.ACTIVE;
+        } else {
+          resolvedStatusId = 1;
+        }
+      } else if (existing) {
+        resolvedStatusId = existing.status_id ?? 1;
+      } else {
+        resolvedStatusId = 1;
+      }
+
+      const latVal =
+        row.latitude !== null &&
+        row.latitude !== undefined &&
+        row.latitude !== ""
+          ? Number(row.latitude)
+          : null;
+      const longVal =
+        row.longitude !== null &&
+        row.longitude !== undefined &&
+        row.longitude !== ""
+          ? Number(row.longitude)
+          : null;
+
+      try {
+        let action: "inserted" | "updated";
+        let saved: Warehouse;
+
+        if (existing) {
+          if (row.warehouse_name) existing.warehouse_name = row.warehouse_name;
+          if (row.warehouse_ifs) existing.warehouse_ifs = row.warehouse_ifs;
+          if (row.warehouse_code) existing.warehouse_code = row.warehouse_code;
+          if (row.location_id) existing.location_id = Number(row.location_id);
+          if (row.segment_id) existing.segment_id = Number(row.segment_id);
+          existing.warehouse_type_id = resolvedWarehouseTypeId;
+          if (row.address !== undefined && row.address !== null) {
+            existing.address = String(row.address);
+          }
+          if (latVal !== null && !isNaN(latVal)) {
+            existing.latitude = latVal;
+          }
+          if (longVal !== null && !isNaN(longVal)) {
+            existing.longitude = longVal;
+          }
+          existing.status_id = resolvedStatusId;
+          existing.rem_status_id = resolvedRemStatusId;
+          existing.pos_availability_id = resolvedPosAvailabilityId;
+          if (
+            row.allowance !== undefined &&
+            row.allowance !== null &&
+            !isNaN(Number(row.allowance))
+          ) {
+            existing.allowance = Number(row.allowance);
+          }
+          existing.updated_by = userId;
+
+          saved = await this.warehousesRepository.save(existing);
+          action = "updated";
+          updated_count++;
+          updated_row_numbers.push(rowNum);
+        } else {
+          const newWarehouse = this.warehousesRepository.create({
+            warehouse_name: row.warehouse_name,
+            warehouse_ifs: row.warehouse_ifs,
+            warehouse_code: row.warehouse_code,
+            warehouse_type_id: resolvedWarehouseTypeId,
+            location_id: Number(row.location_id),
+            segment_id: Number(row.segment_id),
+            address: row.address ? String(row.address) : "",
+            latitude: latVal !== null && !isNaN(latVal) ? latVal : null,
+            longitude: longVal !== null && !isNaN(longVal) ? longVal : null,
+            status_id: resolvedStatusId,
+            rem_status_id: resolvedRemStatusId,
+            pos_availability_id: resolvedPosAvailabilityId,
+            allowance:
+              row.allowance && !isNaN(Number(row.allowance))
+                ? Number(row.allowance)
+                : 0,
+            access_key_id: accessKeyId || 1,
+            created_by: userId,
+            updated_by: userId,
+          });
+
+          saved = await this.warehousesRepository.save(newWarehouse);
+          action = "inserted";
+          inserted_count++;
+          inserted_row_numbers.push(rowNum);
+
+          // Update maps for subsequent rows in the same file
+          if (saved.warehouse_ifs) {
+            warehouseByIfs.set(saved.warehouse_ifs.toUpperCase(), saved);
+          }
+          if (saved.warehouse_code) {
+            warehouseByCode.set(saved.warehouse_code.toUpperCase(), saved);
+          }
+          if (saved.warehouse_name) {
+            warehouseByName.set(saved.warehouse_name.toUpperCase(), saved);
+          }
+        }
+
+        const matchedPosType = posAvailabilities.find(
+          (p) => p.id === saved.pos_availability_id,
+        );
+        const matchedWarehouseType = warehouseTypes.find(
+          (t) => t.id === saved.warehouse_type_id,
+        );
+
+        success.push({
+          id: saved.id,
+          warehouse_ifs: saved.warehouse_ifs,
+          warehouse_code: saved.warehouse_code,
+          warehouse_name: saved.warehouse_name,
+          location_id: saved.location_id,
+          segment_id: saved.segment_id,
+          warehouse_type_id: saved.warehouse_type_id,
+          warehouse_type_name:
+            matchedWarehouseType?.warehouse_type_name || null,
+          pos_availability_id: saved.pos_availability_id,
+          pos_availability_name: matchedPosType?.pos_availability || null,
+          latitude:
+            saved.latitude !== null && saved.latitude !== undefined
+              ? Number(saved.latitude)
+              : null,
+          longitude:
+            saved.longitude !== null && saved.longitude !== undefined
+              ? Number(saved.longitude)
+              : null,
+          status_id: saved.status_id,
+          status_name: STATUS_NAMES[saved.status_id] ?? "Active",
+          rem_status_id: saved.rem_status_id,
+          rem_status_name: STATUS_NAMES[saved.rem_status_id] ?? "Open",
+          action,
+          __rowNum__: rowNum,
+        });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        errors.push({ row: rowNum, error: errorMessage });
+      }
+    }
+
+    if (inserted_count > 0 || updated_count > 0) {
+      await this.cacheInvalidationService.invalidateWarehouses();
+      try {
+        this.sseEventEmitter.emitCreateSignal("warehouses", 0);
+      } catch (err) {
+        logger.error("SSE event failed for warehouse bulk upload:", err);
+      }
+    }
+
+    return {
+      inserted_count,
+      updated_count,
+      inserted_row_numbers,
+      updated_row_numbers,
+      errors,
+      success,
+    };
   }
 }
