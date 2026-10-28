@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rest_api_nestjs
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    volumes:
+      # Mount source code from Windows for live reload
+      - .:/app
+      # Anonymous volume so container keeps its Linux node_modules
+      - /app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
