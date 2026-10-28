@@ -195,222 +195,354 @@ export class StaffPayrollService {
     }
   }
 
-  async findStaffPayrollDetails(
-    accessKeyId: number,
-    findStaffPayrollDetails: FindStaffPayrollDetailsDto,
-    userId: number,
-    roleId: number,
-  ): Promise<any> {
-    try {
-      const { date_from, date_to, location_ids, vendor_ids } =
-        findStaffPayrollDetails;
 
-      const where: any = {
-        scheduleHeader: {
-          access_key_id: accessKeyId,
-        },
-        attendance_status_id: STATUS_IDS.VALIDATED,
-      };
+  
+async findStaffPayrollDetails(
+  accessKeyId: number,
+  findStaffPayrollDetails: FindStaffPayrollDetailsDto,
+  userId: number,
+  roleId: number,
+): Promise<any> {
+  try {
+    const { date_from, date_to, location_ids, vendor_ids } =
+      findStaffPayrollDetails;
 
-      if (location_ids?.length) {
-        where.location_id = In(location_ids);
-      }
+    const where: any = {
+      scheduleHeader: {
+        access_key_id: accessKeyId,
+      },
+        attendance_status_id: In([
+        STATUS_IDS.VALIDATED,
+        STATUS_IDS.COMPUTED,
+      ]),
+    };
 
-      if (vendor_ids?.length) {
-        where.vendor_id = In(vendor_ids);
-      }
-
-      // Filter using schedule_headers.schedule_date
-      if (date_from && date_to) {
-        where.scheduleHeader = {
-          access_key_id: accessKeyId,
-          schedule_date: Between(date_from, date_to),
-        };
-      }
-
-      // Get all matching schedule details first
-      const allScheduleDetails = await this.scheduleDetailRepository.find({
-        where,
-        relations: [
-          "scheduleHeader",
-          "staff",
-          "staff.position",
-          "warehouse",
-          "vendor",
-          "workingDays",
-        ],
-      });
-
-      // Check if there is at least one detail that is not yet computed
-      const hasCronComputed = allScheduleDetails.some(
-        (detail) => detail.cron_computed !== true,
-      );
-
-      if (hasCronComputed) {
-        return {
-          message:
-            "Note: Some line items for this payroll filters were not yet sync for computation. Please wait for a minute.",
-          data: [],
-        };
-      }
-
-      // Only get records with cron_computed = true
-      const scheduleDetails = allScheduleDetails.filter(
-        (detail) => detail.cron_computed === true,
-      );
-
-      if (scheduleDetails.length === 0) {
-        return this.responseMapperService.mapEntitiesToResponse([]);
-      }
-
-      // ============================================================
-      // VALIDATE WAREHOUSE BUDGET HOURS & SALARIES
-      // ============================================================
-      const budgetHourRequests: Array<{
-        vendor_id: number;
-        warehouse_id: number;
-        date: string;
-      }> = [];
-
-      const warehouseSalaryRequests: Array<{
-        vendor_id: number;
-        warehouse_id: number;
-        position_id?: number;
-        date: string;
-      }> = [];
-
-      for (const d of scheduleDetails) {
-        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
-        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
-        const _dSd = d.scheduleHeader?.schedule_date as unknown as
-          | string
-          | Date;
-
-        let dateIso: string | null = null;
-        if (_dSd != null) {
-          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
-            dateIso = (_dSd as string).slice(0, 10);
-          } else {
-            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
-          }
-        }
-
-        if (vendorId != null && warehouseId != null && dateIso) {
-          budgetHourRequests.push({
-            vendor_id: vendorId,
-            warehouse_id: warehouseId,
-            date: dateIso,
-          });
-
-          warehouseSalaryRequests.push({
-            vendor_id: vendorId,
-            warehouse_id: warehouseId,
-            position_id: d.staff?.position_id,
-            date: dateIso,
-          });
-        }
-      }
-
-      const [budgetHourMap, warehouseSalaryMap] = await Promise.all([
-        this.warehouseBudgetHoursService.getBudgetHoursMap(budgetHourRequests),
-        this.warehouseSalariesService.getSalariesMap(warehouseSalaryRequests),
-      ]);
-
-      const missingBudgetHoursMap = new Map<string, any>();
-      const missingSalariesMap = new Map<string, any>();
-
-      for (const d of scheduleDetails) {
-        const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
-        const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
-        const _dSd = d.scheduleHeader?.schedule_date as unknown as
-          | string
-          | Date;
-
-        let dateIso: string | null = null;
-        if (_dSd != null) {
-          if (typeof _dSd === "string" && (_dSd as string).length >= 10) {
-            dateIso = (_dSd as string).slice(0, 10);
-          } else {
-            dateIso = dayjs(_dSd).format("YYYY-MM-DD");
-          }
-        }
-
-        const warehouseName =
-          d.warehouse?.warehouse_name || `Warehouse #${warehouseId ?? "N/A"}`;
-        const warehouseIfs = d.warehouse?.warehouse_ifs || "";
-        const vendorName =
-          d.vendor?.service_provider_name || `Vendor #${vendorId ?? "N/A"}`;
-        const vendorAbbr =
-          d.vendor?.service_provider_code || `Vendor #${vendorId ?? "N/A"}`;
-        const positionId = d.staff?.position_id ?? null;
-        const positionName =
-          d.staff?.position?.position_name ||
-          (positionId ? `Position #${positionId}` : "Any Position");
-
-        // 1. Check Budget Hours
-        const budgetKey = `${vendorId}-${warehouseId}-${dateIso}`;
-        const budgetRow = dateIso ? budgetHourMap.get(budgetKey) : null;
-        const hasBudget = budgetRow && Number(budgetRow.budget_hours) > 0;
-
-        if (!hasBudget && !missingBudgetHoursMap.has(budgetKey)) {
-          missingBudgetHoursMap.set(budgetKey, {
-            warehouse_id: warehouseId,
-            warehouse_name: warehouseName,
-            warehouse_ifs: warehouseIfs,
-            vendor_id: vendorId,
-            vendor_name: vendorName,
-            vendor_abbr: vendorAbbr,
-            date: dateIso,
-          });
-        }
-
-        // 2. Check Warehouse Salary
-        const posKey = positionId != null ? positionId : "any";
-        const salaryKey = `${vendorId}-${warehouseId}-${posKey}-${dateIso}`;
-        const salaryRow = dateIso ? warehouseSalaryMap.get(salaryKey) : null;
-        const hasSalary = salaryRow && Number(salaryRow.salary) > 0;
-
-        if (!hasSalary && !missingSalariesMap.has(salaryKey)) {
-          missingSalariesMap.set(salaryKey, {
-            warehouse_id: warehouseId,
-            warehouse_name: warehouseName,
-            warehouse_ifs: warehouseIfs,
-            vendor_id: vendorId,
-            vendor_abbr: vendorAbbr,
-            vendor_name: vendorName,
-            position_id: positionId,
-            position_name: positionName,
-            date: dateIso,
-          });
-        }
-      }
-
-      const missingBudgetHours = Array.from(missingBudgetHoursMap.values());
-      const missingSalaries = Array.from(missingSalariesMap.values());
-
-      if (missingBudgetHours.length > 0 || missingSalaries.length > 0) {
-        return {
-          message:
-            "Cannot proceed with computation. Some warehouses do not have budget hours or salary rate configured for the selected period.",
-          data: [],
-          missing_budget_hours: missingBudgetHours,
-          missing_salaries: missingSalaries,
-        };
-      }
-
-      // Sort warehouse alphabetically
-      scheduleDetails.sort((a, b) =>
-        (a.warehouse?.warehouse_name || "").localeCompare(
-          b.warehouse?.warehouse_name || "",
-        ),
-      );
-
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetails);
-    } catch (error) {
-      console.error("Error fetching payroll details:", error);
-      throw new Error("Failed to fetch payroll details");
+    if (location_ids?.length) {
+      where.location_id = In(location_ids);
     }
+
+    if (vendor_ids?.length) {
+      where.vendor_id = In(vendor_ids);
+    }
+
+    // Filter using schedule_headers.schedule_date
+    if (date_from && date_to) {
+      where.scheduleHeader = {
+        access_key_id: accessKeyId,
+        schedule_date: Between(date_from, date_to),
+      };
+    }
+
+    // Get all matching schedule details first
+    const allScheduleDetails = await this.scheduleDetailRepository.find({
+      where,
+      relations: [
+        "scheduleHeader",
+        "staff",
+        "staff.position",
+        "warehouse",
+        "vendor",
+        "workingDays",
+      ],
+    });
+
+    // Check if there is at least one detail that is not yet computed
+    const hasCronComputed = allScheduleDetails.some(
+      (detail) => detail.cron_computed !== true,
+    );
+
+    if (hasCronComputed) {
+      return {
+        message:
+          "Note: Some line items for this payroll filters were not yet sync for computation. Please wait for a minute.",
+        data: [],
+      };
+    }
+
+    // Only get records with cron_computed = true
+    const scheduleDetails = allScheduleDetails.filter(
+      (detail) => detail.cron_computed === true,
+    );
+
+    if (scheduleDetails.length === 0) {
+      return this.responseMapperService.mapEntitiesToResponse([]);
+    }
+
+    // ============================================================
+    // NEW VALIDATION: CHECK EXISTING PAYROLL DETAILS
+    // ============================================================
+    // Only check when a complete requested payroll period is provided.
+    // This lookup uses payroll_details and its payroll header relation.
+    if (date_from && date_to) {
+      const scheduleDetailIds = [
+        ...new Set(
+          scheduleDetails
+            .map((detail) => detail.id)
+            .filter((id) => id != null),
+        ),
+      ];
+
+      if (scheduleDetailIds.length > 0) {
+        const existingPayrollDetails =
+          await this.payrollDetailRepository
+            .createQueryBuilder("payrollDetail")
+            .innerJoin("payrollDetail.payrollHeader", "payrollHeader")
+            .where(
+              "payrollDetail.schedule_detail_id IN (:...scheduleDetailIds)",
+              { scheduleDetailIds },
+            )
+            .andWhere("payrollHeader.status_id IN (:...status_id)", {
+              status_id: [STATUS_IDS.PENDING, STATUS_IDS.POSTED],
+            })
+            // Existing payroll period overlaps the requested period.
+            .andWhere("payrollHeader.payroll_date_from <= :dateTo", {
+              dateTo: date_to,
+            })
+            .andWhere("payrollHeader.payroll_date_to >= :dateFrom", {
+              dateFrom: date_from,
+            })
+            .getMany();
+
+        // Require matching schedule detail ID, vendor ID, and location ID.
+        const duplicatePayrollHeaderIds = new Set<number>();
+
+        for (const detail of scheduleDetails) {
+          const vendorId = (detail.vendor as any)?.id ?? detail.vendor_id;
+          const locationId =
+            (detail as any).location_id ??
+            (detail.warehouse as any)?.id ??
+            (detail as any).warehouse_id;
+
+          const duplicate = existingPayrollDetails.some(
+            (payrollDetail: any) => {
+              const existingScheduleDetailId =
+                payrollDetail.schedule_detail_id ??
+                payrollDetail.scheduleDetail?.id;
+
+              const existingVendorId =
+                payrollDetail.vendor_id ??
+                payrollDetail.vendor?.id;
+
+              const existingLocationId =
+                payrollDetail.location_id ??
+                payrollDetail.location?.id ??
+                payrollDetail.warehouse_id ??
+                payrollDetail.warehouse?.id;
+
+              return (
+                Number(existingScheduleDetailId) === Number(detail.id) &&
+                Number(existingVendorId) === Number(vendorId) &&
+                Number(existingLocationId) === Number(locationId)
+              );
+            },
+          );
+
+          if (duplicate) {
+            // Collect the matching existing payroll header ID(s).
+            for (const payrollDetail of existingPayrollDetails as any[]) {
+              const existingScheduleDetailId =
+                payrollDetail.schedule_detail_id ??
+                payrollDetail.scheduleDetail?.id;
+
+              const existingVendorId =
+                payrollDetail.vendor_id ??
+                payrollDetail.vendor?.id;
+
+              const existingLocationId =
+                payrollDetail.location_id ??
+                payrollDetail.location?.id ??
+                payrollDetail.warehouse_id ??
+                payrollDetail.warehouse?.id;
+
+              if (
+                Number(existingScheduleDetailId) === Number(detail.id) &&
+                Number(existingVendorId) === Number(vendorId) &&
+                Number(existingLocationId) === Number(locationId)
+              ) {
+                const headerId =
+                  payrollDetail.payroll_header_id ??
+                  payrollDetail.payrollHeader?.id;
+
+                if (headerId != null) {
+                  duplicatePayrollHeaderIds.add(Number(headerId));
+                }
+              }
+            }
+          }
+        }
+
+        if (duplicatePayrollHeaderIds.size > 0) {
+          const existingPayrollHeaders = await this.payrollHeaderRepository.find({
+            where: {
+              id: In(Array.from(duplicatePayrollHeaderIds)),
+            },
+            select: ["id", "status_id"],
+          });
+
+          return {
+            message:
+              "An existing payroll was found for the selected filters. Please recompute the existing payroll instead of generating a new one.",
+            existing_payroll_header_ids: existingPayrollHeaders.map(
+              (header) => header.id,
+            ),
+            status_id: existingPayrollHeaders.map(
+              (header) => header.status_id,
+            ),
+            data: [],
+          };
+        }
+      }
+    }
+
+    // ============================================================
+    // EXISTING VALIDATION: WAREHOUSE BUDGET HOURS & SALARIES
+    // ============================================================
+    const budgetHourRequests: Array<{
+      vendor_id: number;
+      warehouse_id: number;
+      date: string;
+    }> = [];
+
+    const warehouseSalaryRequests: Array<{
+      vendor_id: number;
+      warehouse_id: number;
+      position_id?: number;
+      date: string;
+    }> = [];
+
+    for (const d of scheduleDetails) {
+      const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+      const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+      const _dSd = d.scheduleHeader?.schedule_date as unknown as
+        | string
+        | Date;
+
+      let dateIso: string | null = null;
+      if (_dSd != null) {
+        if (typeof _dSd === "string" && _dSd.length >= 10) {
+          dateIso = _dSd.slice(0, 10);
+        } else {
+          dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+        }
+      }
+
+      if (vendorId != null && warehouseId != null && dateIso) {
+        budgetHourRequests.push({
+          vendor_id: vendorId,
+          warehouse_id: warehouseId,
+          date: dateIso,
+        });
+
+        warehouseSalaryRequests.push({
+          vendor_id: vendorId,
+          warehouse_id: warehouseId,
+          position_id: d.staff?.position_id,
+          date: dateIso,
+        });
+      }
+    }
+
+    const [budgetHourMap, warehouseSalaryMap] = await Promise.all([
+      this.warehouseBudgetHoursService.getBudgetHoursMap(budgetHourRequests),
+      this.warehouseSalariesService.getSalariesMap(warehouseSalaryRequests),
+    ]);
+
+    const missingBudgetHoursMap = new Map<string, any>();
+    const missingSalariesMap = new Map<string, any>();
+
+    for (const d of scheduleDetails) {
+      const vendorId = (d.vendor as any)?.id ?? d.vendor_id;
+      const warehouseId = (d.warehouse as any)?.id ?? d.warehouse_id;
+      const _dSd = d.scheduleHeader?.schedule_date as unknown as
+        | string
+        | Date;
+
+      let dateIso: string | null = null;
+      if (_dSd != null) {
+        if (typeof _dSd === "string" && _dSd.length >= 10) {
+          dateIso = _dSd.slice(0, 10);
+        } else {
+          dateIso = dayjs(_dSd).format("YYYY-MM-DD");
+        }
+      }
+
+      const warehouseName =
+        d.warehouse?.warehouse_name || `Warehouse #${warehouseId ?? "N/A"}`;
+      const warehouseIfs = d.warehouse?.warehouse_ifs || "";
+      const vendorName =
+        d.vendor?.service_provider_name || `Vendor #${vendorId ?? "N/A"}`;
+      const vendorAbbr =
+        d.vendor?.service_provider_code || `Vendor #${vendorId ?? "N/A"}`;
+      const positionId = d.staff?.position_id ?? null;
+      const positionName =
+        d.staff?.position?.position_name ||
+        (positionId ? `Position #${positionId}` : "Any Position");
+
+      // 1. Check Budget Hours
+      const budgetKey = `${vendorId}-${warehouseId}-${dateIso}`;
+      const budgetRow = dateIso ? budgetHourMap.get(budgetKey) : null;
+      const hasBudget = budgetRow && Number(budgetRow.budget_hours) > 0;
+
+      if (!hasBudget && !missingBudgetHoursMap.has(budgetKey)) {
+        missingBudgetHoursMap.set(budgetKey, {
+          warehouse_id: warehouseId,
+          warehouse_name: warehouseName,
+          warehouse_ifs: warehouseIfs,
+          vendor_id: vendorId,
+          vendor_name: vendorName,
+          vendor_abbr: vendorAbbr,
+          date: dateIso,
+        });
+      }
+
+      // 2. Check Warehouse Salary
+      const posKey = positionId != null ? positionId : "any";
+      const salaryKey = `${vendorId}-${warehouseId}-${posKey}-${dateIso}`;
+      const salaryRow = dateIso ? warehouseSalaryMap.get(salaryKey) : null;
+      const hasSalary = salaryRow && Number(salaryRow.salary) > 0;
+
+      if (!hasSalary && !missingSalariesMap.has(salaryKey)) {
+        missingSalariesMap.set(salaryKey, {
+          warehouse_id: warehouseId,
+          warehouse_name: warehouseName,
+          warehouse_ifs: warehouseIfs,
+          vendor_id: vendorId,
+          vendor_abbr: vendorAbbr,
+          vendor_name: vendorName,
+          position_id: positionId,
+          position_name: positionName,
+          date: dateIso,
+        });
+      }
+    }
+
+    const missingBudgetHours = Array.from(missingBudgetHoursMap.values());
+    const missingSalaries = Array.from(missingSalariesMap.values());
+
+    if (missingBudgetHours.length > 0 || missingSalaries.length > 0) {
+      return {
+        message:
+          "Cannot proceed with computation. Some warehouses do not have budget hours or salary rate configured for the selected period.",
+        data: [],
+        missing_budget_hours: missingBudgetHours,
+        missing_salaries: missingSalaries,
+      };
+    }
+
+    // Sort warehouse alphabetically
+    scheduleDetails.sort((a, b) =>
+      (a.warehouse?.warehouse_name || "").localeCompare(
+        b.warehouse?.warehouse_name || "",
+      ),
+    );
+
+    return this.responseMapperService.mapEntitiesToResponse(scheduleDetails);
+  } catch (error) {
+    console.error("Error fetching payroll details:", error);
+    throw new Error("Failed to fetch payroll details");
   }
+}
+
 
   /**
    * Extracts and formats parameter objects required by warehouseBudgetHoursService.getBudgetHoursMap().
@@ -516,6 +648,8 @@ export class StaffPayrollService {
         };
       }
 
+      
+
       // ============================================================
       // 3. GROUP BY VENDOR + LOCATION
       // ============================================================
@@ -559,17 +693,17 @@ export class StaffPayrollService {
 
         const locationAbbr = firstDetail.location?.location_abbr;
 
-        const payrollInvoice =
-          await this.commonUtilitiesService.generateTransactionNumber({
-            transaction_type: "PAYROLL INVOICE NUMBER",
-            vendor_id: firstDetail.vendor_id,
-            location_id: firstDetail.location_id,
-            access_key_id: accessKeyId,
-            format: "{abbr}{year}-{seq:6}",
-            reset_per_year: true,
-            currentDate: new Date(),
-            abbr: `${agencyCode}${locationAbbr}`,
-          });
+        // const payrollInvoice =
+        //   await this.commonUtilitiesService.generateTransactionNumber({
+        //     transaction_type: "PAYROLL INVOICE NUMBER",
+        //     vendor_id: firstDetail.vendor_id,
+        //     location_id: firstDetail.location_id,
+        //     access_key_id: accessKeyId,
+        //     format: "{abbr}{year}-{seq:6}",
+        //     reset_per_year: true,
+        //     currentDate: new Date(),
+        //     abbr: `${agencyCode}${locationAbbr}`,
+        //   });
 
         // ========================================================
         // Create Payroll Header
@@ -580,7 +714,7 @@ export class StaffPayrollService {
           payroll_date_to: new Date(payroll_date_to),
           reason: reason || "",
           remarks: remarks || "",
-          payroll_invoice: payrollInvoice,
+          payroll_invoice: "",
           access_key_id: accessKeyId,
           status_id: STATUS_IDS.PENDING,
           created_by: userId,
@@ -690,7 +824,7 @@ export class StaffPayrollService {
             service: "StaffPayrollService",
             method: "create",
             raw_data: JSON.stringify(savedPayrollHeader),
-            description: `Created payroll ${payrollInvoice}`,
+            description: `Created payroll ${savedPayrollHeader.id}`,
             status_id: 1,
           },
           userId,
@@ -724,7 +858,7 @@ export class StaffPayrollService {
             module_name: this.module_name,
             ref_id: savedPayrollHeader.id,
             action_id: ACTION_IDS.ADD,
-            description: `Add Payroll ${payrollInvoice}`,
+            description: `Add Payroll ${savedPayrollHeader.id}`,
             raw_data: JSON.stringify({
               savedPayrollHeader,
             }),
@@ -917,6 +1051,7 @@ export class StaffPayrollService {
           continue;
         }
 
+
         // --- Step D: Fetch budget hours using centralized helper ---
         const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
 
@@ -979,6 +1114,26 @@ export class StaffPayrollService {
 
         await this.payrollDetailRepository.save(newPayrollDetails);
 
+          const scheduleDetailIds = [
+        ...new Set(
+          scheduleDetails
+            .map((detail) => detail.id)
+            .filter((id): id is number => id !== undefined && id !== null),
+        ),
+      ];
+
+      if (scheduleDetailIds.length > 0) {
+        await this.scheduleDetailRepository.update(
+          {
+            id: In(scheduleDetailIds),
+          },
+          {
+            attendance_status_id: STATUS_IDS.COMPUTED,
+            updated_by: userId,
+          },
+        );
+      }
+
         // --- Step F: Update schedule header audit timestamps ---
         const scheduleHeaderIds = [
           ...new Set(
@@ -999,6 +1154,8 @@ export class StaffPayrollService {
             },
           );
         }
+
+        
 
         // --- Step G: User Audit Trail & Action Logs ---
         await this.userAuditTrailCreateService.create(
@@ -1073,6 +1230,7 @@ export class StaffPayrollService {
 
       try {
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -2025,6 +2183,7 @@ export class StaffPayrollService {
 
       try {
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -2078,27 +2237,18 @@ export class StaffPayrollService {
       const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
-            // Update Payroll Headers to POSTED
-            await transactionalEntityManager.update(
-              PayrollHeader,
-              {
-                id: In(payrollIds),
-              },
-              {
-                status_id: STATUS_IDS.POSTED,
-                updated_by: userId,
-                modified_at: new Date(),
-              },
-            );
-
-            // Get schedule detail IDs associated with the selected payroll headers
+            // 1. Get payroll details belonging to the selected headers.
             const payrollDetails = await transactionalEntityManager.find(
               PayrollDetails,
               {
                 where: {
                   payroll_header_id: In(payrollIds),
                 },
-                select: ["id", "schedule_detail_id"],
+                select: [
+                  "id",
+                  "schedule_detail_id",
+                  "payroll_header_id",
+                ],
               },
             );
 
@@ -2112,8 +2262,82 @@ export class StaffPayrollService {
               ),
             ];
 
-            // Update associated Schedule Details to COMPUTED
+            // 2. Find matching ACTIVE details in OTHER, already-POSTED payroll headers.
             if (scheduleDetailIds.length > 0) {
+              const existingPostedDetails = await transactionalEntityManager
+                .createQueryBuilder(PayrollDetails, "pd")
+                .innerJoin(
+                  PayrollHeader,
+                  "ph",
+                  "ph.id = pd.payroll_header_id",
+                )
+                .select("pd.id", "id")
+                .addSelect(
+                  "pd.schedule_detail_id",
+                  "schedule_detail_id",
+                )
+                .where("ph.status_id = :postedStatusId", {
+                  postedStatusId: STATUS_IDS.POSTED,
+                })
+                // Only check details that aren't already INACTIVE.
+                .andWhere("pd.status_id != :inactiveStatusId", {
+                  inactiveStatusId: STATUS_IDS.INACTIVE,
+                })
+                .andWhere(
+                  "pd.schedule_detail_id IN (:...scheduleDetailIds)",
+                  { scheduleDetailIds },
+                )
+                .andWhere(
+                  "pd.payroll_header_id NOT IN (:...payrollIds)",
+                  { payrollIds },
+                )
+                .getRawMany();
+
+              // 3. Collect schedule_detail_ids already posted and active elsewhere.
+              const alreadyPostedScheduleIds = new Set<number>(
+                existingPostedDetails
+                  .map((d) => Number(d.schedule_detail_id))
+                  .filter((id) => !Number.isNaN(id)),
+              );
+
+              // 4. Identify duplicate details in the current payroll batch.
+              const seenInCurrentBatch = new Set<number>();
+              const detailIdsToInactivate: number[] = [];
+
+              const sortedCurrentDetails = [...payrollDetails].sort(
+                (a, b) => Number(a.id) - Number(b.id),
+              );
+
+              for (const newDetail of sortedCurrentDetails) {
+                const scheduleId = newDetail.schedule_detail_id;
+
+                if (scheduleId == null) continue;
+
+                const numericScheduleId = Number(scheduleId);
+
+                if (
+                  alreadyPostedScheduleIds.has(numericScheduleId) ||
+                  seenInCurrentBatch.has(numericScheduleId)
+                ) {
+                  detailIdsToInactivate.push(Number(newDetail.id));
+                } else {
+                  seenInCurrentBatch.add(numericScheduleId);
+                }
+              }
+
+              // 5. Inactivate duplicate payroll details.
+              if (detailIdsToInactivate.length > 0) {
+                await transactionalEntityManager.update(
+                  PayrollDetails,
+                  { id: In(detailIdsToInactivate) },
+                  {
+                    status_id: STATUS_IDS.INACTIVE,
+                    updated_by: userId,
+                  },
+                );
+              }
+
+              // 6. Update associated Schedule Details to COMPUTED.
               await transactionalEntityManager.update(
                 ScheduleDetail,
                 {
@@ -2126,21 +2350,104 @@ export class StaffPayrollService {
               );
             }
 
-            // Retrieve updated Payroll Headers
-            const updatedHeaders = await transactionalEntityManager.find(
+            // 7. Generate payroll invoice numbers before posting.
+            for (const payrollId of payrollIds) {
+              // Retrieve the latest header inside the transaction.
+              const payrollHeader = await transactionalEntityManager.findOne(
+                PayrollHeader,
+                {
+                  where: { id: payrollId },
+                },
+              );
+
+              if (!payrollHeader) {
+                throw new NotFoundException(
+                  `Payroll Header ID ${payrollId} not found`,
+                );
+              }
+
+              // Do not overwrite an existing invoice number.
+              if (payrollHeader.payroll_invoice) {
+                continue;
+              }
+
+              // Get the details for this payroll header.
+              const details = await transactionalEntityManager.find(
+                PayrollDetails,
+                {
+                  where: {
+                    payroll_header_id: payrollId,
+                  },
+                  relations: ["vendor", "location"],
+                  order: {
+                    id: "ASC",
+                  },
+                },
+              );
+
+              // Skip invoice generation if there are no payroll details.
+              if (!details.length) {
+                continue;
+              }
+
+              const firstDetail = details[0];
+
+              const agencyCode =
+                firstDetail.vendor?.service_provider_code ?? "";
+
+              const locationAbbr =
+                firstDetail.location?.location_abbr ?? "";
+
+              const payrollInvoice =
+                await this.commonUtilitiesService.generateTransactionNumber({
+                  transaction_type: "PAYROLL INVOICE NUMBER",
+                  vendor_id: firstDetail.vendor_id,
+                  location_id: firstDetail.location_id,
+                  access_key_id: payrollHeader.access_key_id,
+                  format: "{abbr}{year}-{seq:6}",
+                  reset_per_year: true,
+                  currentDate: new Date(),
+                  abbr: `${agencyCode}${locationAbbr}`,
+                });
+
+              // Save the generated invoice number.
+              await transactionalEntityManager.update(
+                PayrollHeader,
+                { id: payrollId },
+                {
+                  payroll_invoice: payrollInvoice,
+                  updated_by: userId,
+                },
+              );
+            }
+
+            // 8. Update selected Payroll Headers to POSTED.
+            await transactionalEntityManager.update(
               PayrollHeader,
               {
+                id: In(payrollIds),
+              },
+              {
+                status_id: STATUS_IDS.POSTED,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
+
+            // 9. Retrieve updated Payroll Headers.
+            const updatedHeaders =
+              await transactionalEntityManager.find(PayrollHeader, {
                 where: {
                   id: In(payrollIds),
                 },
                 relations: ["status", "createdBy", "updatedBy"],
-              },
-            );
+              });
 
             return updatedHeaders;
           },
         );
 
+      // 10. Create audit trail.
       await this.userAuditTrailCreateService.create(
         {
           service: "Staff Payroll Service",
@@ -2152,17 +2459,19 @@ export class StaffPayrollService {
         userId,
       );
 
+      // 11. Map response.
       const responses = updatedPayrollHeaders.map((payroll) =>
         this.responseMapperService.mapEntityToResponse(payroll),
       );
 
+      // 12. Create action logs.
       try {
         for (const payroll of updatedPayrollHeaders) {
           await this.actionLogsService.logAction({
             module_name: this.module_name,
             ref_id: payroll.id,
             action_id: ACTION_IDS.POST,
-            description: `Post Payroll`,
+            description: "Post Payroll",
             raw_data: JSON.stringify(payroll),
             created_by: userId,
           });
@@ -2171,6 +2480,7 @@ export class StaffPayrollService {
         logger.error("Action log failed for Post Payroll:", err);
       }
 
+      // 13. Emit SSE updates.
       try {
         this.sseEventEmitter.emitUpdate("staff_attendance", 0);
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
