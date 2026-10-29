@@ -2970,6 +2970,118 @@ export class StaffPayrollService {
       const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
+            // ============================================================
+            // PRE-REVERT VALIDATION: Check for conflicts with POSTED payrolls
+            // ============================================================
+            const detailsToRevert = await transactionalEntityManager.find(
+              PayrollDetails,
+              {
+                where: {
+                  payroll_header_id: In(payrollIds),
+                  status_id: STATUS_IDS.ACTIVE,
+                },
+                select: [
+                  "id",
+                  "schedule_detail_id",
+                  "payroll_header_id",
+                  "billing_type_id",
+                ],
+              },
+            );
+
+            const schedIdsToRevert = [
+              ...new Set(
+                detailsToRevert
+                  .map((d) => d.schedule_detail_id)
+                  .filter((id): id is number => id != null),
+              ),
+            ];
+
+            if (schedIdsToRevert.length > 0) {
+              const conflictingPostedDetails = await transactionalEntityManager
+                .createQueryBuilder(PayrollDetails, "pd")
+                .innerJoin(PayrollHeader, "ph", "ph.id = pd.payroll_header_id")
+                .select("pd.id", "id")
+                .addSelect("pd.schedule_detail_id", "schedule_detail_id")
+                .addSelect("ph.id", "payroll_header_id")
+                .addSelect("ph.payroll_invoice", "payroll_invoice")
+                .addSelect(
+                  "COALESCE(pd.billing_type_id, ph.billing_type_id)",
+                  "billing_type_id",
+                )
+                .where("ph.status_id = :postedStatusId", {
+                  postedStatusId: STATUS_IDS.POSTED,
+                })
+                .andWhere("pd.status_id = :activeStatusId", {
+                  activeStatusId: STATUS_IDS.ACTIVE,
+                })
+                .andWhere("pd.schedule_detail_id IN (:...schedIdsToRevert)", {
+                  schedIdsToRevert,
+                })
+                .andWhere("pd.payroll_header_id NOT IN (:...payrollIds)", {
+                  payrollIds,
+                })
+                .getRawMany();
+
+              if (conflictingPostedDetails.length > 0) {
+                const headerBillingTypeMap = new Map<number, number | null>(
+                  payrollHeaders.map((h) => [h.id, h.billing_type_id ?? null]),
+                );
+
+                const postedDetailsBySchedId = new Map<
+                  number,
+                  Array<{ headerId: number; invoice: string; billingType: number }>
+                >();
+
+                for (const d of conflictingPostedDetails) {
+                  const sId = Number(d.schedule_detail_id);
+                  if (!postedDetailsBySchedId.has(sId)) {
+                    postedDetailsBySchedId.set(sId, []);
+                  }
+                  postedDetailsBySchedId.get(sId)!.push({
+                    headerId: Number(d.payroll_header_id),
+                    invoice: d.payroll_invoice || `#${d.payroll_header_id}`,
+                    billingType:
+                      d.billing_type_id != null
+                        ? Number(d.billing_type_id)
+                        : BILLING_TYPE_IDS.ALL,
+                  });
+                }
+
+                const conflictsFound = new Set<string>();
+
+                for (const detail of detailsToRevert) {
+                  const sId = Number(detail.schedule_detail_id);
+                  const postedMatches = postedDetailsBySchedId.get(sId);
+                  if (!postedMatches?.length) continue;
+
+                  const revertBillingType =
+                    detail.billing_type_id != null
+                      ? Number(detail.billing_type_id)
+                      : (headerBillingTypeMap.get(detail.payroll_header_id) ??
+                        BILLING_TYPE_IDS.ALL);
+
+                  for (const posted of postedMatches) {
+                    if (
+                      this.isBillingTypeConflict(
+                        revertBillingType,
+                        posted.billingType,
+                      )
+                    ) {
+                      conflictsFound.add(`Payroll ${posted.invoice}`);
+                    }
+                  }
+                }
+
+                if (conflictsFound.size > 0) {
+                  const conflictingList = Array.from(conflictsFound).join(", ");
+                  throw new BadRequestException(
+                    `Cannot revert payroll. Some entries are already posted in other payroll records (${conflictingList}) with an overlapping billing type. Please cancel or revert the posted payrolls first.`,
+                  );
+                }
+              }
+            }
+
             // Update Payroll Headers
             await transactionalEntityManager.update(
               PayrollHeader,
