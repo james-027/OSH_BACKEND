@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, Between, In } from "typeorm";
+import { Repository, Between, In, EntityManager } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -649,6 +649,106 @@ export class StaffPayrollService {
   }
 
   /**
+   * Evaluates if a ScheduleDetail is fully billed across all applicable billing components.
+   * Centralizes completion logic following DRY principle.
+   */
+  public isScheduleDetailFullyBilled(detail: ScheduleDetail): boolean {
+    const isRegularDay =
+      Number(detail.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+
+    // Ordinary days require regular billed; holidays/rest days have no regular billing
+    const regDone =
+      !isRegularDay ||
+      Number(detail.regular) === 0 ||
+      detail.is_regular_billed;
+
+    // Premium billing covers OT (for regular days) and both regular & OT (for holidays)
+    const otDone =
+      (isRegularDay
+        ? Number(detail.overtime) === 0
+        : Number(detail.regular) === 0 && Number(detail.overtime) === 0) ||
+      detail.is_ot_billed;
+
+    const ndDone =
+      Number(detail.night_shift) === 0 || detail.is_nd_billed;
+
+    return regDone && otDone && ndDone;
+  }
+
+  /**
+   * Synchronizes billing flags and fully-billed attendance status on schedule details
+   * for a set of posted or re-computed payroll headers.
+   * Centralizes this logic to ensure DRY adherence between postPayroll and reComputePayroll.
+   */
+  private async syncScheduleDetailsBillingStatus(
+    headers: PayrollHeader[],
+    userId: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const em = manager || this.payrollDetailRepository.manager;
+    const allSchedIds: number[] = [];
+
+    for (const header of headers) {
+      const activeDetails = await em.find(PayrollDetails, {
+        where: {
+          payroll_header_id: header.id,
+          status_id: STATUS_IDS.ACTIVE,
+        },
+        select: ["schedule_detail_id"],
+      });
+
+      const schedIds: number[] = Array.from(
+        new Set(
+          activeDetails
+            .map((d) => d.schedule_detail_id)
+            .filter((id): id is number => id != null),
+        ),
+      );
+
+      if (!schedIds.length) continue;
+      allSchedIds.push(...schedIds);
+
+      const updateFields: any = { updated_by: userId };
+      if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
+        updateFields.is_regular_billed = true;
+      } else if (header.billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
+        updateFields.is_ot_billed = true;
+      } else if (header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF) {
+        updateFields.is_nd_billed = true;
+      } else {
+        updateFields.is_regular_billed = true;
+        updateFields.is_ot_billed = true;
+        updateFields.is_nd_billed = true;
+      }
+
+      await em.update(ScheduleDetail, { id: In(schedIds) }, updateFields);
+    }
+
+    const uniqueSchedIds = [...new Set(allSchedIds)];
+    if (!uniqueSchedIds.length) return;
+
+    // Fetch affected schedule details to evaluate full completion
+    const affectedDetails = await em.find(ScheduleDetail, {
+      where: { id: In(uniqueSchedIds) },
+    });
+
+    const fullyBilledIds = affectedDetails
+      .filter((d) => this.isScheduleDetailFullyBilled(d))
+      .map((d) => d.id);
+
+    if (fullyBilledIds.length > 0) {
+      await em.update(
+        ScheduleDetail,
+        { id: In(fullyBilledIds) },
+        {
+          attendance_status_id: STATUS_IDS.COMPUTED,
+          updated_by: userId,
+        },
+      );
+    }
+  }
+
+  /**
    * Extracts and formats regular, overtime, and night shift hours based on billing type.
    * Centralizes split billing hours isolation to follow DRY principle across creation and recomputation.
    * - Twist 1: Holiday/Rest Day regular hours belong to Premium Billing (not Regular Billing).
@@ -1277,25 +1377,7 @@ export class StaffPayrollService {
 
         await this.payrollDetailRepository.save(newPayrollDetails);
 
-        const scheduleDetailIds = [
-          ...new Set(
-            scheduleDetails
-              .map((detail) => detail.id)
-              .filter((id): id is number => id !== undefined && id !== null),
-          ),
-        ];
 
-        if (scheduleDetailIds.length > 0) {
-          await this.scheduleDetailRepository.update(
-            {
-              id: In(scheduleDetailIds),
-            },
-            {
-              attendance_status_id: STATUS_IDS.COMPUTED,
-              updated_by: userId,
-            },
-          );
-        }
 
         // --- Step F: Update schedule header audit timestamps ---
         const scheduleHeaderIds = [
@@ -1383,10 +1465,14 @@ export class StaffPayrollService {
           },
           {
             status_id: STATUS_IDS.POSTED,
+            is_reverted: false,
             updated_by: userId,
             modified_at: new Date(),
           },
         );
+
+        // Synchronize billing flags and determine fully-billed schedule details following DRY principle
+        await this.syncScheduleDetailsBillingStatus(existingHeaders, userId);
       }
 
       try {
@@ -2494,94 +2580,18 @@ export class StaffPayrollService {
             }
           }
 
-              // 6. Update associated Schedule Details billing flags & status based on billing_type_id
-              for (const pId of payrollIds) {
-                const header = await transactionalEntityManager.findOne(
-                  PayrollHeader,
-                  {
-                    where: { id: pId },
-                  },
-                );
-                if (!header) continue;
-
-                const headerDetails = await transactionalEntityManager.find(
-                  PayrollDetails,
-                  {
-                    where: { payroll_header_id: pId },
-                    select: ["schedule_detail_id"],
-                  },
-                );
-                const schedIds = [
-                  ...new Set(
-                    headerDetails
-                      .map((d) => d.schedule_detail_id)
-                      .filter((id): id is number => id != null),
-                  ),
-                ];
-                if (!schedIds.length) continue;
-
-                const updateFields: any = { updated_by: userId };
-                if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
-                  updateFields.is_regular_billed = true;
-                } else if (
-                  header.billing_type_id === BILLING_TYPE_IDS.PREMIUM
-                ) {
-                  updateFields.is_ot_billed = true;
-                } else if (
-                  header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF
-                ) {
-                  updateFields.is_nd_billed = true;
-                } else {
-                  updateFields.is_regular_billed = true;
-                  updateFields.is_ot_billed = true;
-                  updateFields.is_nd_billed = true;
-                }
-
-                await transactionalEntityManager.update(
-                  ScheduleDetail,
-                  { id: In(schedIds) },
-                  updateFields,
-                );
-              }
-
-              // Check which schedule details are now fully billed
-              const affectedDetails = await transactionalEntityManager.find(
-                ScheduleDetail,
+              // 6. Update associated Schedule Details billing flags & determine fully-billed status (DRY)
+              const headersToSync = await transactionalEntityManager.find(
+                PayrollHeader,
                 {
-                  where: { id: In(scheduleDetailIds) },
+                  where: { id: In(payrollIds) },
                 },
               );
-
-              const fullyBilledIds = affectedDetails
-                .filter((d) => {
-                  const isRegularDay =
-                    Number(d.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
-                  // Ordinary days require regular billed; holidays/rest days have no regular billing
-                  const regDone =
-                    !isRegularDay ||
-                    Number(d.regular) === 0 ||
-                    d.is_regular_billed;
-                  // Premium billing covers OT (for regular days) and both regular & OT (for holidays)
-                  const otDone =
-                    (isRegularDay
-                      ? Number(d.overtime) === 0
-                      : Number(d.regular) === 0 && Number(d.overtime) === 0) ||
-                    d.is_ot_billed;
-                  const ndDone = Number(d.night_shift) === 0 || d.is_nd_billed;
-                  return regDone && otDone && ndDone;
-                })
-                .map((d) => d.id);
-
-              if (fullyBilledIds.length > 0) {
-                await transactionalEntityManager.update(
-                  ScheduleDetail,
-                  { id: In(fullyBilledIds) },
-                  {
-                    attendance_status_id: STATUS_IDS.COMPUTED,
-                    updated_by: userId,
-                  },
-                );
-              }
+              await this.syncScheduleDetailsBillingStatus(
+                headersToSync,
+                userId,
+                transactionalEntityManager,
+              );
             }
 
           // 9. Generate invoice numbers ONLY for headers with active details.
