@@ -160,7 +160,6 @@ export const DAYS_FACTOR_RATE = {
   DAYS: 26,
 } as const;
 
-
 // ============= BILLING TYPE IDs =============
 export const BILLING_TYPE_IDS = {
   REGULAR: 1,
@@ -171,9 +170,7 @@ export const BILLING_TYPE_IDS = {
 
 export const BILLING_TYPE_ABBRS = {
   [BILLING_TYPE_IDS.REGULAR]: "REG",
-  [BILLING_TYPE_IDS.PREMIUM]: "OT",
+  [BILLING_TYPE_IDS.PREMIUM]: "PREMIUM",
   [BILLING_TYPE_IDS.NIGHT_DIFF]: "ND",
   [BILLING_TYPE_IDS.ALL]: "ALL",
 } as const;
-
-
