@@ -2222,6 +2222,7 @@ export class StaffPayrollService {
 
       const errorLogsMap = new Map<number, Partial<PayrollLog>>();
       const computedDetailIds: number[] = [];
+      const detailsToSave: PayrollDetails[] = [];
 
       for (const detail of postedPayrollDetails) {
         const payrollHeader = detail.payrollHeader;
@@ -2410,9 +2411,7 @@ export class StaffPayrollService {
           }
 
           Object.assign(detail, computedValues);
-
-          await this.payrollDetailRepository.save(detail);
-
+          detailsToSave.push(detail);
           computedDetailIds.push(detail.id);
 
           const headerId = detail.payroll_header_id;
@@ -2442,6 +2441,11 @@ export class StaffPayrollService {
 
           continue;
         }
+      }
+
+      // Bulk save all computed details in chunks for optimal performance
+      if (detailsToSave.length > 0) {
+        await this.payrollDetailRepository.save(detailsToSave, { chunk: 100 });
       }
 
       /**
@@ -2494,6 +2498,8 @@ export class StaffPayrollService {
         }
       }
 
+      let headersUpdated = false;
+
       for (const [headerId, payrollHeader] of headersMap) {
         const hasError = headerIdsWithErrors.has(headerId);
 
@@ -2514,9 +2520,11 @@ export class StaffPayrollService {
         }
 
         await this.payrollHeaderRepository.save(payrollHeader);
+        headersUpdated = true;
       }
 
-      if (postedPayrollDetails.length > 0) {
+      // Emit SSE exactly once when headers have been processed/updated
+      if (headersUpdated && (computedCount > 0 || headerIdsWithErrors.size > 0)) {
         try {
           this.sseEventEmitter.emitUpdate("staff_payroll", 0);
           this.sseEventEmitter.emitUpdate("staff_attendance", 0);
@@ -2536,6 +2544,8 @@ export class StaffPayrollService {
           ? error.message
           : "Failed to compute posted payroll details.",
       );
+    } finally {
+      this.isAutoPayrollComputationRunning = false;
     }
   }
 
