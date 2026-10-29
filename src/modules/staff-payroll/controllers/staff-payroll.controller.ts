@@ -21,6 +21,7 @@ import { CreatePayrollHeaderDto } from "src/modules/staff-payroll/dto/CreatePayr
 import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayrollHeaderDto";
 import { FindStaffPayrollDetailsDto } from "src/modules/staff-payroll/dto/FindStaffPayrollDetailsDto";
 import { StaffScheduleReportFilterDto } from "src/modules/staff-payroll/dto/StaffScheduleReportFilterDto";
+import { BILLING_TYPE_ABBRS } from "src/constants/customConstants";
 
 @Controller("staffs-payroll")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -181,6 +182,7 @@ export class StaffPayrollController {
       filter.date_to,
       filter.vendor_ids,
       filter.location_ids,
+      filter.billing_type_id,
     );
   }
 
@@ -198,9 +200,13 @@ export class StaffPayrollController {
       filter.date_to,
       filter.vendor_ids,
       filter.location_ids,
+      filter.billing_type_id,
     );
 
-    const filename = `SWP_Payroll_Report_${filter.date_from || "start"}_to_${filter.date_to || "end"}.xlsx`;
+    const billingAbbr = filter.billing_type_id
+      ? BILLING_TYPE_ABBRS[filter.billing_type_id as keyof typeof BILLING_TYPE_ABBRS] || `TYPE_${filter.billing_type_id}`
+      : "ALL";
+    const filename = `SWP_Payroll_Report_${billingAbbr}_${filter.date_from || "start"}_to_${filter.date_to || "end"}.xlsx`;
 
     // Write workbook directly to buffer
     const buffer = await workbook.xlsx.writeBuffer();
