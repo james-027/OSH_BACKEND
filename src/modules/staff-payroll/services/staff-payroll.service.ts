@@ -268,22 +268,14 @@ export class StaffPayrollService {
         (detail) => detail.cron_computed === true,
       );
 
-      // Filter by billing_type_id if provided
-      if (billing_type_id === BILLING_TYPE_IDS.REGULAR) {
-        scheduleDetails = scheduleDetails.filter(
-          (d) => Number(d.regular) > 0 && !d.is_regular_billed,
+      // Filter by billing_type_id if provided using centralized helper
+      if (billing_type_id) {
+        scheduleDetails = scheduleDetails.filter((d) =>
+          this.isDetailEligibleForBillingType(d, billing_type_id, true),
         );
-      } else if (billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
-        scheduleDetails = scheduleDetails.filter(
-          (d) => Number(d.overtime) > 0 && !d.is_ot_billed,
-        );
-      } else if (billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF) {
-        scheduleDetails = scheduleDetails.filter(
-          (d) => Number(d.night_shift) > 0 && !d.is_nd_billed,
-        );
-      } else if (billing_type_id === BILLING_TYPE_IDS.ALL) {
-        scheduleDetails = scheduleDetails.filter(
-          (d) => !d.is_regular_billed || !d.is_ot_billed || !d.is_nd_billed,
+      } else {
+        scheduleDetails = scheduleDetails.filter((d) =>
+          this.isDetailEligibleForBillingType(d, BILLING_TYPE_IDS.ALL, true),
         );
       }
 
@@ -713,24 +705,9 @@ export class StaffPayrollService {
     userId: number,
     budgetHourMap: Map<string, any>,
   ): Promise<PayrollHeader | null> {
-    let eligibleDetails = details;
-    if (billingTypeId === BILLING_TYPE_IDS.REGULAR) {
-      eligibleDetails = details.filter(
-        (d) => Number(d.regular) > 0 && !d.is_regular_billed,
+    const eligibleDetails = details.filter((d) =>
+      this.isDetailEligibleForBillingType(d, billingTypeId, true),
       );
-    } else if (billingTypeId === BILLING_TYPE_IDS.PREMIUM) {
-      eligibleDetails = details.filter(
-        (d) => Number(d.overtime) > 0 && !d.is_ot_billed,
-      );
-    } else if (billingTypeId === BILLING_TYPE_IDS.NIGHT_DIFF) {
-      eligibleDetails = details.filter(
-        (d) => Number(d.night_shift) > 0 && !d.is_nd_billed,
-      );
-    } else {
-      eligibleDetails = details.filter(
-        (d) => !d.is_regular_billed || !d.is_ot_billed || !d.is_nd_billed,
-      );
-    }
 
     if (!eligibleDetails.length) {
       return null;
@@ -903,28 +880,14 @@ export class StaffPayrollService {
 
       // Filter only unbilled records based on requested billing_type_id or split_billing
       let scheduleDetails = allScheduleDetails;
-      if (!split_billing && billing_type_id === BILLING_TYPE_IDS.REGULAR) {
-        scheduleDetails = allScheduleDetails.filter(
-          (d) => Number(d.regular) > 0 && !d.is_regular_billed,
-        );
-      } else if (
-        !split_billing &&
-        billing_type_id === BILLING_TYPE_IDS.PREMIUM
-      ) {
-        scheduleDetails = allScheduleDetails.filter(
-          (d) => Number(d.overtime) > 0 && !d.is_ot_billed,
-        );
-      } else if (
-        !split_billing &&
-        billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF
-      ) {
-        scheduleDetails = allScheduleDetails.filter(
-          (d) => Number(d.night_shift) > 0 && !d.is_nd_billed,
+      if (!split_billing && billing_type_id) {
+        scheduleDetails = allScheduleDetails.filter((d) =>
+          this.isDetailEligibleForBillingType(d, billing_type_id, true),
         );
       } else {
         // split_billing or ALL: at least one component is unbilled
-        scheduleDetails = allScheduleDetails.filter(
-          (d) => !d.is_regular_billed || !d.is_ot_billed || !d.is_nd_billed,
+        scheduleDetails = allScheduleDetails.filter((d) =>
+          this.isDetailEligibleForBillingType(d, BILLING_TYPE_IDS.ALL, true),
         );
       }
 
@@ -1224,24 +1187,21 @@ export class StaffPayrollService {
           );
 
         // --- Step E: Create new active payroll details ---
-        // Filter details matching existingHeader.billing_type_id
-        let recomputeDetails = scheduleDetails;
-        if (existingHeader.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
-          recomputeDetails = scheduleDetails.filter(
-            (d) => Number(d.regular) > 0,
-          );
-        } else if (
-          existingHeader.billing_type_id === BILLING_TYPE_IDS.PREMIUM
-        ) {
-          recomputeDetails = scheduleDetails.filter(
-            (d) => Number(d.overtime) > 0,
-          );
-        } else if (
-          existingHeader.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF
-        ) {
-          recomputeDetails = scheduleDetails.filter(
-            (d) => Number(d.night_shift) > 0,
-          );
+        // Filter details matching existingHeader.billing_type_id using centralized helper
+        const recomputeDetails = scheduleDetails.filter((d) =>
+          this.isDetailEligibleForBillingType(
+            d,
+            existingHeader.billing_type_id,
+            false,
+          ),
+        );
+
+        if (!recomputeDetails.length) {
+          return {
+            message:
+              "No eligible schedule details found to recompute this payroll.",
+            data: [],
+          };
         }
 
         const newPayrollDetails = recomputeDetails.map((scheduleDetail) => {
