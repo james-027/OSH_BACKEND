@@ -2077,9 +2077,11 @@ export class StaffPayrollService {
       });
 
       if (!postedPayrollDetails.length) {
-        // logger.info(
-        //   "[PayrollComputation] No posted and computed post header found",
-        // );
+        return {
+          success: true,
+          message: "No posted and uncomputed payroll details found",
+          total: 0,
+        };
       }
 
       const staffIds = [
