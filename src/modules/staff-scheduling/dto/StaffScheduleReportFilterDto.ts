@@ -26,7 +26,6 @@ export class StaffScheduleReportFilterDto {
   @IsDateString()
   date_to?: string;
 
-
   @IsOptional()
   @IsString()
   location_ids?: string;
@@ -34,4 +33,9 @@ export class StaffScheduleReportFilterDto {
   @IsOptional()
   @IsString()
   vendor_ids?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  billing_type_id?: number;
 }

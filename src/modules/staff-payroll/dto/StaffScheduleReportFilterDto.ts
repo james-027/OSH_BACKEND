@@ -37,4 +37,9 @@ export class StaffScheduleReportFilterDto {
   @IsInt({ each: true })
   @Type(() => Number)
   location_ids?: number[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  billing_type_id?: number;
 }
