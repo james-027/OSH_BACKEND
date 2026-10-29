@@ -159,3 +159,21 @@ export const QA_PORT = "3002";
 export const DAYS_FACTOR_RATE = {
   DAYS: 26,
 } as const;
+
+
+// ============= BILLING TYPE IDs =============
+export const BILLING_TYPE_IDS = {
+  REGULAR: 1,
+  PREMIUM: 2,
+  NIGHT_DIFF: 3,
+  ALL: 4,
+} as const;
+
+export const BILLING_TYPE_ABBRS = {
+  [BILLING_TYPE_IDS.REGULAR]: "REG",
+  [BILLING_TYPE_IDS.PREMIUM]: "OT",
+  [BILLING_TYPE_IDS.NIGHT_DIFF]: "ND",
+  [BILLING_TYPE_IDS.ALL]: "ALL",
+} as const;
+
+

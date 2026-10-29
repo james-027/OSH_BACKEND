@@ -29,6 +29,7 @@ import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { WarehousesModule } from "../warehouses/warehouses.module";
 import { PayrollLog } from "src/entities/PayrollLog";
+import { BillingType } from "src/entities/BillingType";
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PayrollLog } from "src/entities/PayrollLog";
       Location,
       SyncLog,
       PayrollLog,
+      BillingType,
     ]),
     UsersModule,
     SSEModule,

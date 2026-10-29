@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNotEmpty,
@@ -70,6 +71,10 @@ export class CreateSchedulingDetailDto {
   @IsOptional()
   @IsInt()
   add_ot?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  is_not_for_premium_pay?: boolean;
 
   @IsOptional()
   @IsDateString()

@@ -21,4 +21,8 @@ export class FindStaffPayrollDetailsDto {
   @IsArray()
   @IsNumber({}, { each: true })
   vendor_ids?: number[];
+
+  @IsOptional()
+  @IsNumber()
+  billing_type_id?: number;
 }

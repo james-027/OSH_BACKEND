@@ -47,6 +47,7 @@ export class PayrollComputationService {
     const overtime = Number(detail.overtime) || 0;
     const nightShift = Number(detail.night_shift) || 0;
     const nightShiftAmount = ((salaryRate * 0.1) / 8) * nightShift;
+    const isNotForPremium = Boolean(detail.is_not_for_premium_pay);
 
     /**
      * ----------------------------------------------------------

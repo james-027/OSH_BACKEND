@@ -840,6 +840,10 @@ export class StaffSchedulingService {
                     operational_end_time: detail.operational_end_time,
                     diff_outlet: detail.diff_outlet,
                     add_ot: detail.add_ot,
+          is_not_for_premium_pay: Boolean(detail.is_not_for_premium_pay),
+                    ...(detail.is_not_for_premium_pay !== undefined && {
+                      is_not_for_premium_pay: detail.is_not_for_premium_pay,
+                    }),
                     working_day_id: workingDay,
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
@@ -1385,6 +1389,9 @@ export class StaffSchedulingService {
                 duty_end_time: detail.duty_end_time,
                 starting_time: detail.starting_time,
                 ending_time: detail.ending_time,
+                ...(detail.is_not_for_premium_pay !== undefined && {
+                  is_not_for_premium_pay: detail.is_not_for_premium_pay,
+                }),
 
                 // Old schedule logic
                 shift_type: isNightShift,
@@ -4060,6 +4067,7 @@ export class StaffSchedulingService {
           actual_break_in: detail.actual_break_in,
           actual_break_out: detail.actual_break_out,
           add_ot: detail.add_ot,
+          is_not_for_premium_pay: Boolean(detail.is_not_for_premium_pay),
           working_day_id: detail.working_day_id,
           status_id: detail.status_id,
           attendance_status_id: detail.attendance_status_id,

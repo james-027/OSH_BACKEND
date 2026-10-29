@@ -12,6 +12,7 @@ import { Status } from "./Status";
 import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 import { PayrollDetails } from "./PayrollDetails";
+import { BillingType } from "./BillingType";
 
 @Entity("payroll_headers")
 export class PayrollHeader {
@@ -41,6 +42,9 @@ export class PayrollHeader {
 
   @Column({ nullable: true })
   access_key_id: number;
+
+  @Column({ nullable: true })
+  billing_type_id: number;
 
   @Column({ default: 1 })
   status_id: number;
@@ -85,6 +89,14 @@ export class PayrollHeader {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+  @ManyToOne(() => BillingType, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "billing_type_id" })
+  billingType: BillingType;
 
   @OneToMany(() => PayrollDetails, (details) => details.payrollHeader)
   details: PayrollDetails[];

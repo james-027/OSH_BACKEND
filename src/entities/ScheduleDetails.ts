@@ -118,6 +118,18 @@ export class ScheduleDetail {
   @Column({ type: 'boolean', default: false })
   ot_clearing_approved: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  is_regular_billed: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  is_ot_billed: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  is_nd_billed: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  is_not_for_premium_pay: boolean;
+
   @Column({ nullable: true })
   created_by: number;
 

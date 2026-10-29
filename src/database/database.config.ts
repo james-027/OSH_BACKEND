@@ -113,6 +113,7 @@ import { SssConfigs } from "../entities/SssConfig";
 import { WarehouseBudgetHour } from "../entities/WarehouseBudgetHour";
 import { WarehouseSalary } from "../entities/WarehouseSalary";
 import { PayrollLog } from "../entities/PayrollLog";
+import { BillingType } from "../entities/BillingType";
 
 // All entities in one place for easy maintenance
 export const entities = [
@@ -229,6 +230,7 @@ export const entities = [
   WarehouseBudgetHour,
   WarehouseSalary,
   PayrollLog,
+  BillingType,
 ];
 
 // Base configuration shared between NestJS and TypeORM CLI
