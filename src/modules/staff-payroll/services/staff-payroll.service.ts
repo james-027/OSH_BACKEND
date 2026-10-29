@@ -2524,7 +2524,10 @@ export class StaffPayrollService {
       }
 
       // Emit SSE exactly once when headers have been processed/updated
-      if (headersUpdated && (computedCount > 0 || headerIdsWithErrors.size > 0)) {
+      if (
+        headersUpdated &&
+        (computedCount > 0 || headerIdsWithErrors.size > 0)
+      ) {
         try {
           this.sseEventEmitter.emitUpdate("staff_payroll", 0);
           this.sseEventEmitter.emitUpdate("staff_attendance", 0);
@@ -3030,7 +3033,11 @@ export class StaffPayrollService {
 
                 const postedDetailsBySchedId = new Map<
                   number,
-                  Array<{ headerId: number; invoice: string; billingType: number }>
+                  Array<{
+                    headerId: number;
+                    invoice: string;
+                    billingType: number;
+                  }>
                 >();
 
                 for (const d of conflictingPostedDetails) {
@@ -3690,7 +3697,7 @@ export class StaffPayrollService {
         });
       }
 
-      if (billingTypeId && Number(billingTypeId) !== BILLING_TYPE_IDS.ALL) {
+      if (billingTypeId !== undefined && billingTypeId !== null) {
         query.andWhere(
           "(payrollDetail.billing_type_id = :billingTypeId OR (payrollDetail.billing_type_id IS NULL AND payrollHeader.billing_type_id = :billingTypeId))",
           { billingTypeId: Number(billingTypeId) },
@@ -3931,9 +3938,13 @@ export class StaffPayrollService {
         warehouseGroup.budget_hours = budgethours;
 
         const effectiveDetailBillingTypeId =
-          detail.billing_type_id ?? (detail.payrollHeader as any)?.billing_type_id ?? null;
+          detail.billing_type_id ??
+          (detail.payrollHeader as any)?.billing_type_id ??
+          null;
         const detailBillingAbbr = effectiveDetailBillingTypeId
-          ? BILLING_TYPE_ABBRS[effectiveDetailBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL"
+          ? BILLING_TYPE_ABBRS[
+              effectiveDetailBillingTypeId as keyof typeof BILLING_TYPE_ABBRS
+            ] || "ALL"
           : "ALL";
 
         staffGroup.details.push({
@@ -4120,9 +4131,13 @@ export class StaffPayrollService {
         return vendorGroup;
       });
 
-      const resolvedBillingTypeId = billingTypeId ? Number(billingTypeId) : BILLING_TYPE_IDS.ALL;
+      const resolvedBillingTypeId = billingTypeId
+        ? Number(billingTypeId)
+        : BILLING_TYPE_IDS.ALL;
       const resolvedBillingAbbr =
-        BILLING_TYPE_ABBRS[resolvedBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL";
+        BILLING_TYPE_ABBRS[
+          resolvedBillingTypeId as keyof typeof BILLING_TYPE_ABBRS
+        ] || "ALL";
 
       return {
         billing_type_id: resolvedBillingTypeId,

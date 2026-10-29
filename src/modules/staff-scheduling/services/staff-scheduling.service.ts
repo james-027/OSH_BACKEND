@@ -57,7 +57,6 @@ import { SssConfigs } from "src/entities/SssConfig";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
-
 @Injectable()
 export class StaffSchedulingService {
   constructor(
@@ -99,11 +98,10 @@ export class StaffSchedulingService {
 
   private readonly module_name = "STAFF SCHEDULING";
   async findAll(
-    statusId?: number[], 
+    statusId?: number[],
     accessKeyId?: number,
     userId?: number,
-    roleId?: number
-
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -115,15 +113,15 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
-          userId,
-          roleId,
-        );
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
         where.details = {
-        location_id: In(allowedLocationIds),
-      };
-    }
+          location_id: In(allowedLocationIds),
+        };
+      }
 
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
         where,
@@ -186,7 +184,7 @@ export class StaffSchedulingService {
             userId,
             roleId,
           );
-          where.location_id = In(allowedLocationIds);
+        where.location_id = In(allowedLocationIds);
       }
 
       if (accessKeyId !== undefined) {
@@ -842,7 +840,9 @@ export class StaffSchedulingService {
                     operational_end_time: detail.operational_end_time,
                     diff_outlet: detail.diff_outlet,
                     add_ot: detail.add_ot,
-          is_not_for_premium_pay: Boolean(detail.is_not_for_premium_pay),
+                    is_not_for_premium_pay: Boolean(
+                      detail.is_not_for_premium_pay,
+                    ),
                     ...(detail.is_not_for_premium_pay !== undefined && {
                       is_not_for_premium_pay: detail.is_not_for_premium_pay,
                     }),
@@ -3820,7 +3820,7 @@ export class StaffSchedulingService {
           vendorIds,
         });
       }
-      if (billingTypeId !== undefined && billingTypeId !== null && Number(billingTypeId) !== BILLING_TYPE_IDS.ALL) {
+      if (billingTypeId !== undefined && billingTypeId !== null) {
         query.andWhere(
           "(payrollDetail.billing_type_id = :billingTypeId OR (payrollDetail.billing_type_id IS NULL AND payrollHeader.billing_type_id = :billingTypeId))",
           { billingTypeId: Number(billingTypeId) },
@@ -4049,9 +4049,13 @@ export class StaffSchedulingService {
         const detail = details[0];
         const staffSummary = staffSummaryMap.get(staffId);
         const effectiveBillingTypeId =
-          detail.billing_type_id ?? detail.payrollHeader?.billing_type_id ?? null;
+          detail.billing_type_id ??
+          detail.payrollHeader?.billing_type_id ??
+          null;
         const billingAbbr = effectiveBillingTypeId
-          ? BILLING_TYPE_ABBRS[effectiveBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL"
+          ? BILLING_TYPE_ABBRS[
+              effectiveBillingTypeId as keyof typeof BILLING_TYPE_ABBRS
+            ] || "ALL"
           : "ALL";
         return {
           id: detail.id,
