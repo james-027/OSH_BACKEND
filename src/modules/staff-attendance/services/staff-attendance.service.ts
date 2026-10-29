@@ -142,6 +142,98 @@ export class StaffAttendanceService {
     }
   }
 
+  /**
+   * Pre-aggregates billing metrics for a collection of ScheduleDetail records.
+   * Computes regular, overtime/premium, and night-diff billed counts,
+   * fully-billed counts, and provides a structured breakdown for frontend tooltips.
+   * Observes DRY and optimization (single-pass O(N) evaluation).
+   */
+  public computeScheduleBillingMetrics(details: ScheduleDetail[] = []) {
+    let regularBilled = 0;
+    let regularEligible = 0;
+
+    let otBilled = 0;
+    let otEligible = 0;
+
+    let ndBilled = 0;
+    let ndEligible = 0;
+
+    let fullyBilled = 0;
+
+    for (let i = 0; i < details.length; i++) {
+      const d = details[i];
+
+      const isRegularDay =
+        Number(d.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+      const hasRegHours = Number(d.regular) > 0;
+      const hasOtHours = Number(d.overtime) > 0;
+      const hasNdHours = Number(d.night_shift) > 0;
+
+      // 1. Regular eligibility & billed status
+      const isRegEligible = isRegularDay && hasRegHours;
+      if (isRegEligible) {
+        regularEligible++;
+        if (d.is_regular_billed) regularBilled++;
+      }
+
+      // 2. OT / Premium eligibility & billed status (covers OT and holiday regular hours)
+      const isOtEligible = (!isRegularDay && hasRegHours) || hasOtHours;
+      if (isOtEligible) {
+        otEligible++;
+        if (d.is_ot_billed) otBilled++;
+      }
+
+      // 3. Night Differential eligibility & billed status
+      const isNdEligible = hasNdHours;
+      if (isNdEligible) {
+        ndEligible++;
+        if (d.is_nd_billed) ndBilled++;
+      }
+
+      // 4. Fully Billed Check (all applicable non-zero hours billed)
+      const regDone = !isRegEligible || Boolean(d.is_regular_billed);
+      const otDone = !isOtEligible || Boolean(d.is_ot_billed);
+      const ndDone = !isNdEligible || Boolean(d.is_nd_billed);
+
+      if (
+        regDone &&
+        otDone &&
+        ndDone &&
+        (isRegEligible || isOtEligible || isNdEligible)
+      ) {
+        fullyBilled++;
+      }
+    }
+
+    const totalEntries = details.length;
+    const unbilledCount = Math.max(0, totalEntries - fullyBilled);
+
+    return {
+      regular_billed_count: regularBilled,
+      ot_billed_count: otBilled,
+      nd_billed_count: ndBilled,
+      fully_billed_count: fullyBilled,
+      unbilled_count: unbilledCount,
+      billing_breakdown: {
+        regular: {
+          billed: regularBilled,
+          unbilled: Math.max(0, regularEligible - regularBilled),
+          total: regularEligible,
+        },
+        ot: {
+          billed: otBilled,
+          unbilled: Math.max(0, otEligible - otBilled),
+          total: otEligible,
+        },
+        nd: {
+          billed: ndBilled,
+          unbilled: Math.max(0, ndEligible - ndBilled),
+          total: ndEligible,
+        },
+      },
+    };
+  }
+
   async findScheduleHeaderDetails(
     scheduleHeaderId?: number,
     accessKeyId?: number,
