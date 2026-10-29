@@ -140,6 +140,7 @@ export class StaffPayrollService {
   ) {}
 
   private readonly module_name = "STAFF PAYROLL";
+  private isAutoPayrollComputationRunning = false;
 
   async findAll(
     statusId?: number[],
@@ -2045,6 +2046,11 @@ export class StaffPayrollService {
   }
 
   async autoPayrollComputation(): Promise<any> {
+    if (this.isAutoPayrollComputationRunning) {
+      return { success: false, message: "Computation already in progress" };
+    }
+
+    this.isAutoPayrollComputationRunning = true;
     try {
       const postedPayrollDetails = await this.payrollDetailRepository.find({
         where: {
