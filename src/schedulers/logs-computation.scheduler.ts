@@ -14,11 +14,8 @@ export class LogsComputationService {
 
   @ConditionalCron(CronExpression.EVERY_30_SECONDS, "ENABLE_LOGS_COMPUTATION_CRON")
   async handleDailyScheduleSync() {
-
-    logger.info(`LogsComputation] Computation triggered for base date`);
     try {
       await this.staffPayrollService.autoComputationScheduleDetails();
-      logger.info(`[LogsComputation] Completed sync for date:`);
     } catch (error: any) {
       const errorMsg = error.getResponse ? JSON.stringify(error.getResponse()) : error.message;
       logger.error(`[LogsComputation] Computation syncing for date : ${errorMsg}`, error.stack);
