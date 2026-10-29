@@ -3424,6 +3424,7 @@ export class StaffPayrollService {
     dateTo?: string,
     vendorIds?: number[],
     locationIds?: number[],
+    billingTypeId?: number,
   ): Promise<any> {
     try {
       const query = this.payrollDetailRepository
@@ -3436,6 +3437,8 @@ export class StaffPayrollService {
       query.select([
         "payrollDetail.id",
         "payrollDetail.payroll_header_id",
+        "payrollDetail.billing_type_id",
+        "payrollHeader.billing_type_id",
         "payrollDetail.schedule_detail_id",
         "payrollDetail.staff_id",
         "payrollDetail.staff_code",
@@ -3575,6 +3578,13 @@ export class StaffPayrollService {
         });
       }
 
+      if (billingTypeId && Number(billingTypeId) !== BILLING_TYPE_IDS.ALL) {
+        query.andWhere(
+          "(payrollDetail.billing_type_id = :billingTypeId OR (payrollDetail.billing_type_id IS NULL AND payrollHeader.billing_type_id = :billingTypeId))",
+          { billingTypeId: Number(billingTypeId) },
+        );
+      }
+
       query
         .orderBy("vendor.id", "ASC")
         .addOrderBy("payrollDetail.schedule_date", "ASC")
@@ -3656,6 +3666,7 @@ export class StaffPayrollService {
             total_special_holiday_hours: 0,
             total_regular_holiday_hours: 0,
             total_lates: 0,
+            _seenShifts: new Set<string>(),
           });
         }
 
@@ -3663,7 +3674,12 @@ export class StaffPayrollService {
 
         periodStaff.total_hours += actualHours;
         periodStaff.total_ot_hours += overtimeHours;
-        periodStaff.total_number_of_days += totalDays;
+
+        const periodShiftKey = `${staffId}-${scheduleDate ?? detail.schedule_detail_id ?? detail.id}`;
+        if (!periodStaff._seenShifts.has(periodShiftKey)) {
+          periodStaff._seenShifts.add(periodShiftKey);
+          periodStaff.total_number_of_days += totalDays;
+        }
 
         if (
           (
@@ -3741,6 +3757,7 @@ export class StaffPayrollService {
             budget_hours: 0,
             staff: [],
             _staffMap: new Map(),
+            _seenShifts: new Set<string>(),
           });
         }
 
@@ -3769,7 +3786,12 @@ export class StaffPayrollService {
 
         warehouseGroup.total_actual_hours += actualHours;
         warehouseGroup.total_hours += actualHours;
-        warehouseGroup.total_number_of_days += totalDays;
+
+        const whShiftKey = `${staffId}-${scheduleDate ?? detail.schedule_detail_id ?? detail.id}`;
+        if (!warehouseGroup._seenShifts.has(whShiftKey)) {
+          warehouseGroup._seenShifts.add(whShiftKey);
+          warehouseGroup.total_number_of_days += totalDays;
+        }
         warehouseGroup.total_ot_hours += overtimeHours;
 
         if (
@@ -3796,9 +3818,17 @@ export class StaffPayrollService {
 
         warehouseGroup.budget_hours = budgethours;
 
+        const effectiveDetailBillingTypeId =
+          detail.billing_type_id ?? (detail.payrollHeader as any)?.billing_type_id ?? null;
+        const detailBillingAbbr = effectiveDetailBillingTypeId
+          ? BILLING_TYPE_ABBRS[effectiveDetailBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL"
+          : "ALL";
+
         staffGroup.details.push({
           id: detail.id,
           payroll_header_id: detail.payroll_header_id,
+          billing_type_id: effectiveDetailBillingTypeId,
+          billing_type_abbr: detailBillingAbbr,
           schedule_detail_id: detail.schedule_detail_id,
           schedule_date: detail.schedule_date,
 
@@ -3917,6 +3947,7 @@ export class StaffPayrollService {
             8 * periodStaff.total_number_of_days - periodStaff.total_hours,
           ),
         );
+        delete periodStaff._seenShifts;
       }
 
       const periodTotals = Array.from(periodWarehouseMap.values());
@@ -3958,6 +3989,7 @@ export class StaffPayrollService {
                 );
 
                 delete warehouseGroup._staffMap;
+                delete warehouseGroup._seenShifts;
 
                 return warehouseGroup;
               },
@@ -3976,7 +4008,13 @@ export class StaffPayrollService {
         return vendorGroup;
       });
 
+      const resolvedBillingTypeId = billingTypeId ? Number(billingTypeId) : BILLING_TYPE_IDS.ALL;
+      const resolvedBillingAbbr =
+        BILLING_TYPE_ABBRS[resolvedBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL";
+
       return {
+        billing_type_id: resolvedBillingTypeId,
+        billing_type_abbr: resolvedBillingAbbr,
         date_from: dateFrom ?? null,
         date_to: dateTo ?? null,
         vendors,
@@ -3996,6 +4034,7 @@ export class StaffPayrollService {
     dateTo?: string,
     vendorIds?: number[],
     locationIds?: number[],
+    billingTypeId?: number,
   ): Promise<ExcelJS.Workbook> {
     const reportData = await this.generatePayrollReport(
       accessKeyId,
@@ -4003,6 +4042,7 @@ export class StaffPayrollService {
       dateTo,
       vendorIds,
       locationIds,
+      billingTypeId,
     );
 
     const workbook = new ExcelJS.Workbook();

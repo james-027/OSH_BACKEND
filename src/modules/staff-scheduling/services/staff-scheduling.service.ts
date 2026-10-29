@@ -29,6 +29,8 @@ import {
   ACCESS_KEY_IDS,
   LOGS_TYPE_ID,
   DAYS_FACTOR_RATE,
+  BILLING_TYPE_IDS,
+  BILLING_TYPE_ABBRS,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -3767,6 +3769,7 @@ export class StaffSchedulingService {
     dateTo?: string,
     locationIds?: number[],
     vendorIds?: number[],
+    billingTypeId?: number,
   ): Promise<{ data: any[]; totals: any }> {
     try {
       const query = this.payrollDetailRepository
@@ -3816,6 +3819,12 @@ export class StaffSchedulingService {
         query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
           vendorIds,
         });
+      }
+      if (billingTypeId !== undefined && billingTypeId !== null && Number(billingTypeId) !== BILLING_TYPE_IDS.ALL) {
+        query.andWhere(
+          "(payrollDetail.billing_type_id = :billingTypeId OR (payrollDetail.billing_type_id IS NULL AND payrollHeader.billing_type_id = :billingTypeId))",
+          { billingTypeId: Number(billingTypeId) },
+        );
       }
       query
         .orderBy("payrollDetail.schedule_date", "ASC")
@@ -3949,6 +3958,7 @@ export class StaffSchedulingService {
             net_of_tax: 0,
             cash_bond: 0,
             total_billing: 0,
+            _seenShifts: new Set<string>(),
           });
         }
         const summary = staffSummaryMap.get(staffId)!;
@@ -3956,11 +3966,17 @@ export class StaffSchedulingService {
         summary.overtime += toNumber(detail.overtime);
         summary.twh += toNumber(detail.twh);
         summary.break += toNumber(detail.break);
-        summary.regular_day += toNumber(detail.regular_day);
-        summary.special_holiday += toNumber(detail.special_holiday);
-        summary.regular_holiday += toNumber(detail.regular_holiday);
-        summary.rest_day += toNumber(detail.rest_day);
-        summary.total_day_work += toNumber(detail.total_day_work);
+
+        // De-duplicate shift days across split billing records
+        const shiftKey = `${staffId}-${detail.schedule_date ?? detail.schedule_detail_id ?? detail.id}`;
+        if (!summary._seenShifts.has(shiftKey)) {
+          summary._seenShifts.add(shiftKey);
+          summary.regular_day += toNumber(detail.regular_day);
+          summary.special_holiday += toNumber(detail.special_holiday);
+          summary.regular_holiday += toNumber(detail.regular_holiday);
+          summary.rest_day += toNumber(detail.rest_day);
+          summary.total_day_work += toNumber(detail.total_day_work);
+        }
         summary.ot_regular_day += toNumber(detail.ot_regular_day);
         summary.ot_special_holiday += toNumber(detail.ot_special_holiday);
         summary.ot_regular_holiday += toNumber(detail.ot_regular_holiday);
@@ -4032,9 +4048,16 @@ export class StaffSchedulingService {
       ).map(([staffId, details]) => {
         const detail = details[0];
         const staffSummary = staffSummaryMap.get(staffId);
+        const effectiveBillingTypeId =
+          detail.billing_type_id ?? detail.payrollHeader?.billing_type_id ?? null;
+        const billingAbbr = effectiveBillingTypeId
+          ? BILLING_TYPE_ABBRS[effectiveBillingTypeId as keyof typeof BILLING_TYPE_ABBRS] || "ALL"
+          : "ALL";
         return {
           id: detail.id,
           payroll_header_id: detail.payroll_header_id,
+          billing_type_id: effectiveBillingTypeId,
+          billing_type_abbr: billingAbbr,
           schedule_detail_id: detail.schedule_detail_id,
           schedule_date: detail.schedule_date,
           staff_id: staffId,
@@ -4281,6 +4304,7 @@ export class StaffSchedulingService {
         staffSummaryMap.values(),
       ).reduce(
         (acc, curr) => {
+          delete curr._seenShifts;
           Object.keys(curr).forEach((key) => {
             acc[key] = (acc[key] || 0) + toNumber(curr[key]);
           });
