@@ -610,6 +610,53 @@ export class StaffPayrollService {
   }
 
   /**
+   * Evaluates if a ScheduleDetail is eligible for a given billing type.
+   * Centralizes eligibility filtering following DRY principle across listing, creation, and recomputation:
+   * - REGULAR (1): Only regular day (working_day_id === 1) regular hours.
+   * - PREMIUM (2): Overtime hours (Approach B) + Holiday/Rest Day regular hours (Twist 1).
+   * - NIGHT_DIFF (3): Night shift hours.
+   * - ALL (4): Any unbilled portion across regular, premium, or night shift.
+   */
+  private isDetailEligibleForBillingType(
+    detail: ScheduleDetail,
+    billingTypeId?: number,
+    checkUnbilledOnly: boolean = true,
+  ): boolean {
+    const isRegularDay =
+      Number(detail.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+    const hasRegHours = Number(detail.regular) > 0;
+    const hasOtHours = Number(detail.overtime) > 0;
+    const hasNdHours = Number(detail.night_shift) > 0;
+
+    const hasEligibleRegular =
+      isRegularDay &&
+      hasRegHours &&
+      (!checkUnbilledOnly || !detail.is_regular_billed);
+
+    const hasEligiblePremium =
+      ((!isRegularDay && hasRegHours) || hasOtHours) &&
+      (!checkUnbilledOnly || !detail.is_ot_billed);
+
+    const hasEligibleNd =
+      hasNdHours && (!checkUnbilledOnly || !detail.is_nd_billed);
+
+    if (billingTypeId === BILLING_TYPE_IDS.REGULAR) {
+      return hasEligibleRegular;
+    }
+    if (billingTypeId === BILLING_TYPE_IDS.PREMIUM) {
+      return hasEligiblePremium;
+    }
+    if (billingTypeId === BILLING_TYPE_IDS.NIGHT_DIFF) {
+      return hasEligibleNd;
+    }
+    if (billingTypeId === BILLING_TYPE_IDS.ALL) {
+      return hasEligibleRegular || hasEligiblePremium || hasEligibleNd;
+    }
+
+    return hasEligibleRegular || hasEligiblePremium || hasEligibleNd;
+  }
+
+  /**
    * Extracts and formats regular, overtime, and night shift hours based on billing type.
    * Centralizes split billing hours isolation to follow DRY principle across creation and recomputation.
    */
