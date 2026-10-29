@@ -717,7 +717,7 @@ export class StaffPayrollService {
   ): Promise<PayrollHeader | null> {
     const eligibleDetails = details.filter((d) =>
       this.isDetailEligibleForBillingType(d, billingTypeId, true),
-      );
+    );
 
     if (!eligibleDetails.length) {
       return null;
@@ -2554,9 +2554,19 @@ export class StaffPayrollService {
 
               const fullyBilledIds = affectedDetails
                 .filter((d) => {
+                  const isRegularDay =
+                    Number(d.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+                  // Ordinary days require regular billed; holidays/rest days have no regular billing
                   const regDone =
-                    Number(d.regular) === 0 || d.is_regular_billed;
-                  const otDone = Number(d.overtime) === 0 || d.is_ot_billed;
+                    !isRegularDay ||
+                    Number(d.regular) === 0 ||
+                    d.is_regular_billed;
+                  // Premium billing covers OT (for regular days) and both regular & OT (for holidays)
+                  const otDone =
+                    (isRegularDay
+                      ? Number(d.overtime) === 0
+                      : Number(d.regular) === 0 && Number(d.overtime) === 0) ||
+                    d.is_ot_billed;
                   const ndDone = Number(d.night_shift) === 0 || d.is_nd_billed;
                   return regDone && otDone && ndDone;
                 })
