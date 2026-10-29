@@ -651,36 +651,46 @@ export class StaffPayrollService {
   /**
    * Extracts and formats regular, overtime, and night shift hours based on billing type.
    * Centralizes split billing hours isolation to follow DRY principle across creation and recomputation.
+   * - Twist 1: Holiday/Rest Day regular hours belong to Premium Billing (not Regular Billing).
+   * - Twist 2 (Approach B): Overtime stays in Premium Billing (1.0x straight pay handled in computation).
    */
   private extractHoursForBillingType(
     scheduleDetail: ScheduleDetail,
     billingTypeId?: number,
   ) {
-    let reg = scheduleDetail.regular;
-    let regHours = scheduleDetail.regular_hours;
-    let ot = scheduleDetail.overtime;
-    let otHours = scheduleDetail.overtime_hours;
-    let nd = scheduleDetail.night_shift;
-    let ndHours = scheduleDetail.night_shift_hrs;
+    const isRegularDay =
+      Number(scheduleDetail.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+
+    let reg = Number(scheduleDetail.regular) || 0;
+    let regHours = scheduleDetail.regular_hours || "00:00:00";
+    let ot = Number(scheduleDetail.overtime) || 0;
+    let otHours = scheduleDetail.overtime_hours || "00:00:00";
+    let nd = Number(scheduleDetail.night_shift) || 0;
+    let ndHours = scheduleDetail.night_shift_hrs || null;
 
     if (billingTypeId === BILLING_TYPE_IDS.REGULAR) {
-      ot = 0 as any;
+      // Twist 1: Only regular day regular hours belong to Regular Billing
+      reg = isRegularDay ? reg : 0;
+      regHours = isRegularDay ? regHours : "00:00:00";
+      ot = 0;
       otHours = "00:00:00";
-      nd = 0 as any;
+      nd = 0;
       ndHours = null;
     } else if (billingTypeId === BILLING_TYPE_IDS.PREMIUM) {
-      reg = 0 as any;
-      regHours = "00:00:00";
-      nd = 0 as any;
+      // Twist 1: Non-regular day regular hours belong to Premium Billing
+      // Approach B: ALL Overtime hours remain in Premium Billing
+      reg = !isRegularDay ? reg : 0;
+      regHours = !isRegularDay ? regHours : "00:00:00";
+      nd = 0;
       ndHours = null;
     } else if (billingTypeId === BILLING_TYPE_IDS.NIGHT_DIFF) {
-      reg = 0 as any;
+      reg = 0;
       regHours = "00:00:00";
-      ot = 0 as any;
+      ot = 0;
       otHours = "00:00:00";
     }
 
-    const twhVal = Number(reg || 0) + Number(ot || 0);
+    const twhVal = reg + ot;
 
     return {
       regular: reg,
