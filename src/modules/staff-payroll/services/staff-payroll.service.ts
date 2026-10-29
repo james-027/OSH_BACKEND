@@ -767,6 +767,57 @@ export class StaffPayrollService {
   }
 
   /**
+   * Resets billing flags (is_regular_billed, is_ot_billed, is_nd_billed) and reverts
+   * attendance status back to VALIDATED on schedule details for a set of cancelled or reverted payroll headers.
+   * Centralizes rollback logic to ensure DRY adherence between cancelPayroll and revertPayroll.
+   */
+  private async resetScheduleDetailsBillingStatus(
+    headers: PayrollHeader[],
+    userId: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const em = manager || this.payrollDetailRepository.manager;
+
+    for (const header of headers) {
+      const headerDetails = await em.find(PayrollDetails, {
+        where: { payroll_header_id: header.id },
+        select: ["schedule_detail_id"],
+      });
+
+      const schedIds = Array.from(
+        new Set(
+          headerDetails
+            .map((d) => d.schedule_detail_id)
+            .filter((id): id is number => id != null),
+        ),
+      );
+
+      if (!schedIds.length) continue;
+
+      const resetFields: any = {
+        attendance_status_id: STATUS_IDS.VALIDATED,
+        cron_computed: false,
+        updated_by: userId,
+        modified_at: new Date(),
+      };
+
+      if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
+        resetFields.is_regular_billed = false;
+      } else if (header.billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
+        resetFields.is_ot_billed = false;
+      } else if (header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF) {
+        resetFields.is_nd_billed = false;
+      } else {
+        resetFields.is_regular_billed = false;
+        resetFields.is_ot_billed = false;
+        resetFields.is_nd_billed = false;
+      }
+
+      await em.update(ScheduleDetail, { id: In(schedIds) }, resetFields);
+    }
+  }
+
+  /**
    * Extracts and formats regular, overtime, and night shift hours based on billing type.
    * Centralizes split billing hours isolation to follow DRY principle across creation and recomputation.
    * - Twist 1: Holiday/Rest Day regular hours belong to Premium Billing (not Regular Billing).
