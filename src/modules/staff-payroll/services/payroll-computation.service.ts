@@ -50,6 +50,16 @@ export class PayrollComputationService {
     const isNotForPremium = Boolean(detail.is_not_for_premium_pay);
 
     /**
+     * Helper to determine overtime rate multiplier under Approach B:
+     * When is_not_for_premium_pay is true (e.g. agency fault / no reliever sent),
+     * the company only pays standard straight rate (1.0x), and the agency
+     * absorbs the statutory premium surplus markup.
+     */
+    const getOtMultiplier = (standardMultiplier: number): number => {
+      return isNotForPremium ? 1.0 : standardMultiplier;
+    };
+
+    /**
      * ----------------------------------------------------------
      * WORKING DAY & OVERTIME COMPUTATIONS
      * ----------------------------------------------------------
@@ -72,32 +82,32 @@ export class PayrollComputationService {
     switch (detail.working_day_id) {
       case WORKING_DAY_IDS.REGULAR_DAY:
         regularAmount = regular * hourRate;
-        otRegularAmount = overtime * hourRate * 1.25;
+        otRegularAmount = overtime * hourRate * getOtMultiplier(1.25);
         break;
 
       case WORKING_DAY_IDS.REGULAR_HOLIDAY:
         // RH = #hrs * salary_rate/8 * 2
         regularHolidayAmount = regular * hourRate * 2.0;
-        otRegularHolidayAmount = overtime * hourRate * 2.6;
+        otRegularHolidayAmount = overtime * hourRate * getOtMultiplier(2.6);
         break;
 
       case WORKING_DAY_IDS.SPECIAL_HOLIDAY:
         // SPH = #hrs * salary_rate/8 * 1.30
         specialHolidayAmount = regular * hourRate * 1.3;
-        otSpecialHolidayAmount = overtime * hourRate * 1.69;
+        otSpecialHolidayAmount = overtime * hourRate * getOtMultiplier(1.69);
         break;
 
       case WORKING_DAY_IDS.REST_DAY_REGULAR_HOLIDAY:
         // RD & RH = (#hrs * salary_rate/8 * 2) + (#hrs * salary_rate/8 * 0.3)
         rdRegularHolidayAmount =
           regular * hourRate * 2.0 + regular * hourRate * 0.3;
-        otRdRegularHolidayAmount = overtime * hourRate * 3.38;
+        otRdRegularHolidayAmount = overtime * hourRate * getOtMultiplier(3.38);
         break;
 
       case WORKING_DAY_IDS.REST_DAY_SPECIAL_HOLIDAY:
         // RD & SPH = (#hrs * salary_rate/8) * 1.50
         rdSpecialHolidayAmount = regular * hourRate * 1.5;
-        otRdSpecialHolidayAmount = overtime * hourRate * 1.95;
+        otRdSpecialHolidayAmount = overtime * hourRate * getOtMultiplier(1.95);
         break;
 
       case WORKING_DAY_IDS.REGULAR_HOLIDAY_OFF:
@@ -108,12 +118,12 @@ export class PayrollComputationService {
       case WORKING_DAY_IDS.REST_DAY:
         // RD = #hrs * salary_rate/8 * 1.30
         restDayAmount = regular * hourRate * 1.3;
-        otRestDayAmount = overtime * hourRate * 1.69;
+        otRestDayAmount = overtime * hourRate * getOtMultiplier(1.69);
         break;
 
       default:
         regularAmount = regular * hourRate;
-        otRegularAmount = overtime * hourRate * 1.25;
+        otRegularAmount = overtime * hourRate * getOtMultiplier(1.25);
         break;
     }
 
