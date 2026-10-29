@@ -17,7 +17,7 @@ import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/Update
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS } from "src/constants/customConstants";
+import { STATUS_IDS, ACTION_IDS, WORKING_DAY_IDS } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
 import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
@@ -121,10 +121,11 @@ export class StaffAttendanceService {
 
       return mappedHeaders.map((mappedHeader, index) => {
         const originalHeader = filteredHeaders[index];
+        const details = originalHeader.details ?? [];
+        const firstDetail = details[0];
+        const detailCount = details.length;
 
-        const firstDetail = originalHeader.details?.[0];
-
-        const detailCount = originalHeader.details?.length ?? 0;
+        const billingMetrics = this.computeScheduleBillingMetrics(details);
 
         return {
           ...mappedHeader,
@@ -133,6 +134,12 @@ export class StaffAttendanceService {
           location_name: firstDetail?.location?.location_name ?? null,
           vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
           status_name: firstDetail?.attendanceStatus?.status_name ?? null,
+          regular_billed_count: billingMetrics.regular_billed_count,
+          ot_billed_count: billingMetrics.ot_billed_count,
+          nd_billed_count: billingMetrics.nd_billed_count,
+          fully_billed_count: billingMetrics.fully_billed_count,
+          unbilled_count: billingMetrics.unbilled_count,
+          billing_breakdown: billingMetrics.billing_breakdown,
         };
       });
     } catch (error) {
