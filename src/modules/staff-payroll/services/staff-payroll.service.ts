@@ -1468,6 +1468,18 @@ export class StaffPayrollService {
           );
         }
 
+        if (existingHeader.status_id === STATUS_IDS.POSTED) {
+          await this.payrollHeaderRepository.update(
+            { id: existingHeader.id },
+            {
+              cron_computed: false,
+              has_payroll_computation_error: false,
+              updated_by: userId,
+              modified_at: new Date(),
+            },
+          );
+        }
+
         // --- Step G: User Audit Trail & Action Logs ---
         await this.userAuditTrailCreateService.create(
           {
@@ -2057,6 +2069,7 @@ export class StaffPayrollService {
           payrollHeader: {
             status_id: STATUS_IDS.POSTED,
             cron_computed: false,
+            has_payroll_computation_error: false,
           },
           status_id: STATUS_IDS.ACTIVE,
         },
@@ -2826,21 +2839,20 @@ export class StaffPayrollService {
               );
             }
 
-            // 10. Update ONLY eligible Payroll Headers to POSTED.
-            // Headers with zero active entries remain in their current status.
-            if (payrollIdsWithActiveDetails.length > 0) {
-              await transactionalEntityManager.update(
-                PayrollHeader,
-                {
-                  id: In(payrollIdsWithActiveDetails),
-                },
-                {
-                  status_id: STATUS_IDS.POSTED,
-                  updated_by: userId,
-                  modified_at: new Date(),
-                },
-              );
-            }
+            // 8. Update selected Payroll Headers to POSTED.
+            await transactionalEntityManager.update(
+              PayrollHeader,
+              {
+                id: In(payrollIds),
+              },
+              {
+                status_id: STATUS_IDS.POSTED,
+                cron_computed: false,
+                has_payroll_computation_error: false,
+                updated_by: userId,
+                modified_at: new Date(),
+              },
+            );
 
             // 9. Retrieve updated Payroll Headers.
             const updatedHeaders = await transactionalEntityManager.find(
