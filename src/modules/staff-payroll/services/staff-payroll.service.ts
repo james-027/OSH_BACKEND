@@ -2957,78 +2957,12 @@ export class StaffPayrollService {
               },
             );
 
-            // Get schedule detail IDs from the selected payroll details
-            const payrollDetails = await transactionalEntityManager.find(
-              PayrollDetails,
-              {
-                where: {
-                  payroll_header_id: In(payrollIds),
-                },
-                select: ["schedule_detail_id"],
-              },
+            // Reset attendance status & billing flags for related schedule details (DRY)
+            await this.resetScheduleDetailsBillingStatus(
+              payrollHeaders,
+              userId,
+              transactionalEntityManager,
             );
-
-            const scheduleDetailIds = [
-              ...new Set(
-                payrollDetails
-                  .map((detail) => detail.schedule_detail_id)
-                  .filter((id) => id != null),
-              ),
-            ];
-
-            // Reset attendance status & billing flags for related schedule details
-            for (const pId of payrollIds) {
-              const header = await transactionalEntityManager.findOne(
-                PayrollHeader,
-                {
-                  where: { id: pId },
-                },
-              );
-              if (!header) continue;
-
-              const headerDetails = await transactionalEntityManager.find(
-                PayrollDetails,
-                {
-                  where: { payroll_header_id: pId },
-                  select: ["schedule_detail_id"],
-                },
-              );
-              const schedIds = [
-                ...new Set(
-                  headerDetails
-                    .map((d) => d.schedule_detail_id)
-                    .filter((id): id is number => id != null),
-                ),
-              ];
-              if (!schedIds.length) continue;
-
-              const resetFields: any = {
-                attendance_status_id: STATUS_IDS.VALIDATED,
-                cron_computed: false,
-                updated_by: userId,
-                modified_at: new Date(),
-              };
-
-              if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
-                resetFields.is_regular_billed = false;
-              } else if (header.billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
-                resetFields.is_ot_billed = false;
-              } else if (
-                header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF
-              ) {
-                resetFields.is_nd_billed = false;
-              } else {
-                resetFields.is_regular_billed = false;
-                resetFields.is_ot_billed = false;
-                resetFields.is_nd_billed = false;
-              }
-
-              await transactionalEntityManager.update(
-                ScheduleDetail,
-                { id: In(schedIds) },
-                resetFields,
-              );
-            }
 
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
@@ -3145,40 +3079,12 @@ export class StaffPayrollService {
               },
             );
 
-            // Get schedule detail IDs from the selected payroll details
-            const payrollDetails = await transactionalEntityManager.find(
-              PayrollDetails,
-              {
-                where: {
-                  payroll_header_id: In(payrollIds),
-                },
-                select: ["schedule_detail_id"],
-              },
+            // Reset attendance status & specific billing flags for related schedule details (DRY)
+            await this.resetScheduleDetailsBillingStatus(
+              payrollHeaders,
+              userId,
+              transactionalEntityManager,
             );
-
-            const scheduleDetailIds = [
-              ...new Set(
-                payrollDetails
-                  .map((detail) => detail.schedule_detail_id)
-                  .filter((id) => id != null),
-              ),
-            ];
-
-            // Reset attendance status to VALIDATED for the related schedule details
-            if (scheduleDetailIds.length > 0) {
-              await transactionalEntityManager.update(
-                ScheduleDetail,
-                {
-                  id: In(scheduleDetailIds),
-                },
-                {
-                  attendance_status_id: STATUS_IDS.VALIDATED,
-                  cron_computed: false,
-                  updated_by: userId,
-                  modified_at: new Date(),
-                },
-              );
-            }
 
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
