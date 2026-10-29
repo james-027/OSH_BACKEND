@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, Between, In, EntityManager } from "typeorm";
+import { Repository, Between, In, EntityManager, Not } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -658,9 +658,7 @@ export class StaffPayrollService {
 
     // Ordinary days require regular billed; holidays/rest days have no regular billing
     const regDone =
-      !isRegularDay ||
-      Number(detail.regular) === 0 ||
-      detail.is_regular_billed;
+      !isRegularDay || Number(detail.regular) === 0 || detail.is_regular_billed;
 
     // Premium billing covers OT (for regular days) and both regular & OT (for holidays)
     const otDone =
@@ -669,8 +667,7 @@ export class StaffPayrollService {
         : Number(detail.regular) === 0 && Number(detail.overtime) === 0) ||
       detail.is_ot_billed;
 
-    const ndDone =
-      Number(detail.night_shift) === 0 || detail.is_nd_billed;
+    const ndDone = Number(detail.night_shift) === 0 || detail.is_nd_billed;
 
     return regDone && otDone && ndDone;
   }
@@ -1397,8 +1394,6 @@ export class StaffPayrollService {
         });
 
         await this.payrollDetailRepository.save(newPayrollDetails);
-
-
 
         // --- Step F: Update schedule header audit timestamps ---
         const scheduleHeaderIds = [
@@ -2472,71 +2467,83 @@ export class StaffPayrollService {
     }
   }
 
-
   async postPayroll(
-  updatePayrollDto: UpdatePayrollHeaderDto,
-  userId: number,
-): Promise<any> {
-  try {
-    const payrollIds = updatePayrollDto.id;
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollIds = updatePayrollDto.id;
 
-    if (!payrollIds?.length) {
-      throw new BadRequestException(
-        "At least one Payroll Header ID is required.",
+      if (!payrollIds?.length) {
+        throw new BadRequestException(
+          "At least one Payroll Header ID is required.",
+        );
+      }
+
+      const payrollHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(payrollIds),
+        },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      const foundIds = payrollHeaders.map((payroll) => payroll.id);
+
+      const missingIds = payrollIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
       );
-    }
 
-    const payrollHeaders = await this.payrollHeaderRepository.find({
-      where: {
-        id: In(payrollIds),
-      },
-      relations: ["status", "createdBy", "updatedBy"],
-    });
-
-    const foundIds = payrollHeaders.map((payroll) => payroll.id);
-
-    const missingIds = payrollIds.filter(
-      (payrollId) => !foundIds.includes(payrollId),
-    );
-
-    if (missingIds.length > 0) {
-      throw new NotFoundException(
-        `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
-      );
-    }
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
 
       const updatedPayrollHeaders =
         await this.payrollHeaderRepository.manager.transaction(
           async (transactionalEntityManager) => {
-            // 1. Get payroll details belonging to the selected headers.
+            // 1. Get payroll details belonging to the selected headers (excluding already inactive).
             const payrollDetails = await transactionalEntityManager.find(
               PayrollDetails,
               {
                 where: {
                   payroll_header_id: In(payrollIds),
+                  status_id: Not(STATUS_IDS.INACTIVE),
                 },
-                select: ["id", "schedule_detail_id", "payroll_header_id"],
+                select: [
+                  "id",
+                  "schedule_detail_id",
+                  "payroll_header_id",
+                  "billing_type_id",
+                ],
               },
             );
 
-          const scheduleDetailIds = [
-            ...new Set(
-              payrollDetails
-                .map((detail) => detail.schedule_detail_id)
-                .filter(
-                  (id): id is number => id !== undefined && id !== null,
-                ),
-            ),
-          ];
+            const headerBillingTypeMap = new Map<number, number | null>(
+              payrollHeaders.map((h) => [h.id, h.billing_type_id ?? null]),
+            );
 
-          // 2. Find matching ACTIVE details in OTHER, already-POSTED payroll headers.
-          if (scheduleDetailIds.length > 0) {
-            const existingPostedDetails =
-              await transactionalEntityManager
+            const scheduleDetailIds = [
+              ...new Set(
+                payrollDetails
+                  .map((detail) => detail.schedule_detail_id)
+                  .filter(
+                    (id): id is number => id !== undefined && id !== null,
+                  ),
+              ),
+            ];
+
+            // 2. Find matching ACTIVE details in OTHER, already-POSTED payroll headers with their billing type.
+            if (scheduleDetailIds.length > 0) {
+              const existingPostedDetails = await transactionalEntityManager
                 .createQueryBuilder(PayrollDetails, "pd")
                 .innerJoin(PayrollHeader, "ph", "ph.id = pd.payroll_header_id")
                 .select("pd.id", "id")
                 .addSelect("pd.schedule_detail_id", "schedule_detail_id")
+                .addSelect(
+                  "COALESCE(pd.billing_type_id, ph.billing_type_id)",
+                  "billing_type_id",
+                )
                 .where("ph.status_id = :postedStatusId", {
                   postedStatusId: STATUS_IDS.POSTED,
                 })
@@ -2551,55 +2558,118 @@ export class StaffPayrollService {
                 })
                 .getRawMany();
 
-            // 3. Collect schedule_detail_ids already posted and active elsewhere.
-            const alreadyPostedScheduleIds = new Set<number>(
-              existingPostedDetails
-                .map((detail) => Number(detail.schedule_detail_id))
-                .filter((id) => !Number.isNaN(id)),
-            );
-
-            // 4. Identify duplicate details in the current payroll batch.
-            const seenInCurrentBatch = new Set<number>();
-            const detailIdsToInactivate: number[] = [];
-
-            const sortedCurrentDetails = [...payrollDetails].sort(
-              (a, b) => Number(a.id) - Number(b.id),
-            );
-
-            for (const newDetail of sortedCurrentDetails) {
-              const scheduleId = newDetail.schedule_detail_id;
-
-              if (scheduleId == null) continue;
-
-              // Ignore details that are already inactive.
-              if (newDetail.status_id === STATUS_IDS.INACTIVE) {
-                continue;
+              // 3. Map posted billing types per schedule_detail_id for fast O(1) lookup.
+              const alreadyPostedTypeMap = new Map<number, number[]>();
+              for (const d of existingPostedDetails) {
+                const sId = Number(d.schedule_detail_id);
+                const bType =
+                  d.billing_type_id != null
+                    ? Number(d.billing_type_id)
+                    : BILLING_TYPE_IDS.ALL;
+                if (!alreadyPostedTypeMap.has(sId)) {
+                  alreadyPostedTypeMap.set(sId, []);
+                }
+                alreadyPostedTypeMap.get(sId)!.push(bType);
               }
 
-              const numericScheduleId = Number(scheduleId);
+              // 4. Identify duplicate details considering billing_type_id (Inter-batch & Intra-batch).
+              const seenInCurrentBatchMap = new Map<number, number[]>();
+              const detailIdsToInactivate: number[] = [];
 
-              if (
-                alreadyPostedScheduleIds.has(numericScheduleId) ||
-                seenInCurrentBatch.has(numericScheduleId)
-              ) {
-                detailIdsToInactivate.push(Number(newDetail.id));
-              } else {
-                seenInCurrentBatch.add(numericScheduleId);
-              }
-            }
-
-            // 5. Inactivate duplicate payroll details.
-            if (detailIdsToInactivate.length > 0) {
-              await transactionalEntityManager.update(
-                PayrollDetails,
-                { id: In(detailIdsToInactivate) },
-                {
-                  status_id: STATUS_IDS.INACTIVE,
-                  updated_by: userId,
-                },
+              const sortedCurrentDetails = [...payrollDetails].sort(
+                (a, b) => Number(a.id) - Number(b.id),
               );
-            }
-          }
+
+              for (const newDetail of sortedCurrentDetails) {
+                const scheduleId = newDetail.schedule_detail_id;
+
+                if (scheduleId == null) continue;
+
+                // Ignore details that are already inactive.
+                if (newDetail.status_id === STATUS_IDS.INACTIVE) {
+                  continue;
+                }
+
+                const numericScheduleId = Number(scheduleId);
+                const detailBillingType =
+                  newDetail.billing_type_id != null
+                    ? Number(newDetail.billing_type_id)
+                    : (headerBillingTypeMap.get(newDetail.payroll_header_id) ??
+                      BILLING_TYPE_IDS.ALL);
+
+                // Check conflict against already-posted details
+                const postedTypes =
+                  alreadyPostedTypeMap.get(numericScheduleId) || [];
+                const hasPostedConflict = postedTypes.some((postedType) =>
+                  this.isBillingTypeConflict(detailBillingType, postedType),
+                );
+
+                // Check conflict against details already processed in this current batch
+                const seenTypes =
+                  seenInCurrentBatchMap.get(numericScheduleId) || [];
+                const hasBatchConflict = seenTypes.some((seenType) =>
+                  this.isBillingTypeConflict(detailBillingType, seenType),
+                );
+
+                if (hasPostedConflict || hasBatchConflict) {
+                  detailIdsToInactivate.push(Number(newDetail.id));
+                } else {
+                  if (!seenInCurrentBatchMap.has(numericScheduleId)) {
+                    seenInCurrentBatchMap.set(numericScheduleId, []);
+                  }
+                  seenInCurrentBatchMap
+                    .get(numericScheduleId)!
+                    .push(detailBillingType);
+                }
+              }
+
+              // 5. Inactivate genuine duplicate payroll details.
+              if (detailIdsToInactivate.length > 0) {
+                await transactionalEntityManager.update(
+                  PayrollDetails,
+                  { id: In(detailIdsToInactivate) },
+                  {
+                    status_id: STATUS_IDS.INACTIVE,
+                    updated_by: userId,
+                  },
+                );
+
+                // 5.1 Recalculate header totals for affected headers to ensure computation amounts remain accurate.
+                const affectedHeaderIds = [
+                  ...new Set(
+                    payrollDetails
+                      .filter((d) =>
+                        detailIdsToInactivate.includes(Number(d.id)),
+                      )
+                      .map((d) => d.payroll_header_id),
+                  ),
+                ];
+
+                for (const headerId of affectedHeaderIds) {
+                  const remainingActiveDetails =
+                    await transactionalEntityManager.find(PayrollDetails, {
+                      where: {
+                        payroll_header_id: headerId,
+                        status_id: STATUS_IDS.ACTIVE,
+                      },
+                    });
+
+                  const updatedTotals =
+                    this.payrollComputationService.computePayrollHeaderTotals(
+                      remainingActiveDetails,
+                    );
+
+                  await transactionalEntityManager.update(
+                    PayrollHeader,
+                    { id: headerId },
+                    {
+                      ...updatedTotals,
+                      updated_by: userId,
+                      modified_at: new Date(),
+                    },
+                  );
+                }
+              }
 
               // 6. Update associated Schedule Details billing flags & determine fully-billed status (DRY)
               const headersToSync = await transactionalEntityManager.find(
@@ -2615,51 +2685,53 @@ export class StaffPayrollService {
               );
             }
 
-          // 9. Generate invoice numbers ONLY for headers with active details.
-          for (const payrollId of payrollIdsWithActiveDetails) {
-            const payrollHeader =
-              await transactionalEntityManager.findOne(PayrollHeader, {
-                where: { id: payrollId },
-              });
-
-            if (!payrollHeader) {
-              throw new NotFoundException(
-                `Payroll Header ID ${payrollId} not found`,
+            // 9. Generate invoice numbers ONLY for headers with active details.
+            for (const payrollId of payrollIdsWithActiveDetails) {
+              const payrollHeader = await transactionalEntityManager.findOne(
+                PayrollHeader,
+                {
+                  where: { id: payrollId },
+                },
               );
-            }
 
-            // Do not overwrite an existing invoice number.
-            if (payrollHeader.payroll_invoice) {
-              continue;
-            }
+              if (!payrollHeader) {
+                throw new NotFoundException(
+                  `Payroll Header ID ${payrollId} not found`,
+                );
+              }
 
-            // Get active payroll details for this header.
-            const details = await transactionalEntityManager.find(
-              PayrollDetails,
-              {
-                where: {
-                  payroll_header_id: payrollId,
+              // Do not overwrite an existing invoice number.
+              if (payrollHeader.payroll_invoice) {
+                continue;
+              }
+
+              // Get active payroll details for this header.
+              const details = await transactionalEntityManager.find(
+                PayrollDetails,
+                {
+                  where: {
+                    payroll_header_id: payrollId,
+                  },
+                  relations: ["vendor", "location"],
+                  order: {
+                    id: "ASC",
+                  },
                 },
-                relations: ["vendor", "location"],
-                order: {
-                  id: "ASC",
-                },
-              },
-            );
+              );
 
-            const activeDetails = details.filter(
-              (detail) => detail.status_id !== STATUS_IDS.INACTIVE,
-            );
+              const activeDetails = details.filter(
+                (detail) => detail.status_id !== STATUS_IDS.INACTIVE,
+              );
 
-            // Safety check: do not generate an invoice without active entries.
-            if (activeDetails.length === 0) {
-              continue;
-            }
+              // Safety check: do not generate an invoice without active entries.
+              if (activeDetails.length === 0) {
+                continue;
+              }
 
-            const firstDetail = activeDetails[0];
+              const firstDetail = activeDetails[0];
 
-            const agencyCode =
-              firstDetail.vendor?.service_provider_code ?? "";
+              const agencyCode =
+                firstDetail.vendor?.service_provider_code ?? "";
 
               const locationAbbr = firstDetail.location?.location_abbr ?? "";
 
@@ -2669,46 +2741,47 @@ export class StaffPayrollService {
                   vendor_id: firstDetail.vendor_id,
                   location_id: firstDetail.location_id,
                   access_key_id: payrollHeader.access_key_id,
-                  format: (() => {
-                    const billingAbbr =
-                      BILLING_TYPE_ABBRS[
-                        payrollHeader.billing_type_id as keyof typeof BILLING_TYPE_ABBRS
-                      ];
-                    return billingAbbr && billingAbbr !== "ALL"
-                      ? `{abbr}{year}-{seq:6}-${billingAbbr}`
-                      : "{abbr}{year}-{seq:6}";
-                  })(),
+                  format: "{abbr}{year}-{seq:6}",
+                  // format: (() => {
+                  //   const billingAbbr =
+                  //     BILLING_TYPE_ABBRS[
+                  //       payrollHeader.billing_type_id as keyof typeof BILLING_TYPE_ABBRS
+                  //     ];
+                  //   return billingAbbr && billingAbbr !== "ALL"
+                  //     ? `{abbr}{year}-{seq:6}-${billingAbbr}`
+                  //     : "{abbr}{year}-{seq:6}";
+                  // })(),
                   reset_per_year: true,
                   currentDate: new Date(),
                   abbr: `${agencyCode}${locationAbbr}`,
                 });
 
-            // Save the generated invoice number.
-            await transactionalEntityManager.update(
-              PayrollHeader,
-              { id: payrollId },
-              {
-                payroll_invoice: payrollInvoice,
-                updated_by: userId,
-              },
-            );
-          }
+              // Save the generated invoice number.
+              await transactionalEntityManager.update(
+                PayrollHeader,
+                { id: payrollId },
+                {
+                  payroll_invoice: payrollInvoice,
+                  updated_by: userId,
+                },
+              );
+            }
 
-          // 10. Update ONLY eligible Payroll Headers to POSTED.
-          // Headers with zero active entries remain in their current status.
-          if (payrollIdsWithActiveDetails.length > 0) {
-            await transactionalEntityManager.update(
-              PayrollHeader,
-              {
-                id: In(payrollIdsWithActiveDetails),
-              },
-              {
-                status_id: STATUS_IDS.POSTED,
-                updated_by: userId,
-                modified_at: new Date(),
-              },
-            );
-          }
+            // 10. Update ONLY eligible Payroll Headers to POSTED.
+            // Headers with zero active entries remain in their current status.
+            if (payrollIdsWithActiveDetails.length > 0) {
+              await transactionalEntityManager.update(
+                PayrollHeader,
+                {
+                  id: In(payrollIdsWithActiveDetails),
+                },
+                {
+                  status_id: STATUS_IDS.POSTED,
+                  updated_by: userId,
+                  modified_at: new Date(),
+                },
+              );
+            }
 
             // 9. Retrieve updated Payroll Headers.
             const updatedHeaders = await transactionalEntityManager.find(
@@ -2721,64 +2794,64 @@ export class StaffPayrollService {
               },
             );
 
-          return updatedHeaders;
+            return updatedHeaders;
+          },
+        );
+
+      // 12. Create audit trail.
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "Staff Payroll Service",
+          method: "",
+          raw_data: JSON.stringify(updatedPayrollHeaders),
+          description: `Posted Payroll Headers: ${payrollIds.join(", ")}`,
+          status_id: 1,
         },
+        userId,
       );
 
-    // 12. Create audit trail.
-    await this.userAuditTrailCreateService.create(
-      {
-        service: "Staff Payroll Service",
-        method: "",
-        raw_data: JSON.stringify(updatedPayrollHeaders),
-        description: `Posted Payroll Headers: ${payrollIds.join(", ")}`,
-        status_id: 1,
-      },
-      userId,
-    );
+      // 13. Map response.
+      const responses = updatedPayrollHeaders.map((payroll) =>
+        this.responseMapperService.mapEntityToResponse(payroll),
+      );
 
-    // 13. Map response.
-    const responses = updatedPayrollHeaders.map((payroll) =>
-      this.responseMapperService.mapEntityToResponse(payroll),
-    );
-
-    // 14. Create action logs.
-    try {
-      for (const payroll of updatedPayrollHeaders) {
-        await this.actionLogsService.logAction({
-          module_name: this.module_name,
-          ref_id: payroll.id,
-          action_id: ACTION_IDS.POST,
-          description: "Post Payroll",
-          raw_data: JSON.stringify(payroll),
-          created_by: userId,
-        });
+      // 14. Create action logs.
+      try {
+        for (const payroll of updatedPayrollHeaders) {
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: payroll.id,
+            action_id: ACTION_IDS.POST,
+            description: "Post Payroll",
+            raw_data: JSON.stringify(payroll),
+            created_by: userId,
+          });
+        }
+      } catch (err) {
+        logger.error("Action log failed for Post Payroll:", err);
       }
-    } catch (err) {
-      logger.error("Action log failed for Post Payroll:", err);
+
+      // 15. Emit SSE updates.
+      try {
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_payroll", 0);
+      } catch (err) {
+        logger.error("SSE event failed:", err);
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to post payroll headers:", error);
+
+      throw new Error("Failed to post payroll headers");
     }
-
-    // 15. Emit SSE updates.
-    try {
-      this.sseEventEmitter.emitUpdate("staff_attendance", 0);
-      this.sseEventEmitter.emitUpdate("staff_payroll", 0);
-    } catch (err) {
-      logger.error("SSE event failed:", err);
-    }
-
-    return responses;
-  } catch (error) {
-    if (
-      error instanceof NotFoundException ||
-      error instanceof BadRequestException
-    ) {
-      throw error;
-    }   
-
-    logger.error("Failed to post payroll headers:", error);
-
-    throw new Error("Failed to post payroll headers");
-  }
   }
 
   async revertPayroll(
