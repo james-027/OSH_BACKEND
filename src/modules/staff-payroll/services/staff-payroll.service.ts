@@ -779,6 +779,7 @@ export class StaffPayrollService {
         status_id: STATUS_IDS.ACTIVE,
         attendance_status_id: scheduleDetail.attendance_status_id,
         just_remarks: scheduleDetail.just_remarks,
+        is_not_for_premium_pay: Boolean(scheduleDetail.is_not_for_premium_pay),
         regular: hours.regular,
         overtime: hours.overtime,
         twh: hours.twh,
@@ -1255,6 +1256,9 @@ export class StaffPayrollService {
             status_id: STATUS_IDS.ACTIVE,
             attendance_status_id: scheduleDetail.attendance_status_id,
             just_remarks: scheduleDetail.just_remarks,
+            is_not_for_premium_pay: Boolean(
+              scheduleDetail.is_not_for_premium_pay,
+            ),
             regular: hours.regular,
             overtime: hours.overtime,
             twh: hours.twh,
@@ -1914,11 +1918,9 @@ export class StaffPayrollService {
       });
 
       if (!postedPayrollDetails.length) {
-        return {
-          success: true,
-          message: "No posted payroll details to compute.",
-          total: 0,
-        };
+        // logger.info(
+        //   "[PayrollComputation] No posted and computed post header found",
+        // );
       }
 
       const staffIds = [
