@@ -135,6 +135,7 @@ export class StaffAttendanceService {
           vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
           status_name: firstDetail?.attendanceStatus?.status_name ?? null,
           regular_billed_count: billingMetrics.regular_billed_count,
+          premium_billed_count: billingMetrics.premium_billed_count,
           ot_billed_count: billingMetrics.ot_billed_count,
           nd_billed_count: billingMetrics.nd_billed_count,
           fully_billed_count: billingMetrics.fully_billed_count,
@@ -159,8 +160,8 @@ export class StaffAttendanceService {
     let regularBilled = 0;
     let regularEligible = 0;
 
-    let otBilled = 0;
-    let otEligible = 0;
+    let premiumBilled = 0;
+    let premiumEligible = 0;
 
     let ndBilled = 0;
     let ndEligible = 0;
@@ -183,11 +184,11 @@ export class StaffAttendanceService {
         if (d.is_regular_billed) regularBilled++;
       }
 
-      // 2. OT / Premium eligibility & billed status (covers OT and holiday regular hours)
-      const isOtEligible = (!isRegularDay && hasRegHours) || hasOtHours;
-      if (isOtEligible) {
-        otEligible++;
-        if (d.is_ot_billed) otBilled++;
+      // 2. Premium eligibility & billed status (covers OT and holiday regular hours)
+      const isPremiumEligible = (!isRegularDay && hasRegHours) || hasOtHours;
+      if (isPremiumEligible) {
+        premiumEligible++;
+        if (d.is_premium_billed) premiumBilled++;
       }
 
       // 3. Night Differential eligibility & billed status
@@ -199,14 +200,14 @@ export class StaffAttendanceService {
 
       // 4. Fully Billed Check (all applicable non-zero hours billed)
       const regDone = !isRegEligible || Boolean(d.is_regular_billed);
-      const otDone = !isOtEligible || Boolean(d.is_ot_billed);
+      const premiumDone = !isPremiumEligible || Boolean(d.is_premium_billed);
       const ndDone = !isNdEligible || Boolean(d.is_nd_billed);
 
       if (
         regDone &&
-        otDone &&
+        premiumDone &&
         ndDone &&
-        (isRegEligible || isOtEligible || isNdEligible)
+        (isRegEligible || isPremiumEligible || isNdEligible)
       ) {
         fullyBilled++;
       }
@@ -217,7 +218,8 @@ export class StaffAttendanceService {
 
     return {
       regular_billed_count: regularBilled,
-      ot_billed_count: otBilled,
+      premium_billed_count: premiumBilled,
+      ot_billed_count: premiumBilled,
       nd_billed_count: ndBilled,
       fully_billed_count: fullyBilled,
       unbilled_count: unbilledCount,
@@ -227,10 +229,15 @@ export class StaffAttendanceService {
           unbilled: Math.max(0, regularEligible - regularBilled),
           total: regularEligible,
         },
+        premium: {
+          billed: premiumBilled,
+          unbilled: Math.max(0, premiumEligible - premiumBilled),
+          total: premiumEligible,
+        },
         ot: {
-          billed: otBilled,
-          unbilled: Math.max(0, otEligible - otBilled),
-          total: otEligible,
+          billed: premiumBilled,
+          unbilled: Math.max(0, premiumEligible - premiumBilled),
+          total: premiumEligible,
         },
         nd: {
           billed: ndBilled,

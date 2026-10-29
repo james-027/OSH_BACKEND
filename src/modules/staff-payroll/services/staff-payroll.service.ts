@@ -628,7 +628,7 @@ export class StaffPayrollService {
 
     const hasEligiblePremium =
       ((!isRegularDay && hasRegHours) || hasOtHours) &&
-      (!checkUnbilledOnly || !detail.is_ot_billed);
+      (!checkUnbilledOnly || !detail.is_premium_billed);
 
     const hasEligibleNd =
       hasNdHours && (!checkUnbilledOnly || !detail.is_nd_billed);
@@ -662,15 +662,15 @@ export class StaffPayrollService {
       !isRegularDay || Number(detail.regular) === 0 || detail.is_regular_billed;
 
     // Premium billing covers OT (for regular days) and both regular & OT (for holidays)
-    const otDone =
+    const premiumDone =
       (isRegularDay
         ? Number(detail.overtime) === 0
         : Number(detail.regular) === 0 && Number(detail.overtime) === 0) ||
-      detail.is_ot_billed;
+      detail.is_premium_billed;
 
     const ndDone = Number(detail.night_shift) === 0 || detail.is_nd_billed;
 
-    return regDone && otDone && ndDone;
+    return regDone && premiumDone && ndDone;
   }
 
   /**
@@ -731,12 +731,12 @@ export class StaffPayrollService {
       if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
         updateFields.is_regular_billed = true;
       } else if (header.billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
-        updateFields.is_ot_billed = true;
+        updateFields.is_premium_billed = true;
       } else if (header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF) {
         updateFields.is_nd_billed = true;
       } else {
         updateFields.is_regular_billed = true;
-        updateFields.is_ot_billed = true;
+        updateFields.is_premium_billed = true;
         updateFields.is_nd_billed = true;
       }
 
@@ -768,7 +768,7 @@ export class StaffPayrollService {
   }
 
   /**
-   * Resets billing flags (is_regular_billed, is_ot_billed, is_nd_billed) and reverts
+   * Resets billing flags (is_regular_billed, is_premium_billed, is_nd_billed) and reverts
    * attendance status back to VALIDATED on schedule details for a set of cancelled or reverted payroll headers.
    * Centralizes rollback logic to ensure DRY adherence between cancelPayroll and revertPayroll.
    */
@@ -805,12 +805,12 @@ export class StaffPayrollService {
       if (header.billing_type_id === BILLING_TYPE_IDS.REGULAR) {
         resetFields.is_regular_billed = false;
       } else if (header.billing_type_id === BILLING_TYPE_IDS.PREMIUM) {
-        resetFields.is_ot_billed = false;
+        resetFields.is_premium_billed = false;
       } else if (header.billing_type_id === BILLING_TYPE_IDS.NIGHT_DIFF) {
         resetFields.is_nd_billed = false;
       } else {
         resetFields.is_regular_billed = false;
-        resetFields.is_ot_billed = false;
+        resetFields.is_premium_billed = false;
         resetFields.is_nd_billed = false;
       }
 

@@ -72,10 +72,10 @@ export class ScheduleDetail {
 
   @Column({ type: "timestamp", nullable: true })
   just_time_in: Date;
-  
+
   @Column({ type: "timestamp", nullable: true })
   overtime_in: Date;
-  
+
   @Column({ type: "timestamp", nullable: true })
   overtime_out: Date;
 
@@ -112,22 +112,22 @@ export class ScheduleDetail {
   @Column({ nullable: true })
   attendance_status_id: number;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   cron_computed: boolean;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   ot_clearing_approved: boolean;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   is_regular_billed: boolean;
 
-  @Column({ type: 'boolean', default: false })
-  is_ot_billed: boolean;
+  @Column({ type: "boolean", default: false })
+  is_premium_billed: boolean;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   is_nd_billed: boolean;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   is_not_for_premium_pay: boolean;
 
   @Column({ nullable: true })
@@ -160,8 +160,7 @@ export class ScheduleDetail {
   @Column({
     type: "tinyint",
     nullable: true,
-    comment:
-      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
+    comment: "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
   shift_type: number;
 
