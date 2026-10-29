@@ -676,6 +676,27 @@ export class StaffPayrollService {
   }
 
   /**
+   * Evaluates whether two billing types collide for the same schedule detail.
+   * Centralizes collision rules following DRY principle:
+   * - Same billing type (e.g. REG vs REG, PREMIUM vs PREMIUM, ND vs ND) -> Conflict!
+   * - Either is ALL (4) or NULL (legacy full payroll) -> Conflict! (ALL covers everything)
+   * - Distinct specific billing types (e.g. REG (1) vs PREMIUM (2)) -> No conflict!
+   */
+  private isBillingTypeConflict(
+    typeA?: number | null,
+    typeB?: number | null,
+  ): boolean {
+    const normA = typeA != null ? Number(typeA) : BILLING_TYPE_IDS.ALL;
+    const normB = typeB != null ? Number(typeB) : BILLING_TYPE_IDS.ALL;
+
+    if (normA === BILLING_TYPE_IDS.ALL || normB === BILLING_TYPE_IDS.ALL) {
+      return true;
+    }
+
+    return normA === normB;
+  }
+
+  /**
    * Synchronizes billing flags and fully-billed attendance status on schedule details
    * for a set of posted or re-computed payroll headers.
    * Centralizes this logic to ensure DRY adherence between postPayroll and reComputePayroll.
