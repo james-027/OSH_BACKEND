@@ -1252,13 +1252,14 @@ export class StaffPayrollService {
         );
       }
 
-      // ============================================================
-      // 1. FETCH AND VALIDATE EXISTING PAYROLL HEADERS IN BULK
-      // ============================================================
+      const sortedPayrollIds = [...new Set(payrollHeaderIds)].sort(
+        (a, b) => a - b,
+      );
 
+      // 1. Fetch and validate existing payroll headers in bulk
       const existingHeaders = await this.payrollHeaderRepository.find({
         where: {
-          id: In(payrollHeaderIds),
+          id: In(sortedPayrollIds),
           access_key_id: accessKeyId,
         },
         relations: ["details"],
@@ -1269,8 +1270,7 @@ export class StaffPayrollService {
       }
 
       const foundIds = existingHeaders.map((payroll) => payroll.id);
-
-      const missingIds = payrollHeaderIds.filter(
+      const missingIds = sortedPayrollIds.filter(
         (payrollId) => !foundIds.includes(payrollId),
       );
 
@@ -1280,28 +1280,35 @@ export class StaffPayrollService {
         );
       }
 
-      const recomputedPayrolls: any[] = [];
+      // 2. Execute re-computation & posting atomically in a transaction
+      const updatedPayrollHeaders =
+        await this.payrollHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            // STEP 0: Pessimistic lock on headers to guard against concurrent postings/recomputes
+            const lockedHeaders = await transactionalEntityManager.find(
+              PayrollHeader,
+              {
+                where: {
+                  id: In(sortedPayrollIds),
+                  access_key_id: accessKeyId,
+                },
+                relations: ["details"],
+                lock: { mode: "pessimistic_write" },
+              },
+            );
 
-      // ============================================================
-      // 2. LOOP THROUGH EACH PAYROLL HEADER FOR RE-COMPUTATION
-      // ============================================================
+            const notReverted = lockedHeaders.filter((h) => !h.is_reverted);
+            if (notReverted.length > 0) {
+              const ids = notReverted.map((h) => `#${h.id}`).join(", ");
+              throw new BadRequestException(
+                `Cannot re-compute payroll. Payroll Header(s) [${ids}] are not marked as reverted for re-computation.`,
+              );
+            }
 
-      for (const existingHeader of existingHeaders) {
-        // --- Step A: Soft-deactivate current payroll details (status_id = 2) if the payroll_header.is_reverted is true ---
-        if (!existingHeader.is_reverted) {
-          continue; // Skip if the payroll header is not marked for re-computation
-        }
-        await this.payrollDetailRepository.update(
-          {
-            payroll_header_id: existingHeader.id,
-          },
-          {
-            status_id: STATUS_IDS.INACTIVE, // 2
-            updated_by: userId,
-          },
-        );
+            const scheduleHeaderIdsToUpdate: number[] = [];
 
-        // --- Step B: Reconstruct schedule filter for this header ---
+            // STEP 1: Reconstruct schedule filter, query validated schedules, and generate new details
+            for (const existingHeader of lockedHeaders) {
         const payrollDateFrom = existingHeader.payroll_date_from;
         const payrollDateTo = existingHeader.payroll_date_to;
 
@@ -1309,7 +1316,9 @@ export class StaffPayrollService {
           ...new Set(
             existingHeader.details
               ?.map((d) => d.vendor_id)
-              .filter((id): id is number => id !== null && id !== undefined),
+                    .filter(
+                      (id): id is number => id !== null && id !== undefined,
+                    ),
           ),
         ];
 
@@ -1317,7 +1326,9 @@ export class StaffPayrollService {
           ...new Set(
             existingHeader.details
               ?.map((d) => d.location_id)
-              .filter((id): id is number => id !== null && id !== undefined),
+                    .filter(
+                      (id): id is number => id !== null && id !== undefined,
+                    ),
           ),
         ];
 
@@ -1333,13 +1344,13 @@ export class StaffPayrollService {
         if (locationIds.length > 0) {
           where.location_id = In(locationIds);
         }
-
         if (vendorIds.length > 0) {
           where.vendor_id = In(vendorIds);
         }
 
-        // --- Step C: Re-fetch validated schedule details ---
-        const scheduleDetails = await this.scheduleDetailRepository.find({
+              const scheduleDetails = await transactionalEntityManager.find(
+                ScheduleDetail,
+                {
           where,
           relations: [
             "scheduleHeader",
@@ -1350,25 +1361,10 @@ export class StaffPayrollService {
             "workingDays",
             "actualLogsDetail",
           ],
-        });
+                },
+              );
 
-        if (!scheduleDetails.length) {
-          logger.warn(
-            `No schedule details found for re-computing payroll header ID ${existingHeader.id}.`,
-          );
-          continue;
-        }
-
-        // --- Step D: Fetch budget hours using centralized helper ---
-        const budgetHourParams = this.extractBudgetHourParams(scheduleDetails);
-
-        const budgetHourMap =
-          await this.warehouseBudgetHoursService.getBudgetHoursMap(
-            budgetHourParams,
-          );
-
-        // --- Step E: Create new active payroll details ---
-        // Filter details matching existingHeader.billing_type_id using centralized helper
+              // Filter details matching existingHeader.billing_type_id
         const recomputeDetails = scheduleDetails.filter((d) =>
           this.isDetailEligibleForBillingType(
             d,
@@ -1377,26 +1373,41 @@ export class StaffPayrollService {
           ),
         );
 
-        if (!recomputeDetails.length) {
-          return {
-            message:
-              "No eligible schedule details found to recompute this payroll.",
-            data: [],
-          };
-        }
+              // Soft-deactivate previous payroll details for this header
+              await transactionalEntityManager.update(
+                PayrollDetails,
+                { payroll_header_id: existingHeader.id },
+                {
+                  status_id: STATUS_IDS.INACTIVE,
+                  updated_by: userId,
+                },
+              );
 
-        const newPayrollDetails = recomputeDetails.map((scheduleDetail) => {
-          const scheduleDateIso = scheduleDetail.scheduleHeader?.schedule_date;
+              // If eligible schedule details exist, generate and persist fresh payroll details
+              if (recomputeDetails.length > 0) {
+                const budgetHourParams =
+                  this.extractBudgetHourParams(scheduleDetails);
+                const budgetHourMap =
+                  await this.warehouseBudgetHoursService.getBudgetHoursMap(
+                    budgetHourParams,
+                  );
+
+                const newPayrollDetails = recomputeDetails.map(
+                  (scheduleDetail) => {
+                    const scheduleDateIso =
+                      scheduleDetail.scheduleHeader?.schedule_date;
           const budgetHourKey = `${scheduleDetail.vendor_id}-${scheduleDetail.warehouse_id ?? ""}-${scheduleDateIso ?? ""}`;
           const budgetRow = budgetHourMap.get(budgetHourKey);
-          const budgethours = budgetRow ? Number(budgetRow.budget_hours) : 0;
+                    const budgethours = budgetRow
+                      ? Number(budgetRow.budget_hours)
+                      : 0;
 
           const hours = this.extractHoursForBillingType(
             scheduleDetail,
             existingHeader.billing_type_id,
           );
 
-          return this.payrollDetailRepository.create({
+                    return transactionalEntityManager.create(PayrollDetails, {
             payroll_header_id: existingHeader.id,
             billing_type_id: existingHeader.billing_type_id,
             schedule_detail_id: scheduleDetail.id,
@@ -1405,12 +1416,16 @@ export class StaffPayrollService {
             vendor_id: scheduleDetail.vendor_id,
             location_id: scheduleDetail.location_id,
             warehouse_id: scheduleDetail.warehouse_id,
-            warehouse_ifs: scheduleDetail.warehouse?.warehouse_ifs || "",
+                      warehouse_ifs:
+                        scheduleDetail.warehouse?.warehouse_ifs || "",
             duty_start_time: scheduleDetail.duty_start_time,
             duty_end_time: scheduleDetail.duty_end_time,
-            planned_duty_start_time: scheduleDetail.planned_duty_start_time,
-            planned_duty_end_time: scheduleDetail.planned_duty_end_time,
-            schedule_date: scheduleDetail.scheduleHeader?.schedule_date,
+                      planned_duty_start_time:
+                        scheduleDetail.planned_duty_start_time,
+                      planned_duty_end_time:
+                        scheduleDetail.planned_duty_end_time,
+                      schedule_date:
+                        scheduleDetail.scheduleHeader?.schedule_date,
             just_time_in: scheduleDetail.just_time_in,
             overtime_in: scheduleDetail.overtime_in,
             overtime_out: scheduleDetail.overtime_out,
@@ -1418,9 +1433,12 @@ export class StaffPayrollService {
             just_break_out: scheduleDetail.just_break_out,
             just_break_in: scheduleDetail.just_break_in,
             actual_time_in: scheduleDetail.actualLogsDetail?.time_in,
-            actual_time_out: scheduleDetail.actualLogsDetail?.time_out,
-            actual_break_in: scheduleDetail.actualLogsDetail?.break_in,
-            actual_break_out: scheduleDetail.actualLogsDetail?.break_out,
+                      actual_time_out:
+                        scheduleDetail.actualLogsDetail?.time_out,
+                      actual_break_in:
+                        scheduleDetail.actualLogsDetail?.break_in,
+                      actual_break_out:
+                        scheduleDetail.actualLogsDetail?.break_out,
             add_ot: scheduleDetail.add_ot,
             working_day_id: scheduleDetail.working_day_id,
             status_id: STATUS_IDS.ACTIVE,
@@ -1443,24 +1461,31 @@ export class StaffPayrollService {
             created_by: userId,
             trans_budget_hours: budgethours,
           });
-        });
+                  },
+                );
 
-        await this.payrollDetailRepository.save(newPayrollDetails);
+                await transactionalEntityManager.save(
+                  PayrollDetails,
+                  newPayrollDetails,
+                );
+              }
 
-        // --- Step F: Update schedule header audit timestamps ---
-        const scheduleHeaderIds = [
-          ...new Set(
-            scheduleDetails
-              .map((detail) => detail.scheduleHeader?.id)
-              .filter((id): id is number => id !== undefined && id !== null),
-          ),
+              // Collect schedule header ids for audit timestamp updates
+              for (const d of scheduleDetails) {
+                if (d.scheduleHeader?.id) {
+                  scheduleHeaderIdsToUpdate.push(d.scheduleHeader.id);
+                }
+              }
+            }
+
+            // Update schedule header timestamps
+            const uniqueSchedHeaderIds = [
+              ...new Set(scheduleHeaderIdsToUpdate),
         ];
-
-        if (scheduleHeaderIds.length > 0) {
-          await this.scheduleHeaderRepository.update(
-            {
-              id: In(scheduleHeaderIds),
-            },
+            if (uniqueSchedHeaderIds.length > 0) {
+              await transactionalEntityManager.update(
+                ScheduleHeader,
+                { id: In(uniqueSchedHeaderIds) },
             {
               payroll_ts: new Date(),
               payroll_updated_by: userId,
@@ -1468,92 +1493,54 @@ export class StaffPayrollService {
           );
         }
 
-        if (existingHeader.status_id === STATUS_IDS.POSTED) {
-          await this.payrollHeaderRepository.update(
-            { id: existingHeader.id },
-            {
-              cron_computed: false,
-              has_payroll_computation_error: false,
-              updated_by: userId,
-              modified_at: new Date(),
+            // STEP 2: DELEGATE DIRECTLY TO CENTRALIZED SHARED POSTING PIPELINE!
+            // This enforces conflict detection, 0-entry guards, invoice generation, and status updates!
+            return this.executePayrollPostingPipeline(
+              transactionalEntityManager,
+              sortedPayrollIds,
+              userId,
+              {
+                isRecompute: true,
+                remarks: updatePayrollDto.remarks,
             },
           );
-        }
+          },
+        );
 
-        // --- Step G: User Audit Trail & Action Logs ---
+      // 3. User Audit Trail & Action Logs
+      for (const payroll of updatedPayrollHeaders) {
         await this.userAuditTrailCreateService.create(
           {
             service: "StaffPayrollService",
             method: "reComputePayroll",
-            raw_data: JSON.stringify({ payrollHeaderId: existingHeader.id }),
-            description: `Re-computed payroll ${existingHeader.payroll_invoice} with reamrks: ${updatePayrollDto.remarks || ""}`,
+            raw_data: JSON.stringify({ payrollHeaderId: payroll.id }),
+            description: `Re-computed payroll ${payroll.payroll_invoice} with remarks: ${updatePayrollDto.remarks || ""}`,
             status_id: 1,
           },
           userId,
         );
 
-        const updatedPayrollWithRelations =
-          await this.payrollHeaderRepository.findOne({
-            where: {
-              id: existingHeader.id,
-            },
-            relations: [
-              "status",
-              "createdBy",
-              "updatedBy",
-              "details",
-              "details.staff",
-              "details.vendor",
-              "details.location",
-              "details.warehouse",
-              "details.status",
-            ],
-          });
-
-        if (updatedPayrollWithRelations) {
           try {
             await this.actionLogsService.logAction({
               module_name: this.module_name,
-              ref_id: existingHeader.id,
+            ref_id: payroll.id,
               action_id: ACTION_IDS.EDIT,
-              description: `Re-computed Payroll ${existingHeader.payroll_invoice} with remarks: ${updatePayrollDto.remarks || ""}`,
+            description: `Re-computed Payroll ${payroll.payroll_invoice} with remarks: ${updatePayrollDto.remarks || ""}`,
               raw_data: JSON.stringify({
-                payrollHeaderId: existingHeader.id,
-                newDetailsCount: newPayrollDetails.length,
+              payrollHeaderId: payroll.id,
+              detailsCount: payroll.details?.length || 0,
               }),
               created_by: userId,
             });
           } catch (err) {
-            logger.error(
-              "Action log failed for Re-compute Staff payroll:",
-              err,
-            );
+          logger.error("Action log failed for Re-compute Staff payroll:", err);
           }
-
-          const response = this.responseMapperService.mapEntityToResponse(
-            updatedPayrollWithRelations,
-          );
-
-          recomputedPayrolls.push(response);
-        }
       }
 
-      if (recomputedPayrolls.length > 0) {
-        await this.payrollHeaderRepository.update(
-          {
-            id: In(payrollHeaderIds),
-          },
-          {
-            status_id: STATUS_IDS.POSTED,
-            is_reverted: false,
-            updated_by: userId,
-            modified_at: new Date(),
-          },
-        );
-
-        // Synchronize billing flags and determine fully-billed schedule details following DRY principle
-        await this.syncScheduleDetailsBillingStatus(existingHeaders, userId);
-      }
+      // 4. Response mapping & SSE Updates
+      const responses = updatedPayrollHeaders.map((payroll) =>
+        this.responseMapperService.mapEntityToResponse(payroll),
+      );
 
       try {
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
@@ -1564,10 +1551,17 @@ export class StaffPayrollService {
 
       return {
         message: "Payroll headers re-computed successfully.",
-        data: recomputedPayrolls,
+        data: responses,
       };
     } catch (error) {
-      console.error("Error re-computing payroll:", error);
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Error re-computing payroll:", error);
 
       throw new Error(
         error instanceof Error ? error.message : "Failed to re-compute payroll",
