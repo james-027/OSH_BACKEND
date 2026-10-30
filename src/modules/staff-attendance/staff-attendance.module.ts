@@ -23,6 +23,7 @@ import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { Location } from "src/entities/Location";
 
 
 
@@ -37,6 +38,7 @@ import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
       StaffWarehouse,
       Warehouse,
       Action,
+      Location,
       Staff,
       ActualLogsDetail,
       TimeKeepingConfig,

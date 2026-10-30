@@ -102,7 +102,7 @@ export class StaffAttendanceController {
 
   @Post("attendance-reports")
   @RequirePermissions({ module: "ATTENDANCE REPORT", action: "VIEW" })
-  async getPayrollReport(
+  async getAttendanceReport(
     @Body() filter: AttendanceReportFilter,
     @Request() req?: any,
   ): Promise<any[]> {
@@ -121,6 +121,28 @@ export class StaffAttendanceController {
     );
   }
 
+
+  @Post("compliance-attendance-reports")
+  @RequirePermissions({ module: "ATTENDANCE REPORT", action: "VIEW" })
+  async getComplianceAttendanceReport(
+    @Body() filter: AttendanceReportFilter,
+    @Request() req?: any,
+  ): Promise<any[]> {
+    const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
+    return this.staffAttendanceService.generateComplianceAttendanceReport(
+      accessKeyId,
+      filter.date_from,
+      filter.date_to,
+      filter.vendor_ids,
+      filter.location_ids,
+      userId,
+      roleId,
+    );
+  }
+  
   // Placed before :id to prevent collision
   @Get("history/:id")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })

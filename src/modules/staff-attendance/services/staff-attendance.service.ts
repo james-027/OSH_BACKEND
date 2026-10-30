@@ -24,6 +24,7 @@ import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { Location } from "src/entities/Location";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
 const dayjs = require("dayjs");
@@ -42,6 +43,8 @@ export class StaffAttendanceService {
     private scheduleHeaderRepository: Repository<ScheduleHeader>,
     @InjectRepository(Warehouse)
     private warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(Location)
+    private locationRepository: Repository<Location>,
     @InjectRepository(StaffWarehouse)
     private staffWarehouseRepository: Repository<StaffWarehouse>,
     @InjectRepository(Staff)
@@ -245,10 +248,118 @@ export class StaffAttendanceService {
     }
   }
 
+  async generateAttendanceReport(
+    accessKeyId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    vendorIds?: number[],
+    locationIds?: number[],
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
+    try {
+      const where: any = {
+        attendance_status_id: STATUS_IDS.VALIDATED,
+      };
 
+      // Filter by access key through ScheduleHeader
+      if (accessKeyId !== undefined) {
+        where.scheduleHeader = {
+          access_key_id: accessKeyId,
+        };
+      }
 
-  
-async generateAttendanceReport(
+      // Filter by schedule date from ScheduleHeader
+      if (dateFrom || dateTo) {
+        where.scheduleHeader = {
+          ...(where.scheduleHeader || {}),
+        };
+
+        if (dateFrom) {
+          where.scheduleHeader.schedule_date = MoreThanOrEqual(
+            dateFrom,
+          );
+        }
+
+        if (dateTo) {
+          where.scheduleHeader.schedule_date = LessThanOrEqual(
+            dateTo,
+          );
+        }
+
+        // Apply both date filters together
+        if (dateFrom && dateTo) {
+          where.scheduleHeader.schedule_date = Between(
+            dateFrom,
+            dateTo,
+          );
+        }
+      }
+
+      // Filter by vendor from ScheduleDetail
+      if (vendorIds && vendorIds.length > 0) {
+        where.vendor_id = In(vendorIds);
+      }
+
+      // Filter by location from ScheduleDetail
+      if (locationIds && locationIds.length > 0) {
+        where.location_id = In(locationIds);
+      }
+
+      // Apply user's allowed location permissions
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+
+        if (where.location_id) {
+          // Intersect selected locations with allowed locations
+          const selectedLocationIds = locationIds || [];
+          const permittedLocationIds = selectedLocationIds.filter(
+            (id) => allowedLocationIds.includes(id),
+          );
+
+          where.location_id = In(permittedLocationIds);
+        } else {
+          where.location_id = In(allowedLocationIds);
+        }
+      }
+
+      const scheduleDetail = await this.scheduleDetailRepository.find({
+        where,
+        relations: [
+          "scheduleHeader",
+          "staff",
+          "vendor",
+          "location",
+          "warehouse",
+          "status",
+          "createdBy",
+          "updatedBy",
+          "actualLogsDetail",
+          "workingDays"
+        ],
+        order: {
+          overtime: "DESC",
+          scheduleHeader: {
+            schedule_date: "DESC",
+          },
+          id: "ASC",
+        },
+      });
+
+      return this.responseMapperService.mapEntitiesToResponse(
+        scheduleDetail,
+      );
+    } catch (error) {
+      console.error("Error generating attendance report:", error);
+      throw new Error("Failed to generate attendance report");
+    }
+  }
+
+async generateComplianceAttendanceReport(
   accessKeyId?: number,
   dateFrom?: string,
   dateTo?: string,
@@ -258,55 +369,9 @@ async generateAttendanceReport(
   roleId?: number,
 ): Promise<any[]> {
   try {
-    const where: any = {
-      attendance_status_id: STATUS_IDS.VALIDATED,
-    };
+    // 1. Apply allowed-location permissions.
+    let effectiveLocationIds = locationIds;
 
-    // Filter by access key through ScheduleHeader
-    if (accessKeyId !== undefined) {
-      where.scheduleHeader = {
-        access_key_id: accessKeyId,
-      };
-    }
-
-    // Filter by schedule date from ScheduleHeader
-    if (dateFrom || dateTo) {
-      where.scheduleHeader = {
-        ...(where.scheduleHeader || {}),
-      };
-
-      if (dateFrom) {
-        where.scheduleHeader.schedule_date = MoreThanOrEqual(
-          dateFrom,
-        );
-      }
-
-      if (dateTo) {
-        where.scheduleHeader.schedule_date = LessThanOrEqual(
-          dateTo,
-        );
-      }
-
-      // Apply both date filters together
-      if (dateFrom && dateTo) {
-        where.scheduleHeader.schedule_date = Between(
-          dateFrom,
-          dateTo,
-        );
-      }
-    }
-
-    // Filter by vendor from ScheduleDetail
-    if (vendorIds && vendorIds.length > 0) {
-      where.vendor_id = In(vendorIds);
-    }
-
-    // Filter by location from ScheduleDetail
-    if (locationIds && locationIds.length > 0) {
-      where.location_id = In(locationIds);
-    }
-
-    // Apply user's allowed location permissions
     if (userId && roleId) {
       const allowedLocationIds =
         await this.commonUtilitiesService.getUserAllowedLocationIds(
@@ -314,51 +379,164 @@ async generateAttendanceReport(
           roleId,
         );
 
-      if (where.location_id) {
-        // Intersect selected locations with allowed locations
-        const selectedLocationIds = locationIds || [];
-        const permittedLocationIds = selectedLocationIds.filter(
-          (id) => allowedLocationIds.includes(id),
-        );
+      if (!allowedLocationIds.length) {
+        return [];
+      }
 
-        where.location_id = In(permittedLocationIds);
-      } else {
-        where.location_id = In(allowedLocationIds);
+      effectiveLocationIds = locationIds?.length
+        ? locationIds.filter((id) => allowedLocationIds.includes(id))
+        : allowedLocationIds;
+
+      if (!effectiveLocationIds.length) {
+        return [];
       }
     }
 
-    const scheduleDetail = await this.scheduleDetailRepository.find({
-      where,
-      relations: [
-        "scheduleHeader",
-        "staff",
-        "vendor",
-        "location",
-        "warehouse",
-        "status",
-        "createdBy",
-        "updatedBy",
-        "actualLogsDetail",
-        "workingDays"
-      ],
-      order: {
-        overtime: "DESC",
-        scheduleHeader: {
-          schedule_date: "DESC",
-        },
-        id: "ASC",
-      },
-    });
+    // 2. Get expected store assignments.
+    const staffWarehouseWhere: any = {};
 
-    return this.responseMapperService.mapEntitiesToResponse(
-      scheduleDetail,
+    if (vendorIds?.length) {
+      staffWarehouseWhere.vendor_id = In(vendorIds);
+    }
+
+    if (effectiveLocationIds?.length) {
+      staffWarehouseWhere.location_id = In(effectiveLocationIds);
+    }
+
+    if (accessKeyId !== undefined) {
+        staffWarehouseWhere.warehouse = {
+          access_key_id: accessKeyId,
+        };
+      }
+
+    const staffWarehouses =
+      await this.staffWarehouseRepository.find({
+        where: staffWarehouseWhere,
+        relations: ["location", "warehouse", "vendor"],
+      });
+
+    // 3. Build ScheduleHeader filters.
+    const scheduleHeaderWhere: any = {};
+
+    if (accessKeyId !== undefined) {
+      scheduleHeaderWhere.access_key_id = accessKeyId;
+    }
+
+    if (dateFrom && dateTo) {
+      scheduleHeaderWhere.schedule_date = Between(
+        dateFrom,
+        dateTo,
+      );
+    } else if (dateFrom) {
+      scheduleHeaderWhere.schedule_date =
+        MoreThanOrEqual(dateFrom);
+    } else if (dateTo) {
+      scheduleHeaderWhere.schedule_date =
+        LessThanOrEqual(dateTo);
+    }
+
+    // 4. Get schedules for the selected date range.
+    const scheduleWhere: any = {
+      scheduleHeader: scheduleHeaderWhere,
+    };
+
+    if (vendorIds?.length) {
+      scheduleWhere.vendor_id = In(vendorIds);
+    }
+
+    if (effectiveLocationIds?.length) {
+      scheduleWhere.location_id = In(effectiveLocationIds);
+    }
+
+    const scheduledDetails =
+      await this.scheduleDetailRepository.find({
+        where: scheduleWhere,
+        select: {
+          id: true,
+          location_id: true,
+          vendor_id: true,
+          warehouse_id: true,
+        },
+        relations: ["scheduleHeader"],
+      });
+
+    // 5. Build a set of scheduled stores by date.
+    const scheduledStoreKeys = new Set(
+      scheduledDetails.map((detail) => {
+        const scheduleDate =
+          detail.scheduleHeader?.schedule_date;
+
+        const formattedDate = scheduleDate
+          ? scheduleDate instanceof Date
+            ? scheduleDate.toISOString().slice(0, 10)
+            : String(scheduleDate).slice(0, 10)
+          : "";
+
+        return [
+          formattedDate,
+          detail.location_id,
+          detail.vendor_id,
+          detail.warehouse_id,
+        ].join("-");
+      }),
     );
+
+    // 6. Generate dates within the selected range.
+    const dates: string[] = [];
+
+    if (dateFrom && dateTo) {
+      const currentDate = new Date(`${dateFrom}T00:00:00Z`);
+      const endDate = new Date(`${dateTo}T00:00:00Z`);
+
+      while (currentDate <= endDate) {
+        dates.push(currentDate.toISOString().slice(0, 10));
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+    } else if (dateFrom || dateTo) {
+      // If only one boundary is supplied, check only that date.
+      dates.push((dateFrom || dateTo)!);
+    }
+
+    // 7. Find stores without schedules.
+    const missingStores: any[] = [];
+
+    for (const date of dates) {
+      for (const assignment of staffWarehouses) {
+        const key = [
+          date,
+          assignment.location_id,
+          assignment.vendor_id,
+          assignment.warehouse_id,
+        ].join("-");
+
+        if (!scheduledStoreKeys.has(key)) {
+          missingStores.push({
+            schedule_date: date,
+            store: {
+              warehouse_id: assignment.warehouse_id,
+              warehouse: assignment.warehouse,
+              vendor_id: assignment.vendor_id,
+              vendor: assignment.vendor,
+              location_id: assignment.location_id,
+              location: assignment.location,
+            },
+            attendance_status: "NO SCHEDULE",
+          });
+        }
+      }
+    }
+
+    // 8. Return only stores without schedules.
+    return missingStores;
   } catch (error) {
-    console.error("Error generating attendance report:", error);
-    throw new Error("Failed to generate attendance report");
+    console.error(
+      "Error generating compliance attendance report:",
+      error,
+    );
+
+    throw new Error("Failed to generate compliance attendance report");
   }
 }
-
 
   async findOne(id: number): Promise<any> {
     try {
