@@ -2552,54 +2552,29 @@ export class StaffPayrollService {
     }
   }
 
-  async postPayroll(
-    updatePayrollDto: UpdatePayrollHeaderDto,
+  /**
+   * Centralized transactional posting pipeline for Payroll Headers.
+   * Shared between postPayroll and reComputePayroll to guarantee DRY adherence,
+   * deadlock-safe pessimistic locking, conflict detection, 0-entry guards,
+   * and sequential invoice generation.
+   */
+  private async executePayrollPostingPipeline(
+    transactionalEntityManager: EntityManager,
+    sortedPayrollIds: number[],
     userId: number,
-  ): Promise<any> {
-    try {
-      const payrollIds = updatePayrollDto.id;
-
-      if (!payrollIds?.length) {
-        throw new BadRequestException(
-          "At least one Payroll Header ID is required.",
-        );
-      }
-
-      // 1. Sort IDs to prevent database deadlocks during pessimistic locking
-      const sortedPayrollIds = [...new Set(payrollIds)].sort((a, b) => a - b);
-
-      const payrollHeaders = await this.payrollHeaderRepository.find({
-        where: {
-          id: In(sortedPayrollIds),
-        },
-        relations: ["status", "createdBy", "updatedBy"],
-      });
-
-      const foundIds = payrollHeaders.map((payroll) => payroll.id);
-
-      const missingIds = sortedPayrollIds.filter(
-        (payrollId) => !foundIds.includes(payrollId),
-      );
-
-      if (missingIds.length > 0) {
-        throw new NotFoundException(
-          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
-        );
-      }
-
-      const updatedPayrollHeaders =
-        await this.payrollHeaderRepository.manager.transaction(
-          async (transactionalEntityManager) => {
+    options?: {
+      isRecompute?: boolean;
+      remarks?: string;
+    },
+  ): Promise<PayrollHeader[]> {
             // STEP 0: PESSIMISTIC LOCK ON HEADERS (Concurrency & Race Condition guard)
-            const lockedHeaders = await transactionalEntityManager.find(
-              PayrollHeader,
-              {
+    const lockedHeaders = await transactionalEntityManager.find(PayrollHeader, {
                 where: { id: In(sortedPayrollIds) },
                 lock: { mode: "pessimistic_write" },
-              },
-            );
+    });
 
-            // Guard: check if any header was already posted by a concurrent user/process
+    // Guard: check if any header was already posted by a concurrent user/process (only if not recomputing)
+    if (!options?.isRecompute) {
             const alreadyPostedHeaders = lockedHeaders.filter(
               (h) => h.status_id === STATUS_IDS.POSTED,
             );
@@ -2610,6 +2585,7 @@ export class StaffPayrollService {
               throw new BadRequestException(
                 `Cannot post payroll. Payroll Header(s) [${postedIds}] are already posted by another user or process.`,
               );
+      }
             }
 
             // STEP 1: LOAD ACTIVE DETAILS WITH RELATIONS (Optimized & DRY: loaded once for conflict check & invoice generation)
@@ -2645,9 +2621,7 @@ export class StaffPayrollService {
               ...new Set(
                 payrollDetails
                   .map((detail) => detail.schedule_detail_id)
-                  .filter(
-                    (id): id is number => id !== undefined && id !== null,
-                  ),
+          .filter((id): id is number => id !== undefined && id !== null),
               ),
             ].sort((a, b) => a - b);
 
@@ -2696,8 +2670,7 @@ export class StaffPayrollService {
                   d.billing_type_id != null
                     ? Number(d.billing_type_id)
                     : BILLING_TYPE_IDS.ALL;
-                const inv =
-                  d.payroll_invoice || `Header #${d.conflicting_header_id}`;
+        const inv = d.payroll_invoice || `Header #${d.conflicting_header_id}`;
 
                 if (!alreadyPostedMap.has(sId)) {
                   alreadyPostedMap.set(sId, []);
@@ -2735,18 +2708,13 @@ export class StaffPayrollService {
                     BILLING_TYPE_IDS.ALL);
 
               // Check conflict against already-posted details
-              const postedMatches =
-                alreadyPostedMap.get(numericScheduleId) || [];
+      const postedMatches = alreadyPostedMap.get(numericScheduleId) || [];
               const conflictingPosted = postedMatches.find((posted) =>
-                this.isBillingTypeConflict(
-                  detailBillingType,
-                  posted.billingType,
-                ),
+        this.isBillingTypeConflict(detailBillingType, posted.billingType),
               );
 
               // Check conflict against details already processed in this current batch
-              const seenTypes =
-                seenInCurrentBatchMap.get(numericScheduleId) || [];
+      const seenTypes = seenInCurrentBatchMap.get(numericScheduleId) || [];
               const hasBatchConflict = seenTypes.some((seenType) =>
                 this.isBillingTypeConflict(detailBillingType, seenType),
               );
@@ -2754,10 +2722,7 @@ export class StaffPayrollService {
               if (conflictingPosted) {
                 detailIdsToInactivate.push(Number(newDetail.id));
                 if (!postedConflictsByHeader.has(newDetail.payroll_header_id)) {
-                  postedConflictsByHeader.set(
-                    newDetail.payroll_header_id,
-                    new Set(),
-                  );
+          postedConflictsByHeader.set(newDetail.payroll_header_id, new Set());
                 }
                 postedConflictsByHeader
                   .get(newDetail.payroll_header_id)!
@@ -2774,9 +2739,7 @@ export class StaffPayrollService {
                 if (!seenInCurrentBatchMap.has(numericScheduleId)) {
                   seenInCurrentBatchMap.set(numericScheduleId, []);
                 }
-                seenInCurrentBatchMap
-                  .get(numericScheduleId)!
-                  .push(detailBillingType);
+        seenInCurrentBatchMap.get(numericScheduleId)!.push(detailBillingType);
               }
             }
 
@@ -2784,10 +2747,7 @@ export class StaffPayrollService {
             const inactivateIdSet = new Set(detailIdsToInactivate);
             interface BatchPostingError {
               payrollId: number;
-              reason:
-                | "NO_ENTRIES"
-                | "ALL_CONFLICTS_POSTED"
-                | "ALL_CONFLICTS_BATCH";
+      reason: "NO_ENTRIES" | "ALL_CONFLICTS_POSTED" | "ALL_CONFLICTS_BATCH";
               conflictingInvoices?: string[];
             }
             const batchErrors: BatchPostingError[] = [];
@@ -2835,8 +2795,7 @@ export class StaffPayrollService {
                   case "NO_ENTRIES":
                     return `• Payroll #${err.payrollId}: Contains no active attendance entries to post.`;
                   case "ALL_CONFLICTS_POSTED":
-                    const invoiceList =
-                      err.conflictingInvoices?.join(", ") || "";
+            const invoiceList = err.conflictingInvoices?.join(", ") || "";
                     return `• Payroll #${err.payrollId}: All entries conflict with already posted payroll(s) (${invoiceList}).`;
                   case "ALL_CONFLICTS_BATCH":
                     return `• Payroll #${err.payrollId}: All entries duplicate other records within this batch.`;
@@ -2872,13 +2831,15 @@ export class StaffPayrollService {
               ];
 
               for (const headerId of affectedHeaderIds) {
-                const remainingActiveDetails =
-                  await transactionalEntityManager.find(PayrollDetails, {
+        const remainingActiveDetails = await transactionalEntityManager.find(
+          PayrollDetails,
+          {
                     where: {
                       payroll_header_id: headerId,
                       status_id: STATUS_IDS.ACTIVE,
                     },
-                  });
+          },
+        );
 
                 const updatedTotals =
                   this.payrollComputationService.computePayrollHeaderTotals(
@@ -2898,12 +2859,9 @@ export class StaffPayrollService {
             }
 
             // STEP 6: UPDATE ASSOCIATED SCHEDULE DETAILS BILLING FLAGS (DRY)
-            const headersToSync = await transactionalEntityManager.find(
-              PayrollHeader,
-              {
+    const headersToSync = await transactionalEntityManager.find(PayrollHeader, {
                 where: { id: In(sortedPayrollIds) },
-              },
-            );
+    });
             await this.syncScheduleDetailsBillingStatus(
               headersToSync,
               userId,
@@ -2918,9 +2876,9 @@ export class StaffPayrollService {
               }
 
               // Retrieve active details from memory (preloaded with vendor and location)
-              const activeDetails = (
-                detailsByHeaderMap.get(header.id) || []
-              ).filter((d) => !inactivateIdSet.has(Number(d.id)));
+      const activeDetails = (detailsByHeaderMap.get(header.id) || []).filter(
+        (d) => !inactivateIdSet.has(Number(d.id)),
+      );
 
               // Guard assertion: guaranteed by Step 4, but ensures zero runtime anomalies
               if (!activeDetails.length) {
@@ -2930,8 +2888,7 @@ export class StaffPayrollService {
               }
 
               const firstDetail = activeDetails[0];
-              const agencyCode =
-                firstDetail.vendor?.service_provider_code ?? "";
+      const agencyCode = firstDetail.vendor?.service_provider_code ?? "";
               const locationAbbr = firstDetail.location?.location_abbr ?? "";
 
               const payrollInvoice =
@@ -2958,32 +2915,96 @@ export class StaffPayrollService {
             }
 
             // STEP 8: UPDATE PAYROLL HEADERS TO POSTED
-            await transactionalEntityManager.update(
-              PayrollHeader,
-              {
-                id: In(sortedPayrollIds),
-              },
-              {
+    const headerUpdatePayload: any = {
                 status_id: STATUS_IDS.POSTED,
                 cron_computed: false,
                 has_payroll_computation_error: false,
                 updated_by: userId,
                 modified_at: new Date(),
-              },
+    };
+
+    if (options?.isRecompute) {
+      headerUpdatePayload.is_reverted = false;
+      if (options.remarks !== undefined) {
+        headerUpdatePayload.remarks = options.remarks;
+      }
+    }
+
+    await transactionalEntityManager.update(
+      PayrollHeader,
+      {
+        id: In(sortedPayrollIds),
+      },
+      headerUpdatePayload,
             );
 
-            // STEP 9: RETRIEVE UPDATED PAYROLL HEADERS
+    // STEP 9: RETRIEVE UPDATED PAYROLL HEADERS WITH RELATIONS
             const updatedHeaders = await transactionalEntityManager.find(
               PayrollHeader,
               {
                 where: {
                   id: In(sortedPayrollIds),
                 },
-                relations: ["status", "createdBy", "updatedBy"],
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "details",
+          "details.staff",
+          "details.vendor",
+          "details.location",
+          "details.warehouse",
+          "details.status",
+        ],
               },
             );
 
             return updatedHeaders;
+  }
+
+  async postPayroll(
+    updatePayrollDto: UpdatePayrollHeaderDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const payrollIds = updatePayrollDto.id;
+
+      if (!payrollIds?.length) {
+        throw new BadRequestException(
+          "At least one Payroll Header ID is required.",
+        );
+      }
+
+      // 1. Sort IDs to prevent database deadlocks during pessimistic locking
+      const sortedPayrollIds = [...new Set(payrollIds)].sort((a, b) => a - b);
+
+      const payrollHeaders = await this.payrollHeaderRepository.find({
+        where: {
+          id: In(sortedPayrollIds),
+        },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
+
+      const foundIds = payrollHeaders.map((payroll) => payroll.id);
+
+      const missingIds = sortedPayrollIds.filter(
+        (payrollId) => !foundIds.includes(payrollId),
+      );
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Payroll Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const updatedPayrollHeaders =
+        await this.payrollHeaderRepository.manager.transaction(
+          async (transactionalEntityManager) => {
+            return this.executePayrollPostingPipeline(
+              transactionalEntityManager,
+              sortedPayrollIds,
+              userId,
+            );
           },
         );
 
