@@ -251,7 +251,7 @@ export class PayrollDetails {
   @JoinColumn({ name: "working_day_id" })
   workingDays: WorkingDay;
 
-  @ManyToOne(() => ScheduleDetail, {
+  @ManyToOne(() => ScheduleDetail, (sd) => sd.payrollDetails, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",

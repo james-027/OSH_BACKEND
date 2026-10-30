@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
@@ -16,6 +17,7 @@ import { Vendor } from "./Vendor";
 import { ScheduleHeader } from "./ScheduleHeader";
 import { WorkingDay } from "./WorkingDay";
 import { ActualLogsDetail } from "./ActualLogsDetail";
+import { PayrollDetails } from "./PayrollDetails";
 
 @Entity("schedule_details")
 export class ScheduleDetail {
@@ -312,4 +314,10 @@ export class ScheduleDetail {
   })
   @JoinColumn({ name: "working_day_id" })
   workingDays: WorkingDay;
+
+  @OneToMany(
+    () => PayrollDetails,
+    (payrollDetails) => payrollDetails.scheduleDetail,
+  )
+  payrollDetails: PayrollDetails[];
 }
