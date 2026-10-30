@@ -130,6 +130,22 @@ export class StaffAttendanceService {
               .filter((header) => header.details.length > 0)
           : scheduleHeaders;
 
+      // Collect all detail IDs across all filtered headers
+      const allDetailIds: number[] = [];
+      for (const header of filteredHeaders) {
+        if (header.details) {
+          for (const d of header.details) {
+            if (d.id) {
+              allDetailIds.push(d.id);
+            }
+          }
+        }
+      }
+
+      // Batch fetch connected posted payrolls in one query
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(allDetailIds);
+
       const mappedHeaders =
         this.responseMapperService.mapEntitiesToResponse(filteredHeaders);
 
@@ -141,6 +157,30 @@ export class StaffAttendanceService {
 
         const billingMetrics = this.computeScheduleBillingMetrics(details);
 
+        // Aggregate unique connected payrolls for this schedule header
+        const headerPayrollsMap = new Map<
+          number,
+          {
+            id: number;
+            invoice: string;
+            billing_type_id: number;
+            status_id: number;
+          }
+        >();
+
+        for (const detail of details) {
+          const detailPayrolls = connectedPayrollsMap.get(detail.id) || [];
+          for (const p of detailPayrolls) {
+            if (!headerPayrollsMap.has(p.id)) {
+              headerPayrollsMap.set(p.id, p);
+            }
+          }
+        }
+
+        const connectedPayrolls = Array.from(headerPayrollsMap.values());
+        const payrollInvoices = connectedPayrolls.map((p) => p.invoice);
+        const payrollInvoiceStr = payrollInvoices.join(", ") || null;
+
         return {
           ...mappedHeader,
           entry_no: detailCount,
@@ -148,6 +188,9 @@ export class StaffAttendanceService {
           location_name: firstDetail?.location?.location_name ?? null,
           vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
           status_name: firstDetail?.attendanceStatus?.status_name ?? null,
+          payroll_invoice: payrollInvoiceStr,
+          payroll_invoices: payrollInvoices,
+          connected_payrolls: connectedPayrolls,
           regular_billed_count: billingMetrics.regular_billed_count,
           premium_billed_count: billingMetrics.premium_billed_count,
           ot_billed_count: billingMetrics.ot_billed_count,
@@ -403,7 +446,24 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+      const detailIds = scheduleDetail.map((d) => d.id).filter(Boolean);
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(detailIds);
+
+      const mappedDetails =
+        this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+
+      return mappedDetails.map((mappedItem, idx) => {
+        const dId = scheduleDetail[idx]?.id;
+        const connected = connectedPayrollsMap.get(dId) || [];
+        const invoices = connected.map((c) => c.invoice);
+        return {
+          ...mappedItem,
+          payroll_invoice: invoices.join(", ") || null,
+          payroll_invoices: invoices,
+          connected_payrolls: connected,
+        };
+      });
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");
@@ -458,7 +518,24 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+      const detailIds = scheduleDetail.map((d) => d.id).filter(Boolean);
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(detailIds);
+
+      const mappedDetails =
+        this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+
+      return mappedDetails.map((mappedItem, idx) => {
+        const dId = scheduleDetail[idx]?.id;
+        const connected = connectedPayrollsMap.get(dId) || [];
+        const invoices = connected.map((c) => c.invoice);
+        return {
+          ...mappedItem,
+          payroll_invoice: invoices.join(", ") || null,
+          payroll_invoices: invoices,
+          connected_payrolls: connected,
+        };
+      });
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");

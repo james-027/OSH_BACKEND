@@ -5,7 +5,7 @@ import { UserAuditTrail } from "src/entities/UserAuditTrail";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { Module as AppModule } from "src/entities/Module";
 import { Action } from "src/entities/Action";
-import { StaffAttendanceService} from "src/modules/staff-attendance/services/staff-attendance.service";
+import { StaffAttendanceService } from "src/modules/staff-attendance/services/staff-attendance.service";
 import { StaffAttendanceController } from "src/modules/staff-attendance/controllers/staff-attendance.controller";
 import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
@@ -23,9 +23,8 @@ import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { PayrollDetails } from "src/entities/PayrollDetails";
 import { Location } from "src/entities/Location";
-
-
 
 @Module({
   imports: [
@@ -45,18 +44,19 @@ import { Location } from "src/entities/Location";
       Vendor,
       TransactionSequence,
       StaffHistory,
-      Status
+      Status,
+      PayrollDetails,
     ]),
     UsersModule,
     SSEModule,
-    ActionsModule
+    ActionsModule,
   ],
   controllers: [StaffAttendanceController],
   providers: [
     StaffAttendanceService,
     UserAuditTrailCreateService,
     ResponseMapperService,
-     CommonUtilitiesService,
+    CommonUtilitiesService,
   ],
   exports: [StaffAttendanceService],
 })
