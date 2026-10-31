@@ -8,6 +8,7 @@ import {
   DAYS_FACTOR_RATE,
   WORKING_DAY_IDS,
 } from "src/constants/customConstants";
+import { roundMoney } from "src/utils/math.utils";
 
 @Injectable()
 export class PayrollComputationService {
@@ -46,7 +47,7 @@ export class PayrollComputationService {
     const regular = Number(detail.regular) || 0;
     const overtime = Number(detail.overtime) || 0;
     const nightShift = Number(detail.night_shift) || 0;
-    const nightShiftAmount = ((salaryRate * 0.1) / 8) * nightShift;
+    const nightShiftAmount = roundMoney(((salaryRate * 0.1) / 8) * nightShift);
     const isNotForPremium = Boolean(detail.is_not_for_premium_pay);
 
     /**
@@ -81,70 +82,73 @@ export class PayrollComputationService {
 
     switch (detail.working_day_id) {
       case WORKING_DAY_IDS.REGULAR_DAY:
-        regularAmount = regular * hourRate;
-        otRegularAmount = overtime * hourRate * getOtMultiplier(1.25);
+        regularAmount = roundMoney(regular * hourRate);
+        otRegularAmount = roundMoney(overtime * hourRate * getOtMultiplier(1.25));
         break;
 
       case WORKING_DAY_IDS.REGULAR_HOLIDAY:
         // RH = #hrs * salary_rate/8 * 2
-        regularHolidayAmount = regular * hourRate * 2.0;
-        otRegularHolidayAmount = overtime * hourRate * getOtMultiplier(2.6);
+        regularHolidayAmount = roundMoney(regular * hourRate * 2.0);
+        otRegularHolidayAmount = roundMoney(overtime * hourRate * getOtMultiplier(2.6));
         break;
 
       case WORKING_DAY_IDS.SPECIAL_HOLIDAY:
         // SPH = #hrs * salary_rate/8 * 1.30
-        specialHolidayAmount = regular * hourRate * 1.3;
-        otSpecialHolidayAmount = overtime * hourRate * getOtMultiplier(1.69);
+        specialHolidayAmount = roundMoney(regular * hourRate * 1.3);
+        otSpecialHolidayAmount = roundMoney(overtime * hourRate * getOtMultiplier(1.69));
         break;
 
       case WORKING_DAY_IDS.REST_DAY_REGULAR_HOLIDAY:
         // RD & RH = (#hrs * salary_rate/8 * 2) + (#hrs * salary_rate/8 * 0.3)
-        rdRegularHolidayAmount =
-          regular * hourRate * 2.0 + regular * hourRate * 0.3;
-        otRdRegularHolidayAmount = overtime * hourRate * getOtMultiplier(3.38);
+        rdRegularHolidayAmount = roundMoney(
+          regular * hourRate * 2.0 + regular * hourRate * 0.3,
+        );
+        otRdRegularHolidayAmount = roundMoney(overtime * hourRate * getOtMultiplier(3.38));
         break;
 
       case WORKING_DAY_IDS.REST_DAY_SPECIAL_HOLIDAY:
         // RD & SPH = (#hrs * salary_rate/8) * 1.50
-        rdSpecialHolidayAmount = regular * hourRate * 1.5;
-        otRdSpecialHolidayAmount = overtime * hourRate * getOtMultiplier(1.95);
+        rdSpecialHolidayAmount = roundMoney(regular * hourRate * 1.5);
+        otRdSpecialHolidayAmount = roundMoney(overtime * hourRate * getOtMultiplier(1.95));
         break;
 
       case WORKING_DAY_IDS.REGULAR_HOLIDAY_OFF:
         // RH OFF = #hrs * salary_rate/8
-        regularHolidayOffAmount = regular * hourRate;
+        regularHolidayOffAmount = roundMoney(regular * hourRate);
         break;
 
       case WORKING_DAY_IDS.REST_DAY:
         // RD = #hrs * salary_rate/8 * 1.30
-        restDayAmount = regular * hourRate * 1.3;
-        otRestDayAmount = overtime * hourRate * getOtMultiplier(1.69);
+        restDayAmount = roundMoney(regular * hourRate * 1.3);
+        otRestDayAmount = roundMoney(overtime * hourRate * getOtMultiplier(1.69));
         break;
 
       default:
-        regularAmount = regular * hourRate;
-        otRegularAmount = overtime * hourRate * getOtMultiplier(1.25);
+        regularAmount = roundMoney(regular * hourRate);
+        otRegularAmount = roundMoney(overtime * hourRate * getOtMultiplier(1.25));
         break;
     }
 
-    const regularDayAmount =
+    const regularDayAmount = roundMoney(
       regularAmount +
       restDayAmount +
       specialHolidayAmount +
       regularHolidayAmount +
       regularHolidayOffAmount +
       rdRegularHolidayAmount +
-      rdSpecialHolidayAmount;
+      rdSpecialHolidayAmount,
+    );
 
-    const overtimeAmount =
+    const overtimeAmount = roundMoney(
       otRegularAmount +
       otRestDayAmount +
       otSpecialHolidayAmount +
       otRegularHolidayAmount +
       otRdRegularHolidayAmount +
-      otRdSpecialHolidayAmount;
+      otRdSpecialHolidayAmount,
+    );
 
-    const grossPay = regularDayAmount + overtimeAmount + nightShiftAmount;
+    const grossPay = roundMoney(regularDayAmount + overtimeAmount + nightShiftAmount);
 
     /**
      * ----------------------------------------------------------
@@ -172,12 +176,11 @@ export class PayrollComputationService {
      * 13TH MONTH PAY
      * ----------------------------------------------------------
      */
-    const thirteenMonthPay = this.computeThirteenMonthPay(
-      hourRate,
-      totalHoursWorked,
+    const thirteenMonthPay = roundMoney(
+      this.computeThirteenMonthPay(hourRate, totalHoursWorked),
     );
 
-    const netAmtDiser = grossPay + thirteenMonthPay;
+    const netAmtDiser = roundMoney(grossPay + thirteenMonthPay);
 
     /**
      * ----------------------------------------------------------
@@ -190,19 +193,17 @@ export class PayrollComputationService {
       sssConfigs,
     );
 
-    const pagIbigShare = this.computePagIbigShare(
-      staffSalary,
-      totalDayWorkFraction,
+    const pagIbigShare = roundMoney(
+      this.computePagIbigShare(staffSalary, totalDayWorkFraction),
     );
 
-    const philHealthShare = this.computePhilHealthShare(
-      salaryRate,
-      staffSalary,
-      totalDayWorkFraction,
+    const philHealthShare = roundMoney(
+      this.computePhilHealthShare(salaryRate, staffSalary, totalDayWorkFraction),
     );
 
-    const totalGovtShare =
-      sssShare + pagIbigShare + philHealthShare + thirteenMonthPay;
+    const totalGovtShare = roundMoney(
+      sssShare + pagIbigShare + philHealthShare + thirteenMonthPay,
+    );
 
     /**
      * ----------------------------------------------------------
@@ -223,11 +224,11 @@ export class PayrollComputationService {
      * ----------------------------------------------------------
      */
     return {
-      salary_rate: salaryRate,
-      hour_rate: hourRate,
+      salary_rate: roundMoney(salaryRate),
+      hour_rate: roundMoney(hourRate),
 
       night_shift: nightShift,
-      night_shift_amount: Number(nightShiftAmount.toFixed(2)),
+      night_shift_amount: nightShiftAmount,
 
       regular_amount: regularAmount,
       rest_day_amount: restDayAmount,
@@ -237,7 +238,7 @@ export class PayrollComputationService {
       rd_regular_holiday_amount: rdRegularHolidayAmount,
       rd_special_holiday_amount: rdSpecialHolidayAmount,
 
-      regular_day_amount: Number(regularDayAmount.toFixed(2)),
+      regular_day_amount: regularDayAmount,
 
       ot_regular_amount: otRegularAmount,
       ot_rest_day_amount: otRestDayAmount,
@@ -269,7 +270,7 @@ export class PayrollComputationService {
       pag_ibig_share: pagIbigShare,
       phil_health_share: philHealthShare,
 
-      total_govt_share: Number(totalGovtShare.toFixed(2)),
+      total_govt_share: totalGovtShare,
 
       total_payroll: billingValues.totalPayroll,
       asf: billingValues.asf,
@@ -453,7 +454,7 @@ export class PayrollComputationService {
     const sampleMpf = withMpfEc / DAYS_FACTOR_RATE.DAYS;
 
     return {
-      sssShare: sampleMpf * totalDayWorkFraction,
+      sssShare: roundMoney(sampleMpf * totalDayWorkFraction),
       ec,
     };
   }
@@ -468,10 +469,11 @@ export class PayrollComputationService {
     totalDayWorkFraction: number,
   ): number {
     const pagibigNumberPerc = Number(staffSalary?.pagibig_number_perc) || 0;
-    const pagibigDailyRate =
-      Math.round((pagibigNumberPerc / DAYS_FACTOR_RATE.DAYS) * 100) / 100;
+    const pagibigDailyRate = roundMoney(
+      pagibigNumberPerc / DAYS_FACTOR_RATE.DAYS,
+    );
 
-    return pagibigDailyRate * totalDayWorkFraction;
+    return roundMoney(pagibigDailyRate * totalDayWorkFraction);
   }
 
   /**
@@ -487,10 +489,11 @@ export class PayrollComputationService {
     const philHealthContriPerc =
       Number(staffSalary?.phil_health_contri_perc) || 0;
 
-    const philHealthDailyRate =
-      Math.round(((salaryRate * (philHealthContriPerc / 100)) / 2) * 100) / 100;
+    const philHealthDailyRate = roundMoney(
+      (salaryRate * (philHealthContriPerc / 100)) / 2,
+    );
 
-    return philHealthDailyRate * totalDayWorkFraction;
+    return roundMoney(philHealthDailyRate * totalDayWorkFraction);
   }
 
   /**
@@ -522,19 +525,19 @@ export class PayrollComputationService {
     const vendorTaxField = Number(detail.vendor?.tax) || 0;
     const warehouseAllowance = Number(detail.warehouse?.allowance) || 0;
 
-    const totalPayroll = grossPay + totalGovtShare;
-    const asf = totalPayroll * vendorAsfField;
-    const totalAsf = totalPayroll + asf;
-    const allowance = warehouseAllowance * dutyCount;
-    const totalAllowance = totalAsf + allowance;
-    const vat = totalAllowance * vendorVatField;
-    const totalWithVat = totalAllowance + vat;
-    const tax = totalAllowance * vendorTaxField;
-    const netOfTax = totalWithVat - tax;
+    const totalPayroll = roundMoney(grossPay + totalGovtShare);
+    const asf = roundMoney(totalPayroll * vendorAsfField);
+    const totalAsf = roundMoney(totalPayroll + asf);
+    const allowance = roundMoney(warehouseAllowance * dutyCount);
+    const totalAllowance = roundMoney(totalAsf + allowance);
+    const vat = roundMoney(totalAllowance * vendorVatField);
+    const totalWithVat = roundMoney(totalAllowance + vat);
+    const tax = roundMoney(totalAllowance * vendorTaxField);
+    const netOfTax = roundMoney(totalWithVat - tax);
 
     const cashBondEnabled = Boolean(Number(timeKeeping?.cash_bond));
-    const cashBond = cashBondEnabled ? grossPay * 0.01 : 0;
-    const totalBilling = netOfTax - cashBond;
+    const cashBond = cashBondEnabled ? roundMoney(grossPay * 0.01) : 0;
+    const totalBilling = roundMoney(netOfTax - cashBond);
 
     return {
       totalPayroll,
