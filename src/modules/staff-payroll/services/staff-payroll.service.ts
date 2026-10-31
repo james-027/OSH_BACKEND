@@ -2492,6 +2492,25 @@ export class StaffPayrollService {
         }
       }
 
+      // Load all active details for affected headers in a single query to ensure 100% footing integrity
+      const affectedHeaderIds = Array.from(headersMap.keys());
+      const allActiveDetails =
+        affectedHeaderIds.length > 0
+          ? await this.payrollDetailRepository.find({
+              where: {
+                payroll_header_id: In(affectedHeaderIds),
+                status_id: STATUS_IDS.ACTIVE,
+              },
+            })
+          : [];
+
+      const activeDetailsByHeader = new Map<number, PayrollDetails[]>();
+      for (const d of allActiveDetails) {
+        const list = activeDetailsByHeader.get(d.payroll_header_id) || [];
+        list.push(d);
+        activeDetailsByHeader.set(d.payroll_header_id, list);
+      }
+
       let headersUpdated = false;
 
       for (const [headerId, payrollHeader] of headersMap) {
@@ -2505,8 +2524,8 @@ export class StaffPayrollService {
           payrollHeader.cron_computed = false;
         }
 
-        if (computedDetailsByHeader.has(headerId)) {
-          const details = computedDetailsByHeader.get(headerId)!;
+        const details = activeDetailsByHeader.get(headerId) || [];
+        if (details.length > 0) {
           const headerTotals =
             this.payrollComputationService.computePayrollHeaderTotals(details);
 
@@ -2525,6 +2544,7 @@ export class StaffPayrollService {
         try {
           this.sseEventEmitter.emitUpdate("staff_payroll", 0);
           this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+          this.sseEventEmitter.emitUpdate("billing_schedule_report", 0);
         } catch (err) {
           logger.error("SSE event failed:", err);
         }
