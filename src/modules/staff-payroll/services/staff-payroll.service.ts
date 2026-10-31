@@ -41,6 +41,7 @@ import { formatDateToString } from "src/utils/date.utils";
 import { WarehouseBudgetHoursService } from "src/modules/warehouses/services/warehouse-budget-hours.service";
 import { WarehouseSalariesService } from "src/modules/warehouses/services/warehouse-salaries.service";
 import { PayrollLog } from "src/entities/PayrollLog";
+import { roundMoney } from "src/utils/math.utils";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
@@ -3869,15 +3870,12 @@ export class StaffPayrollService {
         }
         const key = `${vid}-${wid}-${dateIso}`;
         if (!budgetHourByGroupMap.has(key) && d.trans_budget_hours != null) {
-          budgetHourByGroupMap.set(key, Number(d.trans_budget_hours));
+          budgetHourByGroupMap.set(key, roundMoney(d.trans_budget_hours));
         }
       }
 
       const vendorMap = new Map<number, any>();
       const periodWarehouseMap = new Map<string, any>();
-
-      const round2 = (value: number | string | null | undefined): number =>
-        Number(Number(value ?? 0).toFixed(2));
 
       for (const detail of details) {
         const vendorId = detail.vendor?.id ?? detail.vendor_id;
@@ -4116,95 +4114,95 @@ export class StaffPayrollService {
           status_id: detail.status_id,
           attendance_status_id: detail.attendance_status_id,
 
-          regular: round2(detail.regular),
-          overtime: round2(detail.overtime),
-          twh: round2(detail.twh),
-          break: round2(detail.break),
+          regular: roundMoney(detail.regular),
+          overtime: roundMoney(detail.overtime),
+          twh: roundMoney(detail.twh),
+          break: roundMoney(detail.break),
 
-          regular_hours: round2(detail.regular_hours),
-          overtime_hours: round2(detail.overtime_hours),
-          twh_hours: round2(detail.twh_hours),
-          break_hours: round2(detail.break_hours),
+          regular_hours: detail.regular_hours ?? null,
+          overtime_hours: detail.overtime_hours ?? null,
+          twh_hours: detail.twh_hours ?? null,
+          break_hours: detail.break_hours ?? null,
 
           shift_type: detail.shift_type,
-          night_shift_hrs: round2(detail.night_shift_hrs),
-          night_shift: detail.night_shift,
-          night_shift_amount: round2(detail.night_shift_amount),
+          night_shift_hrs: detail.night_shift_hrs ?? null,
+          night_shift: roundMoney(detail.night_shift),
+          night_shift_amount: roundMoney(detail.night_shift_amount),
 
-          regular_amount: round2(detail.regular_amount),
-          regular_day_amount: round2(detail.regular_day_amount),
-          rest_day_amount: round2(detail.rest_day_amount),
-          special_holiday_amount: round2(detail.special_holiday_amount),
-          regular_holiday_amount: round2(detail.regular_holiday_amount),
-          regular_holiday_off_amount: round2(detail.regular_holiday_off_amount),
-          rd_regular_holiday_amount: round2(detail.rd_regular_holiday_amount),
-          rd_special_holiday_amount: round2(detail.rd_special_holiday_amount),
-          net_amt_diser: round2(detail.net_amt_diser),
+          regular_amount: roundMoney(detail.regular_amount),
+          regular_day_amount: roundMoney(detail.regular_day_amount),
+          rest_day_amount: roundMoney(detail.rest_day_amount),
+          special_holiday_amount: roundMoney(detail.special_holiday_amount),
+          regular_holiday_amount: roundMoney(detail.regular_holiday_amount),
+          regular_holiday_off_amount: roundMoney(detail.regular_holiday_off_amount),
+          rd_regular_holiday_amount: roundMoney(detail.rd_regular_holiday_amount),
+          rd_special_holiday_amount: roundMoney(detail.rd_special_holiday_amount),
+          net_amt_diser: roundMoney(detail.net_amt_diser),
 
-          overtime_amount: round2(detail.overtime_amount),
-          ot_regular_amount: round2(detail.ot_regular_amount),
-          ot_rest_day_amount: round2(detail.ot_rest_day_amount),
-          ot_special_holiday_amount: round2(detail.ot_special_holiday_amount),
-          ot_regular_holiday_amount: round2(detail.ot_regular_holiday_amount),
-          ot_rd_regular_holiday_amount: round2(
+          overtime_amount: roundMoney(detail.overtime_amount),
+          ot_regular_amount: roundMoney(detail.ot_regular_amount),
+          ot_rest_day_amount: roundMoney(detail.ot_rest_day_amount),
+          ot_special_holiday_amount: roundMoney(detail.ot_special_holiday_amount),
+          ot_regular_holiday_amount: roundMoney(detail.ot_regular_holiday_amount),
+          ot_rd_regular_holiday_amount: roundMoney(
             detail.ot_rd_regular_holiday_amount,
           ),
-          ot_rd_special_holiday_amount: round2(
+          ot_rd_special_holiday_amount: roundMoney(
             detail.ot_rd_special_holiday_amount,
           ),
 
           salary_rate_effectivity: detail.salary_rate_effectivity,
-          salary_rate: round2(detail.salary_rate),
-          hour_rate: round2(detail.hour_rate),
+          salary_rate: roundMoney(detail.salary_rate),
+          hour_rate: roundMoney(detail.hour_rate),
 
-          regular_day: round2(detail.regular_day),
-          special_holiday: round2(detail.special_holiday),
-          regular_holiday: round2(detail.regular_holiday),
-          rest_day: round2(detail.rest_day),
-          total_day_work: round2(detail.total_day_work),
+          regular_day: roundMoney(detail.regular_day),
+          special_holiday: roundMoney(detail.special_holiday),
+          regular_holiday: roundMoney(detail.regular_holiday),
+          rest_day: roundMoney(detail.rest_day),
+          total_day_work: roundMoney(detail.total_day_work),
 
-          ot_regular_day: round2(detail.ot_regular_day),
-          ot_special_holiday: round2(detail.ot_special_holiday),
-          ot_regular_holiday: round2(detail.ot_regular_holiday),
-          ot_rest_day: round2(detail.ot_rest_day),
-          total_ot_day_work: round2(detail.total_ot_day_work),
+          ot_regular_day: roundMoney(detail.ot_regular_day),
+          ot_special_holiday: roundMoney(detail.ot_special_holiday),
+          ot_regular_holiday: roundMoney(detail.ot_regular_holiday),
+          ot_rest_day: roundMoney(detail.ot_rest_day),
+          total_ot_day_work: roundMoney(detail.total_ot_day_work),
 
-          gross_pay: round2(detail.gross_pay),
-          thirteen_month_pay: round2(detail.thirteen_month_pay),
-          sss_share: round2(detail.sss_share),
-          pag_ibig_share: round2(detail.pag_ibig_share),
-          phil_health_share: round2(detail.phil_health_share),
-          total_govt_share: round2(detail.total_govt_share),
-          total_payroll: round2(detail.total_payroll),
+          gross_pay: roundMoney(detail.gross_pay),
+          thirteen_month_pay: roundMoney(detail.thirteen_month_pay),
+          sss_share: roundMoney(detail.sss_share),
+          pag_ibig_share: roundMoney(detail.pag_ibig_share),
+          phil_health_share: roundMoney(detail.phil_health_share),
+          total_govt_share: roundMoney(detail.total_govt_share),
+          total_payroll: roundMoney(detail.total_payroll),
 
-          ec_er: round2(detail.ec),
+          ec_er: roundMoney(detail.ec),
 
-          asf: round2(detail.asf),
-          total_asf: round2(detail.total_asf),
-          allowance: round2(detail.allowance),
-          total_allowance: round2(detail.total_allowance),
-          vat: round2(detail.vat),
-          total_with_vat: round2(detail.total_with_vat),
-          tax: round2(detail.tax),
-          net_of_tax: round2(detail.net_of_tax),
-          cash_bond: round2(detail.cash_bond),
-          total_billing: round2(detail.total_billing),
+          asf: roundMoney(detail.asf),
+          total_asf: roundMoney(detail.total_asf),
+          allowance: roundMoney(detail.allowance),
+          total_allowance: roundMoney(detail.total_allowance),
+          vat: roundMoney(detail.vat),
+          total_with_vat: roundMoney(detail.total_with_vat),
+          tax: roundMoney(detail.tax),
+          net_of_tax: roundMoney(detail.net_of_tax),
+          cash_bond: roundMoney(detail.cash_bond),
+          total_billing: roundMoney(detail.total_billing),
         });
       }
 
       for (const periodStaff of periodWarehouseMap.values()) {
-        periodStaff.total_hours = round2(periodStaff.total_hours);
-        periodStaff.total_ot_hours = round2(periodStaff.total_ot_hours);
-        periodStaff.total_number_of_days = round2(
+        periodStaff.total_hours = roundMoney(periodStaff.total_hours);
+        periodStaff.total_ot_hours = roundMoney(periodStaff.total_ot_hours);
+        periodStaff.total_number_of_days = roundMoney(
           periodStaff.total_number_of_days,
         );
-        periodStaff.total_special_holiday_hours = round2(
+        periodStaff.total_special_holiday_hours = roundMoney(
           periodStaff.total_special_holiday_hours,
         );
-        periodStaff.total_regular_holiday_hours = round2(
+        periodStaff.total_regular_holiday_hours = roundMoney(
           periodStaff.total_regular_holiday_hours,
         );
-        periodStaff.total_lates = round2(
+        periodStaff.total_lates = roundMoney(
           Math.max(
             0,
             8 * periodStaff.total_number_of_days - periodStaff.total_hours,
@@ -4224,30 +4222,30 @@ export class StaffPayrollService {
                   warehouseGroup._staffMap.values(),
                 );
 
-                warehouseGroup.total_actual_hours = round2(
+                warehouseGroup.total_actual_hours = roundMoney(
                   warehouseGroup.total_actual_hours,
                 );
-                warehouseGroup.total_hours = round2(warehouseGroup.total_hours);
-                warehouseGroup.total_number_of_days = round2(
+                warehouseGroup.total_hours = roundMoney(warehouseGroup.total_hours);
+                warehouseGroup.total_number_of_days = roundMoney(
                   warehouseGroup.total_number_of_days,
                 );
-                warehouseGroup.total_ot_hours = round2(
+                warehouseGroup.total_ot_hours = roundMoney(
                   warehouseGroup.total_ot_hours,
                 );
-                warehouseGroup.total_special_holiday_hours = round2(
+                warehouseGroup.total_special_holiday_hours = roundMoney(
                   warehouseGroup.total_special_holiday_hours,
                 );
-                warehouseGroup.total_regular_holiday_hours = round2(
+                warehouseGroup.total_regular_holiday_hours = roundMoney(
                   warehouseGroup.total_regular_holiday_hours,
                 );
-                warehouseGroup.total_lates = round2(
+                warehouseGroup.total_lates = roundMoney(
                   Math.max(
                     0,
                     8 * warehouseGroup.total_number_of_days -
                       warehouseGroup.total_hours,
                   ),
                 );
-                warehouseGroup.budget_hours = round2(
+                warehouseGroup.budget_hours = roundMoney(
                   warehouseGroup.budget_hours,
                 );
 
