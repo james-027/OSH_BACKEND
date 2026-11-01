@@ -1499,6 +1499,8 @@ export class StaffAttendanceService {
           scheduleDetail.updated_by = userId;
           scheduleDetail.attendance_status_id = STATUS_IDS.VALIDATED;
           scheduleDetail.add_ot = updateDetail.add_ot;
+          scheduleDetail.is_not_for_premium_pay =
+            updateDetail.is_not_for_premium_pay;
           scheduleDetail.cron_computed = false;
         }
       }

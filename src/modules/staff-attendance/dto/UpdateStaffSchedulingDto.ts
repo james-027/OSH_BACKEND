@@ -47,6 +47,10 @@ export class UpdateSchedulingDetailDto {
   @IsBoolean()
   is_ot_clearing?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  is_not_for_premium_pay?: boolean;
+
   @IsNotEmpty()
   @IsDateString()
   duty_start_time: string;
