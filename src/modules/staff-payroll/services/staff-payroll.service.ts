@@ -1660,6 +1660,8 @@ export class StaffPayrollService {
 
             const overtimeIn = scheduleDetail.overtime_in ?? null;
             const overtimeOut = scheduleDetail.overtime_out ?? null;
+            const otClearingApproved =
+              scheduleDetail.ot_clearing_approved ?? false;
 
             /*
              * If there is no time in AND no time out,
@@ -1904,11 +1906,19 @@ export class StaffPayrollService {
 
             await this.scheduleDetailRepository.update(scheduleDetail.id, {
               regular: regularDecimal,
-              overtime: overtimeDecimal,
+              overtime: otClearingApproved
+                ? null
+                : overtimeDecimal >= 1
+                  ? overtimeDecimal
+                  : null,
               twh: totalWorkingDecimal,
               break: breakDecimal,
               regular_hours: regularHours,
-              overtime_hours: overtimeHours,
+              overtime_hours: otClearingApproved
+                ? null
+                : overtimeDecimal >= 1
+                  ? overtimeHours
+                  : null,
               twh_hours: totalWorkingHours,
               break_hours: breakHours,
               night_shift: night_shift,
