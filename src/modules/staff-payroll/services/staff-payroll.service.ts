@@ -3794,6 +3794,9 @@ export class StaffPayrollService {
         "vendor.service_provider_name",
         "vendor.service_provider_code",
         "vendor.vendor_code",
+        "vendor.asf",
+        "vendor.vat",
+        "vendor.tax",
         "warehouse.id",
         "warehouse.warehouse_name",
         "warehouse.warehouse_code",
@@ -3968,6 +3971,9 @@ export class StaffPayrollService {
               detail.vendor?.vendor_code ||
               detail.vendor?.service_provider_code ||
               null,
+            vendor_asf: detail.vendor?.asf ?? null,
+            vendor_vat: detail.vendor?.vat ?? null,
+            vendor_tax: detail.vendor?.tax ?? null,
             dates: [],
             _dateMap: new Map(),
           });
@@ -4134,16 +4140,26 @@ export class StaffPayrollService {
           rest_day_amount: roundMoney(detail.rest_day_amount),
           special_holiday_amount: roundMoney(detail.special_holiday_amount),
           regular_holiday_amount: roundMoney(detail.regular_holiday_amount),
-          regular_holiday_off_amount: roundMoney(detail.regular_holiday_off_amount),
-          rd_regular_holiday_amount: roundMoney(detail.rd_regular_holiday_amount),
-          rd_special_holiday_amount: roundMoney(detail.rd_special_holiday_amount),
+          regular_holiday_off_amount: roundMoney(
+            detail.regular_holiday_off_amount,
+          ),
+          rd_regular_holiday_amount: roundMoney(
+            detail.rd_regular_holiday_amount,
+          ),
+          rd_special_holiday_amount: roundMoney(
+            detail.rd_special_holiday_amount,
+          ),
           net_amt_diser: roundMoney(detail.net_amt_diser),
 
           overtime_amount: roundMoney(detail.overtime_amount),
           ot_regular_amount: roundMoney(detail.ot_regular_amount),
           ot_rest_day_amount: roundMoney(detail.ot_rest_day_amount),
-          ot_special_holiday_amount: roundMoney(detail.ot_special_holiday_amount),
-          ot_regular_holiday_amount: roundMoney(detail.ot_regular_holiday_amount),
+          ot_special_holiday_amount: roundMoney(
+            detail.ot_special_holiday_amount,
+          ),
+          ot_regular_holiday_amount: roundMoney(
+            detail.ot_regular_holiday_amount,
+          ),
           ot_rd_regular_holiday_amount: roundMoney(
             detail.ot_rd_regular_holiday_amount,
           ),
@@ -4225,7 +4241,9 @@ export class StaffPayrollService {
                 warehouseGroup.total_actual_hours = roundMoney(
                   warehouseGroup.total_actual_hours,
                 );
-                warehouseGroup.total_hours = roundMoney(warehouseGroup.total_hours);
+                warehouseGroup.total_hours = roundMoney(
+                  warehouseGroup.total_hours,
+                );
                 warehouseGroup.total_number_of_days = roundMoney(
                   warehouseGroup.total_number_of_days,
                 );
