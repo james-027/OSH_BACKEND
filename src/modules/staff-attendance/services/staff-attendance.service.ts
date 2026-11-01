@@ -1355,7 +1355,7 @@ export class StaffAttendanceService {
           if (updateDetail.is_ot_clearing === true) {
             scheduleDetail.overtime_in = null;
             scheduleDetail.overtime_out = null;
-            scheduleDetail.overtime = null;
+            scheduleDetail.overtime = 0;
             scheduleDetail.ot_clearing_approved = true;
           } else if (updateDetail.is_ot_clearing === false) {
             actualLogsDetail = scheduleDetail.actual_logs_detail_id
@@ -1371,7 +1371,7 @@ export class StaffAttendanceService {
             scheduleDetail.overtime_out =
               actualLogsDetail?.overtime_out ?? null;
 
-            scheduleDetail.overtime = actualLogsDetail?.overtime ?? null;
+            scheduleDetail.overtime = actualLogsDetail?.overtime ?? 0;
             scheduleDetail.ot_clearing_approved = false;
           }
 

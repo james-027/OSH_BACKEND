@@ -1907,10 +1907,10 @@ export class StaffPayrollService {
             await this.scheduleDetailRepository.update(scheduleDetail.id, {
               regular: regularDecimal,
               overtime: otClearingApproved
-                ? null
+                ? 0
                 : overtimeDecimal >= 1
                   ? overtimeDecimal
-                  : null,
+                  : 0,
               twh: totalWorkingDecimal,
               break: breakDecimal,
               regular_hours: regularHours,
