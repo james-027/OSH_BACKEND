@@ -879,7 +879,7 @@ export class StaffSchedulingService {
                       ? new Date(detail.overtime_out).toISOString()
                       : undefined,
                     ot_clearing_approved:
-                      detail.overtime_in && detail.overtime_out ? true : false,
+                      detail.overtime_in && detail.overtime_out ? false : false,
                   },
                 );
 
@@ -3448,7 +3448,7 @@ export class StaffSchedulingService {
             existingDetail.cron_computed = false;
             existingDetail.updated_by = userId;
             existingDetail.ot_clearing_approved =
-              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false;
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? false : false;
 
             await this.scheduleDetailRepository.save(existingDetail);
 
@@ -3528,7 +3528,7 @@ export class StaffSchedulingService {
             created_by: userId,
             updated_by: userId,
             ot_clearing_approved:
-              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false,
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? false : false,
           });
 
           const savedScheduleDetail =
