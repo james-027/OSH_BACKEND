@@ -216,6 +216,7 @@ export class StaffSchedulingService {
         ],
         order: {
           overtime: "DESC",
+          actualLogsDetail: { overtime: "DESC" },
         },
       });
 
