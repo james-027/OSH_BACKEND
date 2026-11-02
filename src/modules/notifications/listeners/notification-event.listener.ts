@@ -24,6 +24,7 @@ export class NotificationEventListener {
         refId: event.refId,
         creatorId: event.creatorId,
         accessKeyId: event.accessKeyId,
+        locationIds: event.locationIds,
         data: event.data,
         customTitle: event.customTitle,
         customDescription: event.customDescription,

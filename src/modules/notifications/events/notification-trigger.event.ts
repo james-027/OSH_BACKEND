@@ -9,6 +9,6 @@ export class NotificationTriggerEvent {
     public readonly customTitle?: string,
     public readonly customDescription?: string,
     public readonly actionUrl?: string,
+    public readonly locationIds?: number[],
   ) {}
 }
-

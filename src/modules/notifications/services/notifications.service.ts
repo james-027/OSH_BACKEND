@@ -13,6 +13,8 @@ import { NotificationMatrix } from "src/entities/NotificationMatrix";
 import { NotificationMatrixRecipient } from "src/entities/NotificationMatrixRecipient";
 import { Module } from "src/entities/Module";
 import { User } from "src/entities/User";
+import { UserPermissions } from "src/entities/UserPermissions";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { SSEEmitterService } from "src/modules/sse/services/sse-emitter.service";
 import { getRedisClient } from "src/config/cache.config";
 import { CreateNotificationDto } from "../dto/CreateNotificationDto";
@@ -33,6 +35,7 @@ export interface TriggerNotificationParams {
   refId: number;
   creatorId: number;
   accessKeyId?: number | null;
+  locationIds?: number[];
   data?: Record<string, any>;
   customTitle?: string;
   customDescription?: string;
@@ -63,6 +66,7 @@ export class NotificationsService {
     private readonly userRepository: Repository<User>,
 
     private readonly sseEmitterService: SSEEmitterService,
+    private readonly commonUtilitiesService: CommonUtilitiesService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -85,6 +89,7 @@ export class NotificationsService {
         refId,
         creatorId,
         accessKeyId,
+        locationIds,
         data = {},
         customTitle,
         customDescription,
@@ -139,7 +144,7 @@ export class NotificationsService {
       // 2. Fetch Creator Info for template interpolation
       const creator = await this.userRepository.findOne({
         where: { id: creatorId },
-        select: ["id", "user_name", "first_name", "last_name", "current_access_key"],
+        select: ["id", "user_name", "first_name", "last_name", "current_access_key", "role_id"],
       });
       const resolvedAccessKeyId =
         accessKeyId !== undefined
@@ -155,40 +160,92 @@ export class NotificationsService {
 
       for (const rec of matrixRule.recipients) {
         if (rec.user_id) {
-          // Specific user configured under this role
-          targetUserIds.add(rec.user_id);
+          // Specific user explicitly designated in the matrix rule
+          targetUserIds.add(Number(rec.user_id));
         } else if (rec.role_id) {
-          // All users in this role
-          rolesToQuery.add(rec.role_id);
+          // Dynamic role query: find all users holding this role
+          rolesToQuery.add(Number(rec.role_id));
         }
       }
 
       if (rolesToQuery.size > 0) {
-        const usersInRoles = await this.userRepository.find({
+        const candidateRoleUserIds = new Set<number>();
+        const roleIdsArray = Array.from(rolesToQuery);
+
+        // A. Authoritative role assignments per user & access key in user_permissions
+        const permQb = this.dataSource
+          .getRepository(UserPermissions)
+          .createQueryBuilder("up")
+          .innerJoin("users", "u", "u.id = up.user_id AND u.status_id = 1")
+          .select("DISTINCT up.user_id", "userId")
+          .where("up.role_id IN (:...roleIds)", { roleIds: roleIdsArray })
+          .andWhere("up.status_id = :statusId", { statusId: 1 });
+
+        if (resolvedAccessKeyId) {
+          permQb.andWhere("up.access_key_id = :accessKeyId", {
+            accessKeyId: resolvedAccessKeyId,
+          });
+        }
+
+        const permRows = await permQb.getRawMany();
+        permRows.forEach((r) => candidateRoleUserIds.add(Number(r.userId)));
+
+        // B. Union with users whose current active role in users table matches
+        const usersInCurrentRole = await this.userRepository.find({
           where: {
-            role_id: In(Array.from(rolesToQuery)),
-            status_id: 1, // Only active users
+            role_id: In(roleIdsArray),
+            status_id: 1,
           },
           select: ["id"],
         });
-        usersInRoles.forEach((u) => targetUserIds.add(u.id));
+        usersInCurrentRole.forEach((u) => candidateRoleUserIds.add(u.id));
+
+        // C. Location Filtering (multi-user batch check)
+        let targetLocIds: number[] = Array.isArray(locationIds) ? [...locationIds] : [];
+
+        // If no explicit document locations provided, derive from creator's allowed locations
+        if (targetLocIds.length === 0 && creator?.id && creator?.role_id) {
+          targetLocIds =
+            await this.commonUtilitiesService.getUserAllowedLocationIds(
+              creator.id,
+              creator.role_id,
+            );
+        }
+
+        if (candidateRoleUserIds.size > 0) {
+          if (targetLocIds.length > 0) {
+            // Filter candidate role users to only those with access to matching locations (O(1) batch query)
+            const matchedUserIds =
+              await this.commonUtilitiesService.filterUsersByAllowedLocations(
+                Array.from(candidateRoleUserIds),
+                targetLocIds,
+              );
+            matchedUserIds.forEach((uid) => targetUserIds.add(uid));
+          } else {
+            // No location restriction applies -> notify all candidate users in the role
+            candidateRoleUserIds.forEach((uid) => targetUserIds.add(uid));
+          }
+        }
       }
 
       if (targetUserIds.size === 0) {
         logger.warn(
-          `[TriggerNotification] Matrix rule #${matrixRule.id} matched, but resolved 0 eligible recipient users.`,
+          `[TriggerNotification] Matrix rule #${matrixRule.id} matched, but resolved 0 eligible recipient users (after role and location filtering).`,
         );
         return null;
       }
 
       // 4. Interpolate title, description and action URL
+      const payloadData =
+        data?.payload && typeof data.payload === "object" ? data.payload : {};
       const templateParams: Record<string, any> = {
+        ...payloadData,
         ...data,
         ref_id: refId,
         creator_id: creatorId,
         creator_name: creatorName,
         user_name: creatorName,
-        remarks: data?.remarks ?? '',
+        remarks: data?.remarks ?? payloadData.remarks ?? '',
       };
 
       // Dynamic matrix templates configured in admin take priority over hardcoded defaults

@@ -2215,6 +2215,42 @@ export class StaffAttendanceService {
             ? `/staff-payroll?invoice=${primaryInvoice}`
             : `/staff-payroll`;
 
+          const locationIds = Array.from(
+            new Set(
+              (header.details || [])
+                .map((d) => d.location_id)
+                .filter((locId): locId is number => locId != null && locId > 0),
+            ),
+          );
+
+          const payrollIds = connectedPayrollsList
+            .map((p) => p.id)
+            .filter((id): id is number => id != null && !isNaN(id));
+
+          const notificationPayload = {
+            navigation: {
+              route: "/staff-payroll",
+              highlight_ids: payrollIds,
+              primary_id: connectedPayrollsList[0]?.id || null,
+              filter_params: {
+                invoice: primaryInvoice || undefined,
+                source_schedule_id: header.id,
+                status_id: 41,
+              },
+            },
+            payload: {
+              schedule_header_id: header.id,
+              previous_status: "Computed",
+              target_status: "Validated",
+              remarks: cleanedRemarks,
+              payroll_invoices: payrollInvoicesStr,
+              connected_payrolls: connectedPayrollsList,
+              location_ids: locationIds,
+            },
+            remarks: cleanedRemarks,
+            payroll_invoices: payrollInvoicesStr,
+          };
+
           this.eventEmitter.emit(
             "notification.trigger",
             new NotificationTriggerEvent(
@@ -2223,17 +2259,11 @@ export class StaffAttendanceService {
               header.id,
               userId,
               header.access_key_id,
-              {
-                schedule_header_id: header.id,
-                previous_status: "Computed",
-                target_status: "Validated",
-                remarks: cleanedRemarks,
-                payroll_invoices: payrollInvoicesStr,
-                connected_payrolls: connectedPayrollsList,
-              },
+              notificationPayload,
               `Attendance Reversal Requested - Schedule #${header.id}`,
               `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || 'No remarks provided'}`,
               actionUrl,
+              locationIds,
             ),
           );
         }
@@ -2248,6 +2278,33 @@ export class StaffAttendanceService {
           const prevStatusName =
             STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
 
+          const locationIds = Array.from(
+            new Set(
+              (header.details || [])
+                .map((d) => d.location_id)
+                .filter((locId): locId is number => locId != null && locId > 0),
+            ),
+          );
+
+          const notificationPayload = {
+            navigation: {
+              route: `/staff-attendance?header_id=${header.id}`,
+              highlight_ids: [header.id],
+              primary_id: header.id,
+              filter_params: {
+                header_id: header.id,
+              },
+            },
+            payload: {
+              schedule_header_id: header.id,
+              previous_status: prevStatusName,
+              target_status: targetStatusName,
+              remarks: cleanedRemarks,
+              location_ids: locationIds,
+            },
+            remarks: cleanedRemarks,
+          };
+
           this.eventEmitter.emit(
             "notification.trigger",
             new NotificationTriggerEvent(
@@ -2256,15 +2313,11 @@ export class StaffAttendanceService {
               header.id,
               userId,
               header.access_key_id,
-              {
-                schedule_header_id: header.id,
-                previous_status: prevStatusName,
-                target_status: targetStatusName,
-                remarks: cleanedRemarks,
-              },
-              undefined,
-              undefined,
+              notificationPayload,
+              `Attendance Reversal Requested - Schedule #${header.id}`,
+              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || 'No remarks provided'}`,
               `/staff-attendance?header_id=${header.id}`,
+              locationIds,
             ),
           );
         }

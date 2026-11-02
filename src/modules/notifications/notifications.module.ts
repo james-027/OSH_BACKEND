@@ -10,8 +10,12 @@ import { NotificationMatrixRecipient } from "../../entities/NotificationMatrixRe
 import { Module as ModuleEntity } from "../../entities/Module";
 import { User } from "../../entities/User";
 import { UserPermissions } from "src/entities/UserPermissions";
+import { UserLocations } from "src/entities/UserLocations";
+import { TransactionSequence } from "src/entities/TransactionSequence";
 import { SSEModule } from "../sse/sse.module";
 import { Action } from "src/entities/Action";
+import { UsersModule } from "../users/users.module";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -23,12 +27,19 @@ import { Action } from "src/entities/Action";
       ModuleEntity,
       User,
       UserPermissions,
+      UserLocations,
+      TransactionSequence,
       Action,
     ]),
+    UsersModule,
     SSEModule,
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationEventListener],
+  providers: [
+    NotificationsService,
+    NotificationEventListener,
+    CommonUtilitiesService,
+  ],
   exports: [NotificationsService],
 })
 export class NotificationsModule {}

@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource, In } from "typeorm";
 import { UsersService } from "../modules/users/services/users.service";
 import { TransactionSequence } from "../entities/TransactionSequence";
+import { UserLocations } from "../entities/UserLocations";
 
 /**
  * Common Utilities Service
@@ -74,6 +75,67 @@ export class CommonUtilitiesService {
 
     return dates;
   }
+  /**
+   * Efficiently filter candidate user IDs to only those who have access to
+   * at least one of the specified target location IDs in user_locations.
+   * Single indexed batch query O(1) database trips.
+   */
+  async filterUsersByAllowedLocations(
+    userIds: number[],
+    targetLocationIds: number[],
+    roleId?: number,
+  ): Promise<number[]> {
+    if (!userIds || userIds.length === 0 || !targetLocationIds || targetLocationIds.length === 0) {
+      return [];
+    }
+
+    const query = this.dataSource
+      .getRepository(UserLocations)
+      .createQueryBuilder("ul")
+      .select("DISTINCT ul.user_id", "userId")
+      .where("ul.user_id IN (:...userIds)", { userIds })
+      .andWhere("ul.location_id IN (:...targetLocationIds)", { targetLocationIds })
+      .andWhere("ul.status_id = :statusId", { statusId: 1 });
+
+    if (roleId) {
+      query.andWhere("ul.role_id = :roleId", { roleId });
+    }
+
+    const rows = await query.getRawMany();
+    return rows.map((r) => Number(r.userId));
+  }
+
+  /**
+   * Batch-fetch allowed location IDs for multiple users at once,
+   * returning a Map of userId -> location_id[]
+   */
+  async getUsersAllowedLocationIdsBatch(
+    userIds: number[],
+    roleId?: number,
+  ): Promise<Map<number, number[]>> {
+    const result = new Map<number, number[]>();
+    if (!userIds || userIds.length === 0) return result;
+
+    const query = this.dataSource
+      .getRepository(UserLocations)
+      .createQueryBuilder("ul")
+      .select(["ul.user_id", "ul.location_id"])
+      .where("ul.user_id IN (:...userIds)", { userIds })
+      .andWhere("ul.status_id = :statusId", { statusId: 1 });
+
+    if (roleId) {
+      query.andWhere("ul.role_id = :roleId", { roleId });
+    }
+
+    const rows = await query.getMany();
+    for (const row of rows) {
+      const list = result.get(row.user_id) || [];
+      list.push(row.location_id);
+      result.set(row.user_id, list);
+    }
+    return result;
+  }
+
 
   /**
    * Format date to YYYY-MM-DD string
