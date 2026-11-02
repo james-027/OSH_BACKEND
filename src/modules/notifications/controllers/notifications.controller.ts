@@ -24,9 +24,11 @@ import {
   NotificationQueryDto,
   AdminNotificationAuditDto,
 } from "../dto/NotificationQueryDto";
+import { PermissionsGuard } from "src/guards/permissions.guard";
+import { RequirePermissions } from "src/decorators/permissions.decorator";
 
 @Controller("notifications")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
@@ -38,6 +40,7 @@ export class NotificationsController {
    * Get logged-in user's notifications with pagination, filters, and unread counts
    */
   @Get("my")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   getMyNotifications(@Req() req: any, @Query() query: NotificationQueryDto) {
     const userId = req.user?.id || 0;
     return this.notificationsService.getMyNotifications(userId, query);
@@ -47,6 +50,7 @@ export class NotificationsController {
    * Get instant unread notification count for notification bell badge
    */
   @Get("unread-count")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   async getUnreadCount(@Req() req: any) {
     const userId = req.user?.id || 0;
     const count = await this.notificationsService.getUnreadCount(userId);
@@ -57,6 +61,7 @@ export class NotificationsController {
    * Mark all unread notifications as read for current user
    */
   @Patch("mark-all-read")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   markAllAsRead(@Req() req: any) {
     const userId = req.user?.id || 0;
     return this.notificationsService.markAllAsRead(userId);
@@ -66,6 +71,7 @@ export class NotificationsController {
    * Mark single notification as read for current user
    */
   @Patch(":id/read")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   markAsRead(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
     const userId = req.user?.id || 0;
     return this.notificationsService.markAsRead(id, userId);
@@ -79,6 +85,7 @@ export class NotificationsController {
    * System Admin overall view: See all notifications, recipient delivery status,
    * and which team members (e.g. payroll) have marked as read with timestamps.
    */
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
   @Get("admin/audit")
   getAdminAuditTrail(@Query() query: AdminNotificationAuditDto) {
     return this.notificationsService.getAdminAuditTrail(query);
@@ -89,25 +96,26 @@ export class NotificationsController {
   // =========================================================================
 
   @Get("matrix")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
   findAllMatrix() {
     return this.notificationsService.findAllMatrix();
   }
 
   @Get("matrix/:id")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
   findOneMatrix(@Param("id", ParseIntPipe) id: number) {
     return this.notificationsService.findOneMatrix(id);
   }
 
   @Post("matrix")
-  createMatrix(
-    @Body() dto: CreateNotificationMatrixDto,
-    @Req() req: any,
-  ) {
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "ADD" })
+  createMatrix(@Body() dto: CreateNotificationMatrixDto, @Req() req: any) {
     const userId = req.user?.id || 0;
     return this.notificationsService.createMatrix(dto, userId);
   }
 
   @Put("matrix/:id")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "EDIT" })
   updateMatrix(
     @Param("id", ParseIntPipe) id: number,
     @Body() dto: UpdateNotificationMatrixDto,
@@ -118,6 +126,7 @@ export class NotificationsController {
   }
 
   @Delete("matrix/:id")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "DEACTIVATE" })
   removeMatrix(@Param("id", ParseIntPipe) id: number) {
     return this.notificationsService.removeMatrix(id);
   }

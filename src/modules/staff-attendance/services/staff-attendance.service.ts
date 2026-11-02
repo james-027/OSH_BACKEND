@@ -1975,12 +1975,26 @@ export class StaffAttendanceService {
       const targetStatusName =
         STATUS_NAMES[targetStatusId] || `Status ${targetStatusId}`;
 
-      // Fetch existing Schedule Headers
+      // Fetch existing Schedule Headers with details to determine effective status
       const existingHeaders = await this.scheduleHeaderRepository.find({
         where: {
           id: In(scheduleIds),
         },
+        relations: ["details"],
       });
+
+      // Helper to determine the effective current attendance status of a schedule header
+      const getEffectiveStatusId = (header: ScheduleHeader): number => {
+        const detailStatuses = (header.details || [])
+          .map((d) => d.attendance_status_id)
+          .filter((id): id is number => id != null);
+
+        if (detailStatuses.some((status) => status === STATUS_IDS.COMPUTED)) {
+          return STATUS_IDS.COMPUTED;
+        }
+
+        return detailStatuses[0] ?? header.attendance_status_id;
+      };
 
       const foundIds = new Set(existingHeaders.map((h) => h.id));
       const missingIds = scheduleIds.filter((id) => !foundIds.has(id));
@@ -2002,12 +2016,12 @@ export class StaffAttendanceService {
           );
         }
 
-        const currentStatusId = header.attendance_status_id;
+        const currentStatusId = getEffectiveStatusId(header);
 
         // Ensure current status is one of the supported lifecycle statuses
         if (!currentStatusId || !STATUS_ORDER[currentStatusId]) {
           throw new BadRequestException(
-            `Schedule Header #${header.id} has invalid current attendance status (${currentStatusId}). Only PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), and VALIDATED (${STATUS_IDS.VALIDATED}) can be transitioned.`,
+            `Schedule Header #${header.id} has invalid current attendance status (${currentStatusId}). Only PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), VALIDATED (${STATUS_IDS.VALIDATED}), and COMPUTED (${STATUS_IDS.COMPUTED}) can be transitioned.`,
           );
         }
 
@@ -2033,47 +2047,78 @@ export class StaffAttendanceService {
 
       const now = new Date();
 
+      // Separate computed headers (which require payroll team to revert connected payroll first)
+      // from direct attendance transitions (which can be updated immediately).
+      const computedHeaders = existingHeaders.filter(
+        (h) => getEffectiveStatusId(h) === STATUS_IDS.COMPUTED,
+      );
+      const directUpdateHeaders = existingHeaders.filter(
+        (h) => getEffectiveStatusId(h) !== STATUS_IDS.COMPUTED,
+      );
+      const directUpdateHeaderIds = directUpdateHeaders.map((h) => h.id);
+
       // Execute updates inside an atomic database transaction
       await this.dataSource.transaction(async (manager) => {
-        // 1. Bulk update ScheduleHeader records
-        await manager.update(
-          ScheduleHeader,
-          {
-            id: In(scheduleIds),
-          },
-          {
+        // 1. Direct Attendance Transitions: update header and details
+        if (directUpdateHeaderIds.length > 0) {
+          await manager.update(
+            ScheduleHeader,
+            {
+              id: In(directUpdateHeaderIds),
+            },
+            {
+              attendance_status_id: targetStatusId,
+              attendance_updated_by: userId,
+              attendance_reason: cleanedRemarks || undefined,
+              attendance_ts: now,
+              updated_by: userId,
+              modified_at: now,
+            },
+          );
+
+          const detailUpdatePayload: any = {
             attendance_status_id: targetStatusId,
-            attendance_updated_by: userId,
-            attendance_reason: cleanedRemarks || undefined,
-            attendance_ts: now,
             updated_by: userId,
             modified_at: now,
-          },
-        );
+          };
+          if (cleanedRemarks) {
+            detailUpdatePayload.remarks = cleanedRemarks;
+          }
 
-        // 2. Bulk cascade update child ScheduleDetails
-        const detailUpdatePayload: any = {
-          attendance_status_id: targetStatusId,
-          updated_by: userId,
-          modified_at: now,
-        };
-        if (cleanedRemarks) {
-          detailUpdatePayload.remarks = cleanedRemarks;
+          await manager.update(
+            ScheduleDetail,
+            {
+              schedule_header_id: In(directUpdateHeaderIds),
+            },
+            detailUpdatePayload,
+          );
         }
 
-        await manager.update(
-          ScheduleDetail,
-          {
-            schedule_header_id: In(scheduleIds),
-          },
-          detailUpdatePayload,
-        );
+        // 2. Computed Attendance Reversal Requests:
+        // Do NOT change schedule_details status directly because they are tied to computed payroll!
+        // Record the reversal request reason on the header while waiting for Payroll team action.
+        if (computedHeaders.length > 0) {
+          const computedHeaderIds = computedHeaders.map((h) => h.id);
+          await manager.update(
+            ScheduleHeader,
+            {
+              id: In(computedHeaderIds),
+            },
+            {
+              attendance_reason: cleanedRemarks || undefined,
+              attendance_updated_by: userId,
+              attendance_ts: now,
+              updated_by: userId,
+              modified_at: now,
+            },
+          );
+        }
       });
 
       // 3. Batch Action Logs (concise recording, optimized single batch query)
       try {
         const actionLogs = existingHeaders.map((header) => {
-          const currentStatusId = header.attendance_status_id;
+          const currentStatusId = getEffectiveStatusId(header);
           const currentStatusName =
             STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
           const isBackwardRevert = targetOrder < STATUS_ORDER[currentStatusId];
@@ -2084,9 +2129,12 @@ export class StaffAttendanceService {
               : ACTION_IDS.EDIT;
 
           const descAction = isBackwardRevert ? "Revert" : "Transition";
-          const description = `${descAction} Attendance Status: ${currentStatusName} -> ${targetStatusName}${
-            cleanedRemarks ? `. Remarks: ${cleanedRemarks}` : ""
-          }`;
+          const isComputedReversal = currentStatusId === STATUS_IDS.COMPUTED;
+          const description = isComputedReversal
+            ? `Request Attendance Reversal: ${currentStatusName} -> ${targetStatusName}. Remarks: ${cleanedRemarks || 'None'}`
+            : `${descAction} Attendance Status: ${currentStatusName} -> ${targetStatusName}${
+                cleanedRemarks ? `. Remarks: ${cleanedRemarks}` : ""
+              }`;
 
           return {
             ref_id: header.id,
@@ -2096,6 +2144,7 @@ export class StaffAttendanceService {
               previous_status_id: currentStatusId,
               new_status_id: targetStatusId,
               remarks: cleanedRemarks || null,
+              reversal_requested_to_payroll: isComputedReversal,
             }),
             created_by: userId,
           };
@@ -2122,8 +2171,9 @@ export class StaffAttendanceService {
               schedule_header_ids: scheduleIds,
               target_status_id: targetStatusId,
               remarks: cleanedRemarks || null,
+              has_computed_reversals: computedHeaders.length > 0,
             }),
-            description: `Bulk transition attendance status for Schedule Headers [${scheduleIds.join(
+            description: `Bulk attendance status request for Schedule Headers [${scheduleIds.join(
               ", ",
             )}] to ${targetStatusName}`,
             status_id: 1,
@@ -2134,16 +2184,69 @@ export class StaffAttendanceService {
         logger.error("Audit trail failed for bulk attendance status:", err);
       }
 
-      // 5. Dynamic In-App Notifications on Attendance Reversal
+      // 5. Dynamic In-App Notifications: Notify Payroll Team with redirect to Payroll Module
       try {
-        const revertedHeaders = existingHeaders.filter(
-          (header) => targetOrder < STATUS_ORDER[header.attendance_status_id],
+        for (const header of computedHeaders) {
+          const detailIds = (header.details || [])
+            .map((d) => d.id)
+            .filter((id): id is number => id != null);
+
+          const connectedMap = await this.fetchConnectedPayrollsMap(detailIds);
+          const connectedPayrollsList: Array<{ id: number; invoice: string }> = [];
+
+          for (const did of detailIds) {
+            const payList = connectedMap.get(did) || [];
+            for (const p of payList) {
+              if (!connectedPayrollsList.some((cp) => cp.id === p.id)) {
+                connectedPayrollsList.push(p);
+              }
+            }
+          }
+
+          const payrollInvoicesStr =
+            connectedPayrollsList
+              .map((p) => p.invoice)
+              .filter(Boolean)
+              .join(", ") || "N/A";
+          const primaryInvoice = connectedPayrollsList[0]?.invoice || "";
+
+          // Action URL redirects the Payroll Team directly into the Payroll Module
+          const actionUrl = primaryInvoice
+            ? `/staff-payroll?invoice=${primaryInvoice}`
+            : `/staff-payroll`;
+
+          this.eventEmitter.emit(
+            "notification.trigger",
+            new NotificationTriggerEvent(
+              this.module_name,
+              "ATTENDANCE_REVERSAL_REQUEST",
+              header.id,
+              userId,
+              header.access_key_id,
+              {
+                schedule_header_id: header.id,
+                previous_status: "Computed",
+                target_status: "Validated",
+                remarks: cleanedRemarks,
+                payroll_invoices: payrollInvoicesStr,
+                connected_payrolls: connectedPayrollsList,
+              },
+              `Attendance Reversal Requested - Schedule #${header.id}`,
+              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || 'No remarks provided'}`,
+              actionUrl,
+            ),
+          );
+        }
+
+        // Also notify on normal backward reverts (e.g. Validated -> For Review) if configured
+        const nonComputedReverts = directUpdateHeaders.filter(
+          (header) => targetOrder < STATUS_ORDER[getEffectiveStatusId(header)],
         );
 
-        for (const header of revertedHeaders) {
+        for (const header of nonComputedReverts) {
+          const currentStatusId = getEffectiveStatusId(header);
           const prevStatusName =
-            STATUS_NAMES[header.attendance_status_id] ||
-            `Status ${header.attendance_status_id}`;
+            STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
 
           this.eventEmitter.emit(
             "notification.trigger",

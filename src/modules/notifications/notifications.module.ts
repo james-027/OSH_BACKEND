@@ -11,6 +11,7 @@ import { Module as ModuleEntity } from "../../entities/Module";
 import { User } from "../../entities/User";
 import { UserPermissions } from "src/entities/UserPermissions";
 import { SSEModule } from "../sse/sse.module";
+import { Action } from "src/entities/Action";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SSEModule } from "../sse/sse.module";
       ModuleEntity,
       User,
       UserPermissions,
+      Action,
     ]),
     SSEModule,
   ],
