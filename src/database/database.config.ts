@@ -41,6 +41,9 @@ import { TransactionDetail } from "../entities/TransactionDetail";
 import { EmployeeLocation } from "../entities/EmployeeLocation";
 import { ActionLog } from "../entities/ActionLog";
 import { Notification } from "../entities/Notification";
+import { NotificationMatrix } from "../entities/NotificationMatrix";
+import { NotificationMatrixRecipient } from "../entities/NotificationMatrixRecipient";
+import { NotificationRecipient } from "../entities/NotificationRecipient";
 import { ApiKey } from "../entities/ApiKey";
 import { ApiAuthAccess } from "../entities/ApiAuthAccess";
 import { ApiLogs } from "../entities/ApiLogs";
@@ -158,6 +161,9 @@ export const entities = [
   EmployeeLocation,
   ActionLog,
   Notification,
+  NotificationMatrix,
+  NotificationMatrixRecipient,
+  NotificationRecipient,
   ApiKey,
   ApiAuthAccess,
   ApiLogs,

@@ -26,6 +26,7 @@ import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/Update
 import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { NotificationsService } from "src/modules/notifications/services/notifications.service";
 import logger from "../../../config/logger";
 import {
   STATUS_IDS,
@@ -75,6 +76,7 @@ export class StaffAttendanceService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
+    private readonly notificationsService: NotificationsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -1965,6 +1967,7 @@ export class StaffAttendanceService {
         [STATUS_IDS.PENDING]: 1,
         [STATUS_IDS.FOR_REVIEW]: 2,
         [STATUS_IDS.VALIDATED]: 3,
+        [STATUS_IDS.COMPUTED]: 4,
       };
 
       const targetOrder = STATUS_ORDER[targetStatusId];
@@ -2130,7 +2133,47 @@ export class StaffAttendanceService {
         logger.error("Audit trail failed for bulk attendance status:", err);
       }
 
-      // 5. Fetch updated schedule headers for mapped response & SSE broadcast
+      // 5. Dynamic In-App Notifications on Attendance Reversal
+      try {
+        const revertedHeaders = existingHeaders.filter(
+          (header) => targetOrder < STATUS_ORDER[header.attendance_status_id],
+        );
+
+        for (const header of revertedHeaders) {
+          const prevStatusName =
+            STATUS_NAMES[header.attendance_status_id] ||
+            `Status ${header.attendance_status_id}`;
+
+          this.notificationsService
+            .triggerNotification({
+              moduleName: this.module_name,
+              eventCode: "ATTENDANCE_REVERSAL_REQUEST",
+              refId: header.id,
+              creatorId: userId,
+              accessKeyId: header.access_key_id,
+              data: {
+                schedule_header_id: header.id,
+                previous_status: prevStatusName,
+                target_status: targetStatusName,
+                remarks: cleanedRemarks,
+              },
+              actionUrl: `/staff-attendance?header_id=${header.id}`,
+            })
+            .catch((err) =>
+              logger.error(
+                `Notification trigger failed for attendance reversal #${header.id}:`,
+                err,
+              ),
+            );
+        }
+      } catch (err) {
+        logger.error(
+          "Failed to trigger attendance reversal notifications:",
+          err,
+        );
+      }
+
+      // 6. Fetch updated schedule headers for mapped response & SSE broadcast
       const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
         where: {
           id: In(scheduleIds),
