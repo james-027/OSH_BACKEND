@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In } from "typeorm";
+import { Repository, DataSource, In, EntityManager } from "typeorm";
 import { Notification } from "src/entities/Notification";
 import { NotificationRecipient } from "src/entities/NotificationRecipient";
 import { NotificationMatrix } from "src/entities/NotificationMatrix";
@@ -607,8 +607,12 @@ export class NotificationsService {
     });
   }
 
-  async findOneMatrix(id: number) {
-    const matrix = await this.matrixRepository.findOne({
+  async findOneMatrix(id: number, manager?: EntityManager) {
+    const repo = manager
+      ? manager.getRepository(NotificationMatrix)
+      : this.matrixRepository;
+
+    const matrix = await repo.findOne({
       where: { id },
       relations: [
         "module",
@@ -635,7 +639,7 @@ export class NotificationsService {
       throw new BadRequestException(`Module #${dto.module_id} not found`);
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const savedMatrixId = await this.dataSource.transaction(async (manager) => {
       const matrix = manager.create(NotificationMatrix, {
         module_id: dto.module_id,
         event_code: dto.event_code.trim().toUpperCase(),
@@ -664,8 +668,10 @@ export class NotificationsService {
         await manager.save(NotificationMatrixRecipient, recipients);
       }
 
-      return this.findOneMatrix(savedMatrix.id);
+      return savedMatrix.id;
     });
+
+    return this.findOneMatrix(savedMatrixId);
   }
 
   async updateMatrix(
@@ -675,7 +681,7 @@ export class NotificationsService {
   ) {
     const existing = await this.findOneMatrix(id);
 
-    return this.dataSource.transaction(async (manager) => {
+    await this.dataSource.transaction(async (manager) => {
       await manager.update(NotificationMatrix, id, {
         module_id: dto.module_id ?? existing.module_id,
         event_code: dto.event_code
@@ -708,9 +714,9 @@ export class NotificationsService {
           await manager.save(NotificationMatrixRecipient, newRecipients);
         }
       }
-
-      return this.findOneMatrix(id);
     });
+
+    return this.findOneMatrix(id);
   }
 
   async removeMatrix(id: number) {
