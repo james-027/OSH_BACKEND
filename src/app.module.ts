@@ -12,6 +12,7 @@ import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
 // Configuration
@@ -128,6 +129,7 @@ import { WorkingDaysModule } from "./modules/working-days/working-days.module";
 import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     // Configuration
     ConfigModule.forRoot({
@@ -173,6 +175,7 @@ import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     DebitAdviceModule,
     UsersModule,

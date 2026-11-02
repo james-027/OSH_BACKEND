@@ -26,7 +26,8 @@ import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/Update
 import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
-import { NotificationsService } from "src/modules/notifications/services/notifications.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { NotificationTriggerEvent } from "src/modules/notifications/events/notification-trigger.event";
 import logger from "../../../config/logger";
 import {
   STATUS_IDS,
@@ -76,7 +77,7 @@ export class StaffAttendanceService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
-    private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -2144,27 +2145,25 @@ export class StaffAttendanceService {
             STATUS_NAMES[header.attendance_status_id] ||
             `Status ${header.attendance_status_id}`;
 
-          this.notificationsService
-            .triggerNotification({
-              moduleName: this.module_name,
-              eventCode: "ATTENDANCE_REVERSAL_REQUEST",
-              refId: header.id,
-              creatorId: userId,
-              accessKeyId: header.access_key_id,
-              data: {
+          this.eventEmitter.emit(
+            "notification.trigger",
+            new NotificationTriggerEvent(
+              this.module_name,
+              "ATTENDANCE_REVERSAL_REQUEST",
+              header.id,
+              userId,
+              header.access_key_id,
+              {
                 schedule_header_id: header.id,
                 previous_status: prevStatusName,
                 target_status: targetStatusName,
                 remarks: cleanedRemarks,
               },
-              actionUrl: `/staff-attendance?header_id=${header.id}`,
-            })
-            .catch((err) =>
-              logger.error(
-                `Notification trigger failed for attendance reversal #${header.id}:`,
-                err,
-              ),
-            );
+              undefined,
+              undefined,
+              `/staff-attendance?header_id=${header.id}`,
+            ),
+          );
         }
       } catch (err) {
         logger.error(

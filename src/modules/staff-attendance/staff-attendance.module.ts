@@ -11,7 +11,6 @@ import { UsersModule } from "../users/users.module";
 import { UserAuditTrailCreateService } from "../users/services/user-audit-trail-create.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
-import { NotificationsModule } from "../notifications/notifications.module";
 import { Staff } from "src/entities/Staff";
 import { Warehouse } from "src/entities/Warehouse";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -51,7 +50,7 @@ import { Location } from "src/entities/Location";
     UsersModule,
     SSEModule,
     ActionsModule,
-    NotificationsModule,
+
   ],
   controllers: [StaffAttendanceController],
   providers: [
