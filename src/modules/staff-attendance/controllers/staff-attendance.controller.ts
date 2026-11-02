@@ -21,6 +21,7 @@ import { StaffAttendanceService } from "src/modules/staff-attendance/services/st
 import { CreateScheduleHeaderDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { AttendanceReportFilter } from "src/modules/staff-attendance/dto/AttendanceReportFilterDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/UpdateStaffSchedulingDto";
+import { BulkAttendanceStatusDto } from "src/modules/staff-attendance/dto/BulkAttendanceStatusDto";
 import { FileInterceptor, diskStorage } from "../../../adapters";
 
 import {
@@ -241,6 +242,16 @@ export class StaffAttendanceController {
       updateScheduleDto,
       userId,
     );
+  }
+
+  @Patch("bulk-status")
+  @RequirePermissions({ module: "STAFF ATTENDANCE", action: "EDIT" })
+  async bulkUpdateStatus(
+    @Body() bulkStatusDto: BulkAttendanceStatusDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.staffAttendanceService.bulkUpdateStatus(bulkStatusDto, userId);
   }
 
   @Put(":id")

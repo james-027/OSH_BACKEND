@@ -23,6 +23,7 @@ import { Staff } from "src/entities/Staff";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { CreateScheduleHeaderDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/UpdateStaffSchedulingDto";
+import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
@@ -30,6 +31,7 @@ import {
   STATUS_IDS,
   ACTION_IDS,
   WORKING_DAY_IDS,
+  STATUS_NAMES,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -1926,6 +1928,247 @@ export class StaffAttendanceService {
       logger.error("Failed to cancel schedule headers:", error);
 
       throw new Error("Failed to cancel schedule headers");
+    }
+  }
+
+  async bulkUpdateStatus(
+    bulkStatusDto: BulkAttendanceStatusDto,
+    userId: number,
+  ): Promise<any> {
+    try {
+      const { id: rawIds, status_id: targetStatusId, remarks } = bulkStatusDto;
+
+      if (!rawIds || !rawIds.length) {
+        throw new BadRequestException(
+          "At least one Schedule Header ID is required.",
+        );
+      }
+
+      // Deduplicate IDs
+      const scheduleIds = Array.from(new Set(rawIds.map(Number)));
+
+      // Allowed lifecycle statuses for bulk transition
+      const allowedStatusIds: number[] = [
+        STATUS_IDS.PENDING, // 3
+        STATUS_IDS.FOR_REVIEW, // 42
+        STATUS_IDS.VALIDATED, // 40
+      ];
+
+      if (!allowedStatusIds.includes(targetStatusId)) {
+        throw new BadRequestException(
+          `Invalid target status_id: ${targetStatusId}. Allowed statuses: PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), VALIDATED (${STATUS_IDS.VALIDATED}).`,
+        );
+      }
+
+      // Progression hierarchy order: PENDING (1) -> FOR_REVIEW (2) -> VALIDATED (3)
+      const STATUS_ORDER: Record<number, number> = {
+        [STATUS_IDS.PENDING]: 1,
+        [STATUS_IDS.FOR_REVIEW]: 2,
+        [STATUS_IDS.VALIDATED]: 3,
+      };
+
+      const targetOrder = STATUS_ORDER[targetStatusId];
+      const targetStatusName =
+        STATUS_NAMES[targetStatusId] || `Status ${targetStatusId}`;
+
+      // Fetch existing Schedule Headers
+      const existingHeaders = await this.scheduleHeaderRepository.find({
+        where: {
+          id: In(scheduleIds),
+        },
+      });
+
+      const foundIds = new Set(existingHeaders.map((h) => h.id));
+      const missingIds = scheduleIds.filter((id) => !foundIds.has(id));
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Schedule Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const cleanedRemarks = remarks?.trim() || "";
+
+      // Validate transitions and business rules across all records
+      for (const header of existingHeaders) {
+        // Disallow transitions on cancelled schedule headers
+        if (header.status_id === STATUS_IDS.CANCELLED) {
+          throw new BadRequestException(
+            `Cannot change attendance status for cancelled Schedule Header #${header.id}.`,
+          );
+        }
+
+        const currentStatusId = header.attendance_status_id;
+
+        // Ensure current status is one of the supported lifecycle statuses
+        if (!currentStatusId || !STATUS_ORDER[currentStatusId]) {
+          throw new BadRequestException(
+            `Schedule Header #${header.id} has invalid current attendance status (${currentStatusId}). Only PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), and VALIDATED (${STATUS_IDS.VALIDATED}) can be transitioned.`,
+          );
+        }
+
+        const currentOrder = STATUS_ORDER[currentStatusId];
+        const currentStatusName =
+          STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
+
+        // Identity check: same status
+        if (currentStatusId === targetStatusId) {
+          throw new BadRequestException(
+            `Schedule Header #${header.id} is already in '${targetStatusName}' status.`,
+          );
+        }
+
+        // Backward revert check: remarks are mandatory on reversal transitions
+        const isBackwardRevert = targetOrder < currentOrder;
+        if (isBackwardRevert && !cleanedRemarks) {
+          throw new BadRequestException(
+            `Remarks are mandatory when reverting attendance status backwards (from ${currentStatusName} to ${targetStatusName}) for Schedule Header #${header.id}.`,
+          );
+        }
+      }
+
+      const now = new Date();
+
+      // Execute updates inside an atomic database transaction
+      await this.dataSource.transaction(async (manager) => {
+        // 1. Bulk update ScheduleHeader records
+        await manager.update(
+          ScheduleHeader,
+          {
+            id: In(scheduleIds),
+          },
+          {
+            attendance_status_id: targetStatusId,
+            attendance_updated_by: userId,
+            attendance_reason: cleanedRemarks || undefined,
+            attendance_ts: now,
+            updated_by: userId,
+            modified_at: now,
+          },
+        );
+
+        // 2. Bulk cascade update child ScheduleDetails
+        const detailUpdatePayload: any = {
+          attendance_status_id: targetStatusId,
+          updated_by: userId,
+          modified_at: now,
+        };
+        if (cleanedRemarks) {
+          detailUpdatePayload.remarks = cleanedRemarks;
+        }
+
+        await manager.update(
+          ScheduleDetail,
+          {
+            schedule_header_id: In(scheduleIds),
+          },
+          detailUpdatePayload,
+        );
+      });
+
+      // 3. Batch Action Logs (concise recording, optimized single batch query)
+      try {
+        const actionLogs = existingHeaders.map((header) => {
+          const currentStatusId = header.attendance_status_id;
+          const currentStatusName =
+            STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
+          const isBackwardRevert = targetOrder < STATUS_ORDER[currentStatusId];
+          const actionId = isBackwardRevert
+            ? ACTION_IDS.REVERT
+            : targetStatusId === STATUS_IDS.VALIDATED
+              ? ACTION_IDS.APPROVE
+              : ACTION_IDS.EDIT;
+
+          const descAction = isBackwardRevert ? "Revert" : "Transition";
+          const description = `${descAction} Attendance Status: ${currentStatusName} -> ${targetStatusName}${
+            cleanedRemarks ? `. Remarks: ${cleanedRemarks}` : ""
+          }`;
+
+          return {
+            ref_id: header.id,
+            action_id: actionId,
+            description,
+            raw_data: JSON.stringify({
+              previous_status_id: currentStatusId,
+              new_status_id: targetStatusId,
+              remarks: cleanedRemarks || null,
+            }),
+            created_by: userId,
+          };
+        });
+
+        await this.actionLogsService.logActionBatch(
+          this.module_name,
+          actionLogs,
+        );
+      } catch (err) {
+        logger.error(
+          "Action log batch failed for bulk attendance status:",
+          err,
+        );
+      }
+
+      // 4. Audit Trail (concise summary log)
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "Staff Attendance Services",
+            method: "bulkUpdateStatus",
+            raw_data: JSON.stringify({
+              schedule_header_ids: scheduleIds,
+              target_status_id: targetStatusId,
+              remarks: cleanedRemarks || null,
+            }),
+            description: `Bulk transition attendance status for Schedule Headers [${scheduleIds.join(
+              ", ",
+            )}] to ${targetStatusName}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (err) {
+        logger.error("Audit trail failed for bulk attendance status:", err);
+      }
+
+      // 5. Fetch updated schedule headers for mapped response & SSE broadcast
+      const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
+        where: {
+          id: In(scheduleIds),
+        },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "details",
+          "details.attendanceStatus",
+          "details.location",
+          "details.vendor",
+        ],
+      });
+
+      const responses = updatedScheduleHeaders.map((schedule) =>
+        this.responseMapperService.mapEntityToResponse(schedule),
+      );
+
+      // 6. SSE Real-time Broadcast
+      try {
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_scheduling", 0);
+      } catch (err) {
+        logger.error("SSE event failed for bulk attendance status:", err);
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to bulk update attendance status:", error);
+      throw new Error("Failed to bulk update attendance status");
     }
   }
 

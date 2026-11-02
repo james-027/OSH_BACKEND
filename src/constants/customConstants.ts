@@ -99,6 +99,9 @@ export const STATUS_NAMES = {
   [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
   [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
   [STATUS_IDS.TEMPORARY_CLOSED]: "Tempo Closed",
+  [STATUS_IDS.VALIDATED]: "Validated",
+  [STATUS_IDS.COMPUTED]: "Computed",
+  [STATUS_IDS.FOR_REVIEW]: "For Review",
 } as const;
 
 export const TOGGLE_NAMES = {
@@ -111,6 +114,9 @@ export const TOGGLE_NAMES = {
   [STATUS_IDS.PERMANENT_CLOSED]: "Permanent Closed",
   [STATUS_IDS.CANCELLED_DECLINED]: "Cancelled/Declined",
   [STATUS_IDS.TEMPORARY_CLOSED]: "Tempo Closed",
+  [STATUS_IDS.VALIDATED]: "Validated",
+  [STATUS_IDS.COMPUTED]: "Computed",
+  [STATUS_IDS.FOR_REVIEW]: "For Review",
 } as const;
 
 // ============= WAREHOUSE REM STATUS =============
