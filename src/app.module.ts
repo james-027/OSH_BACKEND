@@ -175,8 +175,6 @@ import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),
-    EventEmitterModule.forRoot(),
-    ScheduleModule.forRoot(),
     DebitAdviceModule,
     UsersModule,
     EmployeesModule,

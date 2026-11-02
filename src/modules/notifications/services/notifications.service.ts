@@ -1,3 +1,4 @@
+import logger from "src/config/logger";
 import {
   Injectable,
   Logger,
@@ -173,33 +174,35 @@ export class NotificationsService {
         usersInRoles.forEach((u) => targetUserIds.add(u.id));
       }
 
-      // Exclude creator from receiving their own notification unless desired
-      targetUserIds.delete(creatorId);
-
       if (targetUserIds.size === 0) {
-        this.logger.log(
+        logger.warn(
           `[TriggerNotification] Matrix rule #${matrixRule.id} matched, but resolved 0 eligible recipient users.`,
         );
         return null;
       }
 
-      // 4. Interpolate title and description
-      const finalTitle =
-        customTitle ||
-        this.interpolateTemplate(
-          matrixRule.title_template || `${matrixRule.event_name} - #${refId}`,
-          { ...data, ref_id: refId, user_name: creatorName },
-        );
+      // 4. Interpolate title, description and action URL
+      const templateParams: Record<string, any> = {
+        ...data,
+        ref_id: refId,
+        creator_id: creatorId,
+        creator_name: creatorName,
+        user_name: creatorName,
+        remarks: data?.remarks ?? '',
+      };
 
-      const finalDescription =
-        customDescription ||
-        this.interpolateTemplate(
-          matrixRule.description_template ||
-            `Action required on ${matrixRule.event_name} for ref #${refId}`,
-          { ...data, ref_id: refId, user_name: creatorName },
-        );
+      // Dynamic matrix templates configured in admin take priority over hardcoded defaults
+      const finalTitle = matrixRule.title_template?.trim()
+        ? this.interpolateTemplate(matrixRule.title_template, templateParams)
+        : (customTitle || `${matrixRule.event_name} - #${refId}`);
 
-      const finalActionUrl = actionUrl || matrixRule.action_url || null;
+      const finalDescription = matrixRule.description_template?.trim()
+        ? this.interpolateTemplate(matrixRule.description_template, templateParams)
+        : (customDescription || `Action required on ${matrixRule.event_name} for ref #${refId}`);
+
+      const finalActionUrl = matrixRule.action_url?.trim()
+        ? this.interpolateTemplate(matrixRule.action_url, templateParams)
+        : (actionUrl || null);
 
       // 5. Execute DB write in a transaction (atomic master + recipients)
       let savedNotification: Notification;
@@ -247,7 +250,7 @@ export class NotificationsService {
         });
       }
 
-      this.logger.log(
+      logger.info(
         `[TriggerNotification] Notification #${savedNotification.id} dispatched to ${recipientIdsArray.length} recipient(s) for event ${eventCode}`,
       );
 
