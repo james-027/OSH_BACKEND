@@ -39,16 +39,16 @@ export class WeighInController {
     private readonly weighInService: WeighInService,
   ) {}
 
-  @Get()
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
- @Get()
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
+//   @Get()
+//   @RequirePermissions({
+//     module: ["WEIGH IN"],
+//     action: "VIEW",
+//   })
+//  @Get()
+//   @RequirePermissions({
+//     module: ["WEIGH IN"],
+//     action: "VIEW",
+//   })
 //   async findAll(@Request() req) {
 //     const userId = req.user?.id;
 //     const roleId = req.user?.role_id;
@@ -56,10 +56,10 @@ export class WeighInController {
 //   }
 
 @Get()
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
+//   @RequirePermissions({
+//     module: ["WEIGH IN"],
+//     action: "VIEW",
+//   })
   async findAll(@Request() req) {
     const userId = req.user?.id;    // Uses the ID from your JWT token / logged-in user
     const roleId = req.user?.role_id; // Uses the role ID from your JWT token
@@ -88,10 +88,10 @@ export class WeighInController {
   }
   
   @Post("bulk")
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "VIEW",
+  // })
   async findBulk(@Body() body: { ids: number[] }, @Request() req) {
     if (!Array.isArray(body?.ids) || body.ids.length === 0) {
       throw new BadRequestException("No weigh-in IDs provided.");
@@ -101,28 +101,28 @@ export class WeighInController {
   }
 
   @Get(":id")
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "VIEW",
+  // })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.weighInService.findOne(id);
   }
 
   @Get("history/:ref_id")
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "VIEW",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "VIEW",
+  // })
   async findOneHistory(@Param("ref_id", ParseIntPipe) ref_id: number, @Request() req) {
     return this.weighInService.findOneHistory(ref_id);
   }
 
   @Post()
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "ADD",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "ADD",
+  // })
   async create(@Body() createWeighInDto: CreateWeighInDto, @Request() req) {
     const userId = req.user.id;
     const accessKeyId = req.user?.current_access_key;
@@ -132,10 +132,10 @@ export class WeighInController {
   }
 
   @Put(":control_no")
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "EDIT",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "EDIT",
+  // })
   async update(
     @Param("control_no") controlNo: string,
     @Body() updateWeighInDto: UpdateWeighInDto,
@@ -153,10 +153,10 @@ export class WeighInController {
   }
 
   @Post(":control_no/upload-attachment")
-  @RequirePermissions({
-    module: ["WEIGH IN"],
-    action: "ADD",
-  })
+  // @RequirePermissions({
+  //   module: ["WEIGH IN"],
+  //   action: "ADD",
+  // })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({

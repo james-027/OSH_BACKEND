@@ -26,22 +26,22 @@ export class CustomerController {
   constructor(private readonly customerService: CustomerService) {}
 
   @Get()
-  @RequirePermissions({
-    module: ["CUSTOMERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
-    action: "DATA ACCESS",
-  })
+  // @RequirePermissions({
+  //   module: ["CUSTOMERS"],
+  //   action: "DATA ACCESS",
+  // })
   async findAll(@Request() req) {
     return this.customerService.findAll();
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "CUSTOMERS", action: "VIEW" })
+  // @RequirePermissions({ module: "CUSTOMERS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.customerService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "CUSTOMERS", action: "ADD" })
+  // @RequirePermissions({ module: "CUSTOMERS", action: "ADD" })
   async create(@Body() createCustomerDto: CreateCustomerDto, @Request() req) {
     const userId = req.user.id;
 
@@ -49,7 +49,7 @@ export class CustomerController {
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "CUSTOMERS", action: "EDIT" })
+  // @RequirePermissions({ module: "CUSTOMERS", action: "EDIT" })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -61,10 +61,10 @@ export class CustomerController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({
-    module: "CUSTOMERS",
-    action: "ACTIVATE",
-  })
+  // @RequirePermissions({
+  //   module: "CUSTOMERS",
+  //   action: "ACTIVATE",
+  // })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -75,10 +75,10 @@ export class CustomerController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({
-    module: "CUSTOMERS",
-    action: "DEACTIVATE",
-  })
+  // @RequirePermissions({
+  //   module: "CUSTOMERS",
+  //   action: "DEACTIVATE",
+  // })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
