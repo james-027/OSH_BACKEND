@@ -95,6 +95,12 @@ export class NotificationsController {
   // 3. DYNAMIC NOTIFICATION MATRIX CONFIGURATION (ADMIN SETTINGS)
   // =========================================================================
 
+  @Get("matrix/events/catalog")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
+  getEventCatalog() {
+    return this.notificationsService.getEventCatalog();
+  }
+
   @Get("matrix")
   @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
   findAllMatrix() {

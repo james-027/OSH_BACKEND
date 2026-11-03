@@ -27,7 +27,7 @@ import {
   NotificationQueryDto,
   AdminNotificationAuditDto,
 } from "../dto/NotificationQueryDto";
-import { STATUS_IDS } from "src/constants/customConstants";
+import { STATUS_IDS, NOTIFICATION_EVENT_CATALOG } from "src/constants/customConstants";
 
 export interface TriggerNotificationParams {
   moduleId?: number;
@@ -694,6 +694,10 @@ export class NotificationsService {
   // =========================================================================
   // 4. MATRIX CONFIGURATION CRUD (ADMIN SETTINGS)
   // =========================================================================
+
+  getEventCatalog() {
+    return Object.values(NOTIFICATION_EVENT_CATALOG);
+  }
 
   async findAllMatrix() {
     return this.matrixRepository.find({
