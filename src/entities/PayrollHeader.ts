@@ -334,4 +334,7 @@ export class PayrollHeader {
 
   @Column({ type: "boolean", default: false })
   has_payroll_computation_error: boolean;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_miscellaneous_income: number;
 }

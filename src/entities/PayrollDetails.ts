@@ -29,7 +29,7 @@ export class PayrollDetails {
   @Column({ nullable: true })
   billing_type_id: number;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   is_not_for_premium_pay: boolean;
 
   @Column({ nullable: true })
@@ -531,4 +531,7 @@ export class PayrollDetails {
 
   @Column({ type: "date", nullable: true })
   salary_rate_effectivity: Date;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  miscellaneous_income: number;
 }

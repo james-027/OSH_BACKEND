@@ -3884,6 +3884,7 @@ export class StaffSchedulingService {
         tax: "0.00",
         net_of_tax: "0.00",
         cash_bond: "0.00",
+        miscellaneous_income: "0.00",
         total_billing: "0.00",
         total_night_shift: "0.00",
         total_night_shift_amount: "0.00",
@@ -3958,6 +3959,7 @@ export class StaffSchedulingService {
             tax: 0,
             net_of_tax: 0,
             cash_bond: 0,
+            miscellaneous_income: 0,
             total_billing: 0,
             _seenShifts: new Set<string>(),
           });
@@ -4042,6 +4044,7 @@ export class StaffSchedulingService {
         summary.tax += toNumber(detail.tax);
         summary.net_of_tax += toNumber(detail.net_of_tax);
         summary.cash_bond += toNumber(detail.cash_bond);
+        summary.miscellaneous_income += toNumber(detail.miscellaneous_income);
         summary.total_billing += toNumber(detail.total_billing);
       }
       /* * Build one row per staff. */ const data = Array.from(
@@ -4170,6 +4173,7 @@ export class StaffSchedulingService {
           tax: toFixed(staffSummary.tax),
           net_of_tax: toFixed(staffSummary.net_of_tax),
           cash_bond: toFixed(staffSummary.cash_bond),
+          miscellaneous_income: toFixed(staffSummary.miscellaneous_income),
           total_billing: toFixed(staffSummary.total_billing),
           regular_hours: detail.regular_hours,
           overtime_hours: detail.overtime_hours,
@@ -4293,6 +4297,9 @@ export class StaffSchedulingService {
                   detail.payrollHeader.total_net_of_tax,
                 ),
                 total_cash_bond: toFixed(detail.payrollHeader.total_cash_bond),
+                total_miscellaneous_income: toFixed(
+                  detail.payrollHeader.total_miscellaneous_income,
+                ),
                 total_billing: toFixed(detail.payrollHeader.total_billing),
                 status_name: detail.payrollHeader.status?.status_name ?? null,
                 created_by_name: detail.payrollHeader.createdBy
@@ -4354,6 +4361,7 @@ export class StaffSchedulingService {
         tax: toFixed(grandTotalsAcc.tax),
         net_of_tax: toFixed(grandTotalsAcc.net_of_tax),
         cash_bond: toFixed(grandTotalsAcc.cash_bond),
+        miscellaneous_income: toFixed(grandTotalsAcc.miscellaneous_income),
         total_billing: toFixed(grandTotalsAcc.total_billing),
       };
       return { data, totals };

@@ -516,6 +516,7 @@ export class StaffAttendanceService {
         ],
         order: {
           overtime: "DESC",
+          ot_clearing_approved: "DESC",
           scheduleHeader: {
             schedule_date: "DESC",
           },
