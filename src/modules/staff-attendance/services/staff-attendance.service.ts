@@ -33,6 +33,7 @@ import {
   ACTION_IDS,
   WORKING_DAY_IDS,
   STATUS_NAMES,
+  NOTIFICATION_EVENTS,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -2232,7 +2233,7 @@ export class StaffAttendanceService {
             .filter((id): id is number => id != null && !isNaN(id));
 
           this.notificationPublisher.publish({
-            eventCode: "ATTENDANCE_REVERSAL_REQUEST",
+            eventCode: NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST,
             creatorId: userId,
             accessKeyId: header.access_key_id || accessKeyId,
             locationIds,
@@ -2246,8 +2247,7 @@ export class StaffAttendanceService {
               remarks: cleanedRemarks,
             },
             destination: {
-              module: "STAFF PAYROLL",
-              route: "/staff-payroll",
+              module: "STAFF PAYROLL", // Route auto-resolved to "/staff-payroll" from Module Registry
               refIds: payrollIds,
               referenceNo: primaryInvoice || undefined,
               statusId: STATUS_IDS.POSTED,
@@ -2280,7 +2280,7 @@ export class StaffAttendanceService {
           );
 
           this.notificationPublisher.publish({
-            eventCode: "ATTENDANCE_REVERSAL_REQUEST",
+            eventCode: NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST,
             creatorId: userId,
             accessKeyId: header.access_key_id || accessKeyId,
             locationIds,

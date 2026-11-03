@@ -22,6 +22,7 @@ import {
   BILLING_TYPE_IDS,
   BILLING_TYPE_ABBRS,
   STATUS_NAMES,
+  NOTIFICATION_EVENTS,
 } from "src/constants/customConstants";
 import { BillingType } from "src/entities/BillingType";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -3381,7 +3382,7 @@ export class StaffPayrollService {
           const payrollInvoicesStr = header.payroll_invoice || `#${header.id}`;
 
           this.notificationPublisher.publish({
-            eventCode: "PAYROLL_REVERSAL_GRANT",
+            eventCode: NOTIFICATION_EVENTS.PAYROLL_REVERSAL_GRANT,
             creatorId: userId,
             accessKeyId: header.access_key_id,
             locationIds,
@@ -3396,8 +3397,7 @@ export class StaffPayrollService {
               remarks: cleanedRemarks,
             },
             destination: {
-              module: "STAFF ATTENDANCE",
-              route: "/staff-attendance",
+              module: "STAFF ATTENDANCE", // Route auto-resolved to "/staff-attendance" from Module Registry
               refIds: scheduleIds,
               referenceNo: primaryInvoice,
               statusId: STATUS_IDS.VALIDATED,
