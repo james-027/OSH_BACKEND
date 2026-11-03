@@ -1937,6 +1937,7 @@ export class StaffAttendanceService {
   async bulkUpdateStatus(
     bulkStatusDto: BulkAttendanceStatusDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
     try {
       const { id: rawIds, status_id: targetStatusId, remarks } = bulkStatusDto;
@@ -2131,7 +2132,7 @@ export class StaffAttendanceService {
           const descAction = isBackwardRevert ? "Revert" : "Transition";
           const isComputedReversal = currentStatusId === STATUS_IDS.COMPUTED;
           const description = isComputedReversal
-            ? `Request Attendance Reversal: ${currentStatusName} -> ${targetStatusName}. Remarks: ${cleanedRemarks || 'None'}`
+            ? `Request Attendance Reversal: ${currentStatusName} -> ${targetStatusName}. Remarks: ${cleanedRemarks || "None"}`
             : `${descAction} Attendance Status: ${currentStatusName} -> ${targetStatusName}${
                 cleanedRemarks ? `. Remarks: ${cleanedRemarks}` : ""
               }`;
@@ -2192,7 +2193,8 @@ export class StaffAttendanceService {
             .filter((id): id is number => id != null);
 
           const connectedMap = await this.fetchConnectedPayrollsMap(detailIds);
-          const connectedPayrollsList: Array<{ id: number; invoice: string }> = [];
+          const connectedPayrollsList: Array<{ id: number; invoice: string }> =
+            [];
 
           for (const did of detailIds) {
             const payList = connectedMap.get(did) || [];
@@ -2235,7 +2237,7 @@ export class StaffAttendanceService {
               filter_params: {
                 invoice: primaryInvoice || undefined,
                 source_schedule_id: header.id,
-                status_id: 41,
+                status_id: STATUS_IDS.POSTED,
               },
             },
             payload: {
@@ -2258,10 +2260,10 @@ export class StaffAttendanceService {
               "ATTENDANCE_REVERSAL_REQUEST",
               header.id,
               userId,
-              header.access_key_id,
+              header.access_key_id || accessKeyId,
               notificationPayload,
               `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || 'No remarks provided'}`,
+              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
               actionUrl,
               locationIds,
             ),
@@ -2312,10 +2314,10 @@ export class StaffAttendanceService {
               "ATTENDANCE_REVERSAL_REQUEST",
               header.id,
               userId,
-              header.access_key_id,
+              header.access_key_id || accessKeyId,
               notificationPayload,
               `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || 'No remarks provided'}`,
+              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
               `/staff-attendance?header_id=${header.id}`,
               locationIds,
             ),

@@ -27,6 +27,7 @@ import {
   NotificationQueryDto,
   AdminNotificationAuditDto,
 } from "../dto/NotificationQueryDto";
+import { STATUS_IDS } from "src/constants/customConstants";
 
 export interface TriggerNotificationParams {
   moduleId?: number;
@@ -144,14 +145,22 @@ export class NotificationsService {
       // 2. Fetch Creator Info for template interpolation
       const creator = await this.userRepository.findOne({
         where: { id: creatorId },
-        select: ["id", "user_name", "first_name", "last_name", "current_access_key", "role_id"],
+        select: [
+          "id",
+          "user_name",
+          "first_name",
+          "last_name",
+          "current_access_key",
+          "role_id",
+        ],
       });
       const resolvedAccessKeyId =
         accessKeyId !== undefined
           ? accessKeyId
           : (data.access_key_id ?? creator?.current_access_key ?? null);
       const creatorName = creator
-        ? `${creator.first_name} ${creator.last_name}`.trim() || creator.user_name
+        ? `${creator.first_name} ${creator.last_name}`.trim() ||
+          creator.user_name
         : `User #${creatorId}`;
 
       // 3. Resolve target user IDs (deduplicated)
@@ -201,7 +210,9 @@ export class NotificationsService {
         usersInCurrentRole.forEach((u) => candidateRoleUserIds.add(u.id));
 
         // C. Location Filtering (multi-user batch check)
-        let targetLocIds: number[] = Array.isArray(locationIds) ? [...locationIds] : [];
+        let targetLocIds: number[] = Array.isArray(locationIds)
+          ? [...locationIds]
+          : [];
 
         // If no explicit document locations provided, derive from creator's allowed locations
         if (targetLocIds.length === 0 && creator?.id && creator?.role_id) {
@@ -245,21 +256,25 @@ export class NotificationsService {
         creator_id: creatorId,
         creator_name: creatorName,
         user_name: creatorName,
-        remarks: data?.remarks ?? payloadData.remarks ?? '',
+        remarks: data?.remarks ?? payloadData.remarks ?? "",
       };
 
       // Dynamic matrix templates configured in admin take priority over hardcoded defaults
       const finalTitle = matrixRule.title_template?.trim()
         ? this.interpolateTemplate(matrixRule.title_template, templateParams)
-        : (customTitle || `${matrixRule.event_name} - #${refId}`);
+        : customTitle || `${matrixRule.event_name} - #${refId}`;
 
       const finalDescription = matrixRule.description_template?.trim()
-        ? this.interpolateTemplate(matrixRule.description_template, templateParams)
-        : (customDescription || `Action required on ${matrixRule.event_name} for ref #${refId}`);
+        ? this.interpolateTemplate(
+            matrixRule.description_template,
+            templateParams,
+          )
+        : customDescription ||
+          `Action required on ${matrixRule.event_name} for ref #${refId}`;
 
       const finalActionUrl = matrixRule.action_url?.trim()
         ? this.interpolateTemplate(matrixRule.action_url, templateParams)
-        : (actionUrl || null);
+        : actionUrl || null;
 
       // 5. Execute DB write in a transaction (atomic master + recipients)
       let savedNotification: Notification;
@@ -278,7 +293,10 @@ export class NotificationsService {
           status_id: 1,
         });
 
-        savedNotification = await manager.save(Notification, notificationEntity);
+        savedNotification = await manager.save(
+          Notification,
+          notificationEntity,
+        );
 
         const recipientEntities = Array.from(targetUserIds).map((userId) =>
           manager.create(NotificationRecipient, {
@@ -339,7 +357,8 @@ export class NotificationsService {
       .leftJoinAndSelect("notif.module", "module")
       .leftJoinAndSelect("notif.createdBy", "creator")
       .where("rec.user_id = :userId", { userId })
-      .andWhere("rec.is_dismissed = :dismissed", { dismissed: false });
+      .andWhere("rec.is_dismissed = :dismissed", { dismissed: false })
+      .andWhere("notif.status_id = :statusId", { statusId: STATUS_IDS.ACTIVE });
 
     if (query.unread_only) {
       qb.andWhere("rec.is_read = :isRead", { isRead: false });
@@ -359,9 +378,7 @@ export class NotificationsService {
       );
     }
 
-    qb.orderBy("rec.created_at", "DESC")
-      .skip(skip)
-      .take(limit);
+    qb.orderBy("rec.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
     const unreadCount = await this.getUnreadCount(userId);
@@ -388,7 +405,8 @@ export class NotificationsService {
           ? {
               id: item.notification.createdBy.id,
               user_name: item.notification.createdBy.user_name,
-              full_name: `${item.notification.createdBy.first_name} ${item.notification.createdBy.last_name}`.trim(),
+              full_name:
+                `${item.notification.createdBy.first_name} ${item.notification.createdBy.last_name}`.trim(),
             }
           : null,
         is_read: item.is_read,
@@ -556,9 +574,7 @@ export class NotificationsService {
       });
     }
 
-    qb.orderBy("notif.created_at", "DESC")
-      .skip(skip)
-      .take(limit);
+    qb.orderBy("notif.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
 
@@ -597,7 +613,8 @@ export class NotificationsService {
           ? {
               id: notif.createdBy.id,
               user_name: notif.createdBy.user_name,
-              full_name: `${notif.createdBy.first_name} ${notif.createdBy.last_name}`.trim(),
+              full_name:
+                `${notif.createdBy.first_name} ${notif.createdBy.last_name}`.trim(),
             }
           : null,
         metrics: {
@@ -747,7 +764,9 @@ export class NotificationsService {
         event_code: dto.event_code
           ? dto.event_code.trim().toUpperCase()
           : existing.event_code,
-        event_name: dto.event_name ? dto.event_name.trim() : existing.event_name,
+        event_name: dto.event_name
+          ? dto.event_name.trim()
+          : existing.event_name,
         title_template: dto.title_template ?? existing.title_template,
         description_template:
           dto.description_template ?? existing.description_template,
@@ -789,7 +808,10 @@ export class NotificationsService {
   // 5. LEGACY METHODS (PRESERVED FOR BACKWARD COMPATIBILITY)
   // =========================================================================
 
-  async create(createNotificationDto: CreateNotificationDto, created_by: number) {
+  async create(
+    createNotificationDto: CreateNotificationDto,
+    created_by: number,
+  ) {
     const notifications = createNotificationDto.to_user_ids.map((to_user_id) =>
       this.notificationRepository.create({
         ...createNotificationDto,

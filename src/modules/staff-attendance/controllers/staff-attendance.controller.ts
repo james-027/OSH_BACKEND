@@ -122,7 +122,6 @@ export class StaffAttendanceController {
     );
   }
 
-
   @Post("compliance-attendance-reports")
   @RequirePermissions({ module: "ATTENDANCE REPORT", action: "VIEW" })
   async getComplianceAttendanceReport(
@@ -143,7 +142,7 @@ export class StaffAttendanceController {
       roleId,
     );
   }
-  
+
   // Placed before :id to prevent collision
   @Get("history/:id")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
@@ -251,7 +250,12 @@ export class StaffAttendanceController {
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.staffAttendanceService.bulkUpdateStatus(bulkStatusDto, userId);
+    const accessKeyId = req.user.current_access_key;
+    return this.staffAttendanceService.bulkUpdateStatus(
+      bulkStatusDto,
+      userId,
+      accessKeyId,
+    );
   }
 
   @Put(":id")
