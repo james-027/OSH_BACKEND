@@ -246,17 +246,41 @@ export class NotificationsService {
         return null;
       }
 
-      // 4. Interpolate title, description and action URL
+      // 4. Interpolate title, description and action URL (supports legacy payload, source, destination, and navigation)
       const payloadData =
         data?.payload && typeof data.payload === "object" ? data.payload : {};
+      const sourceData =
+        data?.source && typeof data.source === "object" ? data.source : {};
+      const destinationData =
+        data?.destination && typeof data.destination === "object"
+          ? data.destination
+          : {};
+
       const templateParams: Record<string, any> = {
         ...payloadData,
+        ...sourceData,
+        ...destinationData,
         ...data,
         ref_id: refId,
         creator_id: creatorId,
         creator_name: creatorName,
         user_name: creatorName,
-        remarks: data?.remarks ?? payloadData.remarks ?? "",
+        remarks:
+          data?.remarks ??
+          sourceData?.remarks ??
+          payloadData?.remarks ??
+          "",
+        reference_no:
+          data?.reference_no ??
+          sourceData?.reference_no ??
+          destinationData?.reference_no ??
+          payloadData?.reference_no ??
+          "",
+        ref_ids:
+          data?.ref_ids ??
+          (Array.isArray(destinationData?.ref_ids)
+            ? destinationData.ref_ids.join(", ")
+            : destinationData?.ref_ids ?? ""),
       };
 
       // Dynamic matrix templates configured in admin take priority over hardcoded defaults
@@ -879,11 +903,42 @@ export class NotificationsService {
     params: Record<string, any>,
   ): string {
     if (!template) return "";
-    return template.replace(/\{(\w+)\}/g, (_, key) => {
-      return params[key] !== undefined && params[key] !== null
-        ? String(params[key])
-        : `{${key}}`;
-    });
+
+    const resolveValue = (key: string): any => {
+      if (params[key] !== undefined && params[key] !== null) {
+        return params[key];
+      }
+      if (key.includes(".")) {
+        return key
+          .split(".")
+          .reduce(
+            (acc, part) => (acc && acc[part] !== undefined ? acc[part] : undefined),
+            params,
+          );
+      }
+      return undefined;
+    };
+
+    const formatValue = (val: any): string => {
+      if (Array.isArray(val)) {
+        return val.join(", ");
+      }
+      if (typeof val === "object" && val !== null) {
+        return JSON.stringify(val);
+      }
+      return String(val);
+    };
+
+    // Supports {var} and (var), with nested dot notation like {source.reference_no}
+    return template
+      .replace(/\{([\w.-]+)\}/g, (match, key) => {
+        const val = resolveValue(key);
+        return val !== undefined && val !== null ? formatValue(val) : match;
+      })
+      .replace(/\(([\w.-]+)\)/g, (match, key) => {
+        const val = resolveValue(key);
+        return val !== undefined && val !== null ? formatValue(val) : match;
+      });
   }
 
   private async invalidateUnreadCountCache(userIds: number[]): Promise<void> {

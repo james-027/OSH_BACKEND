@@ -81,6 +81,8 @@ export class NotificationPublisherService {
         // Common template interpolation helpers
         remarks: source?.remarks ?? options.payload?.remarks ?? "",
         reference_no: source?.referenceNo ?? destination?.referenceNo ?? "",
+        ref_ids:
+          targetHighlightIds.length > 0 ? targetHighlightIds.join(", ") : "",
         payroll_invoices: destination?.referenceNo ?? source?.referenceNo ?? "",
         source_ref_id: sourceRefId,
         target_ref_id: targetHighlightIds[0] ?? null,
