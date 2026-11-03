@@ -28,15 +28,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = "Internal server error";
+    let message: any = "Internal server error";
+    let originalErrorObj: any = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const errorResponse = exception.getResponse();
-      message =
-        typeof errorResponse === "string"
-          ? errorResponse
-          : (errorResponse as any).message || exception.message;
+      if (typeof errorResponse === "object" && errorResponse !== null) {
+        originalErrorObj = errorResponse;
+        message =
+          (errorResponse as any).msg ||
+          (errorResponse as any).message ||
+          (errorResponse as any).error ||
+          exception.message;
+      } else {
+        message = errorResponse || exception.message;
+      }
     } else if (exception instanceof Error) {
       message = exception.message;
 
@@ -133,33 +140,65 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method,
     });
 
-    // Platform-agnostic response
-    const errorResponse = {
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: url,
-      error: message,
-    };
+    // Determine response format
+    // If request is from POS /api/* or if error already has legacy PHP status format
+    const isApiRoute =
+      (url && url.includes("/api/")) ||
+      (request.originalUrl && request.originalUrl.includes("/api/")) ||
+      (request.raw?.url && request.raw?.url.includes("/api/"));
 
-    // Check platform: Fastify has .code() and .send(), Express has .status() and .json()
+    let finalErrorResponse: any;
+
+    if (
+      isApiRoute ||
+      (originalErrorObj && originalErrorObj.status !== undefined)
+    ) {
+      if (originalErrorObj && originalErrorObj.status !== undefined) {
+        finalErrorResponse = originalErrorObj;
+      } else {
+        finalErrorResponse = {
+          status: "error",
+          msg: Array.isArray(message) ? message.join(", ") : String(message),
+        };
+      }
+    } else {
+      finalErrorResponse = {
+        statusCode: status,
+        timestamp: new Date().toISOString(),
+        path: url,
+        error: message,
+      };
+    }
+
+    // Platform-agnostic response delivery (supports Fastify, Express, and raw Node ServerResponse from Fastify middie)
     if (
       typeof response.code === "function" &&
       typeof response.send === "function"
     ) {
-      // Fastify
-      response.code(status).send(errorResponse);
+      // Fastify Reply object
+      response.code(status).send(finalErrorResponse);
     } else if (
       typeof response.status === "function" &&
       typeof response.json === "function"
     ) {
-      // Express
-      response.status(status).json(errorResponse);
+      // Express response object
+      response.status(status).json(finalErrorResponse);
+    } else if (
+      typeof response.writeHead === "function" &&
+      typeof response.end === "function"
+    ) {
+      // Raw Node.js http.ServerResponse (e.g. from Fastify middie middleware)
+      response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(finalErrorResponse));
     } else {
-      // Fallback - try Fastify style first, then Express
       try {
-        response.code(status).send(errorResponse);
+        if (typeof response.send === "function") {
+          response.send(finalErrorResponse);
+        } else if (typeof response.end === "function") {
+          response.end(JSON.stringify(finalErrorResponse));
+        }
       } catch (e) {
-        response.status(status).json(errorResponse);
+        logger.error("Failed to send error response:", e);
       }
     }
   }

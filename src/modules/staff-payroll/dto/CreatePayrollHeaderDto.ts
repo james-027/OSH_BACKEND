@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsInt,
   IsNotEmpty,
@@ -14,6 +15,14 @@ export class CreatePayrollDetailDto {
   @IsOptional()
   @IsInt()
   schedule_detail_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  billing_type_id?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  is_not_for_premium_pay?: boolean;
 
   @IsNotEmpty()
   @IsInt()
@@ -190,6 +199,17 @@ export class CreatePayrollHeaderDto {
   @IsArray()
   @IsInt({ each: true })
   vendor_ids?: number[];
+
+  @IsOptional()
+  @IsInt()
+  billing_type_id?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  is_not_for_premium_pay?: boolean;
+
+  @IsOptional()
+  split_billing?: boolean;
 
 
 }

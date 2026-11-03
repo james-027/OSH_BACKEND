@@ -226,7 +226,8 @@ async uploadExcel(
       filter.date_from,
       filter.date_to,
       locationIds,
-      vendorIds
+      vendorIds,
+      filter.billing_type_id
     );
   }
 

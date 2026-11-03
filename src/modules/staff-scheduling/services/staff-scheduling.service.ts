@@ -29,6 +29,8 @@ import {
   ACCESS_KEY_IDS,
   LOGS_TYPE_ID,
   DAYS_FACTOR_RATE,
+  BILLING_TYPE_IDS,
+  BILLING_TYPE_ABBRS,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -54,7 +56,6 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { SssConfigs } from "src/entities/SssConfig";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
-
 
 @Injectable()
 export class StaffSchedulingService {
@@ -97,11 +98,10 @@ export class StaffSchedulingService {
 
   private readonly module_name = "STAFF SCHEDULING";
   async findAll(
-    statusId?: number[], 
+    statusId?: number[],
     accessKeyId?: number,
     userId?: number,
-    roleId?: number
-
+    roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {};
@@ -113,15 +113,15 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
-          userId,
-          roleId,
-        );
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
         where.details = {
-        location_id: In(allowedLocationIds),
-      };
-    }
+          location_id: In(allowedLocationIds),
+        };
+      }
 
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
         where,
@@ -184,7 +184,7 @@ export class StaffSchedulingService {
             userId,
             roleId,
           );
-          where.location_id = In(allowedLocationIds);
+        where.location_id = In(allowedLocationIds);
       }
 
       if (accessKeyId !== undefined) {
@@ -216,6 +216,7 @@ export class StaffSchedulingService {
         ],
         order: {
           overtime: "DESC",
+          actualLogsDetail: { overtime: "DESC" },
         },
       });
 
@@ -840,6 +841,12 @@ export class StaffSchedulingService {
                     operational_end_time: detail.operational_end_time,
                     diff_outlet: detail.diff_outlet,
                     add_ot: detail.add_ot,
+                    is_not_for_premium_pay: Boolean(
+                      detail.is_not_for_premium_pay,
+                    ),
+                    ...(detail.is_not_for_premium_pay !== undefined && {
+                      is_not_for_premium_pay: detail.is_not_for_premium_pay,
+                    }),
                     working_day_id: workingDay,
                     shift_type: isNightShift,
                     multiple_duty: multipleDuty,
@@ -873,7 +880,7 @@ export class StaffSchedulingService {
                       ? new Date(detail.overtime_out).toISOString()
                       : undefined,
                     ot_clearing_approved:
-                      detail.overtime_in && detail.overtime_out ? true : false,
+                      detail.overtime_in && detail.overtime_out ? false : false,
                   },
                 );
 
@@ -1385,6 +1392,9 @@ export class StaffSchedulingService {
                 duty_end_time: detail.duty_end_time,
                 starting_time: detail.starting_time,
                 ending_time: detail.ending_time,
+                ...(detail.is_not_for_premium_pay !== undefined && {
+                  is_not_for_premium_pay: detail.is_not_for_premium_pay,
+                }),
 
                 // Old schedule logic
                 shift_type: isNightShift,
@@ -3439,7 +3449,7 @@ export class StaffSchedulingService {
             existingDetail.cron_computed = false;
             existingDetail.updated_by = userId;
             existingDetail.ot_clearing_approved =
-              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false;
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? false : false;
 
             await this.scheduleDetailRepository.save(existingDetail);
 
@@ -3519,7 +3529,7 @@ export class StaffSchedulingService {
             created_by: userId,
             updated_by: userId,
             ot_clearing_approved:
-              dwsDetail.overtime_in && dwsDetail.overtime_out ? true : false,
+              dwsDetail.overtime_in && dwsDetail.overtime_out ? false : false,
           });
 
           const savedScheduleDetail =
@@ -3760,6 +3770,7 @@ export class StaffSchedulingService {
     dateTo?: string,
     locationIds?: number[],
     vendorIds?: number[],
+    billingTypeId?: number,
   ): Promise<{ data: any[]; totals: any }> {
     try {
       const query = this.payrollDetailRepository
@@ -3809,6 +3820,12 @@ export class StaffSchedulingService {
         query.andWhere("payrollDetail.vendor_id IN (:...vendorIds)", {
           vendorIds,
         });
+      }
+      if (billingTypeId !== undefined && billingTypeId !== null) {
+        query.andWhere(
+          "(payrollDetail.billing_type_id = :billingTypeId OR (payrollDetail.billing_type_id IS NULL AND payrollHeader.billing_type_id = :billingTypeId))",
+          { billingTypeId: Number(billingTypeId) },
+        );
       }
       query
         .orderBy("payrollDetail.schedule_date", "ASC")
@@ -3867,6 +3884,7 @@ export class StaffSchedulingService {
         tax: "0.00",
         net_of_tax: "0.00",
         cash_bond: "0.00",
+        miscellaneous_income: "0.00",
         total_billing: "0.00",
         total_night_shift: "0.00",
         total_night_shift_amount: "0.00",
@@ -3941,7 +3959,9 @@ export class StaffSchedulingService {
             tax: 0,
             net_of_tax: 0,
             cash_bond: 0,
+            miscellaneous_income: 0,
             total_billing: 0,
+            _seenShifts: new Set<string>(),
           });
         }
         const summary = staffSummaryMap.get(staffId)!;
@@ -3949,11 +3969,17 @@ export class StaffSchedulingService {
         summary.overtime += toNumber(detail.overtime);
         summary.twh += toNumber(detail.twh);
         summary.break += toNumber(detail.break);
-        summary.regular_day += toNumber(detail.regular_day);
-        summary.special_holiday += toNumber(detail.special_holiday);
-        summary.regular_holiday += toNumber(detail.regular_holiday);
-        summary.rest_day += toNumber(detail.rest_day);
-        summary.total_day_work += toNumber(detail.total_day_work);
+
+        // De-duplicate shift days across split billing records
+        const shiftKey = `${staffId}-${detail.schedule_date ?? detail.schedule_detail_id ?? detail.id}`;
+        if (!summary._seenShifts.has(shiftKey)) {
+          summary._seenShifts.add(shiftKey);
+          summary.regular_day += toNumber(detail.regular_day);
+          summary.special_holiday += toNumber(detail.special_holiday);
+          summary.regular_holiday += toNumber(detail.regular_holiday);
+          summary.rest_day += toNumber(detail.rest_day);
+          summary.total_day_work += toNumber(detail.total_day_work);
+        }
         summary.ot_regular_day += toNumber(detail.ot_regular_day);
         summary.ot_special_holiday += toNumber(detail.ot_special_holiday);
         summary.ot_regular_holiday += toNumber(detail.ot_regular_holiday);
@@ -4018,6 +4044,7 @@ export class StaffSchedulingService {
         summary.tax += toNumber(detail.tax);
         summary.net_of_tax += toNumber(detail.net_of_tax);
         summary.cash_bond += toNumber(detail.cash_bond);
+        summary.miscellaneous_income += toNumber(detail.miscellaneous_income);
         summary.total_billing += toNumber(detail.total_billing);
       }
       /* * Build one row per staff. */ const data = Array.from(
@@ -4025,9 +4052,20 @@ export class StaffSchedulingService {
       ).map(([staffId, details]) => {
         const detail = details[0];
         const staffSummary = staffSummaryMap.get(staffId);
+        const effectiveBillingTypeId =
+          detail.billing_type_id ??
+          detail.payrollHeader?.billing_type_id ??
+          null;
+        const billingAbbr = effectiveBillingTypeId
+          ? BILLING_TYPE_ABBRS[
+              effectiveBillingTypeId as keyof typeof BILLING_TYPE_ABBRS
+            ] || "ALL"
+          : "ALL";
         return {
           id: detail.id,
           payroll_header_id: detail.payroll_header_id,
+          billing_type_id: effectiveBillingTypeId,
+          billing_type_abbr: billingAbbr,
           schedule_detail_id: detail.schedule_detail_id,
           schedule_date: detail.schedule_date,
           staff_id: staffId,
@@ -4060,6 +4098,7 @@ export class StaffSchedulingService {
           actual_break_in: detail.actual_break_in,
           actual_break_out: detail.actual_break_out,
           add_ot: detail.add_ot,
+          is_not_for_premium_pay: Boolean(detail.is_not_for_premium_pay),
           working_day_id: detail.working_day_id,
           status_id: detail.status_id,
           attendance_status_id: detail.attendance_status_id,
@@ -4134,6 +4173,7 @@ export class StaffSchedulingService {
           tax: toFixed(staffSummary.tax),
           net_of_tax: toFixed(staffSummary.net_of_tax),
           cash_bond: toFixed(staffSummary.cash_bond),
+          miscellaneous_income: toFixed(staffSummary.miscellaneous_income),
           total_billing: toFixed(staffSummary.total_billing),
           regular_hours: detail.regular_hours,
           overtime_hours: detail.overtime_hours,
@@ -4257,6 +4297,9 @@ export class StaffSchedulingService {
                   detail.payrollHeader.total_net_of_tax,
                 ),
                 total_cash_bond: toFixed(detail.payrollHeader.total_cash_bond),
+                total_miscellaneous_income: toFixed(
+                  detail.payrollHeader.total_miscellaneous_income,
+                ),
                 total_billing: toFixed(detail.payrollHeader.total_billing),
                 status_name: detail.payrollHeader.status?.status_name ?? null,
                 created_by_name: detail.payrollHeader.createdBy
@@ -4273,6 +4316,7 @@ export class StaffSchedulingService {
         staffSummaryMap.values(),
       ).reduce(
         (acc, curr) => {
+          delete curr._seenShifts;
           Object.keys(curr).forEach((key) => {
             acc[key] = (acc[key] || 0) + toNumber(curr[key]);
           });
@@ -4317,6 +4361,7 @@ export class StaffSchedulingService {
         tax: toFixed(grandTotalsAcc.tax),
         net_of_tax: toFixed(grandTotalsAcc.net_of_tax),
         cash_bond: toFixed(grandTotalsAcc.cash_bond),
+        miscellaneous_income: toFixed(grandTotalsAcc.miscellaneous_income),
         total_billing: toFixed(grandTotalsAcc.total_billing),
       };
       return { data, totals };

@@ -6,6 +6,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
@@ -16,6 +17,7 @@ import { Vendor } from "./Vendor";
 import { ScheduleHeader } from "./ScheduleHeader";
 import { WorkingDay } from "./WorkingDay";
 import { ActualLogsDetail } from "./ActualLogsDetail";
+import { PayrollDetails } from "./PayrollDetails";
 
 @Entity("schedule_details")
 export class ScheduleDetail {
@@ -72,10 +74,10 @@ export class ScheduleDetail {
 
   @Column({ type: "timestamp", nullable: true })
   just_time_in: Date;
-  
+
   @Column({ type: "timestamp", nullable: true })
   overtime_in: Date;
-  
+
   @Column({ type: "timestamp", nullable: true })
   overtime_out: Date;
 
@@ -112,11 +114,23 @@ export class ScheduleDetail {
   @Column({ nullable: true })
   attendance_status_id: number;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   cron_computed: boolean;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   ot_clearing_approved: boolean;
+
+  @Column({ type: "boolean", default: false })
+  is_regular_billed: boolean;
+
+  @Column({ type: "boolean", default: false })
+  is_premium_billed: boolean;
+
+  @Column({ type: "boolean", default: false })
+  is_nd_billed: boolean;
+
+  @Column({ type: "boolean", default: false })
+  is_not_for_premium_pay: boolean;
 
   @Column({ nullable: true })
   created_by: number;
@@ -148,8 +162,7 @@ export class ScheduleDetail {
   @Column({
     type: "tinyint",
     nullable: true,
-    comment:
-      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
+    comment: "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
   shift_type: number;
 
@@ -301,4 +314,10 @@ export class ScheduleDetail {
   })
   @JoinColumn({ name: "working_day_id" })
   workingDays: WorkingDay;
+
+  @OneToMany(
+    () => PayrollDetails,
+    (payrollDetails) => payrollDetails.scheduleDetail,
+  )
+  payrollDetails: PayrollDetails[];
 }

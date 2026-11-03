@@ -4,7 +4,16 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In, Not, EntityManager, LessThanOrEqual, MoreThanOrEqual, Between } from "typeorm";
+import {
+  Repository,
+  DataSource,
+  In,
+  Not,
+  EntityManager,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Between,
+} from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -14,16 +23,25 @@ import { Staff } from "src/entities/Staff";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { CreateScheduleHeaderDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/UpdateStaffSchedulingDto";
+import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { NotificationTriggerEvent } from "src/modules/notifications/events/notification-trigger.event";
 import logger from "../../../config/logger";
-import { STATUS_IDS, ACTION_IDS } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  ACTION_IDS,
+  WORKING_DAY_IDS,
+  STATUS_NAMES,
+} from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
 import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
+import { PayrollDetails } from "src/entities/PayrollDetails";
 import { Location } from "src/entities/Location";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
@@ -59,6 +77,7 @@ export class StaffAttendanceService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -116,15 +135,56 @@ export class StaffAttendanceService {
               .filter((header) => header.details.length > 0)
           : scheduleHeaders;
 
+      // Collect all detail IDs across all filtered headers
+      const allDetailIds: number[] = [];
+      for (const header of filteredHeaders) {
+        if (header.details) {
+          for (const d of header.details) {
+            if (d.id) {
+              allDetailIds.push(d.id);
+            }
+          }
+        }
+      }
+
+      // Batch fetch connected posted payrolls in one query
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(allDetailIds);
+
       const mappedHeaders =
         this.responseMapperService.mapEntitiesToResponse(filteredHeaders);
 
       return mappedHeaders.map((mappedHeader, index) => {
         const originalHeader = filteredHeaders[index];
+        const details = originalHeader.details ?? [];
+        const firstDetail = details[0];
+        const detailCount = details.length;
 
-        const firstDetail = originalHeader.details?.[0];
+        const billingMetrics = this.computeScheduleBillingMetrics(details);
 
-        const detailCount = originalHeader.details?.length ?? 0;
+        // Aggregate unique connected payrolls for this schedule header
+        const headerPayrollsMap = new Map<
+          number,
+          {
+            id: number;
+            invoice: string;
+            billing_type_id: number;
+            status_id: number;
+          }
+        >();
+
+        for (const detail of details) {
+          const detailPayrolls = connectedPayrollsMap.get(detail.id) || [];
+          for (const p of detailPayrolls) {
+            if (!headerPayrollsMap.has(p.id)) {
+              headerPayrollsMap.set(p.id, p);
+            }
+          }
+        }
+
+        const connectedPayrolls = Array.from(headerPayrollsMap.values());
+        const payrollInvoices = connectedPayrolls.map((p) => p.invoice);
+        const payrollInvoiceStr = payrollInvoices.join(", ") || null;
 
         return {
           ...mappedHeader,
@@ -133,6 +193,16 @@ export class StaffAttendanceService {
           location_name: firstDetail?.location?.location_name ?? null,
           vendor_name: firstDetail?.vendor?.service_provider_name ?? null,
           status_name: firstDetail?.attendanceStatus?.status_name ?? null,
+          payroll_invoice: payrollInvoiceStr,
+          payroll_invoices: payrollInvoices,
+          connected_payrolls: connectedPayrolls,
+          regular_billed_count: billingMetrics.regular_billed_count,
+          premium_billed_count: billingMetrics.premium_billed_count,
+          ot_billed_count: billingMetrics.ot_billed_count,
+          nd_billed_count: billingMetrics.nd_billed_count,
+          fully_billed_count: billingMetrics.fully_billed_count,
+          unbilled_count: billingMetrics.unbilled_count,
+          billing_breakdown: billingMetrics.billing_breakdown,
         };
       });
     } catch (error) {
@@ -140,6 +210,201 @@ export class StaffAttendanceService {
 
       throw new Error("Failed to fetch staff schedule");
     }
+  }
+
+  /**
+   * Batch fetches connected posted payrolls for a collection of scheduleDetailIds.
+   * Only includes ACTIVE details under POSTED payroll headers with a valid payroll_invoice.
+   * Deduplicates detail IDs and chunks queries to avoid SQL limits.
+   * Returns a Map of scheduleDetailId -> Array<{ id: number; invoice: string; billing_type_id: number; status_id: number }>.
+   */
+  public async fetchConnectedPayrollsMap(scheduleDetailIds: number[]): Promise<
+    Map<
+      number,
+      Array<{
+        id: number;
+        invoice: string;
+        billing_type_id: number;
+        status_id: number;
+      }>
+    >
+  > {
+    const detailPayrollsMap = new Map<
+      number,
+      Array<{
+        id: number;
+        invoice: string;
+        billing_type_id: number;
+        status_id: number;
+      }>
+    >();
+
+    if (!scheduleDetailIds || scheduleDetailIds.length === 0) {
+      return detailPayrollsMap;
+    }
+
+    const uniqueDetailIds = Array.from(
+      new Set(scheduleDetailIds.filter(Boolean)),
+    );
+    if (uniqueDetailIds.length === 0) {
+      return detailPayrollsMap;
+    }
+
+    const chunkSize = 1000;
+    const rawResults: Array<{
+      schedule_detail_id: number | string;
+      payroll_header_id: number | string;
+      payroll_invoice: string;
+      billing_type_id: number | string;
+      status_id: number | string;
+    }> = [];
+
+    for (let i = 0; i < uniqueDetailIds.length; i += chunkSize) {
+      const chunk = uniqueDetailIds.slice(i, i + chunkSize);
+      const rows = await this.dataSource
+        .getRepository(PayrollDetails)
+        .createQueryBuilder("pd")
+        .innerJoin("pd.payrollHeader", "ph")
+        .where("pd.schedule_detail_id IN (:...detailIds)", {
+          detailIds: chunk,
+        })
+        .andWhere("pd.status_id = :activeStatus", {
+          activeStatus: STATUS_IDS.ACTIVE,
+        })
+        .andWhere("ph.status_id = :postedStatus", {
+          postedStatus: STATUS_IDS.POSTED,
+        })
+        .andWhere("ph.payroll_invoice IS NOT NULL")
+        .andWhere("ph.payroll_invoice != ''")
+        .select([
+          "pd.schedule_detail_id AS schedule_detail_id",
+          "ph.id AS payroll_header_id",
+          "ph.payroll_invoice AS payroll_invoice",
+          "ph.billing_type_id AS billing_type_id",
+          "ph.status_id AS status_id",
+        ])
+        .getRawMany();
+
+      rawResults.push(...rows);
+    }
+
+    for (const row of rawResults) {
+      const detailId = Number(row.schedule_detail_id);
+      const payrollItem = {
+        id: Number(row.payroll_header_id),
+        invoice: String(row.payroll_invoice).trim(),
+        billing_type_id: Number(row.billing_type_id),
+        status_id: Number(row.status_id),
+      };
+
+      if (!detailPayrollsMap.has(detailId)) {
+        detailPayrollsMap.set(detailId, []);
+      }
+      const existing = detailPayrollsMap.get(detailId)!;
+      if (!existing.some((e) => e.id === payrollItem.id)) {
+        existing.push(payrollItem);
+      }
+    }
+
+    return detailPayrollsMap;
+  }
+
+  /**
+   * Pre-aggregates billing metrics for a collection of ScheduleDetail records.
+   * Computes regular, overtime/premium, and night-diff billed counts,
+   * fully-billed counts, and provides a structured breakdown for frontend tooltips.
+   * Observes DRY and optimization (single-pass O(N) evaluation).
+   */
+  public computeScheduleBillingMetrics(details: ScheduleDetail[] = []) {
+    let regularBilled = 0;
+    let regularEligible = 0;
+
+    let premiumBilled = 0;
+    let premiumEligible = 0;
+
+    let ndBilled = 0;
+    let ndEligible = 0;
+
+    let fullyBilled = 0;
+
+    for (let i = 0; i < details.length; i++) {
+      const d = details[i];
+
+      const isRegularDay =
+        Number(d.working_day_id) === WORKING_DAY_IDS.REGULAR_DAY;
+      const hasRegHours = Number(d.regular) > 0;
+      const hasOtHours = Number(d.overtime) > 0;
+      const hasNdHours = Number(d.night_shift) > 0;
+
+      // 1. Regular eligibility & billed status
+      const isRegEligible = isRegularDay && hasRegHours;
+      if (isRegEligible) {
+        regularEligible++;
+        if (d.is_regular_billed) regularBilled++;
+      }
+
+      // 2. Premium eligibility & billed status (covers OT and holiday regular hours)
+      const isPremiumEligible = (!isRegularDay && hasRegHours) || hasOtHours;
+      if (isPremiumEligible) {
+        premiumEligible++;
+        if (d.is_premium_billed) premiumBilled++;
+      }
+
+      // 3. Night Differential eligibility & billed status
+      const isNdEligible = hasNdHours;
+      if (isNdEligible) {
+        ndEligible++;
+        if (d.is_nd_billed) ndBilled++;
+      }
+
+      // 4. Fully Billed Check (all applicable non-zero hours billed)
+      const regDone = !isRegEligible || Boolean(d.is_regular_billed);
+      const premiumDone = !isPremiumEligible || Boolean(d.is_premium_billed);
+      const ndDone = !isNdEligible || Boolean(d.is_nd_billed);
+
+      if (
+        regDone &&
+        premiumDone &&
+        ndDone &&
+        (isRegEligible || isPremiumEligible || isNdEligible)
+      ) {
+        fullyBilled++;
+      }
+    }
+
+    const totalEntries = details.length;
+    const unbilledCount = Math.max(0, totalEntries - fullyBilled);
+
+    return {
+      regular_billed_count: regularBilled,
+      premium_billed_count: premiumBilled,
+      ot_billed_count: premiumBilled,
+      nd_billed_count: ndBilled,
+      fully_billed_count: fullyBilled,
+      unbilled_count: unbilledCount,
+      billing_breakdown: {
+        regular: {
+          billed: regularBilled,
+          unbilled: Math.max(0, regularEligible - regularBilled),
+          total: regularEligible,
+        },
+        premium: {
+          billed: premiumBilled,
+          unbilled: Math.max(0, premiumEligible - premiumBilled),
+          total: premiumEligible,
+        },
+        ot: {
+          billed: premiumBilled,
+          unbilled: Math.max(0, premiumEligible - premiumBilled),
+          total: premiumEligible,
+        },
+        nd: {
+          billed: ndBilled,
+          unbilled: Math.max(0, ndEligible - ndBilled),
+          total: ndEligible,
+        },
+      },
+    };
   }
 
   async findScheduleHeaderDetails(
@@ -186,7 +451,24 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+      const detailIds = scheduleDetail.map((d) => d.id).filter(Boolean);
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(detailIds);
+
+      const mappedDetails =
+        this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+
+      return mappedDetails.map((mappedItem, idx) => {
+        const dId = scheduleDetail[idx]?.id;
+        const connected = connectedPayrollsMap.get(dId) || [];
+        const invoices = connected.map((c) => c.invoice);
+        return {
+          ...mappedItem,
+          payroll_invoice: invoices.join(", ") || null,
+          payroll_invoices: invoices,
+          connected_payrolls: connected,
+        };
+      });
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");
@@ -211,13 +493,13 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
-          userId,
-          roleId,
-        );
-      where.location_id = In(allowedLocationIds);
-    }
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
+        where.location_id = In(allowedLocationIds);
+      }
 
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,
@@ -234,6 +516,7 @@ export class StaffAttendanceService {
         ],
         order: {
           overtime: "DESC",
+          ot_clearing_approved: "DESC",
           scheduleHeader: {
             schedule_date: "DESC",
           },
@@ -241,7 +524,24 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+      const detailIds = scheduleDetail.map((d) => d.id).filter(Boolean);
+      const connectedPayrollsMap =
+        await this.fetchConnectedPayrollsMap(detailIds);
+
+      const mappedDetails =
+        this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
+
+      return mappedDetails.map((mappedItem, idx) => {
+        const dId = scheduleDetail[idx]?.id;
+        const connected = connectedPayrollsMap.get(dId) || [];
+        const invoices = connected.map((c) => c.invoice);
+        return {
+          ...mappedItem,
+          payroll_invoice: invoices.join(", ") || null,
+          payroll_invoices: invoices,
+          connected_payrolls: connected,
+        };
+      });
     } catch (error) {
       console.error("Error fetching staff schedule:", error);
       throw new Error("Failed to fetch staff schedule");
@@ -276,23 +576,16 @@ export class StaffAttendanceService {
         };
 
         if (dateFrom) {
-          where.scheduleHeader.schedule_date = MoreThanOrEqual(
-            dateFrom,
-          );
+          where.scheduleHeader.schedule_date = MoreThanOrEqual(dateFrom);
         }
 
         if (dateTo) {
-          where.scheduleHeader.schedule_date = LessThanOrEqual(
-            dateTo,
-          );
+          where.scheduleHeader.schedule_date = LessThanOrEqual(dateTo);
         }
 
         // Apply both date filters together
         if (dateFrom && dateTo) {
-          where.scheduleHeader.schedule_date = Between(
-            dateFrom,
-            dateTo,
-          );
+          where.scheduleHeader.schedule_date = Between(dateFrom, dateTo);
         }
       }
 
@@ -317,8 +610,8 @@ export class StaffAttendanceService {
         if (where.location_id) {
           // Intersect selected locations with allowed locations
           const selectedLocationIds = locationIds || [];
-          const permittedLocationIds = selectedLocationIds.filter(
-            (id) => allowedLocationIds.includes(id),
+          const permittedLocationIds = selectedLocationIds.filter((id) =>
+            allowedLocationIds.includes(id),
           );
 
           where.location_id = In(permittedLocationIds);
@@ -339,7 +632,7 @@ export class StaffAttendanceService {
           "createdBy",
           "updatedBy",
           "actualLogsDetail",
-          "workingDays"
+          "workingDays",
         ],
         order: {
           overtime: "DESC",
@@ -350,106 +643,97 @@ export class StaffAttendanceService {
         },
       });
 
-      return this.responseMapperService.mapEntitiesToResponse(
-        scheduleDetail,
-      );
+      return this.responseMapperService.mapEntitiesToResponse(scheduleDetail);
     } catch (error) {
       console.error("Error generating attendance report:", error);
       throw new Error("Failed to generate attendance report");
     }
   }
 
-async generateComplianceAttendanceReport(
-  accessKeyId?: number,
-  dateFrom?: string,
-  dateTo?: string,
-  vendorIds?: number[],
-  locationIds?: number[],
-  userId?: number,
-  roleId?: number,
-): Promise<any[]> {
-  try {
-    // 1. Apply allowed-location permissions.
-    let effectiveLocationIds = locationIds;
+  async generateComplianceAttendanceReport(
+    accessKeyId?: number,
+    dateFrom?: string,
+    dateTo?: string,
+    vendorIds?: number[],
+    locationIds?: number[],
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
+    try {
+      // 1. Apply allowed-location permissions.
+      let effectiveLocationIds = locationIds;
 
-    if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
-          userId,
-          roleId,
-        );
+      if (userId && roleId) {
+        const allowedLocationIds =
+          await this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+          );
 
-      if (!allowedLocationIds.length) {
-        return [];
+        if (!allowedLocationIds.length) {
+          return [];
+        }
+
+        effectiveLocationIds = locationIds?.length
+          ? locationIds.filter((id) => allowedLocationIds.includes(id))
+          : allowedLocationIds;
+
+        if (!effectiveLocationIds.length) {
+          return [];
+        }
       }
 
-      effectiveLocationIds = locationIds?.length
-        ? locationIds.filter((id) => allowedLocationIds.includes(id))
-        : allowedLocationIds;
+      // 2. Get expected store assignments.
+      const staffWarehouseWhere: any = {};
 
-      if (!effectiveLocationIds.length) {
-        return [];
+      if (vendorIds?.length) {
+        staffWarehouseWhere.vendor_id = In(vendorIds);
       }
-    }
 
-    // 2. Get expected store assignments.
-    const staffWarehouseWhere: any = {};
+      if (effectiveLocationIds?.length) {
+        staffWarehouseWhere.location_id = In(effectiveLocationIds);
+      }
 
-    if (vendorIds?.length) {
-      staffWarehouseWhere.vendor_id = In(vendorIds);
-    }
-
-    if (effectiveLocationIds?.length) {
-      staffWarehouseWhere.location_id = In(effectiveLocationIds);
-    }
-
-    if (accessKeyId !== undefined) {
+      if (accessKeyId !== undefined) {
         staffWarehouseWhere.warehouse = {
           access_key_id: accessKeyId,
         };
       }
 
-    const staffWarehouses =
-      await this.staffWarehouseRepository.find({
+      const staffWarehouses = await this.staffWarehouseRepository.find({
         where: staffWarehouseWhere,
         relations: ["location", "warehouse", "vendor"],
       });
 
-    // 3. Build ScheduleHeader filters.
-    const scheduleHeaderWhere: any = {};
+      // 3. Build ScheduleHeader filters.
+      const scheduleHeaderWhere: any = {};
 
-    if (accessKeyId !== undefined) {
-      scheduleHeaderWhere.access_key_id = accessKeyId;
-    }
+      if (accessKeyId !== undefined) {
+        scheduleHeaderWhere.access_key_id = accessKeyId;
+      }
 
-    if (dateFrom && dateTo) {
-      scheduleHeaderWhere.schedule_date = Between(
-        dateFrom,
-        dateTo,
-      );
-    } else if (dateFrom) {
-      scheduleHeaderWhere.schedule_date =
-        MoreThanOrEqual(dateFrom);
-    } else if (dateTo) {
-      scheduleHeaderWhere.schedule_date =
-        LessThanOrEqual(dateTo);
-    }
+      if (dateFrom && dateTo) {
+        scheduleHeaderWhere.schedule_date = Between(dateFrom, dateTo);
+      } else if (dateFrom) {
+        scheduleHeaderWhere.schedule_date = MoreThanOrEqual(dateFrom);
+      } else if (dateTo) {
+        scheduleHeaderWhere.schedule_date = LessThanOrEqual(dateTo);
+      }
 
-    // 4. Get schedules for the selected date range.
-    const scheduleWhere: any = {
-      scheduleHeader: scheduleHeaderWhere,
-    };
+      // 4. Get schedules for the selected date range.
+      const scheduleWhere: any = {
+        scheduleHeader: scheduleHeaderWhere,
+      };
 
-    if (vendorIds?.length) {
-      scheduleWhere.vendor_id = In(vendorIds);
-    }
+      if (vendorIds?.length) {
+        scheduleWhere.vendor_id = In(vendorIds);
+      }
 
-    if (effectiveLocationIds?.length) {
-      scheduleWhere.location_id = In(effectiveLocationIds);
-    }
+      if (effectiveLocationIds?.length) {
+        scheduleWhere.location_id = In(effectiveLocationIds);
+      }
 
-    const scheduledDetails =
-      await this.scheduleDetailRepository.find({
+      const scheduledDetails = await this.scheduleDetailRepository.find({
         where: scheduleWhere,
         select: {
           id: true,
@@ -460,83 +744,79 @@ async generateComplianceAttendanceReport(
         relations: ["scheduleHeader"],
       });
 
-    // 5. Build a set of scheduled stores by date.
-    const scheduledStoreKeys = new Set(
-      scheduledDetails.map((detail) => {
-        const scheduleDate =
-          detail.scheduleHeader?.schedule_date;
+      // 5. Build a set of scheduled stores by date.
+      const scheduledStoreKeys = new Set(
+        scheduledDetails.map((detail) => {
+          const scheduleDate = detail.scheduleHeader?.schedule_date;
 
-        const formattedDate = scheduleDate
-          ? scheduleDate instanceof Date
-            ? scheduleDate.toISOString().slice(0, 10)
-            : String(scheduleDate).slice(0, 10)
-          : "";
+          const formattedDate = scheduleDate
+            ? scheduleDate instanceof Date
+              ? scheduleDate.toISOString().slice(0, 10)
+              : String(scheduleDate).slice(0, 10)
+            : "";
 
-        return [
-          formattedDate,
-          detail.location_id,
-          detail.vendor_id,
-          detail.warehouse_id,
-        ].join("-");
-      }),
-    );
+          return [
+            formattedDate,
+            detail.location_id,
+            detail.vendor_id,
+            detail.warehouse_id,
+          ].join("-");
+        }),
+      );
 
-    // 6. Generate dates within the selected range.
-    const dates: string[] = [];
+      // 6. Generate dates within the selected range.
+      const dates: string[] = [];
 
-    if (dateFrom && dateTo) {
-      const currentDate = new Date(`${dateFrom}T00:00:00Z`);
-      const endDate = new Date(`${dateTo}T00:00:00Z`);
+      if (dateFrom && dateTo) {
+        const currentDate = new Date(`${dateFrom}T00:00:00Z`);
+        const endDate = new Date(`${dateTo}T00:00:00Z`);
 
-      while (currentDate <= endDate) {
-        dates.push(currentDate.toISOString().slice(0, 10));
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        while (currentDate <= endDate) {
+          dates.push(currentDate.toISOString().slice(0, 10));
+          currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        }
+      } else if (dateFrom || dateTo) {
+        // If only one boundary is supplied, check only that date.
+        dates.push((dateFrom || dateTo)!);
       }
-    } else if (dateFrom || dateTo) {
-      // If only one boundary is supplied, check only that date.
-      dates.push((dateFrom || dateTo)!);
-    }
 
-    // 7. Find stores without schedules.
-    const missingStores: any[] = [];
+      // 7. Find stores without schedules.
+      const missingStores: any[] = [];
 
-    for (const date of dates) {
-      for (const assignment of staffWarehouses) {
-        const key = [
-          date,
-          assignment.location_id,
-          assignment.vendor_id,
-          assignment.warehouse_id,
-        ].join("-");
+      for (const date of dates) {
+        for (const assignment of staffWarehouses) {
+          const key = [
+            date,
+            assignment.location_id,
+            assignment.vendor_id,
+            assignment.warehouse_id,
+          ].join("-");
 
-        if (!scheduledStoreKeys.has(key)) {
-          missingStores.push({
-            schedule_date: date,
-            store: {
-              warehouse_id: assignment.warehouse_id,
-              warehouse: assignment.warehouse,
-              vendor_id: assignment.vendor_id,
-              vendor: assignment.vendor,
-              location_id: assignment.location_id,
-              location: assignment.location,
-            },
-            attendance_status: "NO SCHEDULE",
-          });
+          if (!scheduledStoreKeys.has(key)) {
+            missingStores.push({
+              schedule_date: date,
+              store: {
+                warehouse_id: assignment.warehouse_id,
+                warehouse: assignment.warehouse,
+                vendor_id: assignment.vendor_id,
+                vendor: assignment.vendor,
+                location_id: assignment.location_id,
+                location: assignment.location,
+              },
+              attendance_status: "NO SCHEDULE",
+            });
+          }
         }
       }
+
+      // 8. Return only stores without schedules.
+      return missingStores;
+    } catch (error) {
+      console.error("Error generating compliance attendance report:", error);
+
+      throw new Error("Failed to generate compliance attendance report");
     }
-
-    // 8. Return only stores without schedules.
-    return missingStores;
-  } catch (error) {
-    console.error(
-      "Error generating compliance attendance report:",
-      error,
-    );
-
-    throw new Error("Failed to generate compliance attendance report");
   }
-}
 
   async findOne(id: number): Promise<any> {
     try {
@@ -1081,6 +1361,7 @@ async generateComplianceAttendanceReport(
           if (updateDetail.is_ot_clearing === true) {
             scheduleDetail.overtime_in = null;
             scheduleDetail.overtime_out = null;
+            scheduleDetail.overtime = 0;
             scheduleDetail.ot_clearing_approved = true;
           } else if (updateDetail.is_ot_clearing === false) {
             actualLogsDetail = scheduleDetail.actual_logs_detail_id
@@ -1096,6 +1377,7 @@ async generateComplianceAttendanceReport(
             scheduleDetail.overtime_out =
               actualLogsDetail?.overtime_out ?? null;
 
+            scheduleDetail.overtime = actualLogsDetail?.overtime ?? 0;
             scheduleDetail.ot_clearing_approved = false;
           }
 
@@ -1225,6 +1507,8 @@ async generateComplianceAttendanceReport(
           scheduleDetail.updated_by = userId;
           scheduleDetail.attendance_status_id = STATUS_IDS.VALIDATED;
           scheduleDetail.add_ot = updateDetail.add_ot;
+          scheduleDetail.is_not_for_premium_pay =
+            updateDetail.is_not_for_premium_pay;
           scheduleDetail.cron_computed = false;
         }
       }
@@ -1648,6 +1932,444 @@ async generateComplianceAttendanceReport(
       logger.error("Failed to cancel schedule headers:", error);
 
       throw new Error("Failed to cancel schedule headers");
+    }
+  }
+
+  async bulkUpdateStatus(
+    bulkStatusDto: BulkAttendanceStatusDto,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
+    try {
+      const { id: rawIds, status_id: targetStatusId, remarks } = bulkStatusDto;
+
+      if (!rawIds || !rawIds.length) {
+        throw new BadRequestException(
+          "At least one Schedule Header ID is required.",
+        );
+      }
+
+      // Deduplicate IDs
+      const scheduleIds = Array.from(new Set(rawIds.map(Number)));
+
+      // Allowed lifecycle statuses for bulk transition
+      const allowedStatusIds: number[] = [
+        STATUS_IDS.PENDING, // 3
+        STATUS_IDS.FOR_REVIEW, // 42
+        STATUS_IDS.VALIDATED, // 40
+      ];
+
+      if (!allowedStatusIds.includes(targetStatusId)) {
+        throw new BadRequestException(
+          `Invalid target status_id: ${targetStatusId}. Allowed statuses: PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), VALIDATED (${STATUS_IDS.VALIDATED}).`,
+        );
+      }
+
+      // Progression hierarchy order: PENDING (1) -> FOR_REVIEW (2) -> VALIDATED (3)
+      const STATUS_ORDER: Record<number, number> = {
+        [STATUS_IDS.PENDING]: 1,
+        [STATUS_IDS.FOR_REVIEW]: 2,
+        [STATUS_IDS.VALIDATED]: 3,
+        [STATUS_IDS.COMPUTED]: 4,
+      };
+
+      const targetOrder = STATUS_ORDER[targetStatusId];
+      const targetStatusName =
+        STATUS_NAMES[targetStatusId] || `Status ${targetStatusId}`;
+
+      // Fetch existing Schedule Headers with details to determine effective status
+      const existingHeaders = await this.scheduleHeaderRepository.find({
+        where: {
+          id: In(scheduleIds),
+        },
+        relations: ["details"],
+      });
+
+      // Helper to determine the effective current attendance status of a schedule header
+      const getEffectiveStatusId = (header: ScheduleHeader): number => {
+        const detailStatuses = (header.details || [])
+          .map((d) => d.attendance_status_id)
+          .filter((id): id is number => id != null);
+
+        if (detailStatuses.some((status) => status === STATUS_IDS.COMPUTED)) {
+          return STATUS_IDS.COMPUTED;
+        }
+
+        return detailStatuses[0] ?? header.attendance_status_id;
+      };
+
+      const foundIds = new Set(existingHeaders.map((h) => h.id));
+      const missingIds = scheduleIds.filter((id) => !foundIds.has(id));
+
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Schedule Header(s) with ID(s) ${missingIds.join(", ")} not found`,
+        );
+      }
+
+      const cleanedRemarks = remarks?.trim() || "";
+
+      // Validate transitions and business rules across all records
+      for (const header of existingHeaders) {
+        // Disallow transitions on cancelled schedule headers
+        if (header.status_id === STATUS_IDS.CANCELLED) {
+          throw new BadRequestException(
+            `Cannot change attendance status for cancelled Schedule Header #${header.id}.`,
+          );
+        }
+
+        const currentStatusId = getEffectiveStatusId(header);
+
+        // Ensure current status is one of the supported lifecycle statuses
+        if (!currentStatusId || !STATUS_ORDER[currentStatusId]) {
+          throw new BadRequestException(
+            `Schedule Header #${header.id} has invalid current attendance status (${currentStatusId}). Only PENDING (${STATUS_IDS.PENDING}), FOR_REVIEW (${STATUS_IDS.FOR_REVIEW}), VALIDATED (${STATUS_IDS.VALIDATED}), and COMPUTED (${STATUS_IDS.COMPUTED}) can be transitioned.`,
+          );
+        }
+
+        const currentOrder = STATUS_ORDER[currentStatusId];
+        const currentStatusName =
+          STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
+
+        // Identity check: same status
+        if (currentStatusId === targetStatusId) {
+          throw new BadRequestException(
+            `Schedule Header #${header.id} is already in '${targetStatusName}' status.`,
+          );
+        }
+
+        // Backward revert check: remarks are mandatory on reversal transitions
+        const isBackwardRevert = targetOrder < currentOrder;
+        if (isBackwardRevert && !cleanedRemarks) {
+          throw new BadRequestException(
+            `Remarks are mandatory when reverting attendance status backwards (from ${currentStatusName} to ${targetStatusName}) for Schedule Header #${header.id}.`,
+          );
+        }
+      }
+
+      const now = new Date();
+
+      // Separate computed headers (which require payroll team to revert connected payroll first)
+      // from direct attendance transitions (which can be updated immediately).
+      const computedHeaders = existingHeaders.filter(
+        (h) => getEffectiveStatusId(h) === STATUS_IDS.COMPUTED,
+      );
+      const directUpdateHeaders = existingHeaders.filter(
+        (h) => getEffectiveStatusId(h) !== STATUS_IDS.COMPUTED,
+      );
+      const directUpdateHeaderIds = directUpdateHeaders.map((h) => h.id);
+
+      // Execute updates inside an atomic database transaction
+      await this.dataSource.transaction(async (manager) => {
+        // 1. Direct Attendance Transitions: update header and details
+        if (directUpdateHeaderIds.length > 0) {
+          await manager.update(
+            ScheduleHeader,
+            {
+              id: In(directUpdateHeaderIds),
+            },
+            {
+              attendance_status_id: targetStatusId,
+              attendance_updated_by: userId,
+              attendance_reason: cleanedRemarks || undefined,
+              attendance_ts: now,
+              updated_by: userId,
+              modified_at: now,
+            },
+          );
+
+          const detailUpdatePayload: any = {
+            attendance_status_id: targetStatusId,
+            updated_by: userId,
+            modified_at: now,
+          };
+          if (cleanedRemarks) {
+            detailUpdatePayload.remarks = cleanedRemarks;
+          }
+
+          await manager.update(
+            ScheduleDetail,
+            {
+              schedule_header_id: In(directUpdateHeaderIds),
+            },
+            detailUpdatePayload,
+          );
+        }
+
+        // 2. Computed Attendance Reversal Requests:
+        // Do NOT change schedule_details status directly because they are tied to computed payroll!
+        // Record the reversal request reason on the header while waiting for Payroll team action.
+        if (computedHeaders.length > 0) {
+          const computedHeaderIds = computedHeaders.map((h) => h.id);
+          await manager.update(
+            ScheduleHeader,
+            {
+              id: In(computedHeaderIds),
+            },
+            {
+              attendance_reason: cleanedRemarks || undefined,
+              attendance_updated_by: userId,
+              attendance_ts: now,
+              updated_by: userId,
+              modified_at: now,
+            },
+          );
+        }
+      });
+
+      // 3. Batch Action Logs (concise recording, optimized single batch query)
+      try {
+        const actionLogs = existingHeaders.map((header) => {
+          const currentStatusId = getEffectiveStatusId(header);
+          const currentStatusName =
+            STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
+          const isBackwardRevert = targetOrder < STATUS_ORDER[currentStatusId];
+          const actionId = isBackwardRevert
+            ? ACTION_IDS.REVERT
+            : targetStatusId === STATUS_IDS.VALIDATED
+              ? ACTION_IDS.APPROVE
+              : ACTION_IDS.EDIT;
+
+          const descAction = isBackwardRevert ? "Revert" : "Transition";
+          const isComputedReversal = currentStatusId === STATUS_IDS.COMPUTED;
+          const description = isComputedReversal
+            ? `Request Attendance Reversal: ${currentStatusName} -> ${targetStatusName}. Remarks: ${cleanedRemarks || "None"}`
+            : `${descAction} Attendance Status: ${currentStatusName} -> ${targetStatusName}${
+                cleanedRemarks ? `. Remarks: ${cleanedRemarks}` : ""
+              }`;
+
+          return {
+            ref_id: header.id,
+            action_id: actionId,
+            description,
+            raw_data: JSON.stringify({
+              previous_status_id: currentStatusId,
+              new_status_id: targetStatusId,
+              remarks: cleanedRemarks || null,
+              reversal_requested_to_payroll: isComputedReversal,
+            }),
+            created_by: userId,
+          };
+        });
+
+        await this.actionLogsService.logActionBatch(
+          this.module_name,
+          actionLogs,
+        );
+      } catch (err) {
+        logger.error(
+          "Action log batch failed for bulk attendance status:",
+          err,
+        );
+      }
+
+      // 4. Audit Trail (concise summary log)
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "Staff Attendance Services",
+            method: "bulkUpdateStatus",
+            raw_data: JSON.stringify({
+              schedule_header_ids: scheduleIds,
+              target_status_id: targetStatusId,
+              remarks: cleanedRemarks || null,
+              has_computed_reversals: computedHeaders.length > 0,
+            }),
+            description: `Bulk attendance status request for Schedule Headers [${scheduleIds.join(
+              ", ",
+            )}] to ${targetStatusName}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (err) {
+        logger.error("Audit trail failed for bulk attendance status:", err);
+      }
+
+      // 5. Dynamic In-App Notifications: Notify Payroll Team with redirect to Payroll Module
+      try {
+        for (const header of computedHeaders) {
+          const detailIds = (header.details || [])
+            .map((d) => d.id)
+            .filter((id): id is number => id != null);
+
+          const connectedMap = await this.fetchConnectedPayrollsMap(detailIds);
+          const connectedPayrollsList: Array<{ id: number; invoice: string }> =
+            [];
+
+          for (const did of detailIds) {
+            const payList = connectedMap.get(did) || [];
+            for (const p of payList) {
+              if (!connectedPayrollsList.some((cp) => cp.id === p.id)) {
+                connectedPayrollsList.push(p);
+              }
+            }
+          }
+
+          const payrollInvoicesStr =
+            connectedPayrollsList
+              .map((p) => p.invoice)
+              .filter(Boolean)
+              .join(", ") || "N/A";
+          const primaryInvoice = connectedPayrollsList[0]?.invoice || "";
+
+          // Action URL redirects the Payroll Team directly into the Payroll Module
+          const actionUrl = primaryInvoice
+            ? `/staff-payroll?invoice=${primaryInvoice}`
+            : `/staff-payroll`;
+
+          const locationIds = Array.from(
+            new Set(
+              (header.details || [])
+                .map((d) => d.location_id)
+                .filter((locId): locId is number => locId != null && locId > 0),
+            ),
+          );
+
+          const payrollIds = connectedPayrollsList
+            .map((p) => p.id)
+            .filter((id): id is number => id != null && !isNaN(id));
+
+          const notificationPayload = {
+            navigation: {
+              route: "/staff-payroll",
+              highlight_ids: payrollIds,
+              primary_id: connectedPayrollsList[0]?.id || null,
+              filter_params: {
+                invoice: primaryInvoice || undefined,
+                source_schedule_id: header.id,
+                status_id: STATUS_IDS.POSTED,
+              },
+            },
+            payload: {
+              schedule_header_id: header.id,
+              previous_status: "Computed",
+              target_status: "Validated",
+              remarks: cleanedRemarks,
+              payroll_invoices: payrollInvoicesStr,
+              connected_payrolls: connectedPayrollsList,
+              location_ids: locationIds,
+            },
+            remarks: cleanedRemarks,
+            payroll_invoices: payrollInvoicesStr,
+          };
+
+          this.eventEmitter.emit(
+            "notification.trigger",
+            new NotificationTriggerEvent(
+              this.module_name,
+              "ATTENDANCE_REVERSAL_REQUEST",
+              header.id,
+              userId,
+              header.access_key_id || accessKeyId,
+              notificationPayload,
+              `Attendance Reversal Requested - Schedule #${header.id}`,
+              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+              actionUrl,
+              locationIds,
+            ),
+          );
+        }
+
+        // Also notify on normal backward reverts (e.g. Validated -> For Review) if configured
+        const nonComputedReverts = directUpdateHeaders.filter(
+          (header) => targetOrder < STATUS_ORDER[getEffectiveStatusId(header)],
+        );
+
+        for (const header of nonComputedReverts) {
+          const currentStatusId = getEffectiveStatusId(header);
+          const prevStatusName =
+            STATUS_NAMES[currentStatusId] || `Status ${currentStatusId}`;
+
+          const locationIds = Array.from(
+            new Set(
+              (header.details || [])
+                .map((d) => d.location_id)
+                .filter((locId): locId is number => locId != null && locId > 0),
+            ),
+          );
+
+          const notificationPayload = {
+            navigation: {
+              route: `/staff-attendance?header_id=${header.id}`,
+              highlight_ids: [header.id],
+              primary_id: header.id,
+              filter_params: {
+                header_id: header.id,
+              },
+            },
+            payload: {
+              schedule_header_id: header.id,
+              previous_status: prevStatusName,
+              target_status: targetStatusName,
+              remarks: cleanedRemarks,
+              location_ids: locationIds,
+            },
+            remarks: cleanedRemarks,
+          };
+
+          this.eventEmitter.emit(
+            "notification.trigger",
+            new NotificationTriggerEvent(
+              this.module_name,
+              "ATTENDANCE_REVERSAL_REQUEST",
+              header.id,
+              userId,
+              header.access_key_id || accessKeyId,
+              notificationPayload,
+              `Attendance Reversal Requested - Schedule #${header.id}`,
+              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+              `/staff-attendance?header_id=${header.id}`,
+              locationIds,
+            ),
+          );
+        }
+      } catch (err) {
+        logger.error(
+          "Failed to trigger attendance reversal notifications:",
+          err,
+        );
+      }
+
+      // 6. Fetch updated schedule headers for mapped response & SSE broadcast
+      const updatedScheduleHeaders = await this.scheduleHeaderRepository.find({
+        where: {
+          id: In(scheduleIds),
+        },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "details",
+          "details.attendanceStatus",
+          "details.location",
+          "details.vendor",
+        ],
+      });
+
+      const responses = updatedScheduleHeaders.map((schedule) =>
+        this.responseMapperService.mapEntityToResponse(schedule),
+      );
+
+      // 6. SSE Real-time Broadcast
+      try {
+        this.sseEventEmitter.emitUpdate("staff_attendance", 0);
+        this.sseEventEmitter.emitUpdate("staff_scheduling", 0);
+      } catch (err) {
+        logger.error("SSE event failed for bulk attendance status:", err);
+      }
+
+      return responses;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      logger.error("Failed to bulk update attendance status:", error);
+      throw new Error("Failed to bulk update attendance status");
     }
   }
 

@@ -16,6 +16,7 @@ import { Vendor } from "./Vendor";
 import { WorkingDay } from "./WorkingDay";
 import { PayrollHeader } from "./PayrollHeader";
 import { ScheduleDetail } from "./ScheduleDetails";
+import { BillingType } from "./BillingType";
 
 @Entity("payroll_details")
 export class PayrollDetails {
@@ -24,6 +25,12 @@ export class PayrollDetails {
 
   @Column({ nullable: true })
   payroll_header_id: number;
+
+  @Column({ nullable: true })
+  billing_type_id: number;
+
+  @Column({ type: "boolean", default: false })
+  is_not_for_premium_pay: boolean;
 
   @Column({ nullable: true })
   schedule_detail_id: number;
@@ -244,13 +251,21 @@ export class PayrollDetails {
   @JoinColumn({ name: "working_day_id" })
   workingDays: WorkingDay;
 
-  @ManyToOne(() => ScheduleDetail, {
+  @ManyToOne(() => ScheduleDetail, (sd) => sd.payrollDetails, {
     eager: false,
     onDelete: "RESTRICT",
     onUpdate: "CASCADE",
   })
   @JoinColumn({ name: "schedule_detail_id" })
   scheduleDetail: ScheduleDetail;
+
+  @ManyToOne(() => BillingType, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "billing_type_id" })
+  billingType: BillingType;
 
   @ManyToOne(() => PayrollHeader, {
     eager: false,
@@ -516,4 +531,7 @@ export class PayrollDetails {
 
   @Column({ type: "date", nullable: true })
   salary_rate_effectivity: Date;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  miscellaneous_income: number;
 }

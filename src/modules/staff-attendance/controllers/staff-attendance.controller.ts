@@ -21,6 +21,7 @@ import { StaffAttendanceService } from "src/modules/staff-attendance/services/st
 import { CreateScheduleHeaderDto } from "src/modules/staff-attendance/dto/CreateStaffSchedulingDto";
 import { AttendanceReportFilter } from "src/modules/staff-attendance/dto/AttendanceReportFilterDto";
 import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/UpdateStaffSchedulingDto";
+import { BulkAttendanceStatusDto } from "src/modules/staff-attendance/dto/BulkAttendanceStatusDto";
 import { FileInterceptor, diskStorage } from "../../../adapters";
 
 import {
@@ -121,7 +122,6 @@ export class StaffAttendanceController {
     );
   }
 
-
   @Post("compliance-attendance-reports")
   @RequirePermissions({ module: "ATTENDANCE REPORT", action: "VIEW" })
   async getComplianceAttendanceReport(
@@ -142,7 +142,7 @@ export class StaffAttendanceController {
       roleId,
     );
   }
-  
+
   // Placed before :id to prevent collision
   @Get("history/:id")
   @RequirePermissions({ module: "STAFF ATTENDANCE", action: "VIEW" })
@@ -240,6 +240,21 @@ export class StaffAttendanceController {
     return this.staffAttendanceService.revertSchedule(
       updateScheduleDto,
       userId,
+    );
+  }
+
+  @Patch("bulk-status")
+  @RequirePermissions({ module: "STAFF ATTENDANCE", action: "EDIT" })
+  async bulkUpdateStatus(
+    @Body() bulkStatusDto: BulkAttendanceStatusDto,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    const accessKeyId = req.user.current_access_key;
+    return this.staffAttendanceService.bulkUpdateStatus(
+      bulkStatusDto,
+      userId,
+      accessKeyId,
     );
   }
 

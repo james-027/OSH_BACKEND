@@ -7,10 +7,12 @@ uploads/req-transactions/*
 uploads/qa-req-transactions/*
 *.log
 .env
+.env.docker
 .env.cache.example
 EXT/*
 src/migrations/*
 tsconfig.tsbuildinfo
+tsconfig.build.tsbuildinfo
 package-lock.json
 uploads/*
 !uploads/UPLOAD-TEMPLATE/

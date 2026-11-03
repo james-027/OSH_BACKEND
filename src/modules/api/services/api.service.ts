@@ -18,6 +18,11 @@ import {
   getCtgiSemsQAConnection,
 } from "../../../utils/dwh-datasources";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+import axios from "axios";
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
+import { PosVoucherRelayDto } from "../dto/pos-voucher-relay.dto";
+import logger from "src/config/logger";
 import { WarehouseEmployeesService } from "../../warehouses/services/warehouse-employees.service";
 import { QA_PORT } from "src/constants/customConstants";
 import { EmployeesService } from "src/modules/employees/services/employees.service";
@@ -69,7 +74,8 @@ export class ApiService {
     endpoint: string,
     method: string,
   ): Promise<boolean> {
-    const access = await this.apiAuthAccessRepository.findOne({
+    // 1. Check exact match first
+    let access = await this.apiAuthAccessRepository.findOne({
       where: {
         api_key_id: apiKeyId,
         controller_url: endpoint,
@@ -78,7 +84,50 @@ export class ApiService {
       },
     });
 
-    return !!access || access?.all_access === 1;
+    if (access) {
+      return true;
+    }
+
+    // 2. Check alternative representations (slash vs hyphen, e.g. "pos-coupon/validate" <-> "pos-coupon-validate")
+    const candidates: string[] = [];
+    if (endpoint.includes("/")) {
+      candidates.push(endpoint.replace(/\//g, "-"));
+    }
+    if (endpoint.includes("-")) {
+      candidates.push(endpoint.replace(/-/g, "/"));
+      const lastHyphen = endpoint.lastIndexOf("-");
+      if (lastHyphen !== -1) {
+        candidates.push(
+          endpoint.substring(0, lastHyphen) +
+            "/" +
+            endpoint.substring(lastHyphen + 1),
+        );
+      }
+    }
+
+    for (const alt of candidates) {
+      access = await this.apiAuthAccessRepository.findOne({
+        where: {
+          api_key_id: apiKeyId,
+          controller_url: alt,
+          api_method: method,
+          status_id: 1,
+        },
+      });
+      if (access) {
+        return true;
+      }
+    }
+
+    // 3. Check if key has all_access = 1
+    const allAccess = await this.apiAuthAccessRepository.findOne({
+      where: [
+        { api_key_id: apiKeyId, all_access: 1, status_id: 1 },
+        { api_key_id: apiKeyId, all_access: 1, api_method: method, status_id: 1 },
+      ],
+    });
+
+    return !!allAccess;
   }
 
   async logApiRequest(
@@ -218,8 +267,14 @@ export class ApiService {
       responseData = await this.createDataByEndpoint(endpoint, data);
     } catch (error) {
       const err = error as any;
-      statusCode = err.status || 500;
-      responseData = { error: err.message };
+      statusCode =
+        typeof err.getStatus === "function"
+          ? err.getStatus()
+          : err.status || 500;
+      responseData =
+        typeof err.getResponse === "function"
+          ? err.getResponse()
+          : { error: err.message };
       await this.logApiRequest(
         apiKeyEntity.id,
         endpoint,
@@ -229,6 +284,24 @@ export class ApiService {
         statusCode,
       );
       throw error;
+    }
+
+    // Transparent relay: if the endpoint relayed to legacy PHP, preserve exact PHP status & body
+    if (
+      responseData &&
+      typeof responseData === "object" &&
+      responseData.__isRelayResponse
+    ) {
+      statusCode = responseData.statusCode;
+      await this.logApiRequest(
+        apiKeyEntity.id,
+        endpoint,
+        "POST",
+        data,
+        responseData.data,
+        statusCode,
+      );
+      return responseData;
     }
 
     await this.logApiRequest(
@@ -871,6 +944,136 @@ export class ApiService {
     }
   }
 
+  /**
+   * Parses legacy PHP responses, converting PHP array strings (from var_export/debug)
+   * or JSON strings into clean JSON objects.
+   */
+  private parseLegacyPhpResponse(data: any): any {
+    if (!data) return data;
+    if (typeof data === "object") return data;
+    if (typeof data !== "string") return data;
+
+    const trimmed = data.trim();
+    try {
+      return JSON.parse(trimmed);
+    } catch (e) {
+      // If it's a PHP array string: array ( 'status' => 'error', 'msg' => '...' )
+      if (trimmed.startsWith("array") || trimmed.includes("=>")) {
+        const result: Record<string, any> = {};
+        const regex = /'([^']+)'\s*=>\s*(?:'([^']*)'|(true|false|null|\d+))/g;
+        let match;
+        while ((match = regex.exec(trimmed)) !== null) {
+          const key = match[1];
+          let val: any = match[2] !== undefined ? match[2] : match[3];
+          if (val === "true") val = true;
+          else if (val === "false") val = false;
+          else if (val === "null") val = null;
+          else if (!isNaN(Number(val)) && match[2] === undefined)
+            val = Number(val);
+          result[key] = val;
+        }
+        if (Object.keys(result).length > 0) {
+          return result;
+        }
+      }
+      return data;
+    }
+  }
+
+  /**
+   * Relays a validated POS voucher request to the legacy PHP endpoint
+   */
+  async relayToLegacyPhp(endpoint: string, data: any): Promise<any> {
+    // 1. Strict validation against PosVoucherRelayDto
+    const dto = plainToInstance(PosVoucherRelayDto, data);
+    const validationErrors = await validate(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+
+    if (validationErrors.length > 0) {
+      const messages = validationErrors.flatMap((e) =>
+        Object.values(e.constraints || {}),
+      );
+      throw new HttpException(
+        {
+          status: "error",
+          msg: messages.join(", "),
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    let targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
+    switch (endpoint) {
+      case "pos-coupon-validate":
+      case "pos-coupon/validate":
+        targetUrl = process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL || "";
+        break;
+      case "pos-coupon-redeem":
+      case "pos-coupon/redeem":
+        targetUrl = process.env.LEGACY_EVOUCHER_PHP_REDEEM_API_URL || "";
+        break;
+    }
+    // 2. Resolve legacy PHP target URL
+
+    if (!targetUrl) {
+      if (process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL) {
+        targetUrl = `${process.env.LEGACY_EVOUCHER_PHP_VALIDATE_API_URL.replace(/\/+$/, "")}/${endpoint}`;
+      } else {
+        logger.error(
+          `[LEGACY-PHP-RELAY] LEGACY_EVOUCHER_PHP_VALIDATE_API_URL environment variable is not configured.`,
+        );
+        throw new HttpException(
+          {
+            status: "error",
+            msg: `Endpoint '${endpoint}' relay failed: LEGACY_EVOUCHER_PHP_VALIDATE_API_URL is not configured`,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    } else if (targetUrl.includes("{endpoint}")) {
+      targetUrl = targetUrl.replace("{endpoint}", endpoint);
+    }
+
+    logger.info(
+      `[LEGACY-PHP-RELAY] Forwarding validated request for '${endpoint}' to ${targetUrl}`,
+    );
+
+    // 3. Forward request to legacy PHP with validateStatus: () => true
+    // This allows transparent pass-through of the EXACT status and body from legacy PHP
+    try {
+      const response = await axios.post(targetUrl, data, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Forwarded-By": "NestJS-API-Gateway",
+        },
+        timeout: 15000,
+        validateStatus: () => true, // Don't throw on non-2xx
+      });
+
+      const cleanData = this.parseLegacyPhpResponse(response.data);
+
+      return {
+        __isRelayResponse: true,
+        statusCode: response.status || 200,
+        data: cleanData,
+      };
+    } catch (error: any) {
+      logger.error(
+        `[LEGACY-PHP-RELAY] Connection error to ${targetUrl}: ${error.message}`,
+      );
+      throw new HttpException(
+        {
+          status: "error",
+          msg: `Failed to reach legacy PHP service: ${error.message}`,
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
   private async createDataByEndpoint(
     endpoint: string,
     data: any,
@@ -885,10 +1088,8 @@ export class ApiService {
         return await this.warehouseHurdleCategoryRepository.save(newCategory);
 
       default:
-        throw new HttpException(
-          `Endpoint '${endpoint}' not supported for creation`,
-          HttpStatus.NOT_FOUND,
-        );
+        // Relay any other authorized POST endpoint to legacy PHP service
+        return await this.relayToLegacyPhp(endpoint, data);
     }
   }
 

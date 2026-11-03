@@ -16,6 +16,7 @@ import { databaseConfig } from "./database.config";
         database: configService.get<string>("DB_DATABASE") || "xxx",
         entities: databaseConfig.entities,
         synchronize: false,
+        poolSize: 100,
         // logging: configService.get<string>("NODE_ENV") === "development",
         logging: databaseConfig.logging,
         migrations: ["dist/migration/**/*.js"],

@@ -26,7 +26,7 @@ import { PayrollDetails } from "src/entities/PayrollDetails";
 import { LogsType } from "src/entities/LogsType";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { DwsScheduleSyncCronService } from "src/schedulers/dws-schedule-logs.scheduler";
-import { HttpModule } from "node_modules/@nestjs/axios/dist/http.module";
+import { HttpModule } from "@nestjs/axios";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { ActualLogsHeader } from "src/entities/ActualLogsHeader";

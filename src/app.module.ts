@@ -12,6 +12,7 @@ import { PassportModule } from "@nestjs/passport";
 import { JwtModule } from "@nestjs/jwt";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
 // Configuration
@@ -89,6 +90,7 @@ import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehous
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { ThrottleTrackingMiddleware } from "./middleware/throttle-tracking.middleware";
+import { PhpShieldMiddleware } from "./middleware/php-shield.middleware";
 import { ThrottleTrackerService } from "./services/throttle-tracker.service";
 import { ThrottleTrackingService } from "./guards/throttle-tracking.guard";
 import { TransactionSequence } from "./entities/TransactionSequence";
@@ -127,6 +129,7 @@ import { WorkingDaysModule } from "./modules/working-days/working-days.module";
 import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     // Configuration
     ConfigModule.forRoot({
@@ -172,7 +175,6 @@ import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module
         signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || "10m" },
       }),
     }),
-    ScheduleModule.forRoot(),
     DebitAdviceModule,
     UsersModule,
     EmployeesModule,
@@ -286,6 +288,9 @@ export class AppModule implements NestModule, OnModuleInit {
   }
 
   configure(consumer: MiddlewareConsumer) {
+    // Shield all routes against PHP vulnerability exploits & anomalous patterns
+    consumer.apply(PhpShieldMiddleware).forRoutes("*");
+
     // Track throttle attempts globally (run on all routes first)
     consumer.apply(ThrottleTrackingMiddleware).forRoutes("*");
 
