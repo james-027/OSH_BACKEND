@@ -12,6 +12,7 @@ import { PayrollHeader } from "src/entities/PayrollHeader";
 import { CreatePayrollHeaderDto } from "src/modules/staff-payroll/dto/CreatePayrollHeaderDto";
 import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayrollHeaderDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
+import { NotificationPublisherService } from "src/modules/notifications/services/notification-publisher.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 import {
@@ -20,6 +21,7 @@ import {
   WORKING_DAY_IDS,
   BILLING_TYPE_IDS,
   BILLING_TYPE_ABBRS,
+  STATUS_NAMES,
 } from "src/constants/customConstants";
 import { BillingType } from "src/entities/BillingType";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -138,6 +140,7 @@ export class StaffPayrollService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private actionLogsService: ActionLogsService,
     private payrollComputationService: PayrollComputationService,
+    private readonly notificationPublisher: NotificationPublisherService,
   ) {}
 
   private readonly module_name = "STAFF PAYROLL";
@@ -3072,6 +3075,103 @@ export class StaffPayrollService {
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
+      }
+
+      // 5. Dynamic In-App Notifications: Notify Attendance Team (PAYROLL_REVERSAL_GRANT)
+      try {
+        const detailsWithSched = await this.payrollDetailRepository
+          .createQueryBuilder("pd")
+          .innerJoin("pd.scheduleDetail", "sd")
+          .innerJoin("sd.scheduleHeader", "sh")
+          .select([
+            "pd.payroll_header_id AS payroll_header_id",
+            "sh.id AS schedule_header_id",
+            "sh.schedule_date AS schedule_date",
+            "sd.location_id AS location_id",
+          ])
+          .where("pd.payroll_header_id IN (:...payrollIds)", { payrollIds })
+          .getRawMany();
+
+        const cleanedRemarks = updatePayrollDto.remarks?.trim() || "";
+
+        for (const header of updatedPayrollHeaders) {
+          const headerRows = detailsWithSched.filter(
+            (r) => Number(r.payroll_header_id) === header.id,
+          );
+
+          const scheduleIds = Array.from(
+            new Set(
+              headerRows
+                .map((r) => Number(r.schedule_header_id))
+                .filter((id): id is number => id != null && !isNaN(id)),
+            ),
+          );
+
+          const connectedAttendancesMap = new Map<
+            number,
+            { id: number; schedule_date?: string }
+          >();
+          for (const r of headerRows) {
+            const sId = Number(r.schedule_header_id);
+            if (sId && !connectedAttendancesMap.has(sId)) {
+              connectedAttendancesMap.set(sId, {
+                id: sId,
+                schedule_date: r.schedule_date
+                  ? String(r.schedule_date)
+                  : undefined,
+              });
+            }
+          }
+          const connectedAttendancesList = Array.from(
+            connectedAttendancesMap.values(),
+          );
+
+          const locationIds = Array.from(
+            new Set(
+              headerRows
+                .map((r) => Number(r.location_id))
+                .filter(
+                  (id): id is number => id != null && !isNaN(id) && id > 0,
+                ),
+            ),
+          );
+
+          const primaryInvoice = header.payroll_invoice || `#${header.id}`;
+          const payrollInvoicesStr = header.payroll_invoice || `#${header.id}`;
+
+          this.notificationPublisher.publish({
+            moduleName: this.module_name,
+            eventCode: "PAYROLL_REVERSAL_GRANT",
+            refId: header.id,
+            creatorId: userId,
+            accessKeyId: header.access_key_id,
+            locationIds,
+            navigation: {
+              route: "/staff-attendance",
+              highlightIds: scheduleIds,
+              primaryId: connectedAttendancesList[0]?.id || null,
+              filterParams: {
+                status_id: STATUS_IDS.VALIDATED,
+              },
+            },
+            payload: {
+              payroll_header_id: header.id,
+              previous_status: STATUS_NAMES[STATUS_IDS.POSTED],
+              target_status: STATUS_NAMES[STATUS_IDS.PENDING],
+              remarks: cleanedRemarks,
+              payroll_invoices: payrollInvoicesStr,
+              connected_attendances: connectedAttendancesList,
+            },
+            fallbackTitle: `Payroll Reversal Granted: Payroll ${primaryInvoice}`,
+            fallbackDescription: `Payroll ${primaryInvoice} was reverted to Pending. Connected Attendance ${scheduleIds.map((id) => `#${id}`).join(", ")} reset to Validated. Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: `/staff-attendance?invoice=${primaryInvoice}`,
+          });
+        }
+      } catch (err) {
+        logger.error(
+          "Failed to trigger payroll reversal grant notifications:",
+          err,
+        );
       }
 
       return responses;

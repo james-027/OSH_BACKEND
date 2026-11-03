@@ -2250,8 +2250,8 @@ export class StaffAttendanceService {
             },
             payload: {
               schedule_header_id: header.id,
-              previous_status: "Computed",
-              target_status: "Validated",
+              previous_status: STATUS_NAMES[STATUS_IDS.COMPUTED],
+              target_status: STATUS_NAMES[STATUS_IDS.VALIDATED],
               remarks: cleanedRemarks,
               payroll_invoices: payrollInvoicesStr,
               connected_payrolls: connectedPayrollsList,
