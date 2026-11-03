@@ -19,6 +19,7 @@ import { Vendor } from "src/entities/Vendor";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
@@ -50,6 +51,7 @@ import { Location } from "src/entities/Location";
     UsersModule,
     SSEModule,
     ActionsModule,
+    NotificationsModule,
 
   ],
   controllers: [StaffAttendanceController],

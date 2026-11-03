@@ -26,8 +26,7 @@ import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/Update
 import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
-import { EventEmitter2 } from "@nestjs/event-emitter";
-import { NotificationTriggerEvent } from "src/modules/notifications/events/notification-trigger.event";
+import { NotificationPublisherService } from "src/modules/notifications/services/notification-publisher.service";
 import logger from "../../../config/logger";
 import {
   STATUS_IDS,
@@ -77,7 +76,7 @@ export class StaffAttendanceService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notificationPublisher: NotificationPublisherService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -2232,12 +2231,18 @@ export class StaffAttendanceService {
             .map((p) => p.id)
             .filter((id): id is number => id != null && !isNaN(id));
 
-          const notificationPayload = {
+          this.notificationPublisher.publish({
+            moduleName: this.module_name,
+            eventCode: "ATTENDANCE_REVERSAL_REQUEST",
+            refId: header.id,
+            creatorId: userId,
+            accessKeyId: header.access_key_id || accessKeyId,
+            locationIds,
             navigation: {
               route: "/staff-payroll",
-              highlight_ids: payrollIds,
-              primary_id: connectedPayrollsList[0]?.id || null,
-              filter_params: {
+              highlightIds: payrollIds,
+              primaryId: connectedPayrollsList[0]?.id || null,
+              filterParams: {
                 invoice: primaryInvoice || undefined,
                 source_schedule_id: header.id,
                 status_id: STATUS_IDS.POSTED,
@@ -2250,27 +2255,11 @@ export class StaffAttendanceService {
               remarks: cleanedRemarks,
               payroll_invoices: payrollInvoicesStr,
               connected_payrolls: connectedPayrollsList,
-              location_ids: locationIds,
             },
-            remarks: cleanedRemarks,
-            payroll_invoices: payrollInvoicesStr,
-          };
-
-          this.eventEmitter.emit(
-            "notification.trigger",
-            new NotificationTriggerEvent(
-              this.module_name,
-              "ATTENDANCE_REVERSAL_REQUEST",
-              header.id,
-              userId,
-              header.access_key_id || accessKeyId,
-              notificationPayload,
-              `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
-              actionUrl,
-              locationIds,
-            ),
-          );
+            fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
+            fallbackDescription: `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: actionUrl,
+          });
         }
 
         // Also notify on normal backward reverts (e.g. Validated -> For Review) if configured
@@ -2291,12 +2280,18 @@ export class StaffAttendanceService {
             ),
           );
 
-          const notificationPayload = {
+          this.notificationPublisher.publish({
+            moduleName: this.module_name,
+            eventCode: "ATTENDANCE_REVERSAL_REQUEST",
+            refId: header.id,
+            creatorId: userId,
+            accessKeyId: header.access_key_id || accessKeyId,
+            locationIds,
             navigation: {
               route: `/staff-attendance?header_id=${header.id}`,
-              highlight_ids: [header.id],
-              primary_id: header.id,
-              filter_params: {
+              highlightIds: [header.id],
+              primaryId: header.id,
+              filterParams: {
                 header_id: header.id,
               },
             },
@@ -2305,26 +2300,11 @@ export class StaffAttendanceService {
               previous_status: prevStatusName,
               target_status: targetStatusName,
               remarks: cleanedRemarks,
-              location_ids: locationIds,
             },
-            remarks: cleanedRemarks,
-          };
-
-          this.eventEmitter.emit(
-            "notification.trigger",
-            new NotificationTriggerEvent(
-              this.module_name,
-              "ATTENDANCE_REVERSAL_REQUEST",
-              header.id,
-              userId,
-              header.access_key_id || accessKeyId,
-              notificationPayload,
-              `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
-              `/staff-attendance?header_id=${header.id}`,
-              locationIds,
-            ),
-          );
+            fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
+            fallbackDescription: `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: `/staff-attendance?header_id=${header.id}`,
+          });
         }
       } catch (err) {
         logger.error(
