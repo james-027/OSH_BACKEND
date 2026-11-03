@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+import { EventEmitter2, OnEvent } from "@nestjs/event-emitter";
 import { Module as ModuleEntity } from "../../../entities/Module";
 import { NotificationTriggerEvent } from "../events/notification-trigger.event";
 import { PublishNotificationOptions } from "../interfaces/notification-publish.options";
@@ -14,6 +14,8 @@ export class NotificationPublisherService implements OnModuleInit {
   private readonly moduleByName = new Map<string, ModuleEntity>();
   private readonly moduleByAlias = new Map<string, ModuleEntity>();
   private readonly moduleById = new Map<number, ModuleEntity>();
+  private lastFetchTime = 0;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute auto-refresh window for out-of-band updates
 
   constructor(
     private readonly eventEmitter: EventEmitter2,
@@ -50,6 +52,7 @@ export class NotificationPublisherService implements OnModuleInit {
         this.moduleById.set(mod.id, mod);
       }
 
+      this.lastFetchTime = Date.now();
       logger.info(
         `[NotificationPublisherService] Cached ${activeModules.length} active modules in memory for zero-cost route resolution.`,
       );
@@ -64,8 +67,37 @@ export class NotificationPublisherService implements OnModuleInit {
   /**
    * Fast O(1) in-memory module finder by ID, name, or alias.
    */
+  /**
+   * Event listener: Automatically invalidates and refreshes in-memory module registry
+   * whenever a module is created, updated, or removed in Admin UI.
+   */
+  @OnEvent("module.changed", { async: true })
+  @OnEvent("module.updated", { async: true })
+  @OnEvent("module.created", { async: true })
+  async handleModuleChangedEvent(): Promise<void> {
+    logger.info(
+      "[NotificationPublisherService] Module change detected via event emitter. Refreshing in-memory registry...",
+    );
+    await this.refreshModuleCache();
+  }
+
+  private isCacheExpired(): boolean {
+    return Date.now() - this.lastFetchTime > this.CACHE_TTL_MS;
+  }
+
+  /**
+   * Fast O(1) in-memory module finder by ID, name, or alias.
+   * Auto-refreshes if cache expired or on cache-miss.
+   */
   findModule(identifier?: string | number): ModuleEntity | undefined {
     if (identifier === undefined || identifier === null) return undefined;
+
+    // Layer 1: Auto-refresh cache in background if 5-minute TTL elapsed
+    if (this.isCacheExpired()) {
+      this.refreshModuleCache().catch((err) =>
+        logger.warn("[NotificationPublisherService] Background module refresh error:", err),
+      );
+    }
 
     if (typeof identifier === "number") {
       return this.moduleById.get(identifier);
