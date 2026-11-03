@@ -9,56 +9,96 @@ export class NotificationPublisherService {
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   /**
-   * Publishes a single dynamic in-app notification event safely and asynchronously.
-   * Standardizes the { navigation, payload } data schema for the front-end.
+   * Publishes a streamlined in-app notification event.
+   * Synthesizes source, destination, and standardized navigation metadata.
    */
   publish(options: PublishNotificationOptions): boolean {
     try {
       const {
-        moduleName,
         eventCode,
-        refId,
         creatorId,
         accessKeyId,
         locationIds,
-        navigation,
-        payload = {},
+        source,
+        destination,
         fallbackTitle,
         fallbackDescription,
         fallbackActionUrl,
       } = options;
 
-      // Standardize data contract: { navigation, payload, ...flattenedPayload }
+      // 1. Resolve source module and primary refId
+      const sourceModule = source?.module || options.moduleName || "UNKNOWN";
+      const sourceRefId = source?.refId ?? options.refId ?? 0;
+
+      // 2. Synthesize clean React Navigation contract
+      const targetRoute = destination?.route || options.navigation?.route || "/";
+      const targetHighlightIds =
+        destination?.refIds ??
+        options.navigation?.highlightIds ??
+        (sourceRefId ? [sourceRefId] : []);
+
+      const synthesizedFilterParams: Record<string, unknown> = {
+        ...(destination?.statusId != null
+          ? { status_id: destination.statusId }
+          : {}),
+        ...(destination?.referenceNo
+          ? { invoice: destination.referenceNo }
+          : {}),
+        ...(destination?.filterParams ?? options.navigation?.filterParams ?? {}),
+      };
+
+      const navigation = {
+        route: targetRoute,
+        highlight_ids: targetHighlightIds,
+        primary_id: targetHighlightIds[0] ?? sourceRefId ?? null,
+        filter_params: synthesizedFilterParams,
+        action_modal: destination?.actionModal ?? options.navigation?.actionModal ?? null,
+      };
+
+      // 3. Structured standardized raw_data schema
       const standardizedData: Record<string, any> = {
-        navigation: navigation
+        source: source
           ? {
-              route: navigation.route,
-              highlight_ids: navigation.highlightIds ?? (refId ? [refId] : []),
-              primary_id: navigation.primaryId ?? refId,
-              filter_params: navigation.filterParams ?? {},
-              action_modal: navigation.actionModal ?? null,
+              module: source.module,
+              ref_id: source.refId,
+              reference_no: source.referenceNo ?? null,
+              status: source.status ?? null,
+              remarks: source.remarks ?? null,
+              ...(source.extra ?? {}),
             }
           : undefined,
-        payload: {
-          ...payload,
-          location_ids: locationIds,
-        },
-        // Flatten payload fields to allow template variable interpolation (e.g. {remarks})
-        ...payload,
+        destination: destination
+          ? {
+              module: destination.module,
+              route: destination.route,
+              ref_ids: destination.refIds ?? [],
+              reference_no: destination.referenceNo ?? null,
+              status_id: destination.statusId ?? null,
+              filter_params: destination.filterParams ?? {},
+            }
+          : undefined,
+        navigation,
+        // Common template interpolation helpers
+        remarks: source?.remarks ?? options.payload?.remarks ?? "",
+        reference_no: source?.referenceNo ?? destination?.referenceNo ?? "",
+        payroll_invoices: destination?.referenceNo ?? source?.referenceNo ?? "",
+        source_ref_id: sourceRefId,
+        target_ref_id: targetHighlightIds[0] ?? null,
+        ...(options.payload ?? {}),
       };
 
       this.eventEmitter.emit(
         "notification.trigger",
         new NotificationTriggerEvent(
-          moduleName,
+          sourceModule,
           eventCode,
-          refId,
+          sourceRefId,
           creatorId,
           accessKeyId,
           standardizedData,
           fallbackTitle,
           fallbackDescription,
-          fallbackActionUrl ?? navigation?.route,
+          fallbackActionUrl ?? targetRoute,
           locationIds,
         ),
       );
@@ -66,7 +106,7 @@ export class NotificationPublisherService {
       return true;
     } catch (error) {
       logger.error(
-        `[NotificationPublisherService] Failed to publish notification for event "${options.eventCode}" (Ref #${options.refId}):`,
+        `[NotificationPublisherService] Failed to publish notification for event "${options.eventCode}":`,
         error,
       );
       return false;
@@ -86,4 +126,3 @@ export class NotificationPublisherService {
     }
   }
 }
-

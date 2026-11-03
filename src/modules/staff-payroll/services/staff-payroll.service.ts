@@ -3140,27 +3140,26 @@ export class StaffPayrollService {
           const payrollInvoicesStr = header.payroll_invoice || `#${header.id}`;
 
           this.notificationPublisher.publish({
-            moduleName: this.module_name,
             eventCode: "PAYROLL_REVERSAL_GRANT",
-            refId: header.id,
             creatorId: userId,
             accessKeyId: header.access_key_id,
             locationIds,
-            navigation: {
-              route: "/staff-attendance",
-              highlightIds: scheduleIds,
-              primaryId: connectedAttendancesList[0]?.id || null,
-              filterParams: {
-                status_id: STATUS_IDS.VALIDATED,
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              referenceNo: primaryInvoice,
+              status: {
+                from: STATUS_NAMES[STATUS_IDS.POSTED],
+                to: STATUS_NAMES[STATUS_IDS.PENDING],
               },
-            },
-            payload: {
-              payroll_header_id: header.id,
-              previous_status: STATUS_NAMES[STATUS_IDS.POSTED],
-              target_status: STATUS_NAMES[STATUS_IDS.PENDING],
               remarks: cleanedRemarks,
-              payroll_invoices: payrollInvoicesStr,
-              connected_attendances: connectedAttendancesList,
+            },
+            destination: {
+              module: "STAFF ATTENDANCE",
+              route: "/staff-attendance",
+              refIds: scheduleIds,
+              referenceNo: primaryInvoice,
+              statusId: STATUS_IDS.VALIDATED,
             },
             fallbackTitle: `Payroll Reversal Granted: Payroll ${primaryInvoice}`,
             fallbackDescription: `Payroll ${primaryInvoice} was reverted to Pending. Connected Attendance ${scheduleIds.map((id) => `#${id}`).join(", ")} reset to Validated. Remarks: ${cleanedRemarks || "No remarks provided"}`,

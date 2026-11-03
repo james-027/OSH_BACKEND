@@ -2232,29 +2232,28 @@ export class StaffAttendanceService {
             .filter((id): id is number => id != null && !isNaN(id));
 
           this.notificationPublisher.publish({
-            moduleName: this.module_name,
             eventCode: "ATTENDANCE_REVERSAL_REQUEST",
-            refId: header.id,
             creatorId: userId,
             accessKeyId: header.access_key_id || accessKeyId,
             locationIds,
-            navigation: {
-              route: "/staff-payroll",
-              highlightIds: payrollIds,
-              primaryId: connectedPayrollsList[0]?.id || null,
-              filterParams: {
-                invoice: primaryInvoice || undefined,
-                source_schedule_id: header.id,
-                status_id: STATUS_IDS.POSTED,
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              status: {
+                from: STATUS_NAMES[STATUS_IDS.COMPUTED],
+                to: STATUS_NAMES[STATUS_IDS.VALIDATED],
               },
-            },
-            payload: {
-              schedule_header_id: header.id,
-              previous_status: STATUS_NAMES[STATUS_IDS.COMPUTED],
-              target_status: STATUS_NAMES[STATUS_IDS.VALIDATED],
               remarks: cleanedRemarks,
-              payroll_invoices: payrollInvoicesStr,
-              connected_payrolls: connectedPayrollsList,
+            },
+            destination: {
+              module: "STAFF PAYROLL",
+              route: "/staff-payroll",
+              refIds: payrollIds,
+              referenceNo: primaryInvoice || undefined,
+              statusId: STATUS_IDS.POSTED,
+              filterParams: {
+                source_schedule_id: header.id,
+              },
             },
             fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
             fallbackDescription: `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
@@ -2281,25 +2280,27 @@ export class StaffAttendanceService {
           );
 
           this.notificationPublisher.publish({
-            moduleName: this.module_name,
             eventCode: "ATTENDANCE_REVERSAL_REQUEST",
-            refId: header.id,
             creatorId: userId,
             accessKeyId: header.access_key_id || accessKeyId,
             locationIds,
-            navigation: {
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              status: {
+                from: prevStatusName,
+                to: targetStatusName,
+              },
+              remarks: cleanedRemarks,
+            },
+            destination: {
+              module: this.module_name,
               route: `/staff-attendance?header_id=${header.id}`,
-              highlightIds: [header.id],
-              primaryId: header.id,
+              refIds: [header.id],
+              statusId: targetStatusId,
               filterParams: {
                 header_id: header.id,
               },
-            },
-            payload: {
-              schedule_header_id: header.id,
-              previous_status: prevStatusName,
-              target_status: targetStatusName,
-              remarks: cleanedRemarks,
             },
             fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
             fallbackDescription: `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
