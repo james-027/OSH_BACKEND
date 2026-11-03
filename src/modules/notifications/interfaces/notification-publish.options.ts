@@ -1,5 +1,8 @@
+import { NotificationEventCode } from "src/constants/customConstants";
+
 export interface NotificationSourceContext {
-  module: string;                         // e.g. "STAFF ATTENDANCE"
+  module?: string;                        // e.g. "STAFF ATTENDANCE" or alias "staff-attendance"
+  moduleId?: number;                      // Optional numeric module ID (e.g. 43)
   refId: number;                          // Primary entity ID of originating document (e.g. Schedule Header #33)
   referenceNo?: string;                   // Optional code or invoice (e.g. "SCH-2026-001")
   status?: { from: string; to: string };  // e.g. { from: "Computed", to: "Validated" }
@@ -8,8 +11,9 @@ export interface NotificationSourceContext {
 }
 
 export interface NotificationDestinationContext {
-  module: string;                         // e.g. "STAFF PAYROLL"
-  route: string;                          // Target React route, e.g. "/staff-payroll"
+  module?: string;                        // e.g. "STAFF PAYROLL" or alias "staff-payroll"
+  moduleId?: number;                      // Optional numeric module ID (e.g. 45)
+  route?: string;                         // Target React route (Optional: auto-resolved from module.module_link if omitted)
   refIds: number[];                       // Target entity IDs -> Auto-mapped to highlight_ids in React state
   referenceNo?: string;                   // Target reference no (e.g. invoice string)
   statusId?: number;                      // Target filter status -> Auto-mapped to filter_params.status_id
@@ -18,10 +22,10 @@ export interface NotificationDestinationContext {
 }
 
 export interface PublishNotificationOptions {
-  eventCode: string;                      // e.g. "ATTENDANCE_REVERSAL_REQUEST" or "PAYROLL_REVERSAL_GRANT"
-  creatorId: number;                      // Acting user ID
-  accessKeyId?: number | null;            // Tenant access key ID
-  locationIds?: number[];                 // Multi-branch filtering IDs
+  eventCode: NotificationEventCode | string; // Type-safe enum or custom string
+  creatorId: number;                         // Acting user ID
+  accessKeyId?: number | null;               // Tenant access key ID
+  locationIds?: number[];                    // Multi-branch filtering IDs
   
   // Streamlined Source & Destination contexts
   source: NotificationSourceContext;
