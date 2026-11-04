@@ -27,7 +27,10 @@ import {
   NotificationQueryDto,
   AdminNotificationAuditDto,
 } from "../dto/NotificationQueryDto";
-import { STATUS_IDS, NOTIFICATION_EVENT_CATALOG } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  NOTIFICATION_EVENT_CATALOG,
+} from "src/constants/customConstants";
 
 export interface TriggerNotificationParams {
   moduleId?: number;
@@ -266,10 +269,7 @@ export class NotificationsService {
         creator_name: creatorName,
         user_name: creatorName,
         remarks:
-          data?.remarks ??
-          sourceData?.remarks ??
-          payloadData?.remarks ??
-          "",
+          data?.remarks ?? sourceData?.remarks ?? payloadData?.remarks ?? "",
         reference_no:
           data?.reference_no ??
           sourceData?.reference_no ??
@@ -280,7 +280,7 @@ export class NotificationsService {
           data?.ref_ids ??
           (Array.isArray(destinationData?.ref_ids)
             ? destinationData.ref_ids.join(", ")
-            : destinationData?.ref_ids ?? ""),
+            : (destinationData?.ref_ids ?? "")),
       };
 
       // Dynamic matrix templates configured in admin take priority over hardcoded defaults
@@ -370,7 +370,11 @@ export class NotificationsService {
   /**
    * Get paginated notifications for the logged-in user
    */
-  async getMyNotifications(userId: number, query: NotificationQueryDto) {
+  async getMyNotifications(
+    userId: number,
+    query: NotificationQueryDto,
+    accessKeyId: number | null,
+  ) {
     const page = Math.max(1, query.page || 1);
     const limit = Math.max(1, Math.min(100, query.limit || 20));
     const skip = (page - 1) * limit;
@@ -393,6 +397,11 @@ export class NotificationsService {
         "(notif.access_key_id = :accessKeyId OR notif.access_key_id IS NULL)",
         { accessKeyId: query.access_key_id },
       );
+    } else if (accessKeyId) {
+      qb.andWhere(
+        "(notif.access_key_id = :accessKeyId OR notif.access_key_id IS NULL)",
+        { accessKeyId },
+      );
     }
 
     if (query.search) {
@@ -405,7 +414,7 @@ export class NotificationsService {
     qb.orderBy("rec.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
-    const unreadCount = await this.getUnreadCount(userId);
+    const unreadCount = await this.getUnreadCount(userId, accessKeyId);
 
     return {
       items: items.map((item) => ({
@@ -450,7 +459,10 @@ export class NotificationsService {
   /**
    * Get unread notification count with Redis caching for instant badge render
    */
-  async getUnreadCount(userId: number): Promise<number> {
+  async getUnreadCount(
+    userId: number,
+    accessKeyId: number | null,
+  ): Promise<number> {
     const cacheKey = `notifications:unread:${userId}`;
     const redis = getRedisClient();
 
@@ -471,7 +483,12 @@ export class NotificationsService {
         user_id: userId,
         is_read: false,
         is_dismissed: false,
+        notification: {
+          access_key_id: accessKeyId ?? 0,
+          status_id: STATUS_IDS.ACTIVE,
+        },
       },
+      relations: ["notification"],
     });
 
     if (redis && redis.isOpen) {
@@ -916,7 +933,8 @@ export class NotificationsService {
         return key
           .split(".")
           .reduce(
-            (acc, part) => (acc && acc[part] !== undefined ? acc[part] : undefined),
+            (acc, part) =>
+              acc && acc[part] !== undefined ? acc[part] : undefined,
             params,
           );
       }

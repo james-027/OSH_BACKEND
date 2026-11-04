@@ -43,7 +43,12 @@ export class NotificationsController {
   @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   getMyNotifications(@Req() req: any, @Query() query: NotificationQueryDto) {
     const userId = req.user?.id || 0;
-    return this.notificationsService.getMyNotifications(userId, query);
+    const accessKeyId = req.user?.current_access_key || null;
+    return this.notificationsService.getMyNotifications(
+      userId,
+      query,
+      accessKeyId,
+    );
   }
 
   /**
@@ -53,7 +58,11 @@ export class NotificationsController {
   @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   async getUnreadCount(@Req() req: any) {
     const userId = req.user?.id || 0;
-    const count = await this.notificationsService.getUnreadCount(userId);
+    const accessKeyId = req.user?.current_access_key || null;
+    const count = await this.notificationsService.getUnreadCount(
+      userId,
+      accessKeyId,
+    );
     return { count };
   }
 
