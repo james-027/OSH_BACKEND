@@ -33,20 +33,34 @@ export class ActionLogsService {
   }
 
   async findPerModuleRefID(module_name: string, ref_id: number) {
+    const module = await this.moduleRepository.findOne({
+      where: { module_name },
+    });
+
+    if (!module) {
+      return [];
+    }
+
     const logs = await this.actionLogRepository.find({
-      where: { module: { module_name }, ref_id },
-      relations: ["action", "createdBy", "module"],
-      order: { created_at: "DESC" },
+      where: { module_id: module.id, ref_id },
+      relations: ["action", "createdBy"],
     });
 
     if (!logs || logs.length === 0) {
       return [];
     }
 
+    // Sort in memory to avoid MySQL filesort memory exhaustion (Error 1038) on large JSON payloads
+    logs.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    });
+
     return logs.map((log) => ({
       id: log.id,
       module_id: log.module_id,
-      module_name: log.module?.module_name,
+      module_name: module.module_name,
       ref_id: log.ref_id,
       action_id: log.action_id,
       action_name: log.action?.action_name,
