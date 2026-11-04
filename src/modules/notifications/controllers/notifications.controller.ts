@@ -56,9 +56,14 @@ export class NotificationsController {
    */
   @Get("unread-count")
   @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
-  async getUnreadCount(@Req() req: any) {
+  async getUnreadCount(
+    @Req() req: any,
+    @Query("access_key_id") accessKeyIdQuery?: string,
+  ) {
     const userId = req.user?.id || 0;
-    const accessKeyId = req.user?.current_access_key || null;
+    const accessKeyId = accessKeyIdQuery
+      ? Number(accessKeyIdQuery)
+      : req.user?.current_access_key || null;
     const count = await this.notificationsService.getUnreadCount(
       userId,
       accessKeyId,

@@ -378,6 +378,7 @@ export class NotificationsService {
     const page = Math.max(1, query.page || 1);
     const limit = Math.max(1, Math.min(100, query.limit || 20));
     const skip = (page - 1) * limit;
+    const accessKeyFilter = query.access_key_id ?? null;
 
     const qb = this.recipientRepository
       .createQueryBuilder("rec")
@@ -392,15 +393,10 @@ export class NotificationsService {
       qb.andWhere("rec.is_read = :isRead", { isRead: false });
     }
 
-    if (query.access_key_id) {
+    if (accessKeyFilter) {
       qb.andWhere(
         "(notif.access_key_id = :accessKeyId OR notif.access_key_id IS NULL)",
-        { accessKeyId: query.access_key_id },
-      );
-    } else if (accessKeyId) {
-      qb.andWhere(
-        "(notif.access_key_id = :accessKeyId OR notif.access_key_id IS NULL)",
-        { accessKeyId },
+        { accessKeyId: accessKeyFilter },
       );
     }
 
@@ -414,7 +410,7 @@ export class NotificationsService {
     qb.orderBy("rec.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
-    const unreadCount = await this.getUnreadCount(userId, accessKeyId);
+    const unreadCount = await this.getUnreadCount(userId, accessKeyFilter);
 
     return {
       items: items.map((item) => ({
@@ -452,6 +448,7 @@ export class NotificationsService {
         limit,
         totalPages: Math.ceil(total / limit),
         unread_count: unreadCount,
+        access_key_id: accessKeyFilter,
       },
     };
   }
