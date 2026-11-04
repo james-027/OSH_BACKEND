@@ -1158,7 +1158,7 @@ export class StaffPayrollService {
             {
               service: "StaffPayrollService",
               method: "create",
-              raw_data: JSON.stringify(headerWithRelations),
+              raw_data: JSON.stringify(this.sanitizePayrollForAudit(headerWithRelations)),
               description: `Created payroll ${headerWithRelations.id} (${abbrName})`,
               status_id: 1,
             },
@@ -1172,7 +1172,7 @@ export class StaffPayrollService {
               action_id: ACTION_IDS.ADD,
               description: `Add Payroll ${headerWithRelations.id}`,
               raw_data: JSON.stringify({
-                savedPayrollHeader: headerWithRelations,
+                savedPayrollHeader: this.sanitizePayrollForAudit(headerWithRelations),
               }),
               created_by: userId,
             });
@@ -3042,7 +3042,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Posted Payroll Headers: ${sortedPayrollIds.join(", ")}`,
           status_id: 1,
         },
@@ -3062,7 +3062,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.POST,
             description: "Post Payroll",
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3286,7 +3286,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
           status_id: 1,
         },
@@ -3304,7 +3304,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.REVERT,
             description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3503,7 +3503,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Cancelled Payroll Remarks: ${updatePayrollDto.remarks}`,
           status_id: 1,
         },
@@ -3521,7 +3521,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.CANCEL,
             description: `Cancel Payroll Remarks: ${updatePayrollDto.remarks}`,
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3559,6 +3559,15 @@ export class StaffPayrollService {
 
       throw new Error("Failed to cancel payroll headers");
     }
+  }
+
+  private sanitizePayrollForAudit(payroll: any): any {
+    if (!payroll) return null;
+    const { details, ...headerSummary } = payroll;
+    return {
+      ...headerSummary,
+      detailsCount: Array.isArray(details) ? details.length : undefined,
+    };
   }
 
   async findOneHistory(ref_id: number) {
