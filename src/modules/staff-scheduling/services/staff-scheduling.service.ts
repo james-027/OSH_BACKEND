@@ -4324,13 +4324,9 @@ export class StaffSchedulingService {
                   detail.payrollHeader.total_net_of_tax,
                 ),
                 total_cash_bond: toFixed(detail.payrollHeader.total_cash_bond),
-<<<<<<< HEAD
                 total_miscellaneous_income: toFixed(
                   detail.payrollHeader.total_miscellaneous_income,
                 ),
-=======
-                total_miscellaneous_income: toFixed(detail.payrollHeader.total_miscellaneous_income),
->>>>>>> d9f8a34 (Add Miscellaneous Income)
                 total_billing: toFixed(detail.payrollHeader.total_billing),
                 status_name: detail.payrollHeader.status?.status_name ?? null,
                 created_by_name: detail.payrollHeader.createdBy
