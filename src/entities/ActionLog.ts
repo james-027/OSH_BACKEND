@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from "typeorm";
 import { Module } from "./Module";
 import { Action } from "./Action";
@@ -13,6 +14,8 @@ import { Status } from "./Status";
 import { User } from "./User";
 
 @Entity("action_logs")
+@Index("idx_action_logs_module_ref_created", ["module_id", "ref_id", "created_at"])
+@Index("idx_action_logs_ref_created", ["ref_id", "created_at"])
 export class ActionLog {
   @PrimaryGeneratedColumn()
   id: number;
