@@ -9,14 +9,15 @@ import {
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
+import { WorkingDay } from "./WorkingDay";
 
-@Entity("regular_holidays")
-export class RegularHoliday {
+@Entity("calendar_holidays")
+export class CalendarHoliday {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: "date", nullable: true })
-  regular_holiday_date: Date;
+  holiday_date: Date;
 
   @Column({ length: 255 })
   description: string;
@@ -66,5 +67,16 @@ export class RegularHoliday {
   })
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
+
+  @Column({ nullable: true })
+  working_day_id: number;
+
+  @ManyToOne(() => WorkingDay, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "working_day_id" })
+  workingDays: WorkingDay;
 
 }

@@ -127,6 +127,7 @@ import { DigitalWorkspaceModule } from "./modules/digital-workspace-integration/
 import { StaffAttendanceModule } from "./modules/staff-attendance/staff-attendance.module";
 import { WorkingDaysModule } from "./modules/working-days/working-days.module";
 import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module";
+import { HolidaysModule } from "./modules/holidays/holidays.module";
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
@@ -242,7 +243,8 @@ import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module
     StaffAttendanceModule,
     DigitalWorkspaceModule,
     WorkingDaysModule,
-    StaffPayrollModule
+    StaffPayrollModule,
+    HolidaysModule
   ],
   providers: [
     EmailService,

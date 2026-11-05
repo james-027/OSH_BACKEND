@@ -266,6 +266,33 @@ export class StaffsService {
     }
   }
 
+  private validateBirthday(birthday?: string | Date | null): void {
+    if (!birthday) return; 
+
+    const birthDate = new Date(birthday);
+    if (isNaN(birthDate.getTime())) {
+      throw new BadRequestException("Invalid birthday date format");
+    }
+
+    // Strip time to compare pure calendar dates
+    const normalizedBirthDate = new Date(
+      birthDate.getFullYear(),
+      birthDate.getMonth(),
+      birthDate.getDate(),
+    );
+
+    const today = new Date();
+    const minAdultBirthDate = new Date(
+      today.getFullYear() - 18,
+      today.getMonth(),
+      today.getDate(),
+    );
+
+    if (normalizedBirthDate > minAdultBirthDate) {
+      throw new BadRequestException("Staff must be at least 18 years old");
+    }
+  }
+
   async create(
     createStaffDto: CreateStaffDto,
     userId: number,
@@ -276,6 +303,8 @@ export class StaffsService {
       if (!createdByUser) {
         throw new BadRequestException("Authenticated user not found");
       }
+
+      this.validateBirthday(createStaffDto.birthday);
 
       const firstName = createStaffDto.first_name.toUpperCase().trim();
       const lastName = createStaffDto.last_name.trim();
@@ -627,45 +656,6 @@ export class StaffsService {
     }
   }
 
-  private safeDate = (value: any) => {
-    if (!value || value === "") return null;
-
-    // If value is a string formatted as 'YYYY-MM-DD' without time,
-    // append 'T00:00:00' to force local timezone parsing instead of UTC.
-    let dateInput = value;
-    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-      dateInput = `${value.trim()}T00:00:00`;
-    }
-
-    const date = new Date(dateInput);
-
-    if (isNaN(date.getTime())) {
-      throw new BadRequestException(`Invalid date: ${value}`);
-    }
-
-    return date;
-  };
-
-  private async getApprovalStatusId(warehouseId: number): Promise<number> {
-    const warehouse = await this.warehouseRepository.findOne({
-      where: { id: warehouseId },
-      select: {
-        id: true,
-        pos_availability_id: true,
-      },
-    });
-
-    if (!warehouse) {
-      throw new NotFoundException(
-        `Warehouse with ID ${warehouseId} not found.`,
-      );
-    }
-
-    return warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
-      ? STATUS_IDS.FOR_APPROVAL
-      : STATUS_IDS.APPROVED;
-  }
-
   async update(
     id: number,
     updateStaffDto: UpdateStaffDto,
@@ -680,6 +670,8 @@ export class StaffsService {
       if (!staff) {
         throw new NotFoundException(`Staff with ID ${id} not found`);
       }
+
+      this.validateBirthday(updateStaffDto.birthday);
 
       const firstName = updateStaffDto.first_name.toUpperCase().trim();
       const lastName = updateStaffDto.last_name.trim();
@@ -922,6 +914,45 @@ export class StaffsService {
     }
   }
 
+  private safeDate = (value: any) => {
+    if (!value || value === "") return null;
+
+    // If value is a string formatted as 'YYYY-MM-DD' without time,
+    // append 'T00:00:00' to force local timezone parsing instead of UTC.
+    let dateInput = value;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      dateInput = `${value.trim()}T00:00:00`;
+    }
+
+    const date = new Date(dateInput);
+
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+
+    return date;
+  };
+
+  private async getApprovalStatusId(warehouseId: number): Promise<number> {
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+      select: {
+        id: true,
+        pos_availability_id: true,
+      },
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException(
+        `Warehouse with ID ${warehouseId} not found.`,
+      );
+    }
+
+    return warehouse.pos_availability_id === POS_AVAILABILITY_IDS.WITH_POS
+      ? STATUS_IDS.FOR_APPROVAL
+      : STATUS_IDS.APPROVED;
+  }
+
   async staffTransfer(
     id: number,
     updateStaffTransferDto: UpdateStaffTransferDto,
@@ -967,15 +998,13 @@ export class StaffsService {
       const isVendorChanged = staff.vendor_id !== newVendorId;
       const isLocationChanged = staff.location_id !== newLocationId;
 
+      const effectivityDate = safeDate(updateStaffTransferDto.effectivity_date);
+
       if (!allowSameDetails) {
         if (!isVendorChanged && !isLocationChanged) {
           return this.responseMapperService.mapEntityToResponse(staff);
         }
       }
-
-      const effectivityDate = this.safeDate(
-        updateStaffTransferDto.effectivity_date,
-      );
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -990,7 +1019,20 @@ export class StaffsService {
           );
         }
       }
-      const result = await this.staffTransfersRepository.save({
+
+      // CHECK EXISTING TRANSFER RECORDS BEFORE INSERTING
+      const existingTransfers = await this.staffTransfersRepository.find({
+        where: {
+          staff_id: staff.id,
+          new_vendor_id: newVendorId,
+          new_location_id: newLocationId,
+        },
+        order: {
+          id: "DESC",
+        },
+      });
+
+      const insertPayload = {
         staff_id: staff.id,
         old_vendor_id: staff.vendor_id,
         new_vendor_id: newVendorId,
@@ -999,14 +1041,14 @@ export class StaffsService {
         salary_rate: newSalaryRate,
         allowance: newAllowance,
         remarks: transferRemarks,
-        effectivity_date: this.safeDate(
-          updateStaffTransferDto.effectivity_date,
-        ),
+        effectivity_date: effectivityDate,
         access_key_id: staff.access_key_id,
         status: false,
         created_by: userId,
         updated_by: userId,
-      });
+      };
+
+      const result = await this.staffTransfersRepository.save(insertPayload);
 
       const response = this.responseMapperService.mapEntityToResponse(result);
 
@@ -1031,6 +1073,9 @@ export class StaffsService {
       ) {
         throw error;
       }
+
+      logger.error("STAFF TRANSFER ERROR:", error);
+
       throw new Error("Failed to process staff transfer");
     }
   }
@@ -1409,13 +1454,14 @@ export class StaffsService {
     userId: number,
   ) {
     try {
-      logger.info(`[syncVendorAndSalary] START - Staff ID: ${staff.id}`);
-
+      // Find an existing StaffVendorSalary for this exact combination.
       const staffVendorSalary = await queryRunner.manager.findOne(
         StaffVendorSalary,
         {
           where: {
             staff_id: staff.id,
+            vendor_id: dto.vendor_id,
+            location_id: dto.location_id,
           },
           order: {
             id: "DESC",
@@ -1423,87 +1469,88 @@ export class StaffsService {
         },
       );
 
-      const staffSalary = await queryRunner.manager.findOne(StaffSalary, {
-        where: {
-          staff_id: staff.id,
-        },
-        order: {
-          id: "DESC",
-        },
-      });
+      let finalStaffVendorSalary = staffVendorSalary;
+      let isVendorSalaryCreated = false;
 
-      const isChanged =
-        !staffVendorSalary ||
-        staffVendorSalary.vendor_id !== dto.vendor_id ||
-        staffVendorSalary.location_id !== dto.location_id ||
-        Number(staffSalary?.salary_rate ?? 0) !==
-          Number(dto.salary_rate ?? 0) ||
-        Number(staffSalary?.allowance ?? 0) !== Number(dto.allowance ?? 0);
+      // Create StaffVendorSalary only if the combination does not exist.
+      if (!finalStaffVendorSalary) {
+        finalStaffVendorSalary = await queryRunner.manager.save(
+          StaffVendorSalary,
+          queryRunner.manager.create(StaffVendorSalary, {
+            staff_id: staff.id,
+            vendor_id: dto.vendor_id,
+            location_id: dto.location_id,
+            access_key_id: staff.access_key_id,
+            status_id: dto.status_id || 1,
+            created_by: userId,
+            updated_by: userId,
+          }),
+        );
 
-      logger.info(`[syncVendorAndSalary] isChanged: ${isChanged}`);
-
-      if (!isChanged) {
-        logger.info(`[syncVendorAndSalary] No changes detected.`);
-
-        return {
-          staffVendorSalary,
-          staffSalary,
-          changed: false,
-        };
+        isVendorSalaryCreated = true;
       }
 
-      logger.info(`[syncVendorAndSalary] Creating StaffVendorSalary`);
+      // Normalize salary and allowance values.
+      const salaryRate = Number(dto.salary_rate ?? 0);
+      const allowance = Number(dto.allowance ?? 0);
 
-      const newStaffVendorSalary = await queryRunner.manager.save(
-        StaffVendorSalary,
-        queryRunner.manager.create(StaffVendorSalary, {
-          staff_id: staff.id,
-          vendor_id: dto.vendor_id,
-          location_id: dto.location_id,
-          access_key_id: staff.access_key_id,
-          status_id: dto.status_id || 1,
-          created_by: userId,
-          updated_by: userId,
-        }),
-      );
-
-      logger.info(
-        `[syncVendorAndSalary] StaffVendorSalary created. ID: ${newStaffVendorSalary.id}`,
-      );
-
-      logger.info(`[syncVendorAndSalary] Creating StaffSalary`);
-
-      const newStaffSalary = await queryRunner.manager.save(
+      // Check whether the exact StaffSalary combination already exists.
+      const existingStaffSalary = await queryRunner.manager.findOne(
         StaffSalary,
-        queryRunner.manager.create(StaffSalary, {
-          staff_id: staff.id,
-          staff_vendor_id: newStaffVendorSalary.id,
-          salary_rate: dto.salary_rate ?? 0,
-          allowance: dto.allowance ?? 0,
-          access_key_id: staff.access_key_id,
-          status_id: dto.status_id || 1,
-          created_by: userId,
-          updated_by: userId,
-        }),
+        {
+          where: {
+            staff_id: staff.id,
+            staff_vendor_id: finalStaffVendorSalary.id,
+          },
+          order: {
+            id: "DESC",
+          },
+        },
       );
 
-      logger.info(
-        `[syncVendorAndSalary] StaffSalary created. ID: ${newStaffSalary.id}`,
-      );
+      let finalStaffSalary = existingStaffSalary;
+      let isStaffSalaryCreated = false;
 
-      logger.info(`[syncVendorAndSalary] END SUCCESS`);
+      // Compare allowance and salary rate only for StaffSalary.
+      const isSalaryChanged =
+        !existingStaffSalary ||
+        Number(existingStaffSalary.salary_rate ?? 0) !== salaryRate ||
+        Number(existingStaffSalary.allowance ?? 0) !== allowance;
+
+      // Insert StaffSalary only if it does not exist
+      // or the allowance/salary rate has changed.
+      if (isSalaryChanged) {
+        finalStaffSalary = await queryRunner.manager.save(
+          StaffSalary,
+          queryRunner.manager.create(StaffSalary, {
+            staff_id: staff.id,
+            staff_vendor_id: finalStaffVendorSalary.id,
+            salary_rate: salaryRate,
+            allowance: allowance,
+            access_key_id: staff.access_key_id,
+            status_id: dto.status_id || 1,
+            created_by: userId,
+            updated_by: userId,
+          }),
+        );
+
+        isStaffSalaryCreated = true;
+      }
 
       return {
-        staffVendorSalary: newStaffVendorSalary,
-        staffSalary: newStaffSalary,
-        changed: true,
+        staffVendorSalary: finalStaffVendorSalary,
+        staffSalary: finalStaffSalary,
+        staffVendorSalaryCreated: isVendorSalaryCreated,
+        staffSalaryCreated: isStaffSalaryCreated,
+        changed: isVendorSalaryCreated || isStaffSalaryCreated,
       };
     } catch (err: any) {
-      logger.error(`[syncVendorAndSalary] ERROR`);
-
-      logger.error(`[syncVendorAndSalary] Message: ${err?.message}`);
-
-      logger.error(`[syncVendorAndSalary] Stack: ${err?.stack}`);
+      logger.error({
+        event: "syncVendorAndSalary_failed",
+        staff_id: staff.id,
+        message: err?.message,
+        stack: err?.stack,
+      });
 
       throw err;
     }
@@ -2144,6 +2191,9 @@ export class StaffsService {
           continue;
         }
 
+        const formattedBirthday = this.formatDateToString(row["Birthday"]);
+        this.validateBirthday(formattedBirthday);
+
         const existingTin = await this.staffsRepository.findOne({
           where: { tin: TIN },
         });
@@ -2154,7 +2204,7 @@ export class StaffsService {
           where: { pagibig_number: PAGIBIG },
         });
         const existingPhilHealth = await this.staffsRepository.findOne({
-          where: { phil_health_number: PAGIBIG },
+          where: { phil_health_number: PHILHEALTH },
         });
         const existingEmail = await this.staffsRepository.findOne({
           where: { email: EMAIL },
@@ -2204,7 +2254,7 @@ export class StaffsService {
           existingRecord.last_name = lastName;
           existingRecord.email = row["Email"];
           existingRecord.middle_name = middleName;
-          existingRecord.birthday = this.formatDateToString(row["Birthday"]);
+          existingRecord.birthday = formattedBirthday;
           existingRecord.location_id = location.id;
           existingRecord.vendor_id = vendor.id;
           existingRecord.position_id = position.id;
@@ -2344,7 +2394,7 @@ export class StaffsService {
             last_name: lastName,
             middle_name: middleName,
             email: row["Email"],
-            birthday: parseExcelDate(row["Birthday"]),
+            birthday: formattedBirthday,
             location_id: location.id,
             vendor_id: vendor.id,
             position_id: position.id,

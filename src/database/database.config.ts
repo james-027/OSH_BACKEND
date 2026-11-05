@@ -104,7 +104,7 @@ import { ScheduleHeader } from "../entities/ScheduleHeader";
 import { ScheduleDetail } from "../entities/ScheduleDetails";
 import { ScheduleHeaderHistory } from "../entities/ScheduleHeaderHistory";
 import { WorkingDay } from "../entities/WorkingDay";
-import { RegularHoliday } from "../entities/RegularHoliday";
+import { CalendarHoliday } from "../entities/CalendarHoliday";
 import { LogsType } from "../entities/LogsType";
 import { ActualLogsHeader } from "../entities/ActualLogsHeader";
 import { ActualLogsDetail } from "../entities/ActualLogsDetail";
@@ -224,7 +224,7 @@ export const entities = [
   ScheduleDetail,
   ScheduleHeaderHistory,
   WorkingDay,
-  RegularHoliday,
+  CalendarHoliday,
   ActualLogsDetail,
   ActualLogsHeader,
   LogsType,

@@ -117,6 +117,7 @@ export class StaffAttendanceController {
       filter.date_to,
       filter.vendor_ids,
       filter.location_ids,
+      filter.status_ids,
       userId,
       roleId,
     );

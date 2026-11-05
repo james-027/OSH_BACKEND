@@ -36,7 +36,7 @@ import { ActionLogsService } from "src/modules/actions/services/action-logs.serv
 import { Warehouse } from "src/entities/Warehouse";
 import { ScheduleHeaderHistory } from "src/entities/ScheduleHeaderHistory";
 import * as XLSX from "xlsx";
-import { RegularHoliday } from "src/entities/RegularHoliday";
+import { CalendarHoliday } from "src/entities/CalendarHoliday";
 
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
@@ -80,6 +80,8 @@ export class StaffSchedulingService {
     private staffVendorSalaryRepository: Repository<StaffVendorSalary>,
     @InjectRepository(SssConfigs)
     private sssConfigRepository: Repository<SssConfigs>,
+    @InjectRepository(CalendarHoliday)
+    private calendarHolidayRepository: Repository<CalendarHoliday>,
     @InjectRepository(ActualLogsHeader)
     private actualLogsHeaderRepository: Repository<ActualLogsHeader>,
     @InjectRepository(ActualLogsDetail)
@@ -596,21 +598,22 @@ export class StaffSchedulingService {
             // SCHEDULE DATE / WORKING DAY
             // ========================================================
 
-            const scheduleDate = new Date(createScheduleDto.schedule_date);
-
-            const regularHoliday = await transactionalEntityManager.findOne(
-              RegularHoliday,
+            const scheduleDate = dayjs(createScheduleDto.schedule_date).format("YYYY-MM-DD",);
+            const calendarHoliday = await transactionalEntityManager.findOne(
+              CalendarHoliday,
               {
                 where: {
-                  regular_holiday_date: scheduleDate,
+                  holiday_date: scheduleDate,
+                  status_id: STATUS_IDS.ACTIVE,
                 },
               },
             );
 
-            const workingDay = regularHoliday
-              ? WORKING_DAY_IDS.REGULAR_HOLIDAY
+            const workingDay = calendarHoliday
+              ? calendarHoliday.working_day_id
               : WORKING_DAY_IDS.REGULAR_DAY;
 
+            
             // ========================================================
             // PROCESS EACH LOCATION
             // ========================================================
@@ -1306,8 +1309,20 @@ export class StaffSchedulingService {
             const scheduleDate = updateScheduleDto.schedule_date
               ? updateScheduleDto.schedule_date.substring(0, 10)
               : dayjs(existingHeader.schedule_date).format("YYYY-MM-DD");
+              const scheduleDateValue = new Date(`${scheduleDate}T00:00:00`);
+              const calendarHoliday = await transactionalEntityManager.findOne(
+                CalendarHoliday,
+                {
+                  where: {
+                    holiday_date: scheduleDate,
+                    status_id: STATUS_IDS.ACTIVE,
+                  },
+                },
+              );
+              const workingDay = calendarHoliday
+                ? calendarHoliday.working_day_id
+                : WORKING_DAY_IDS.REGULAR_DAY;
 
-            const scheduleDateValue = new Date(`${scheduleDate}T00:00:00`);
             existingHeader.schedule_date = scheduleDateValue;
             existingHeader.entry_no = details.length;
             if (updateScheduleDto.reason !== undefined) {
@@ -1392,6 +1407,7 @@ export class StaffSchedulingService {
                 duty_end_time: detail.duty_end_time,
                 starting_time: detail.starting_time,
                 ending_time: detail.ending_time,
+                working_day_id: workingDay,
                 ...(detail.is_not_for_premium_pay !== undefined && {
                   is_not_for_premium_pay: detail.is_not_for_premium_pay,
                 }),
@@ -3199,6 +3215,19 @@ export class StaffSchedulingService {
       details: locationDetails,
     } of detailsByLocationAndDate.values()) {
       try {
+
+        const calendarHoliday = await this.calendarHolidayRepository.findOne({
+        where: {
+          holiday_date: new Date(`${scheduleDate}T00:00:00`),
+          status_id: STATUS_IDS.ACTIVE,
+
+        },
+      });
+
+      const workingDay = calendarHoliday
+        ? calendarHoliday.working_day_id
+        : WORKING_DAY_IDS.REGULAR_DAY;
+  
         const existingHeaders = await this.scheduleHeaderRepository
           .createQueryBuilder("header")
           .leftJoinAndSelect("header.details", "detail")
@@ -3460,7 +3489,7 @@ export class StaffSchedulingService {
             existingDetail.location_id = dwsDetail.location_id;
             existingDetail.warehouse_id = dwsDetail.warehouse_id;
             existingDetail.remarks = dwsDetail.remarks;
-
+            existingDetail.working_day_id = workingDay;
             existingDetail.regular = Number(dwsDetail.regular || 0);
             existingDetail.break_hours = String(dwsDetail.break_hours || 0);
             existingDetail.overtime = Number(dwsDetail.overtime || 0);
@@ -3545,8 +3574,7 @@ export class StaffSchedulingService {
 
             night_shift: Number(dwsDetail.night_shift || 0),
 
-            working_day_id:
-              dwsDetail.working_day_id || WORKING_DAY_IDS.REGULAR_DAY,
+            working_day_id: workingDay,
 
             status_id: STATUS_IDS.ACTIVE,
             attendance_status_id: STATUS_IDS.FOR_REVIEW,

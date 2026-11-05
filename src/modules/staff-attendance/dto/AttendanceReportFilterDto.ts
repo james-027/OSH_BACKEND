@@ -37,4 +37,10 @@ export class AttendanceReportFilter {
   @IsInt({ each: true })
   @Type(() => Number)
   location_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  status_ids?: number[];
 }

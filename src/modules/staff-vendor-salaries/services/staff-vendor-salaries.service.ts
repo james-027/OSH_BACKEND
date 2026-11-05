@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository,In} from "typeorm";
+import { Repository, In } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -28,8 +28,6 @@ import { SssConfigs } from "src/entities/SssConfig";
 import { GovernmentContributionUtil } from "src/utils/government-contribution-util";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 
-
-
 @Injectable()
 export class StaffVendorSalariesService {
   constructor(
@@ -51,7 +49,6 @@ export class StaffVendorSalariesService {
     private actionLogsService: ActionLogsService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
-
   ) {}
 
   private readonly module_name = "STAFF VENDOR SALARIES";
@@ -250,86 +247,83 @@ export class StaffVendorSalariesService {
 
       await this.staffVendorSalariesRepository.save(staffVendorSalary);
 
-      if (updateStaffVendorSalaryDto.salary_rate !== undefined) {
-        let staffSalary = await this.staffSalaryRepository.findOne({
-          where: {
-            staff_vendor_id: staffVendorSalary.id,
-          },
+      let staffSalary = await this.staffSalaryRepository.findOne({
+        where: {
+          staff_vendor_id: staffVendorSalary.id,
+        },
+      });
+
+      if (staffSalary) {
+        const oldSalaryRate = staffSalary.salary_rate;
+        staffSalary.phil_health_contri_perc =
+          updateStaffVendorSalaryDto.phil_health_contri_perc;
+        staffSalary.pagibig_number_perc =
+          updateStaffVendorSalaryDto.pagibig_number_perc;
+        staffSalary.updated_by = userId;
+        staffSalary.access_key_id = accessKeyId;
+        const savedStaffSalary =
+          await this.staffSalaryRepository.save(staffSalary);
+
+        try {
+          const changes: string[] = [];
+
+          changes.push(
+            `Salary rate from ${oldSalaryRate} to ${staffSalary.salary_rate}`,
+          );
+
+          // changes.push(
+          //   `Pag-IBIG contribution from ${oldPagibigContriAmount} to ${staffSalary.pagibig_contri_amount}`,
+          // );
+
+          await this.actionLogsService.logAction({
+            module_name: this.module_name,
+            ref_id: staffVendorSalary.id,
+            action_id: ACTION_IDS.EDIT,
+            description: changes.join(", "),
+            raw_data: JSON.stringify({
+              old_salary_rate: oldSalaryRate,
+              new_salary_rate: staffSalary.salary_rate,
+              // old_pagibig_contri_amount: oldPagibigContriAmount,
+              // new_pagibig_contri_amount: staffSalary.pagibig_contri_amount,
+              access_key_id: accessKeyId,
+            }),
+            created_by: userId,
+          });
+        } catch (err) {
+          logger.error("Action log failed for update:", err);
+        }
+      } else {
+        staffSalary = this.staffSalaryRepository.create({
+          staff_id: staffVendorSalary.staff_id,
+          staff_vendor_id: staffVendorSalary.id,
+          access_key_id: accessKeyId,
+          phil_health_contri_perc:
+            updateStaffVendorSalaryDto.phil_health_contri_perc ?? 0,
+          pagibig_number_perc:
+            updateStaffVendorSalaryDto.pagibig_number_perc ?? 0,
+          status_id: staffVendorSalary.status_id,
+          created_by: userId,
+          updated_by: userId,
         });
 
-        if (staffSalary) {
-          const oldSalaryRate = staffSalary.salary_rate;
-          // const oldPagibigContriAmount = staffSalary.pagibig_contri_amount;
+        // staffSalary.pagibig_contri_amount =
+        //   GovernmentContributionUtil.computePagIbigShare(staffSalary);
 
-          staffSalary.salary_rate = updateStaffVendorSalaryDto.salary_rate;
+        // const savedStaffSalary =
+        //   await this.staffSalaryRepository.save(staffSalary);
 
-          // staffSalary.pagibig_contri_amount =
-          //   GovernmentContributionUtil.computePagIbigShare(staffSalary);
-
-          staffSalary.updated_by = userId;
-          staffSalary.access_key_id = accessKeyId;
-
-          const savedStaffSalary =
-            await this.staffSalaryRepository.save(staffSalary);
-
-          try {
-            const changes: string[] = [];
-
-            changes.push(
-              `Salary rate from ${oldSalaryRate} to ${staffSalary.salary_rate}`,
-            );
-
-            // changes.push(
-            //   `Pag-IBIG contribution from ${oldPagibigContriAmount} to ${staffSalary.pagibig_contri_amount}`,
-            // );
-
-            await this.actionLogsService.logAction({
-              module_name: this.module_name,
-              ref_id: staffVendorSalary.id,
-              action_id: ACTION_IDS.EDIT,
-              description: changes.join(", "),
-              raw_data: JSON.stringify({
-                old_salary_rate: oldSalaryRate,
-                new_salary_rate: staffSalary.salary_rate,
-                // old_pagibig_contri_amount: oldPagibigContriAmount,
-                // new_pagibig_contri_amount: staffSalary.pagibig_contri_amount,
-                access_key_id: accessKeyId,
-              }),
-              created_by: userId,
-            });
-          } catch (err) {
-            logger.error("Action log failed for update:", err);
-          }
-        } else {
-          staffSalary = this.staffSalaryRepository.create({
-            staff_id: staffVendorSalary.staff_id,
-            staff_vendor_id: staffVendorSalary.id,
-            access_key_id: accessKeyId,
-            salary_rate: updateStaffVendorSalaryDto.salary_rate ?? 0,
-            status_id: staffVendorSalary.status_id,
-            created_by: userId,
-            updated_by: userId,
-          });
-
-          // staffSalary.pagibig_contri_amount =
-          //   GovernmentContributionUtil.computePagIbigShare(staffSalary);
-
-          // const savedStaffSalary =
-          //   await this.staffSalaryRepository.save(staffSalary);
-
-          // try {
-          //   await this.actionLogsService.logAction({
-          //     module_name: this.module_name,
-          //     ref_id: savedStaffSalary.id,
-          //     action_id: ACTION_IDS.ADD,
-          //     description: `Created staff salary with salary rate ${savedStaffSalary.salary_rate} and Pag-IBIG contribution ${savedStaffSalary.pagibig_contri_amount}`,
-          //     raw_data: JSON.stringify(savedStaffSalary),
-          //     created_by: userId,
-          //   });
-          // } catch (err) {
-          //   logger.error("Action log failed for create:", err);
-          // }
-        }
+        // try {
+        //   await this.actionLogsService.logAction({
+        //     module_name: this.module_name,
+        //     ref_id: savedStaffSalary.id,
+        //     action_id: ACTION_IDS.ADD,
+        //     description: `Created staff salary with salary rate ${savedStaffSalary.salary_rate} and Pag-IBIG contribution ${savedStaffSalary.pagibig_contri_amount}`,
+        //     raw_data: JSON.stringify(savedStaffSalary),
+        //     created_by: userId,
+        //   });
+        // } catch (err) {
+        //   logger.error("Action log failed for create:", err);
+        // }
       }
 
       await this.userAuditTrailCreateService.create(
@@ -483,247 +477,211 @@ export class StaffVendorSalariesService {
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
 
-  async uploadStaffVendorSalaries(
-    file: Express.Multer.File,
-    userId: number,
-    accessKeyId?: number,
-  ) {
-    const XLSX = require("xlsx");
+async uploadStaffVendorSalaries(
+  file: Express.Multer.File,
+  userId: number,
+  accessKeyId?: number,
+) {
+  const XLSX = require("xlsx");
 
-    const workbook = XLSX.readFile(file.path);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const workbook = XLSX.readFile(file.path);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      raw: false,
-      defval: null,
-    });
+  const rows = XLSX.utils.sheet_to_json(sheet, {
+    raw: false,
+    defval: null,
+  });
 
-    const success = [];
-    const errors = [];
+  const success = [];
+  const errors = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const excelRow = i + 2;
+  // Collect StaffVendorSalary IDs for one SSE emission after upload.
+  const sseStaffVendorSalaryIds: number[] = [];
 
-      try {
-        const requiredFields = [
-          "Staff Code",
-          "Staff Name",
-          "Agency",
-          "Location",
-          "Salary Rate",
-          "PhilHealth Number Contribution Perc",
-          "PAGIBIG Number Perc",
-        ];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const excelRow = i + 2;
 
-        const missingFields = requiredFields.filter(
-          (field) =>
-            row[field] === null ||
-            row[field] === undefined ||
-            String(row[field]).trim() === "",
-        );
+    try {
+      const requiredFields = [
+        "DWS Code",
+        "Agency",
+        "Location",
+        "PhilHealth",
+        "PAGIBIG Number",
+      ];
 
-        if (missingFields.length > 0) {
-          errors.push({
-            row: excelRow,
-            error: `Missing required field(s): ${missingFields.join(", ")}`,
-          });
+      const missingFields = requiredFields.filter(
+        (field) =>
+          row[field] === null ||
+          row[field] === undefined ||
+          String(row[field]).trim() === "",
+      );
 
-          continue;
-        }
+      if (missingFields.length > 0) {
+        errors.push({
+          row: excelRow,
+          error: `Missing required field(s): ${missingFields.join(", ")}`,
+        });
 
-        const staffCode = String(row["Staff Code"]).trim();
-        const staffName = String(row["Staff Name"]).trim();
-        const agencyName = String(row["Agency"]).trim();
-        const locationName = String(row["Location"]).trim();
+        continue;
+      }
 
-        // Remove comma from Excel numbers
+      const dwsCode = String(row["DWS Code"]).trim();
 
-        const salaryRate = Number(
-          String(row["Salary Rate"]).replace(/,/g, "").trim(),
-        );
-        const phil_health_contri = Number(
-          String(row["PhilHealth Number Contribution Perc"])
-            .replace(/,/g, "")
-            .trim(),
-        );
+      const staffCode =
+        row["Staff Code"] != null &&
+        String(row["Staff Code"]).trim().toLowerCase() !== "null"
+          ? String(row["Staff Code"]).trim()
+          : "";
 
-        const pagibig_contri = Number(
-          String(row["PAGIBIG Number Perc"]).replace(/,/g, "").trim(),
-        );
+      const staffName =
+        row["Staff Name"] != null &&
+        String(row["Staff Name"]).trim().toLowerCase() !== "null"
+          ? String(row["Staff Name"]).trim()
+          : "";
 
-        if (isNaN(salaryRate)) {
-          errors.push({
-            row: excelRow,
-            error: `Invalid Salary Rate '${row["Salary Rate"]}'`,
-          });
+      const agencyName = String(row["Agency"]).trim();
+      const locationName = String(row["Location"]).trim();
 
-          continue;
-        }
+      const phil_health_contri = Number(
+        String(row["PhilHealth"]).replace(/,/g, "").trim(),
+      );
 
-        const staff = await this.staffsRepository.findOne({
+      const pagibig_contri = Number(
+        String(row["PAGIBIG Number"]).replace(/,/g, "").trim(),
+      );
+
+      if (
+        !Number.isFinite(phil_health_contri) ||
+        !Number.isFinite(pagibig_contri)
+      ) {
+        throw new Error("Invalid PhilHealth or PAGIBIG Number value");
+      }
+
+      const whereCondition: any = {
+        old_dws_code: dwsCode,
+      };
+
+      if (
+        staffCode &&
+        String(staffCode).trim() !== "" &&
+        String(staffCode).trim().toLowerCase() !== "null"
+      ) {
+        whereCondition.staff_code = staffCode;
+      }
+
+      const staff = await this.staffsRepository.findOne({
+        where: whereCondition,
+      });
+
+      if (!staff) {
+        errors.push({
+          row: excelRow,
+          error: `Staff with DWS Code '${dwsCode}'${
+            whereCondition.staff_code
+              ? ` and Staff Code '${staffCode}'`
+              : ""
+          } not found`,
+        });
+
+        continue;
+      }
+
+      const vendor = await this.vendorRepository.findOne({
+        where: {
+          service_provider_name: agencyName,
+        },
+      });
+
+      if (!vendor) {
+        errors.push({
+          row: excelRow,
+          error: `Agency '${agencyName}' not found`,
+        });
+
+        continue;
+      }
+
+      const location = await this.locationRepository.findOne({
+        where: {
+          location_name: locationName,
+        },
+      });
+
+      if (!location) {
+        errors.push({
+          row: excelRow,
+          error: `Location '${locationName}' not found`,
+        });
+
+        continue;
+      }
+
+      const existingStaffVendorSalary =
+        await this.staffVendorSalariesRepository.findOne({
           where: {
-            staff_code: staffCode,
+            staff_id: staff.id,
+            vendor_id: vendor.id,
+            location_id: location.id,
           },
         });
 
-        if (!staff) {
-          errors.push({
-            row: excelRow,
-            error: `Staff with Staff Code '${staffCode}' not found`,
-          });
+      let staffVendorSalaryId: number;
+      let existingStaffSalaryId: number | null = null;
 
-          continue;
-        }
+      if (existingStaffVendorSalary) {
+        staffVendorSalaryId = existingStaffVendorSalary.id;
 
-        const vendor = await this.vendorRepository.findOne({
-          where: {
-            service_provider_name: agencyName,
-          },
-        });
+        existingStaffVendorSalary.updated_by = userId;
+        existingStaffVendorSalary.access_key_id = accessKeyId;
 
-        if (!vendor) {
-          errors.push({
-            row: excelRow,
-            error: `Agency '${agencyName}' not found`,
-          });
+        await this.staffVendorSalariesRepository.save(
+          existingStaffVendorSalary,
+        );
 
-          continue;
-        }
-
-        const location = await this.locationRepository.findOne({
-          where: {
-            location_name: locationName,
-          },
-        });
-
-        if (!location) {
-          errors.push({
-            row: excelRow,
-            error: `Location '${locationName}' not found`,
-          });
-
-          continue;
-        }
-
-        const existingStaffVendorSalary =
-          await this.staffVendorSalariesRepository.findOne({
-            where: {
-              staff_id: staff.id,
-              vendor_id: vendor.id,
-              location_id: location.id,
-            },
-          });
-
-        let staffVendorSalaryId: number;
-        let existingStaffSalaryId: number | null = null;
-
-        if (existingStaffVendorSalary) {
-          staffVendorSalaryId = existingStaffVendorSalary.id;
-
-          existingStaffVendorSalary.updated_by = userId;
-          existingStaffVendorSalary.access_key_id = accessKeyId;
-          await this.staffVendorSalariesRepository.save(
-            existingStaffVendorSalary,
-          );
-
-          const existingStaffSalary = await this.staffSalaryRepository.findOne({
+        const existingStaffSalary =
+          await this.staffSalaryRepository.findOne({
             where: {
               staff_vendor_id: existingStaffVendorSalary.id,
               status_id: STATUS_IDS.ACTIVE,
             },
           });
 
-          if (existingStaffSalary) {
-            const oldStatusId = existingStaffSalary.status_id;
-            const oldAllowance = existingStaffSalary.allowance;
-            const oldSalaryRate = existingStaffSalary.salary_rate;
+        if (existingStaffSalary) {
+          const oldStatusId = existingStaffSalary.status_id;
+          const oldAllowance = existingStaffSalary.allowance;
+          const oldSalaryRate = existingStaffSalary.salary_rate;
 
-            existingStaffSalary.status_id = STATUS_IDS.INACTIVE;
-            existingStaffSalary.updated_by = userId;
-            existingStaffSalary.access_key_id = accessKeyId;
+          existingStaffSalary.status_id = STATUS_IDS.INACTIVE;
+          existingStaffSalary.updated_by = userId;
+          existingStaffSalary.access_key_id = accessKeyId;
 
-            existingStaffSalary.phil_health_contri_perc = phil_health_contri;
-            existingStaffSalary.pagibig_number_perc = pagibig_contri;
+          existingStaffSalary.phil_health_contri_perc =
+            phil_health_contri;
 
-            await this.staffSalaryRepository.save(existingStaffSalary);
+          existingStaffSalary.pagibig_number_perc =
+            pagibig_contri;
 
-            existingStaffSalaryId = existingStaffSalary.id;
+          await this.staffSalaryRepository.save(existingStaffSalary);
 
-            try {
-              await this.actionLogsService.logAction({
-                module_name: this.module_name,
-                ref_id: existingStaffSalary.id,
-                action_id: ACTION_IDS.EDIT,
-                description:
-                  `Deactivated old staff salary for Staff Code ${staffCode} ` +
-                  `with Allowance ${oldAllowance} and Salary Rate ${oldSalaryRate}`,
-                raw_data: JSON.stringify({
-                  source: "STAFF VENDOR SALARY UPLOAD",
-                  action: "DEACTIVATE_OLD_SALARY",
-                  row: excelRow,
-
-                  staff_salary_id: existingStaffSalary.id,
-                  staff_vendor_salary_id: existingStaffVendorSalary.id,
-
-                  staff_id: staff.id,
-                  staff_code: staffCode,
-                  staff_name: staffName,
-
-                  vendor_id: vendor.id,
-                  agency: agencyName,
-
-                  location_id: location.id,
-                  location: locationName,
-
-                  old_status_id: oldStatusId,
-                  new_status_id: STATUS_IDS.INACTIVE,
-
-                  old_salary_rate: oldSalaryRate,
-
-                  new_salary_rate: salaryRate,
-
-                  access_key_id: accessKeyId,
-                }),
-                created_by: userId,
-              });
-            } catch (err) {
-              logger.error(
-                `Action log failed for deactivated staff salary, ` +
-                  `staff_salary_id=${existingStaffSalary.id}:`,
-                err,
-              );
-            }
-          }
-        } else {
-          const newStaffVendorSalary =
-            this.staffVendorSalariesRepository.create({
-              staff_id: staff.id,
-              vendor_id: vendor.id,
-              location_id: location.id,
-              access_key_id: accessKeyId,
-              status_id: STATUS_IDS.ACTIVE,
-              created_by: userId,
-              updated_by: userId,
-            });
-
-          const savedStaffVendorSalary =
-            await this.staffVendorSalariesRepository.save(newStaffVendorSalary);
-
-          staffVendorSalaryId = savedStaffVendorSalary.id;
+          existingStaffSalaryId = existingStaffSalary.id;
 
           try {
             await this.actionLogsService.logAction({
               module_name: this.module_name,
-              ref_id: savedStaffVendorSalary.id,
-              action_id: ACTION_IDS.ADD,
-              description: `Created new staff vendor relation for Staff Code ${staffCode}`,
+              ref_id: existingStaffSalary.id,
+              action_id: ACTION_IDS.EDIT,
+              description:
+                `Deactivated old staff salary for Staff Code ${staffCode} ` +
+                `with Allowance ${oldAllowance} and Salary Rate ${oldSalaryRate}`,
               raw_data: JSON.stringify({
                 source: "STAFF VENDOR SALARY UPLOAD",
-                action: "CREATE_NEW_STAFF_VENDOR_RELATION",
+                action: "DEACTIVATE_OLD_SALARY",
                 row: excelRow,
 
-                staff_vendor_salary_id: savedStaffVendorSalary.id,
+                staff_salary_id: existingStaffSalary.id,
+                staff_vendor_salary_id: existingStaffVendorSalary.id,
 
                 staff_id: staff.id,
                 staff_code: staffCode,
@@ -735,48 +693,54 @@ export class StaffVendorSalariesService {
                 location_id: location.id,
                 location: locationName,
 
+                old_status_id: oldStatusId,
+                new_status_id: STATUS_IDS.INACTIVE,
+
+                old_salary_rate: oldSalaryRate,
+
                 access_key_id: accessKeyId,
               }),
               created_by: userId,
             });
           } catch (err) {
             logger.error(
-              `Action log failed for new staff vendor relation, ` +
-                `staff_vendor_salary_id=${savedStaffVendorSalary.id}:`,
+              `Action log failed for deactivated staff salary, ` +
+                `staff_salary_id=${existingStaffSalary.id}:`,
               err,
             );
           }
         }
+      } else {
+        const newStaffVendorSalary =
+          this.staffVendorSalariesRepository.create({
+            staff_id: staff.id,
+            vendor_id: vendor.id,
+            location_id: location.id,
+            access_key_id: accessKeyId,
+            status_id: STATUS_IDS.ACTIVE,
+            created_by: userId,
+            updated_by: userId,
+          });
 
-        // =========================================================
-        const newStaffSalary = this.staffSalaryRepository.create({
-          staff_id: staff.id,
-          staff_vendor_id: staffVendorSalaryId,
-          access_key_id: accessKeyId,
-          salary_rate: salaryRate,
-          status_id: STATUS_IDS.ACTIVE,
-          created_by: userId,
-          updated_by: userId,
-        });
+        const savedStaffVendorSalary =
+          await this.staffVendorSalariesRepository.save(
+            newStaffVendorSalary,
+          );
 
-        const savedStaffSalary =
-          await this.staffSalaryRepository.save(newStaffSalary);
+        staffVendorSalaryId = savedStaffVendorSalary.id;
+
         try {
           await this.actionLogsService.logAction({
             module_name: this.module_name,
-            ref_id: savedStaffSalary.id,
+            ref_id: savedStaffVendorSalary.id,
             action_id: ACTION_IDS.ADD,
-            description:
-              `Created new staff salary for Staff Code ${staffCode} ` +
-              `with New Salary Rate ${salaryRate}`,
+            description: `Created new staff vendor relation for Staff Code ${staffCode}`,
             raw_data: JSON.stringify({
               source: "STAFF VENDOR SALARY UPLOAD",
-              action: "CREATE_NEW_SALARY",
+              action: "CREATE_NEW_STAFF_VENDOR_RELATION",
               row: excelRow,
 
-              staff_salary_id: savedStaffSalary.id,
-
-              staff_vendor_salary_id: staffVendorSalaryId,
+              staff_vendor_salary_id: savedStaffVendorSalary.id,
 
               staff_id: staff.id,
               staff_code: staffCode,
@@ -788,160 +752,196 @@ export class StaffVendorSalariesService {
               location_id: location.id,
               location: locationName,
 
-              salary_rate: salaryRate,
-
-              old_staff_salary_id: existingStaffSalaryId,
-
               access_key_id: accessKeyId,
             }),
             created_by: userId,
           });
         } catch (err) {
           logger.error(
-            `Action log failed for new staff salary, ` +
-              `staff_salary_id=${savedStaffSalary.id}:`,
+            `Action log failed for new staff vendor relation, ` +
+              `staff_vendor_salary_id=${savedStaffVendorSalary.id}:`,
             err,
           );
         }
+      }
 
-        try {
-          await this.userAuditTrailCreateService.create(
-            {
-              service: "StaffVendorSalariesService",
-              method: "uploadStaffVendorSalaries",
-              raw_data: JSON.stringify({
-                source: "STAFF VENDOR SALARY UPLOAD",
-                row: excelRow,
+      // Create new StaffSalary.
+      const newStaffSalary = this.staffSalaryRepository.create({
+        staff_id: staff.id,
+        staff_vendor_id: staffVendorSalaryId,
+        access_key_id: accessKeyId,
+        status_id: STATUS_IDS.ACTIVE,
+        phil_health_contri_perc: phil_health_contri,
+        pagibig_number_perc: pagibig_contri,
+        created_by: userId,
+        updated_by: userId,
+      });
 
-                staff_id: staff.id,
-                staff_code: staffCode,
-                staff_name: staffName,
+      const savedStaffSalary =
+        await this.staffSalaryRepository.save(newStaffSalary);
 
-                staff_vendor_salary_id: staffVendorSalaryId,
+      try {
+        await this.actionLogsService.logAction({
+          module_name: this.module_name,
+          ref_id: savedStaffSalary.id,
+          action_id: ACTION_IDS.ADD,
+          description: `Created new staff salary for Staff Code ${staffCode}`,
+          raw_data: JSON.stringify({
+            source: "STAFF VENDOR SALARY UPLOAD",
+            action: "CREATE_NEW_SALARY",
+            row: excelRow,
 
-                staff_salary_id: savedStaffSalary.id,
+            staff_salary_id: savedStaffSalary.id,
+            staff_vendor_salary_id: staffVendorSalaryId,
 
-                old_staff_salary_id: existingStaffSalaryId,
-
-                vendor_id: vendor.id,
-                agency: agencyName,
-
-                location_id: location.id,
-                location: locationName,
-
-                salary_rate: salaryRate,
-
-                access_key_id: accessKeyId,
-              }),
-              description:
-                `Uploaded staff salary for Staff Code ${staffCode} ` +
-                `with Salary Rate ${salaryRate}`,
-              status_id: 1,
-            },
-            userId,
-          );
-        } catch (err) {
-          logger.error(
-            `User audit trail failed for staff vendor salary upload, ` +
-              `staff_code=${staffCode}:`,
-            err,
-          );
-        }
-
-        const updatedRecord = await this.staffVendorSalariesRepository.findOne({
-          where: {
-            id: staffVendorSalaryId,
-          },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "staff",
-            "vendor",
-            "location",
-            "accessKey",
-            "staffSalaries",
-          ],
-        });
-
-        if (!updatedRecord) {
-          throw new Error(
-            `Failed to retrieve staff vendor salary for Staff Code '${staffCode}'`,
-          );
-        }
-
-        const response =
-          this.responseMapperService.mapEntityToResponse(updatedRecord);
-
-        try {
-          this.sseEventEmitter.emitUpdate(
-            "staff_vendor_salaries",
-            response.id,
-            response,
-          );
-        } catch (err) {
-          logger.error(
-            `SSE event failed for staff_vendor_salary_id=${response.id}:`,
-            err,
-          );
-        }
-
-        success.push({
-          row: excelRow,
-          action: existingStaffVendorSalary ? "updated" : "inserted",
-          message: existingStaffVendorSalary
-            ? "Existing staff vendor relation retained and old salary deactivated. New salary created."
-            : "New staff vendor relation and salary created.",
-
-          data: {
+            staff_id: staff.id,
             staff_code: staffCode,
             staff_name: staffName,
 
-            agency: agencyName,
             vendor_id: vendor.id,
+            agency: agencyName,
 
-            location: locationName,
             location_id: location.id,
-
-            salary_rate: salaryRate,
-
-            existing_staff_vendor_relation: !!existingStaffVendorSalary,
-
-            staff_vendor_salary_id: staffVendorSalaryId,
+            location: locationName,
 
             old_staff_salary_id: existingStaffSalaryId,
 
-            new_staff_salary_id: savedStaffSalary.id,
-          },
+            access_key_id: accessKeyId,
+          }),
+          created_by: userId,
         });
-      } catch (error) {
-        errors.push({
-          row: excelRow,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-
+      } catch (err) {
         logger.error(
-          `Failed to process staff vendor salary upload row ${excelRow}:`,
-          error,
+          `Action log failed for new staff salary, ` +
+            `staff_salary_id=${savedStaffSalary.id}:`,
+          err,
         );
       }
+
+      try {
+        await this.userAuditTrailCreateService.create(
+          {
+            service: "StaffVendorSalariesService",
+            method: "uploadStaffVendorSalaries",
+            raw_data: JSON.stringify({
+              source: "STAFF VENDOR SALARY UPLOAD",
+              row: excelRow,
+
+              staff_id: staff.id,
+              staff_code: staffCode,
+              staff_name: staffName,
+
+              staff_vendor_salary_id: staffVendorSalaryId,
+              staff_salary_id: savedStaffSalary.id,
+              old_staff_salary_id: existingStaffSalaryId,
+
+              vendor_id: vendor.id,
+              agency: agencyName,
+
+              location_id: location.id,
+              location: locationName,
+
+              access_key_id: accessKeyId,
+            }),
+            description: `Uploaded staff salary for Staff Code ${staffCode}`,
+            status_id: 1,
+          },
+          userId,
+        );
+      } catch (err) {
+        logger.error(
+          `User audit trail failed for staff vendor salary upload, ` +
+            `staff_code=${staffCode}:`,
+          err,
+        );
+      }
+
+      // Collect the ID for the single SSE emission after the loop.
+      sseStaffVendorSalaryIds.push(staffVendorSalaryId);
+
+      success.push({
+        row: excelRow,
+        action: existingStaffVendorSalary ? "updated" : "inserted",
+        message: existingStaffVendorSalary
+          ? "Existing staff vendor relation retained and old salary deactivated. New salary created."
+          : "New staff vendor relation and salary created.",
+
+        data: {
+          staff_code: staffCode,
+          staff_name: staffName,
+          agency: agencyName,
+          vendor_id: vendor.id,
+          location: locationName,
+          pagibig_contri: pagibig_contri,
+          phil_health_contri: phil_health_contri,
+          location_id: location.id,
+          existing_staff_vendor_relation: !!existingStaffVendorSalary,
+          staff_vendor_salary_id: staffVendorSalaryId,
+          old_staff_salary_id: existingStaffSalaryId,
+          new_staff_salary_id: savedStaffSalary.id,
+        },
+      });
+    } catch (error) {
+      errors.push({
+        row: excelRow,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+
+      logger.error(
+        `Failed to process staff vendor salary upload row ${excelRow}:`,
+        error,
+      );
     }
-
-    return {
-      inserted_count: success.filter((s) => s.action === "inserted").length,
-
-      updated_count: success.filter((s) => s.action === "updated").length,
-
-      inserted_row_numbers: success
-        .filter((s) => s.action === "inserted")
-        .map((s) => s.row),
-
-      updated_row_numbers: success
-        .filter((s) => s.action === "updated")
-        .map((s) => s.row),
-
-      success,
-      errors,
-    };
   }
+
+  // =========================================================
+  // EMIT SSE ONLY ONCE AFTER ALL ROWS HAVE BEEN PROCESSED.
+  // =========================================================
+  const uniqueStaffVendorSalaryIds = [
+    ...new Set(sseStaffVendorSalaryIds),
+  ];
+
+  if (uniqueStaffVendorSalaryIds.length > 0) {
+    try {
+      const ssePayload = {
+        type: "BULK_UPLOAD",
+        source: "STAFF VENDOR SALARY UPLOAD",
+        staff_vendor_salary_ids: uniqueStaffVendorSalaryIds,
+        total_processed: success.length,
+        inserted_count: success.filter(
+          (s) => s.action === "inserted",
+        ).length,
+        updated_count: success.filter(
+          (s) => s.action === "updated",
+        ).length,
+        failed_count: errors.length,
+      };
+
+      this.sseEventEmitter.emitUpdate(
+        "staff_vendor_salaries",
+        uniqueStaffVendorSalaryIds[0],
+        ssePayload,
+      );
+    } catch (err) {
+      logger.error("SSE event failed for bulk staff vendor salary upload:", err);
+    }
+  }
+
+  return {
+    inserted_count: success.filter((s) => s.action === "inserted").length,
+
+    updated_count: success.filter((s) => s.action === "updated").length,
+
+    inserted_row_numbers: success
+      .filter((s) => s.action === "inserted")
+      .map((s) => s.row),
+
+    updated_row_numbers: success
+      .filter((s) => s.action === "updated")
+      .map((s) => s.row),
+
+    success,
+    errors,
+  };
+}
 }
