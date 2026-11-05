@@ -420,13 +420,7 @@ export class CrewHubService {
     // 2. Broadcast SSE Event to real-time clients
     if (this.sseEventEmitter) {
       try {
-        if (action === "CREATE") {
-          this.sseEventEmitter.emitCreate(resource, resourceId, data);
-        } else if (action === "UPDATE") {
-          this.sseEventEmitter.emitUpdate(resource, resourceId, data);
-        } else if (action === "DELETE") {
-          this.sseEventEmitter.emitDelete(resource, resourceId);
-        }
+        this.sseEventEmitter.emitUpdate("crew-hub", 0);
       } catch (err) {
         logger.error("[CrewHub] Failed to emit SSE event:", err);
       }
