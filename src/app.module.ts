@@ -87,6 +87,7 @@ import { BrandsModule } from "./modules/brands/brands.module";
 import { BrandGroupModule } from "./modules/brands/brand-groups.module";
 import { StaffCategoryTypesModule } from "./modules/staff-category-types/staff-category-types.module";
 import { StaffWarehousesModule } from "./modules/staff-warehouses/staff-warehouses.module";
+import { CrewHubModule } from "./modules/crew-hub/crew-hub.module";
 import cookieParser from "cookie-parser";
 import { SSEJwtMiddleware } from "./middleware/sse-jwt.middleware";
 import { ThrottleTrackingMiddleware } from "./middleware/throttle-tracking.middleware";
@@ -173,7 +174,7 @@ import { SignatoryDetailModule } from "./modules/signatory-details/signatory-det
       ApprovalMatrixLevels,
       EmailQueue,
       MasterDataSyncLog,
-      Customer
+      Customer,
     ]),
     // Authentication
     PassportModule,
@@ -253,9 +254,11 @@ import { SignatoryDetailModule } from "./modules/signatory-details/signatory-det
     StaffPayrollModule,
     HolidaysModule,
     ActualTimeLogsModule,
+    CrewHubModule,
+    ,
     WeighInModule,
     CustomerModule,
-    SignatoryDetailModule
+    SignatoryDetailModule,
   ],
   providers: [
     EmailService,

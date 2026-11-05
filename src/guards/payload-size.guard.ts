@@ -17,6 +17,7 @@ export class PayloadSizeGuard implements CanActivate {
     "/req-transaction-headers/batch-create": 750 * 1024 * 1024,
     "/req-transaction-details/batch-create": 750 * 1024 * 1024,
     "/req-transaction-dues/batch-create": 750 * 1024 * 1024,
+    "/crew-hub/admin/upload": 4000 * 1024 * 1024,
 
     // Standard operations: 10MB (enforced by Guard, HTTP layer set to 800MB to allow Guard to reject)
     default: 10 * 1024 * 1024,
@@ -47,7 +48,7 @@ export class PayloadSizeGuard implements CanActivate {
       const sizeMB = (payloadSize / 1024 / 1024).toFixed(2);
 
       throw new PayloadTooLargeException(
-        `Payload too large. Max ${limitMB}MB allowed for this endpoint. Received: ${sizeMB}MB`
+        `Payload too large. Max ${limitMB}MB allowed for this endpoint. Received: ${sizeMB}MB`,
       );
     }
 

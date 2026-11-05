@@ -82,6 +82,12 @@ export const CACHE_KEYS = {
   REQUIREMENTS_ALL: "requirements:all",
   REQUIREMENTS_ONE: "requirements:one",
 
+  // Crew System Hub
+  CREW_HUB_SYSTEMS: "crew-hub:systems",
+  CREW_HUB_MATERIALS: "crew-hub:learning-materials",
+  CREW_HUB_TYPES: "crew-hub:material-types",
+  CREW_HUB_OVERVIEW: "crew-hub:overview",
+
   // General findAll/findOne (by service name)
   FIND_ALL: (service: string) => `${service}:find-all`,
   FIND_ONE: (service: string) => `${service}:find-one`,
@@ -118,6 +124,9 @@ export const CACHE_PATTERNS = {
 
   APPROVAL_STAGES_LIST:
   "approval-stageslist:*",
+
+  // Crew System Hub
+  CREW_HUB: "crew-hub:*",
 };
 
 export const CACHE_TTL = {

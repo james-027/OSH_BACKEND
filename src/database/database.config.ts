@@ -117,6 +117,9 @@ import { WarehouseBudgetHour } from "../entities/WarehouseBudgetHour";
 import { WarehouseSalary } from "../entities/WarehouseSalary";
 import { PayrollLog } from "../entities/PayrollLog";
 import { BillingType } from "../entities/BillingType";
+import { CrewHubSystem } from "../entities/CrewHubSystem";
+import { LearningMaterial } from "../entities/LearningMaterial";
+import { LearningMaterialType } from "../entities/LearningMaterialType";
 import { Customer } from "../entities/Customer";
 import { WeighInLine } from "../entities/WeighInItems";
 import { WeighIn_header } from "../entities/WeighInHeader";
@@ -244,6 +247,9 @@ export const entities = [
   WarehouseSalary,
   PayrollLog,
   BillingType,
+  CrewHubSystem,
+  LearningMaterial,
+  LearningMaterialType,
   Customer,
   WeighInLine,
   WeighIn_header,
