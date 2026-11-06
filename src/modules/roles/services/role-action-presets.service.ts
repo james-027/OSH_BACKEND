@@ -1350,6 +1350,8 @@ export class RoleActionPresetsService {
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_permissions_to_users_only = false,
+      apply_locations_to_users_only = false,
     } = createRolePresetDto;
 
     try {
@@ -1399,6 +1401,9 @@ export class RoleActionPresetsService {
         let savedLocationPresets: RoleLocationPreset[] = [];
         let savedActionPresets: RoleActionPreset[] = [];
 
+        const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleActions = !apply_permissions_to_users_only;
+
         if (
           createRolePresetDto.tenant_configs &&
           Object.keys(createRolePresetDto.tenant_configs).length > 0
@@ -1411,7 +1416,7 @@ export class RoleActionPresetsService {
               location_ids?: number[];
               presets?: any[];
             };
-            if (config.location_ids) {
+            if (shouldUpdateRoleLocations && config.location_ids) {
               const locs = await this.updateRoleLocationPresetsFromPresets(
                 role_id,
                 config.location_ids,
@@ -1422,7 +1427,7 @@ export class RoleActionPresetsService {
               );
               savedLocationPresets.push(...locs);
             }
-            if (config.presets) {
+            if (shouldUpdateRoleActions && config.presets) {
               const acts = await this.updateRoleActionPresetsFromPresets(
                 role_id,
                 config.presets,
@@ -1435,31 +1440,40 @@ export class RoleActionPresetsService {
             }
           }
         } else {
-          // Update location presets using helper (mark-inactive-then-upsert)
-          savedLocationPresets =
-            await this.updateRoleLocationPresetsFromPresets(
-              role_id,
-              location_ids,
-              status,
-              userId,
-              queryRunner,
-              targetAccessKeyIds,
-            );
+          if (shouldUpdateRoleLocations) {
+            // Update location presets using helper (mark-inactive-then-upsert)
+            savedLocationPresets =
+              await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                location_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
 
-          // Update action presets using helper (mark-inactive-then-upsert)
-          savedActionPresets =
-            await this.updateRoleActionPresetsFromPresets(
-              role_id,
-              presets,
-              status,
-              userId,
-              queryRunner,
-              targetAccessKeyIds,
-            );
+          if (shouldUpdateRoleActions) {
+            // Update action presets using helper (mark-inactive-then-upsert)
+            savedActionPresets =
+              await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                presets,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
         }
 
         // Handle user permissions and locations updates if requested
-        if (user_ids.length > 0) {
+        const shouldCascadePermissions =
+          apply_permissions_to_users || apply_permissions_to_users_only;
+        const shouldCascadeLocations =
+          apply_locations_to_users || apply_locations_to_users_only;
+
+        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
           const userAccessKeys = await this.userPermissionsRepository
             .createQueryBuilder("up")
             .select("DISTINCT up.access_key_id", "access_key_id")
@@ -1471,7 +1485,7 @@ export class RoleActionPresetsService {
             createRolePresetDto.tenant_configs &&
             Object.keys(createRolePresetDto.tenant_configs).length > 0;
 
-          if (apply_permissions_to_users) {
+          if (shouldCascadePermissions) {
             if (hasTenantConfigs) {
               for (const [keyIdStr, configObj] of Object.entries(
                 createRolePresetDto.tenant_configs!,
@@ -1508,7 +1522,7 @@ export class RoleActionPresetsService {
             }
           }
 
-          if (apply_locations_to_users) {
+          if (shouldCascadeLocations) {
             if (hasTenantConfigs) {
               for (const [keyIdStr, configObj] of Object.entries(
                 createRolePresetDto.tenant_configs!,
@@ -1675,6 +1689,8 @@ export class RoleActionPresetsService {
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_permissions_to_users_only = false,
+      apply_locations_to_users_only = false,
     } = updateRolePresetDto;
 
     // console.log("UpdateRolePresetDto:", updateRolePresetDto);
@@ -1726,6 +1742,9 @@ export class RoleActionPresetsService {
         let savedLocationPresets: RoleLocationPreset[] = [];
         let savedActionPresets: RoleActionPreset[] = [];
 
+        const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleActions = !apply_permissions_to_users_only;
+
         if (
           updateRolePresetDto.tenant_configs &&
           Object.keys(updateRolePresetDto.tenant_configs).length > 0
@@ -1738,7 +1757,7 @@ export class RoleActionPresetsService {
               location_ids?: number[];
               presets?: any[];
             };
-            if (config.location_ids) {
+            if (shouldUpdateRoleLocations && config.location_ids) {
               const locs = await this.updateRoleLocationPresetsFromPresets(
                 role_id,
                 config.location_ids,
@@ -1749,7 +1768,7 @@ export class RoleActionPresetsService {
               );
               savedLocationPresets.push(...locs);
             }
-            if (config.presets) {
+            if (shouldUpdateRoleActions && config.presets) {
               const acts = await this.updateRoleActionPresetsFromPresets(
                 role_id,
                 config.presets,
@@ -1762,31 +1781,40 @@ export class RoleActionPresetsService {
             }
           }
         } else {
-          // Update location presets using helper (mark-inactive-then-upsert)
-          savedLocationPresets =
-            await this.updateRoleLocationPresetsFromPresets(
-              role_id,
-              location_ids,
-              status,
-              userId,
-              queryRunner,
-              targetAccessKeyIds,
-            );
+          if (shouldUpdateRoleLocations) {
+            // Update location presets using helper (mark-inactive-then-upsert)
+            savedLocationPresets =
+              await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                location_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
 
-          // Update action presets using helper (mark-inactive-then-upsert)
-          savedActionPresets =
-            await this.updateRoleActionPresetsFromPresets(
-              role_id,
-              presets,
-              status,
-              userId,
-              queryRunner,
-              targetAccessKeyIds,
-            );
+          if (shouldUpdateRoleActions) {
+            // Update action presets using helper (mark-inactive-then-upsert)
+            savedActionPresets =
+              await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                presets,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
         }
 
         // Handle user permissions and locations updates if requested
-        if (user_ids.length > 0) {
+        const shouldCascadePermissions =
+          apply_permissions_to_users || apply_permissions_to_users_only;
+        const shouldCascadeLocations =
+          apply_locations_to_users || apply_locations_to_users_only;
+
+        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
           const userAccessKeys = await this.userPermissionsRepository
             .createQueryBuilder("up")
             .select("DISTINCT up.access_key_id", "access_key_id")
@@ -1798,7 +1826,7 @@ export class RoleActionPresetsService {
             updateRolePresetDto.tenant_configs &&
             Object.keys(updateRolePresetDto.tenant_configs).length > 0;
 
-          if (apply_permissions_to_users) {
+          if (shouldCascadePermissions) {
             if (hasTenantConfigs) {
               for (const [keyIdStr, configObj] of Object.entries(
                 updateRolePresetDto.tenant_configs!,
@@ -1835,7 +1863,7 @@ export class RoleActionPresetsService {
             }
           }
 
-          if (apply_locations_to_users) {
+          if (shouldCascadeLocations) {
             if (hasTenantConfigs) {
               for (const [keyIdStr, configObj] of Object.entries(
                 updateRolePresetDto.tenant_configs!,

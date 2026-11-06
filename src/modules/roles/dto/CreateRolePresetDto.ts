@@ -83,5 +83,13 @@ export class CreateRolePresetDto {
 
   @IsOptional()
   @IsBoolean()
+  apply_permissions_to_users_only?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   apply_locations_to_users?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  apply_locations_to_users_only?: boolean;
 }
