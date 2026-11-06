@@ -26,6 +26,9 @@ export class LogsType {
 
   @Column({ nullable: true })
   updated_by: number;
+  
+  @Column({ nullable: true })
+  is_cancel_allowed: boolean;
 
   @CreateDateColumn({
     type: "timestamp",

@@ -31,6 +31,9 @@ export class ActualLogsHeader {
 
   @Column({ nullable: true })
   access_key_id: number;
+  
+  @Column({ nullable: true })
+  status_id: number;
 
   @CreateDateColumn({
     type: "timestamp",

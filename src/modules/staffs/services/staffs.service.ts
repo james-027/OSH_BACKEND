@@ -2746,15 +2746,20 @@ export class StaffsService {
           existingRecord = await this.staffsRepository.findOne({
             where: {
               staff_code: staffCode,
+              status_id:STATUS_IDS.ACTIVE
             },
           });
-        } else if (dwsCode) {
-          existingRecord = await this.staffsRepository.findOne({
-            where: {
-              old_dws_code: dwsCode,
-            },
-          });
-        }
+        } 
+
+        //* UNCOMMENT THIS IF DWS CODE OR EMPLOYEE ID IS UNIQUE */
+
+        // else if (dwsCode) {
+        //   existingRecord = await this.staffsRepository.findOne({
+        //     where: {
+        //       old_dws_code: dwsCode,
+        //     },
+        //   });
+        // }
 
         if (!existingRecord) {
           errors.push({

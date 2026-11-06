@@ -1369,6 +1369,7 @@ export class StaffAttendanceService {
               ? await this.actualLogsDetailRepository.findOne({
                   where: {
                     id: scheduleDetail.actual_logs_detail_id,
+                    status_id: STATUS_IDS.ACTIVE
                   },
                 })
               : null;

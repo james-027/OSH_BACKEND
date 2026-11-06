@@ -685,7 +685,7 @@ export class StaffSchedulingService {
                   created_by: userId,
                   updated_by: userId,
                   access_key_id: accessKeyId,
-                  status_id: STATUS_IDS.ACTIVE,
+                  status_id: STATUS_IDS.POSTED,
                 };
 
                 const actualLogsHeader = transactionalEntityManager.create(
@@ -3136,7 +3136,7 @@ export class StaffSchedulingService {
           tagging: "DWS DAILY AUTOMATED SYNC",
           logs_type_id: LOGS_TYPE_ID.FST_FETCH,
           access_key_id: accessKeyId,
-          status_id: STATUS_IDS.ACTIVE,
+          status_id: STATUS_IDS.POSTED,
           created_by: userId,
           updated_by: userId,
         };
@@ -3415,6 +3415,7 @@ export class StaffSchedulingService {
               ? await this.actualLogsDetailRepository.findOne({
                   where: {
                     id: existingDetail.actual_logs_detail_id,
+                    status_id: STATUS_IDS.ACTIVE
                   },
                 })
               : null;
