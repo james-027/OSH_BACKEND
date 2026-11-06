@@ -34,17 +34,20 @@ export class ActualTimeLogDetailService {
 
   private readonly module_name = "ACTUAL TIME LOGS";
 
-async findAll(
+
+  async findAll(
   statusId?: number[],
   accessKeyId?: number,
   userId?: number,
   roleId?: number,
 ): Promise<any[]> {
   try {
-    const where: any = {};
+    const where: any = {
+      actualHeader: {},
+    };
 
     if (accessKeyId !== undefined) {
-      where.access_key_id = accessKeyId;
+      where.actualHeader.access_key_id = accessKeyId;
     }
 
     if (userId && roleId) {
@@ -58,9 +61,7 @@ async findAll(
     }
 
     if (statusId && statusId.length > 0) {
-      where.actualHeader = {
-        status_id: In(statusId),
-      };
+      where.actualHeader.status_id = In(statusId);
     }
 
     const actualLogsDetail = await this.actualLogsDetailRepository.find({
@@ -74,7 +75,6 @@ async findAll(
         "actualHeader.logsType",
         "warehouse",
         "vendor",
-        "warehouse",
         "createdBy",
         "updatedBy",
       ],
