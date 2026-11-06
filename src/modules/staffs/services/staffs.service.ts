@@ -2064,9 +2064,10 @@ export class StaffsService {
         const middleName = (row["Middle Name"] || "").toUpperCase().trim();
         const staffCode = row["Staff Code"]?.toString().trim();
         const dwsCode = row["DWS Code"]?.toString().trim();
-        const dwsId = row["DWS ID"];
+        const dwsId = row["DWS ID"]?.toString().trim();
 
         const isInstitutional = this.parseExcelBoolean(row["Is Institutional"]);
+
 
         let existingRecord = null;
 
@@ -2076,22 +2077,25 @@ export class StaffsService {
               staff_code: staffCode,
             },
           });
+        }
+        
+        if (!existingRecord && dwsId) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_id: dwsId,
+            },
+          });
+        }
 
-          if (!existingRecord) {
-            const whereCondition: any = {
-              first_name: firstName,
-              last_name: lastName,
-            };
+        if (!existingRecord && dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
 
-            if (middleName) {
-              whereCondition.middle_name = middleName;
-            }
-
-            existingRecord = await this.staffsRepository.findOne({
-              where: whereCondition,
-            });
-          }
-        } else {
+        if (!existingRecord) {
           const whereCondition: any = {
             first_name: firstName,
             last_name: lastName,
@@ -2105,6 +2109,8 @@ export class StaffsService {
             where: whereCondition,
           });
         }
+
+
 
         const TIN = String(row["TIN"] || "").trim();
         const SSS = String(row["SSS Number"] || "").trim();
@@ -2737,8 +2743,8 @@ export class StaffsService {
           continue;
         }
 
-        const staffCode = row["Staff Code"];
-        const dwsCode = row["DWS Code"].trim();
+        const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsCode = row["DWS Code"]?.toString().trim();
 
         let existingRecord = null;
 
@@ -2751,15 +2757,14 @@ export class StaffsService {
           });
         } 
 
-        //* UNCOMMENT THIS IF DWS CODE OR EMPLOYEE ID IS UNIQUE */
 
-        // else if (dwsCode) {
-        //   existingRecord = await this.staffsRepository.findOne({
-        //     where: {
-        //       old_dws_code: dwsCode,
-        //     },
-        //   });
-        // }
+        else if (dwsCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_code: dwsCode,
+            },
+          });
+        }
 
         if (!existingRecord) {
           errors.push({
