@@ -108,7 +108,7 @@ export class RolePresetsController {
   async nestedByRole(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const accessKeyId = req.query?.access_key_id
       ? parseInt(req.query.access_key_id, 10)
-      : req.user?.current_access_key;
+      : undefined;
     return this.roleActionPresetsService.nestedByRole(id, accessKeyId);
   }
 
@@ -120,7 +120,7 @@ export class RolePresetsController {
   ) {
     const accessKeyId = req.query?.access_key_id
       ? parseInt(req.query.access_key_id, 10)
-      : req.user?.current_access_key;
+      : undefined;
     return this.roleActionPresetsService.nestedByRole(roleId, accessKeyId);
   }
   @Post()

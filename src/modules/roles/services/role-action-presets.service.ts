@@ -743,31 +743,28 @@ export class RoleActionPresetsService {
     }
 
     try {
+      // Find role first to ensure role exists and role_name is always available
+      const role = await this.roleRepository.findOneBy({ id: role_id });
+
+      // Always query all active presets across all access keys for this role
       const locationWhere: any = { role_id, status_id: 1 };
       const actionWhere: any = { role_id, status_id: 1 };
-      if (accessKeyId) {
-        locationWhere.access_key_id = accessKeyId;
-        actionWhere.access_key_id = accessKeyId;
-      }
 
       // Get role location presets
       const roleLocationPresets = await this.roleLocationPresetRepository.find({
         where: locationWhere,
-        relations: ["location"],
+        relations: ["location", "role"],
       });
 
       // Get role action presets
       const roleActionPresets = await this.roleActionPresetRepository.find({
         where: actionWhere,
-        relations: ["module", "action"],
+        relations: ["module", "action", "role"],
       });
 
       // Check if role exists
-      if (roleLocationPresets.length === 0 && roleActionPresets.length === 0) {
-        const role = await this.roleRepository.findOneBy({ id: role_id });
-        if (!role) {
-          throw new NotFoundException(`Role with ID ${role_id} not found.`);
-        }
+      if (!role && roleLocationPresets.length === 0 && roleActionPresets.length === 0) {
+        throw new NotFoundException(`Role with ID ${role_id} not found.`);
       }
 
       // Group action presets and location presets by access_key
@@ -835,14 +832,19 @@ export class RoleActionPresetsService {
       }
 
       // Default top-level presets and locations (for backward compatibility)
-      const defaultAkId = accessKeyId || 1;
-      const defaultData = byAccessKey[defaultAkId] ||
+      const defaultAkId =
+        accessKeyId && byAccessKey[accessKeyId]
+          ? accessKeyId
+          : allAccessKeyIds[0] || accessKeyId || 1;
+      const defaultData =
+        byAccessKey[defaultAkId] ||
         byAccessKey[allAccessKeyIds[0]] || { location_ids: [], presets: [] };
 
       // Build response
       const response_data = {
         role_id,
         role_name:
+          role?.role_name ||
           roleActionPresets[0]?.role?.role_name ||
           roleLocationPresets[0]?.role?.role_name ||
           null,
