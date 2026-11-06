@@ -21,8 +21,11 @@ export class UserLocationsController {
   constructor(private readonly userLocationsService: UserLocationsService) {}
 
   @Get()
-  async findAll() {
-    return this.userLocationsService.findAll();
+  async findAll(@Request() req) {
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
+    return this.userLocationsService.findAll(accessKeyId);
   }
 
   @Get(":id")

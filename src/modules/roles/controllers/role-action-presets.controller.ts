@@ -106,7 +106,10 @@ export class RolePresetsController {
   @Get("nested/:id")
   @RequirePermissions({ module: "ROLE PRESETS", action: "VIEW" })
   async nestedByRole(@Param("id", ParseIntPipe) id: number, @Request() req) {
-    return this.roleActionPresetsService.nestedByRole(id);
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
+    return this.roleActionPresetsService.nestedByRole(id, accessKeyId);
   }
 
   @Get(":role_id")
@@ -115,8 +118,10 @@ export class RolePresetsController {
     @Param("role_id", ParseIntPipe) roleId: number,
     @Request() req,
   ) {
-    // This should return role presets for a specific role ID
-    return this.roleActionPresetsService.nestedByRole(roleId);
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
+    return this.roleActionPresetsService.nestedByRole(roleId, accessKeyId);
   }
   @Post()
   @RequirePermissions({ module: "ROLE PRESETS", action: "ADD" })

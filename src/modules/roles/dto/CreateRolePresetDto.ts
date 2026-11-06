@@ -19,6 +19,10 @@ class PresetDto {
   @IsInt({ each: true })
   action_ids!: number[];
 
+  @IsOptional()
+  @IsInt()
+  access_key_id?: number;
+
   // Optional fields (sent from frontend but not validated)
   @Allow()
   role_id?: number;
@@ -44,6 +48,25 @@ export class CreateRolePresetDto {
   @ValidateNested({ each: true })
   @Type(() => PresetDto)
   presets!: PresetDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  access_key_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  target_access_key_ids?: number[];
+
+  @IsOptional()
+  tenant_configs?: Record<
+    number,
+    {
+      location_ids: number[];
+      presets: PresetDto[];
+    }
+  >;
 
   @IsOptional()
   @IsInt()

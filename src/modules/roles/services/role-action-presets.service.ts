@@ -737,21 +737,28 @@ export class RoleActionPresetsService {
     }
   }
   // Method to get nested structure for a specific role (similar to Express nestedByRole)
-  async nestedByRole(role_id: number): Promise<any> {
+  async nestedByRole(role_id: number, accessKeyId?: number): Promise<any> {
     if (isNaN(role_id)) {
       throw new BadRequestException("Invalid role ID provided.");
     }
 
     try {
+      const locationWhere: any = { role_id, status_id: 1 };
+      const actionWhere: any = { role_id, status_id: 1 };
+      if (accessKeyId) {
+        locationWhere.access_key_id = accessKeyId;
+        actionWhere.access_key_id = accessKeyId;
+      }
+
       // Get role location presets
       const roleLocationPresets = await this.roleLocationPresetRepository.find({
-        where: { role_id, status_id: 1 },
+        where: locationWhere,
         relations: ["location"],
       });
 
       // Get role action presets
       const roleActionPresets = await this.roleActionPresetRepository.find({
-        where: { role_id, status_id: 1 },
+        where: actionWhere,
         relations: ["module", "action"],
       });
 
@@ -763,41 +770,86 @@ export class RoleActionPresetsService {
         }
       }
 
-      // Group action presets by module
-      const moduleActionMap = new Map<
+      // Group action presets and location presets by access_key
+      const byAccessKey: Record<
         number,
-        { actions: number[]; module_name: string; order_level: number }
-      >();
-      roleActionPresets.forEach((preset) => {
-        if (!moduleActionMap.has(preset.module_id)) {
-          moduleActionMap.set(preset.module_id, {
-            actions: [],
-            module_name: preset.module?.module_name || "",
-            order_level: preset.module?.order_level || 0,
-          });
+        {
+          location_ids: number[];
+          presets: Array<{
+            role_id: number;
+            module_ids: number;
+            module_name: string;
+            action_ids: number[];
+            order_level: number;
+          }>;
         }
-        moduleActionMap.get(preset.module_id)!.actions.push(preset.action_id);
-      });
+      > = {};
 
-      // Build presets array
-      const presets = Array.from(moduleActionMap.entries()).map(
-        ([module_id, data]) => ({
-          role_id,
-          module_ids: module_id,
-          module_name: data.module_name,
-          action_ids: data.actions.sort(),
-          order_level: data.order_level,
-        }),
+      // Distinct access key IDs
+      const allAccessKeyIds = Array.from(
+        new Set([
+          ...roleActionPresets.map((ap) => ap.access_key_id),
+          ...roleLocationPresets.map((lp) => lp.access_key_id),
+        ]),
       );
+
+      for (const akId of allAccessKeyIds) {
+        const akActions = roleActionPresets.filter(
+          (ap) => ap.access_key_id === akId,
+        );
+        const akLocations = roleLocationPresets
+          .filter((lp) => lp.access_key_id === akId)
+          .map((lp) => lp.location_id)
+          .sort((a, b) => a - b);
+
+        const akModuleMap = new Map<
+          number,
+          { actions: number[]; module_name: string; order_level: number }
+        >();
+
+        akActions.forEach((preset) => {
+          if (!akModuleMap.has(preset.module_id)) {
+            akModuleMap.set(preset.module_id, {
+              actions: [],
+              module_name: preset.module?.module_name || "",
+              order_level: preset.module?.order_level || 0,
+            });
+          }
+          akModuleMap.get(preset.module_id)!.actions.push(preset.action_id);
+        });
+
+        const akPresets = Array.from(akModuleMap.entries()).map(
+          ([module_id, data]) => ({
+            role_id,
+            module_ids: module_id,
+            module_name: data.module_name,
+            action_ids: data.actions.sort((a, b) => a - b),
+            order_level: data.order_level,
+          }),
+        );
+
+        byAccessKey[akId] = {
+          location_ids: akLocations,
+          presets: akPresets.sort((a, b) => a.order_level - b.order_level),
+        };
+      }
+
+      // Default top-level presets and locations (for backward compatibility)
+      const defaultAkId = accessKeyId || 1;
+      const defaultData = byAccessKey[defaultAkId] ||
+        byAccessKey[allAccessKeyIds[0]] || { location_ids: [], presets: [] };
 
       // Build response
       const response_data = {
         role_id,
-        role_name: roleActionPresets[0]?.role?.role_name || null,
-        location_ids: roleLocationPresets
-          .map((preset) => preset.location_id)
-          .sort(),
-        presets: presets.sort((a, b) => a.order_level - b.order_level),
+        role_name:
+          roleActionPresets[0]?.role?.role_name ||
+          roleLocationPresets[0]?.role?.role_name ||
+          null,
+        location_ids: defaultData.location_ids,
+        presets: defaultData.presets,
+        by_access_key: byAccessKey,
+        access_key_ids: allAccessKeyIds,
       };
 
       return response_data;
@@ -1039,6 +1091,7 @@ export class RoleActionPresetsService {
     status: Status,
     updatedBy: number,
     queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
   ): Promise<RoleLocationPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1059,10 +1112,10 @@ export class RoleActionPresetsService {
       );
     }
 
-    // Step 1: Mark all existing location presets for this role as inactive
+    // Step 1: Mark all existing location presets for this role within target access keys as inactive
     await queryRunner.manager.update(
       RoleLocationPreset,
-      { role_id: roleId },
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -1070,52 +1123,59 @@ export class RoleActionPresetsService {
       },
     );
 
-    // Step 2: Upsert location presets
+    // Step 2: Upsert location presets for each target access key
     const savedLocationPresets: RoleLocationPreset[] = [];
-    for (const locationId of locationIds) {
-      const existingPreset = await queryRunner.manager.findOne(
-        RoleLocationPreset,
-        {
-          where: { role_id: roleId, location_id: locationId },
-        },
-      );
-
-      if (existingPreset) {
-        // Update existing preset with the provided status
-        await queryRunner.manager.update(
+    for (const accessKeyId of targetAccessKeyIds) {
+      for (const locationId of locationIds) {
+        const existingPreset = await queryRunner.manager.findOne(
           RoleLocationPreset,
-          { id: existingPreset.id },
           {
-            status_id: status.id,
-            updated_by: updatedBy,
-            modified_at: new Date(),
+            where: {
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+            },
           },
         );
-        // Sync in-memory object with database updates
-        existingPreset.status_id = status.id;
-        existingPreset.updated_by = updatedBy;
-        existingPreset.modified_at = new Date();
-        savedLocationPresets.push(existingPreset);
-      } else {
-        // Create new preset
-        const newLocationPreset = new RoleLocationPreset();
-        newLocationPreset.role = role;
-        newLocationPreset.role_id = roleId;
-        newLocationPreset.location = locations.find(
-          (l) => l.id === locationId,
-        )!;
-        newLocationPreset.location_id = locationId;
-        newLocationPreset.status = status;
-        newLocationPreset.status_id = status.id;
-        newLocationPreset.createdBy = await this.userRepository.findOneBy({
-          id: updatedBy,
-        });
-        newLocationPreset.created_by = updatedBy;
-        const saved = await queryRunner.manager.save(
-          RoleLocationPreset,
-          newLocationPreset,
-        );
-        savedLocationPresets.push(saved);
+
+        if (existingPreset) {
+          // Update existing preset with the provided status
+          await queryRunner.manager.update(
+            RoleLocationPreset,
+            { id: existingPreset.id },
+            {
+              status_id: status.id,
+              updated_by: updatedBy,
+              modified_at: new Date(),
+            },
+          );
+          // Sync in-memory object with database updates
+          existingPreset.status_id = status.id;
+          existingPreset.updated_by = updatedBy;
+          existingPreset.modified_at = new Date();
+          savedLocationPresets.push(existingPreset);
+        } else {
+          // Create new preset
+          const newLocationPreset = new RoleLocationPreset();
+          newLocationPreset.role = role;
+          newLocationPreset.role_id = roleId;
+          newLocationPreset.location = locations.find(
+            (l) => l.id === locationId,
+          )!;
+          newLocationPreset.location_id = locationId;
+          newLocationPreset.access_key_id = accessKeyId;
+          newLocationPreset.status = status;
+          newLocationPreset.status_id = status.id;
+          newLocationPreset.createdBy = await this.userRepository.findOneBy({
+            id: updatedBy,
+          });
+          newLocationPreset.created_by = updatedBy;
+          const saved = await queryRunner.manager.save(
+            RoleLocationPreset,
+            newLocationPreset,
+          );
+          savedLocationPresets.push(saved);
+        }
       }
     }
 
@@ -1129,6 +1189,7 @@ export class RoleActionPresetsService {
     status: Status,
     updatedBy: number,
     queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
   ): Promise<RoleActionPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1178,10 +1239,10 @@ export class RoleActionPresetsService {
       );
     }
 
-    // Step 1: Mark all existing action presets for this role as inactive
+    // Step 1: Mark all existing action presets for this role within target access keys as inactive
     await queryRunner.manager.update(
       RoleActionPreset,
-      { role_id: roleId },
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -1200,6 +1261,9 @@ export class RoleActionPresetsService {
     for (const preset of presets) {
       const moduleId = preset.module_ids;
       const actionIds = preset.action_ids;
+      const keysForThisPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
 
       if (!Array.isArray(actionIds) || actionIds.length === 0) {
         logger.warn(
@@ -1208,62 +1272,58 @@ export class RoleActionPresetsService {
         continue;
       }
 
-      for (const actionId of actionIds) {
-        // Find existing preset regardless of status (to reactivate if needed)
-        const existingPreset = await queryRunner.manager.findOne(
-          RoleActionPreset,
-          {
-            where: {
-              role_id: roleId,
-              module_id: moduleId,
-              action_id: actionId,
-            },
-          },
-        );
-
-        if (existingPreset) {
-          // Update existing preset with the provided status
-          logger.info(
-            `Updating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to ${status.id}`,
-          );
-
-          // Use queryRunner to update directly via query (more reliable in transaction)
-          await queryRunner.manager.update(
+      for (const accessKeyId of keysForThisPreset) {
+        for (const actionId of actionIds) {
+          // Find existing preset regardless of status (to reactivate if needed)
+          const existingPreset = await queryRunner.manager.findOne(
             RoleActionPreset,
-            { id: existingPreset.id },
             {
-              status_id: status.id,
-              updated_by: updatedBy,
-              modified_at: new Date(),
+              where: {
+                role_id: roleId,
+                module_id: moduleId,
+                action_id: actionId,
+                access_key_id: accessKeyId,
+              },
             },
           );
 
-          // Sync in-memory object with database updates
-          existingPreset.status_id = status.id;
-          existingPreset.updated_by = updatedBy;
-          existingPreset.modified_at = new Date();
-          savedActionPresets.push(existingPreset);
-        } else {
-          // Create new preset
-          logger.info(
-            `Creating new preset: role=${roleId}, module=${moduleId}, action=${actionId}`,
-          );
-          const newActionPreset = new RoleActionPreset();
-          newActionPreset.role = role;
-          newActionPreset.role_id = roleId;
-          newActionPreset.module = moduleMap.get(moduleId)!;
-          newActionPreset.module_id = moduleId;
-          newActionPreset.action = actionMap.get(actionId)!;
-          newActionPreset.action_id = actionId;
-          newActionPreset.status = status;
-          newActionPreset.status_id = status.id;
-          newActionPreset.createdBy = createdByUser;
-          newActionPreset.created_by = updatedBy;
-          const saved = await queryRunner.manager.save(
-            RoleActionPreset,
-            newActionPreset,
-          );
-          savedActionPresets.push(saved);
+          if (existingPreset) {
+            // Update existing preset with the provided status
+            await queryRunner.manager.update(
+              RoleActionPreset,
+              { id: existingPreset.id },
+              {
+                status_id: status.id,
+                updated_by: updatedBy,
+                modified_at: new Date(),
+              },
+            );
+
+            // Sync in-memory object with database updates
+            existingPreset.status_id = status.id;
+            existingPreset.updated_by = updatedBy;
+            existingPreset.modified_at = new Date();
+            savedActionPresets.push(existingPreset);
+          } else {
+            // Create new preset
+            const newActionPreset = new RoleActionPreset();
+            newActionPreset.role = role;
+            newActionPreset.role_id = roleId;
+            newActionPreset.module = moduleMap.get(moduleId)!;
+            newActionPreset.module_id = moduleId;
+            newActionPreset.action = actionMap.get(actionId)!;
+            newActionPreset.action_id = actionId;
+            newActionPreset.access_key_id = accessKeyId;
+            newActionPreset.status = status;
+            newActionPreset.status_id = status.id;
+            newActionPreset.createdBy = createdByUser;
+            newActionPreset.created_by = updatedBy;
+            const saved = await queryRunner.manager.save(
+              RoleActionPreset,
+              newActionPreset,
+            );
+            savedActionPresets.push(saved);
+          }
         }
       }
     }
@@ -1322,56 +1382,165 @@ export class RoleActionPresetsService {
           throw new BadRequestException("Authenticated user not found.");
         }
 
-        // Update location presets using helper (mark-inactive-then-upsert)
-        const savedLocationPresets =
-          await this.updateRoleLocationPresetsFromPresets(
-            role_id,
-            location_ids,
-            status,
-            userId,
-            queryRunner,
-          );
+        const targetAccessKeyIds =
+          createRolePresetDto.access_key_ids &&
+          createRolePresetDto.access_key_ids.length > 0
+            ? createRolePresetDto.access_key_ids
+            : [1];
 
-        // Update action presets using helper (mark-inactive-then-upsert)
-        const savedActionPresets =
-          await this.updateRoleActionPresetsFromPresets(
-            role_id,
-            presets,
-            status,
-            userId,
-            queryRunner,
-          );
+        const cascadeTargetAccessKeyIds =
+          createRolePresetDto.target_access_key_ids &&
+          createRolePresetDto.target_access_key_ids.length > 0
+            ? createRolePresetDto.target_access_key_ids
+            : targetAccessKeyIds;
+
+        let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedActionPresets: RoleActionPreset[] = [];
+
+        if (
+          createRolePresetDto.tenant_configs &&
+          Object.keys(createRolePresetDto.tenant_configs).length > 0
+        ) {
+          for (const [keyIdStr, configObj] of Object.entries(
+            createRolePresetDto.tenant_configs,
+          )) {
+            const keyId = Number(keyIdStr);
+            const config = configObj as {
+              location_ids?: number[];
+              presets?: any[];
+            };
+            if (config.location_ids) {
+              const locs = await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                config.location_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedLocationPresets.push(...locs);
+            }
+            if (config.presets) {
+              const acts = await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                config.presets,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedActionPresets.push(...acts);
+            }
+          }
+        } else {
+          // Update location presets using helper (mark-inactive-then-upsert)
+          savedLocationPresets =
+            await this.updateRoleLocationPresetsFromPresets(
+              role_id,
+              location_ids,
+              status,
+              userId,
+              queryRunner,
+              targetAccessKeyIds,
+            );
+
+          // Update action presets using helper (mark-inactive-then-upsert)
+          savedActionPresets =
+            await this.updateRoleActionPresetsFromPresets(
+              role_id,
+              presets,
+              status,
+              userId,
+              queryRunner,
+              targetAccessKeyIds,
+            );
+        }
 
         // Handle user permissions and locations updates if requested
         if (user_ids.length > 0) {
+          const userAccessKeys = await this.userPermissionsRepository
+            .createQueryBuilder("up")
+            .select("DISTINCT up.access_key_id", "access_key_id")
+            .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+            .getRawMany();
+
+          const userKeys = userAccessKeys.map((uak) => uak.access_key_id);
+          const hasTenantConfigs =
+            createRolePresetDto.tenant_configs &&
+            Object.keys(createRolePresetDto.tenant_configs).length > 0;
+
           if (apply_permissions_to_users) {
-            // Get access keys that users already have permissions for
-            const userAccessKeys = await this.userPermissionsRepository
-              .createQueryBuilder("up")
-              .select("DISTINCT up.access_key_id", "access_key_id")
-              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-              .getRawMany();
-
-            const accessKeyIds = userAccessKeys.map((uak) => uak.access_key_id);
-
-            if (accessKeyIds.length > 0) {
-              await this.updateUserPermissions(
-                user_ids,
-                role_id,
-                presets,
-                accessKeyIds,
-                userId,
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.presets && userKeys.includes(keyId)) {
+                  await this.updateUserPermissions(
+                    user_ids,
+                    role_id,
+                    config.presets,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
               );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserPermissions(
+                  user_ids,
+                  role_id,
+                  presets,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
 
           if (apply_locations_to_users) {
-            await this.updateUserLocations(
-              user_ids,
-              role_id,
-              location_ids,
-              userId,
-            );
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.location_ids && userKeys.includes(keyId)) {
+                  await this.updateUserLocations(
+                    user_ids,
+                    role_id,
+                    config.location_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserLocations(
+                  user_ids,
+                  role_id,
+                  location_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
 
             // SSE Events
             try {
@@ -1540,56 +1709,165 @@ export class RoleActionPresetsService {
           throw new BadRequestException("Authenticated user not found.");
         }
 
-        // Update location presets using helper (mark-inactive-then-upsert)
-        const savedLocationPresets =
-          await this.updateRoleLocationPresetsFromPresets(
-            role_id,
-            location_ids,
-            status,
-            userId,
-            queryRunner,
-          );
+        const targetAccessKeyIds =
+          updateRolePresetDto.access_key_ids &&
+          updateRolePresetDto.access_key_ids.length > 0
+            ? updateRolePresetDto.access_key_ids
+            : [1];
 
-        // Update action presets using helper (mark-inactive-then-upsert)
-        const savedActionPresets =
-          await this.updateRoleActionPresetsFromPresets(
-            role_id,
-            presets,
-            status,
-            userId,
-            queryRunner,
-          );
+        const cascadeTargetAccessKeyIds =
+          updateRolePresetDto.target_access_key_ids &&
+          updateRolePresetDto.target_access_key_ids.length > 0
+            ? updateRolePresetDto.target_access_key_ids
+            : targetAccessKeyIds;
+
+        let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedActionPresets: RoleActionPreset[] = [];
+
+        if (
+          updateRolePresetDto.tenant_configs &&
+          Object.keys(updateRolePresetDto.tenant_configs).length > 0
+        ) {
+          for (const [keyIdStr, configObj] of Object.entries(
+            updateRolePresetDto.tenant_configs,
+          )) {
+            const keyId = Number(keyIdStr);
+            const config = configObj as {
+              location_ids?: number[];
+              presets?: any[];
+            };
+            if (config.location_ids) {
+              const locs = await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                config.location_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedLocationPresets.push(...locs);
+            }
+            if (config.presets) {
+              const acts = await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                config.presets,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedActionPresets.push(...acts);
+            }
+          }
+        } else {
+          // Update location presets using helper (mark-inactive-then-upsert)
+          savedLocationPresets =
+            await this.updateRoleLocationPresetsFromPresets(
+              role_id,
+              location_ids,
+              status,
+              userId,
+              queryRunner,
+              targetAccessKeyIds,
+            );
+
+          // Update action presets using helper (mark-inactive-then-upsert)
+          savedActionPresets =
+            await this.updateRoleActionPresetsFromPresets(
+              role_id,
+              presets,
+              status,
+              userId,
+              queryRunner,
+              targetAccessKeyIds,
+            );
+        }
 
         // Handle user permissions and locations updates if requested
         if (user_ids.length > 0) {
+          const userAccessKeys = await this.userPermissionsRepository
+            .createQueryBuilder("up")
+            .select("DISTINCT up.access_key_id", "access_key_id")
+            .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+            .getRawMany();
+
+          const userKeys = userAccessKeys.map((uak) => uak.access_key_id);
+          const hasTenantConfigs =
+            updateRolePresetDto.tenant_configs &&
+            Object.keys(updateRolePresetDto.tenant_configs).length > 0;
+
           if (apply_permissions_to_users) {
-            // Get access keys that users already have permissions for
-            const userAccessKeys = await this.userPermissionsRepository
-              .createQueryBuilder("up")
-              .select("DISTINCT up.access_key_id", "access_key_id")
-              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-              .getRawMany();
-
-            const accessKeyIds = userAccessKeys.map((uak) => uak.access_key_id);
-
-            if (accessKeyIds.length > 0) {
-              await this.updateUserPermissions(
-                user_ids,
-                role_id,
-                presets,
-                accessKeyIds,
-                userId,
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.presets && userKeys.includes(keyId)) {
+                  await this.updateUserPermissions(
+                    user_ids,
+                    role_id,
+                    config.presets,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
               );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserPermissions(
+                  user_ids,
+                  role_id,
+                  presets,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
 
           if (apply_locations_to_users) {
-            await this.updateUserLocations(
-              user_ids,
-              role_id,
-              location_ids,
-              userId,
-            );
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.location_ids && userKeys.includes(keyId)) {
+                  await this.updateUserLocations(
+                    user_ids,
+                    role_id,
+                    config.location_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserLocations(
+                  user_ids,
+                  role_id,
+                  location_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
           }
         }
 
@@ -1747,9 +2025,9 @@ export class RoleActionPresetsService {
         continue;
       }
 
-      // First, mark all existing permissions for this user & role as inactive (status_id = 2)
+      // First, mark all existing permissions for this user & role within target access keys as inactive (status_id = 2)
       await this.userPermissionsRepository.update(
-        { user_id: userId, role_id: roleId },
+        { user_id: userId, role_id: roleId, access_key_id: In(accessKeyIds) },
         {
           status_id: 2, // inactive
           updated_by: updatedBy,
@@ -1805,6 +2083,7 @@ export class RoleActionPresetsService {
     userIds: number[],
     roleId: number,
     locationIds: number[],
+    accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
     for (const userId of userIds) {
@@ -1817,9 +2096,9 @@ export class RoleActionPresetsService {
         continue;
       }
 
-      // First, mark all existing locations for this user & role as inactive (status_id = 2)
+      // First, mark all existing locations for this user & role within target access keys as inactive (status_id = 2)
       await this.userLocationsRepository.update(
-        { user_id: userId, role_id: roleId },
+        { user_id: userId, role_id: roleId, access_key_id: In(accessKeyIds) },
         {
           status_id: 2, // inactive
           updated_by: updatedBy,
@@ -1827,33 +2106,37 @@ export class RoleActionPresetsService {
         },
       );
 
-      // Iterate through location IDs
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
-
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
+      // Iterate through access keys and location IDs
+      for (const accessKeyId of accessKeyIds) {
+        for (const locationId of locationIds) {
+          // Check if this combination already exists
+          const existingLocation = await this.userLocationsRepository.findOne({
+            where: {
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+            },
           });
-          await this.userLocationsRepository.save(userLocation);
+
+          if (existingLocation) {
+            // Update existing location back to active status
+            existingLocation.status_id = 1; // active
+            existingLocation.updated_by = updatedBy;
+            existingLocation.modified_at = new Date();
+            await this.userLocationsRepository.save(existingLocation);
+          } else {
+            // Create new location with active status
+            const userLocation = this.userLocationsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1, // active
+              created_by: updatedBy,
+            });
+            await this.userLocationsRepository.save(userLocation);
+          }
         }
       }
     }

@@ -5,16 +5,22 @@ import {
   ManyToOne,
   JoinColumn,
   Unique,
-} from "typeorm"; // NEW: Unique
+} from "typeorm";
 import { Role } from "./Role";
 import { Module } from "./Module";
 import { Action } from "./Action";
 import { Status } from "./Status";
 import { User } from "./User";
+import { AccessKey } from "./AccessKey";
 
-// Define a unique constraint on the combination of role_id, module_id, and action_id
-@Unique(["role_id", "module_id", "action_id"])
-@Entity()
+// Define a unique constraint on the combination of role_id, module_id, action_id, and access_key_id
+@Unique("UQ_role_module_action_access", [
+  "role_id",
+  "module_id",
+  "action_id",
+  "access_key_id",
+])
+@Entity({ name: "role_action_preset" })
 export class RoleActionPreset {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -28,7 +34,7 @@ export class RoleActionPreset {
   role!: Role;
 
   @Column()
-  role_id!: number; // Explicitly define the foreign key column
+  role_id!: number;
 
   // Foreign key to Module entity
   @ManyToOne(() => Module, (module) => module.roleActionPresets, {
@@ -39,7 +45,7 @@ export class RoleActionPreset {
   module!: Module;
 
   @Column()
-  module_id!: number; // Explicitly define the foreign key column
+  module_id!: number;
 
   // Foreign key to Action entity
   @ManyToOne(() => Action, (action) => action.roleActionPresets, {
@@ -50,7 +56,18 @@ export class RoleActionPreset {
   action!: Action;
 
   @Column()
-  action_id!: number; // Explicitly define the foreign key column
+  action_id!: number;
+
+  // Foreign key to AccessKey entity
+  @ManyToOne(() => AccessKey, (accessKey) => accessKey.roleActionPresets, {
+    eager: false,
+    nullable: false,
+  })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey!: AccessKey;
+
+  @Column()
+  access_key_id!: number;
 
   // Foreign key to Status entity
   @ManyToOne(() => Status, (status) => status.roleActionPresets, {
@@ -60,8 +77,8 @@ export class RoleActionPreset {
   @JoinColumn({ name: "status_id" })
   status!: Status;
 
-  @Column({ default: 1 }) // Default status_id to 1 (active)
-  status_id!: number; // Explicitly define the foreign key column
+  @Column({ default: 1 })
+  status_id!: number;
 
   @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
   created_at!: Date;
@@ -75,7 +92,7 @@ export class RoleActionPreset {
   createdBy!: User;
 
   @Column()
-  created_by!: number; // Explicitly define the foreign key column
+  created_by!: number;
 
   // Foreign key to User entity for updated_by
   @ManyToOne(() => User, (user) => user.updatedRoleActionPresets, {
@@ -83,10 +100,10 @@ export class RoleActionPreset {
     nullable: true,
   })
   @JoinColumn({ name: "updated_by" })
-  updatedBy?: User; // Optional for updates
+  updatedBy?: User;
 
   @Column({ nullable: true })
-  updated_by?: number; // Explicitly define the foreign key column, optional
+  updated_by?: number;
 
   @Column({
     type: "timestamp",

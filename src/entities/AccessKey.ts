@@ -12,6 +12,9 @@ import { User } from "./User";
 import { Status } from "./Status";
 import { Company } from "./Company";
 import { UserPermissions } from "./UserPermissions";
+import { UserLocations } from "./UserLocations";
+import { RoleActionPreset } from "./RoleActionPreset";
+import { RoleLocationPreset } from "./RoleLocationPreset";
 import { SystemAccessKey } from "./SystemAccessKey";
 
 @Entity()
@@ -59,12 +62,31 @@ export class AccessKey {
   @ManyToOne(() => User, (user) => user.updatedAccessKeys)
   @JoinColumn({ name: "updated_by" })
   updatedBy!: User | null;
+
   // Relationship for access_key_id in UserPermissions
   @OneToMany(
     () => UserPermissions,
     (userPermissions) => userPermissions.accessKey
   )
   userPermissions!: UserPermissions[];
+
+  // Relationship for access_key_id in UserLocations
+  @OneToMany(() => UserLocations, (userLocations) => userLocations.accessKey)
+  userLocations!: UserLocations[];
+
+  // Relationship for access_key_id in RoleActionPreset
+  @OneToMany(
+    () => RoleActionPreset,
+    (roleActionPreset) => roleActionPreset.accessKey
+  )
+  roleActionPresets!: RoleActionPreset[];
+
+  // Relationship for access_key_id in RoleLocationPreset
+  @OneToMany(
+    () => RoleLocationPreset,
+    (roleLocationPreset) => roleLocationPreset.accessKey
+  )
+  roleLocationPresets!: RoleLocationPreset[];
 
   // Relationship for users who have this as their current access key
   @OneToMany(() => User, (user) => user.currentAccessKey)

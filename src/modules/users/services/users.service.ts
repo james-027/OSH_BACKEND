@@ -628,6 +628,7 @@ export class UsersService {
       if (user_location_presets && user_location_presets.length > 0) {
         await this.createUserLocationsFromPresets(
           savedUser.id,
+          accessKeys.map((ak) => ak.id),
           user_location_presets,
           created_by,
         );
@@ -637,6 +638,7 @@ export class UsersService {
           allRoleIds,
           location_ids,
           created_by,
+          accessKeys.map((ak) => ak.id),
         );
       }
 
@@ -754,15 +756,30 @@ export class UsersService {
     }
   }
 
-  // Helper method to create/update user locations from location presets (per role)
+  // Helper method to create/update user locations from location presets (per role and access key)
   private async createUserLocationsFromPresets(
     userId: number,
+    accessKeyIds: number[],
     userLocationPresets: any[],
     updatedBy: number,
   ): Promise<void> {
-    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
+    // Collect all relevant access key IDs (from presets or user access keys)
+    const presetAccessKeys = userLocationPresets
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        presetAccessKeys.length > 0
+          ? presetAccessKeys
+          : accessKeyIds && accessKeyIds.length > 0
+            ? accessKeyIds
+            : [1],
+      ),
+    );
+
+    // Step 1: Mark existing locations for this user ONLY within target access keys as inactive
     await this.userLocationsRepository.update(
-      { user_id: userId },
+      { user_id: userId, access_key_id: In(targetAccessKeyIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -795,6 +812,9 @@ export class UsersService {
     for (const preset of userLocationPresets) {
       const roleId = preset.role_id;
       const locationIds = preset.location_ids || [];
+      const keysForThisPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
 
       if (!Array.isArray(locationIds)) {
         logger.warn(
@@ -803,33 +823,37 @@ export class UsersService {
         continue;
       }
 
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
-
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
+      for (const accessKeyId of keysForThisPreset) {
+        for (const locationId of locationIds) {
+          // Check if this combination already exists
+          const existingLocation = await this.userLocationsRepository.findOne({
+            where: {
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+            },
           });
 
-          await this.userLocationsRepository.save(userLocation);
+          if (existingLocation) {
+            // Update existing location back to active status
+            existingLocation.status_id = 1; // active
+            existingLocation.updated_by = updatedBy;
+            existingLocation.modified_at = new Date();
+            await this.userLocationsRepository.save(existingLocation);
+          } else {
+            // Create new location with active status
+            const userLocation = this.userLocationsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1, // active
+              created_by: updatedBy,
+            });
+
+            await this.userLocationsRepository.save(userLocation);
+          }
         }
       }
     }
@@ -841,10 +865,14 @@ export class UsersService {
     roleIds: number[],
     locationIds: number[],
     updatedBy: number,
+    accessKeyIds: number[] = [1],
   ): Promise<void> {
-    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
+    const targetKeys =
+      accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : [1];
+
+    // Step 1: Mark all existing locations within target access keys as inactive
     await this.userLocationsRepository.update(
-      { user_id: userId },
+      { user_id: userId, access_key_id: In(targetKeys) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -853,34 +881,38 @@ export class UsersService {
     );
 
     // Step 2: Upsert locations from presets
-    for (const roleId of roleIds) {
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
-
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
+    for (const accessKeyId of targetKeys) {
+      for (const roleId of roleIds) {
+        for (const locationId of locationIds) {
+          // Check if this combination already exists
+          const existingLocation = await this.userLocationsRepository.findOne({
+            where: {
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+            },
           });
 
-          await this.userLocationsRepository.save(userLocation);
+          if (existingLocation) {
+            // Update existing location back to active status
+            existingLocation.status_id = 1; // active
+            existingLocation.updated_by = updatedBy;
+            existingLocation.modified_at = new Date();
+            await this.userLocationsRepository.save(existingLocation);
+          } else {
+            // Create new location with active status
+            const userLocation = this.userLocationsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1, // active
+              created_by: updatedBy,
+            });
+
+            await this.userLocationsRepository.save(userLocation);
+          }
         }
       }
     }
@@ -1090,9 +1122,15 @@ export class UsersService {
 
       // Handle UserLocations updates if provided
       let locationsMessage = "";
+      const effectiveAccessKeyIds =
+        access_key_id && access_key_id.length > 0
+          ? access_key_id
+          : userToUpdate.userPermissions?.map((up) => up.access_key_id) || [];
+
       if (user_location_presets && user_location_presets.length > 0) {
         await this.createUserLocationsFromPresets(
           id,
+          effectiveAccessKeyIds,
           user_location_presets,
           updated_by,
         );
@@ -1115,6 +1153,7 @@ export class UsersService {
           allRoleIds,
           location_ids,
           updated_by,
+          effectiveAccessKeyIds,
         );
 
         // Count active locations for message
@@ -1733,6 +1772,7 @@ export class UsersService {
             .map((ul) => ({
               id: ul.location?.id || null,
               location_name: ul.location?.location_name || null,
+              access_key_id: ul.access_key_id,
               status_id: ul.location?.status_id || null,
               user_location_status_id: ul.status_id,
             }));
@@ -1863,6 +1903,7 @@ export class UsersService {
           locations: userLocations.map((ul) => ({
             id: ul.location?.id || null,
             location_name: ul.location?.location_name || null,
+            access_key_id: ul.access_key_id,
             status_id: ul.location?.status_id || null,
             user_location_status_id: ul.status_id,
           })),
@@ -2347,6 +2388,7 @@ export class UsersService {
           if (userLocationPresets.length > 0) {
             await this.createUserLocationsFromPresets(
               savedUser.id,
+              accessKeys.map((k) => k.id),
               userLocationPresets,
               created_by,
             );

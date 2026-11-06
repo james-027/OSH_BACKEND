@@ -14,12 +14,14 @@ export interface UserPermissionPreset {
   module_ids: number;
   role_id: number;
   action_ids: number[];
+  access_key_id?: number;
 }
 
 // Define interface for user location presets
 export interface UserLocationPreset {
   role_id: number;
   location_ids: number[];
+  access_key_id?: number;
 }
 
 export class CreateUserDto {

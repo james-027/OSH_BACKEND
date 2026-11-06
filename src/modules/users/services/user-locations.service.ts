@@ -11,6 +11,7 @@ import { User } from "../../../entities/User";
 import { Role } from "../../../entities/Role";
 import { Location } from "../../../entities/Location";
 import { Status } from "../../../entities/Status";
+import { AccessKey } from "../../../entities/AccessKey";
 import { UpdateUserLocationsDto } from "src/modules/users/dto/UpdateUserLocationsDto";
 import { CreateUserLocationsDto } from "src/modules/users/dto/CreateUserLocationsDto";
 
@@ -29,31 +30,42 @@ export class UserLocationsService {
     private statusRepository: Repository<Status>,
   ) {}
 
-  async findAll() {
+  async findAll(accessKeyId?: number) {
+    const where: any = {};
+    if (accessKeyId) {
+      where.access_key_id = accessKeyId;
+    }
+
     const userLocations = await this.userLocationsRepository.find({
+      where,
       relations: [
         "user",
         "role",
         "location",
+        "accessKey",
         "status",
         "createdBy",
         "updatedBy",
       ],
     });
 
-    // Group by user_id and role_id combination
+    // Group by user_id, role_id, and access_key_id combination
     const groupedLocations = userLocations.reduce((acc, userLocation) => {
-      const key = `${userLocation.user_id}_${userLocation.role_id}`;
+      const key = `${userLocation.user_id}_${userLocation.role_id}_${userLocation.access_key_id}`;
 
       if (!acc[key]) {
         acc[key] = {
-          id: userLocation.id, // Use the first record's ID as representative
+          id: userLocation.id,
           user_id: userLocation.user_id,
           user_full_name: userLocation.user
             ? `${userLocation.user.first_name} ${userLocation.user.last_name}`
             : null,
           role_id: userLocation.role_id,
           role_name: userLocation.role ? userLocation.role.role_name : null,
+          access_key_id: userLocation.access_key_id,
+          access_key_name: userLocation.accessKey
+            ? userLocation.accessKey.access_key_name
+            : null,
           location_id: [],
           location_name: [],
           status_id: userLocation.status_id,
@@ -92,6 +104,7 @@ export class UserLocationsService {
         "user",
         "role",
         "location",
+        "accessKey",
         "status",
         "createdBy",
         "updatedBy",
@@ -102,11 +115,12 @@ export class UserLocationsService {
       throw new NotFoundException(`User location with ID ${id} not found`);
     }
 
-    // Find all locations for this user and role combination
+    // Find all locations for this user, role, and access_key combination
     const allUserLocations = await this.userLocationsRepository.find({
       where: {
         user_id: userLocation.user_id,
         role_id: userLocation.role_id,
+        access_key_id: userLocation.access_key_id,
       },
       relations: ["location"],
     });
@@ -119,6 +133,10 @@ export class UserLocationsService {
         : null,
       role_id: userLocation.role_id,
       role_name: userLocation.role ? userLocation.role.role_name : null,
+      access_key_id: userLocation.access_key_id,
+      access_key_name: userLocation.accessKey
+        ? userLocation.accessKey.access_key_name
+        : null,
       location_id: allUserLocations.map((ul) => ul.location_id),
       location_name: allUserLocations.map((ul) =>
         ul.location ? ul.location.location_name : null,
@@ -142,6 +160,7 @@ export class UserLocationsService {
     const {
       user_id,
       role_id,
+      access_key_id = 1,
       location_ids,
       status_id = 1,
     } = createUserLocationsDto;
@@ -175,21 +194,22 @@ export class UserLocationsService {
 
     // Iterate through location IDs
     for (const locationId of location_ids) {
-      // Check if this combination already exists
+      // Check if this combination already exists for this tenant
       const existingLocation = await this.userLocationsRepository.findOne({
         where: {
           user_id,
           role_id,
           location_id: locationId,
+          access_key_id,
         },
       });
 
       if (existingLocation) {
-        // Skip this combination as it already exists
         skippedLocations.push({
           user_id,
           role_id,
           location_id: locationId,
+          access_key_id,
           reason: "Combination already exists",
         });
         continue;
@@ -199,6 +219,7 @@ export class UserLocationsService {
         user_id,
         role_id,
         location_id: locationId,
+        access_key_id,
         status_id,
         created_by: userId,
       });
@@ -210,8 +231,8 @@ export class UserLocationsService {
 
     // Fetch all created locations with relations for response
     const locationsWithRelations = await this.userLocationsRepository.find({
-      where: { user_id, role_id },
-      relations: ["user", "role", "location", "status", "createdBy"],
+      where: { user_id, role_id, access_key_id },
+      relations: ["user", "role", "location", "accessKey", "status", "createdBy"],
     });
 
     // Group the response in flattened format
@@ -224,6 +245,10 @@ export class UserLocationsService {
       role_id,
       role_name: locationsWithRelations[0]?.role
         ? locationsWithRelations[0].role.role_name
+        : null,
+      access_key_id,
+      access_key_name: locationsWithRelations[0]?.accessKey
+        ? locationsWithRelations[0].accessKey.access_key_name
         : null,
       location_id: locationsWithRelations.map((ul) => ul.location_id),
       location_name: locationsWithRelations.map((ul) =>
@@ -260,7 +285,7 @@ export class UserLocationsService {
     updateUserLocationsDto: UpdateUserLocationsDto,
     userId: number,
   ) {
-    const { location_ids, role_id, user_id, status_id } =
+    const { location_ids, role_id, user_id, access_key_id, status_id } =
       updateUserLocationsDto;
 
     const userLocationToUpdate = await this.userLocationsRepository.findOne({
@@ -269,6 +294,7 @@ export class UserLocationsService {
         "user",
         "role",
         "location",
+        "accessKey",
         "status",
         "createdBy",
         "updatedBy",
@@ -279,12 +305,15 @@ export class UserLocationsService {
       throw new NotFoundException("User location not found for update.");
     }
 
-    // If location_ids are provided, we need to update the entire set for this user-role combination
+    const targetAccessKeyId = access_key_id || userLocationToUpdate.access_key_id;
+
+    // If location_ids are provided, update the set scoped strictly to this user, role, and tenant
     if (location_ids && Array.isArray(location_ids)) {
-      // First, remove all existing locations for this user-role combination
+      // First, remove existing locations for this user-role-accessKey combination
       await this.userLocationsRepository.delete({
         user_id: userLocationToUpdate.user_id,
         role_id: userLocationToUpdate.role_id,
+        access_key_id: targetAccessKeyId,
       });
 
       // Then create new ones
@@ -303,6 +332,7 @@ export class UserLocationsService {
           user_id: userLocationToUpdate.user_id,
           role_id: userLocationToUpdate.role_id,
           location_id: locationId,
+          access_key_id: targetAccessKeyId,
           status_id: status_id || userLocationToUpdate.status_id,
           created_by: userLocationToUpdate.created_by,
           updated_by: userId,
@@ -313,11 +343,12 @@ export class UserLocationsService {
         createdLocations.push(savedLocation);
       }
     } else if (status_id !== undefined) {
-      // Just update status for all records of this user-role combination
+      // Just update status for all records of this user-role-accessKey combination
       await this.userLocationsRepository.update(
         {
           user_id: userLocationToUpdate.user_id,
           role_id: userLocationToUpdate.role_id,
+          access_key_id: targetAccessKeyId,
         },
         {
           status_id,
@@ -350,6 +381,7 @@ export class UserLocationsService {
         "user",
         "role",
         "location",
+        "accessKey",
         "status",
         "createdBy",
         "updatedBy",
@@ -379,11 +411,12 @@ export class UserLocationsService {
       );
     }
 
-    // Update all records for this user-role combination
+    // Update all records for this user, role, and tenant combination
     await this.userLocationsRepository.update(
       {
         user_id: userLocationToUpdate.user_id,
         role_id: userLocationToUpdate.role_id,
+        access_key_id: userLocationToUpdate.access_key_id,
       },
       {
         status_id: newStatusId,

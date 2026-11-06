@@ -19,23 +19,33 @@ export class CommonUtilitiesService {
   ) {}
 
   /**
-   * Get user's allowed location IDs based on user-role relationship
+   * Get user's allowed location IDs based on user-role relationship and optional access key (tenant)
    * @param userId - The user's ID
    * @param roleId - The user's role ID
+   * @param accessKeyId - Optional tenant access key ID
    * @returns Array of allowed location IDs
    */
   async getUserAllowedLocationIds(
     userId: number,
     roleId: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
     }
     try {
+      const whereClause: any = {
+        user_id: userId,
+        role_id: roleId,
+        status_id: 1,
+      };
+      if (accessKeyId) {
+        whereClause.access_key_id = accessKeyId;
+      }
       const userLocations = await this.usersService[
         "userLocationsRepository"
       ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
+        where: whereClause,
         select: ["location_id"],
       });
       return userLocations.map((ul) => ul.location_id);
