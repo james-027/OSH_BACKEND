@@ -110,6 +110,11 @@ export class CreateUserDto {
   @IsInt({ each: true, message: "Each location ID must be an integer" })
   location_ids?: number[];
 
+  @IsOptional()
+  @IsArray({ message: "Roles to update must be an array" })
+  @IsInt({ each: true, message: "Each role ID must be an integer" })
+  roles_to_update?: number[];
+
   // Additional field for audit
   @IsOptional()
   @IsInt({ message: "Created by must be an integer" })
