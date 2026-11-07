@@ -933,12 +933,18 @@ export class UsersService {
     locationIds: number[],
     updatedBy: number,
     accessKeyIds: number[] = [1],
+    queryRunner?: QueryRunner,
   ): Promise<void> {
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userLocationsRepository.manager;
+
     const targetKeys =
       accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : [1];
 
     // Step 1: Mark all existing locations within target access keys as inactive
-    await this.userLocationsRepository.update(
+    await manager.update(
+      UserLocations,
       { user_id: userId, access_key_id: In(targetKeys) },
       {
         status_id: 2, // inactive
@@ -947,41 +953,53 @@ export class UsersService {
       },
     );
 
-    // Step 2: Upsert locations from presets
+    // Step 2: Fetch existing locations in 1 query
+    const existingLocations = await manager.find(UserLocations, {
+      where: {
+        user_id: userId,
+        role_id: In(roleIds),
+        access_key_id: In(targetKeys),
+      },
+    });
+
+    const locMap = new Map<string, UserLocations>();
+    existingLocations.forEach((el) => {
+      locMap.set(`${el.role_id}_${el.access_key_id}_${el.location_id}`, el);
+    });
+
+    const toSave: UserLocations[] = [];
+    const seen = new Set<string>();
+
     for (const accessKeyId of targetKeys) {
       for (const roleId of roleIds) {
         for (const locationId of locationIds) {
-          // Check if this combination already exists
-          const existingLocation = await this.userLocationsRepository.findOne({
-            where: {
-              user_id: userId,
-              role_id: roleId,
-              location_id: locationId,
-              access_key_id: accessKeyId,
-            },
-          });
+          const key = `${roleId}_${accessKeyId}_${locationId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
+          const existingLocation = locMap.get(key);
           if (existingLocation) {
-            // Update existing location back to active status
-            existingLocation.status_id = 1; // active
+            existingLocation.status_id = 1;
             existingLocation.updated_by = updatedBy;
             existingLocation.modified_at = new Date();
-            await this.userLocationsRepository.save(existingLocation);
+            toSave.push(existingLocation);
           } else {
-            // Create new location with active status
-            const userLocation = this.userLocationsRepository.create({
+            const userLocation = manager.create(UserLocations, {
               user_id: userId,
               role_id: roleId,
               location_id: locationId,
               access_key_id: accessKeyId,
-              status_id: 1, // active
+              status_id: 1,
               created_by: updatedBy,
             });
-
-            await this.userLocationsRepository.save(userLocation);
+            toSave.push(userLocation);
           }
         }
       }
+    }
+
+    if (toSave.length > 0) {
+      await manager.save(UserLocations, toSave, { chunk: 250 });
     }
   }
 
@@ -1019,176 +1037,169 @@ export class UsersService {
       updated_by,
     } = updateUserDto;
 
+    const userToUpdate = await this.usersRepository.findOne({
+      where: { id },
+      relations: [
+        "role",
+        "userUpline",
+        "status",
+        "theme",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
+
+    if (!userToUpdate) {
+      throw new NotFoundException("User not found for update.");
+    }
+
+    // Fast validation for permissions data if provided
+    if (
+      access_key_id &&
+      user_permission_presets &&
+      user_permission_presets.length > 0
+    ) {
+      const akIds = Array.from(new Set(access_key_id));
+      const foundAks = await this.accessKeyRepository.findBy({ id: In(akIds) });
+      if (foundAks.length !== akIds.length) {
+        const foundSet = new Set(foundAks.map((k) => k.id));
+        const missing = akIds.find((k) => !foundSet.has(k));
+        throw new BadRequestException(`Access key with ID ${missing} not found`);
+      }
+
+      const allModuleIds = Array.from(
+        new Set(
+          user_permission_presets.map((p) => p.module_ids).filter(Boolean),
+        ),
+      );
+      if (allModuleIds.length > 0) {
+        const foundModules = await this.moduleRepository.findBy({
+          id: In(allModuleIds),
+        });
+        if (foundModules.length !== allModuleIds.length) {
+          const foundSet = new Set(foundModules.map((m) => m.id));
+          const missing = allModuleIds.find((mid) => !foundSet.has(mid));
+          throw new BadRequestException(`Module with ID ${missing} not found`);
+        }
+      }
+
+      const allActionIds = Array.from(
+        new Set(
+          user_permission_presets
+            .flatMap((p) => p.action_ids || [])
+            .filter(Boolean),
+        ),
+      );
+      if (allActionIds.length > 0) {
+        const foundActions = await this.actionRepository.findBy({
+          id: In(allActionIds),
+        });
+        if (foundActions.length !== allActionIds.length) {
+          const foundSet = new Set(foundActions.map((a) => a.id));
+          const missing = allActionIds.find((aid) => !foundSet.has(aid));
+          throw new BadRequestException(`Action with ID ${missing} not found`);
+        }
+      }
+    }
+
+    // Fast validation for locations data if provided
+    if (location_ids && location_ids.length > 0) {
+      const uniqueLocIds = Array.from(new Set(location_ids));
+      const foundLocs = await this.locationRepository.findBy({
+        id: In(uniqueLocIds),
+      });
+      if (foundLocs.length !== uniqueLocIds.length) {
+        const foundSet = new Set(foundLocs.map((l) => l.id));
+        const missing = uniqueLocIds.find((lid) => !foundSet.has(lid));
+        throw new BadRequestException(`Location with ID ${missing} not found`);
+      }
+    }
+
+    // Update fields if provided
+    if (user_name !== undefined) {
+      if (user_name !== userToUpdate.user_name) {
+        const existingUser = await this.usersRepository.findOne({
+          where: { user_name },
+        });
+        if (existingUser && existingUser.id !== id) {
+          throw new BadRequestException(
+            "User with this username already exists.",
+          );
+        }
+      }
+      userToUpdate.user_name = user_name;
+    }
+
+    if (email !== undefined) {
+      if (email && email !== userToUpdate.email) {
+        const existingEmail = await this.usersRepository.findOne({
+          where: { email },
+        });
+        if (existingEmail && existingEmail.id !== id) {
+          throw new BadRequestException(
+            "User with this email already exists.",
+          );
+        }
+      }
+      userToUpdate.email = email;
+    }
+
+    // Update other fields
+    if (first_name !== undefined && first_name) {
+      userToUpdate.first_name = String(first_name).toUpperCase();
+    }
+    if (middle_name !== undefined && middle_name) {
+      userToUpdate.middle_name = String(middle_name).toUpperCase();
+    } else if (middle_name === null || middle_name === "") {
+      userToUpdate.middle_name = null; // Allow clearing middle name
+    }
+    if (last_name !== undefined && last_name) {
+      userToUpdate.last_name = String(last_name).toUpperCase();
+    }
+    if (role_id !== undefined) {
+      userToUpdate.role_id = role_id;
+      userToUpdate.role = await this.roleRepository.findOne({
+        where: { id: role_id },
+      });
+    }
+    if (emp_number !== undefined) userToUpdate.emp_number = emp_number;
+    if (user_reset !== undefined) userToUpdate.user_reset = user_reset;
+    if (user_upline_id !== undefined)
+      userToUpdate.user_upline_id = user_upline_id;
+    if (email_switch !== undefined) userToUpdate.email_switch = email_switch;
+    if (status_id !== undefined) userToUpdate.status_id = status_id;
+    if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
+    if (profile_pic_url !== undefined)
+      userToUpdate.profile_pic_url = profile_pic_url;
+
+    // Hash new password if provided
+    if (password) {
+      const saltRounds = 10;
+      userToUpdate.password = await bcrypt.hash(password, saltRounds);
+    }
+
+    userToUpdate.updated_by = updated_by;
+
+    // Determine if permissions and locations should be updated
+    // If roles_to_update is provided as an empty array, SKIP updating permissions/locations completely!
+    const shouldUpdatePermissions =
+      (roles_to_update !== undefined && roles_to_update.length > 0) ||
+      (roles_to_update === undefined && user_permission_presets !== undefined);
+
+    let permissionsMessage = "";
+    let locationsMessage = "";
+    let savedUserId = id;
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const userToUpdate = await queryRunner.manager.findOne(User, {
-        where: { id },
-        relations: [
-          "role",
-          "userUpline",
-          "status",
-          "theme",
-          "createdBy",
-          "updatedBy",
-        ],
-      });
-
-      if (!userToUpdate) {
-        throw new NotFoundException("User not found for update.");
-      }
-
-      // Fast validation for permissions data if provided
-      if (
-        access_key_id &&
-        user_permission_presets &&
-        user_permission_presets.length > 0
-      ) {
-        const akIds = Array.from(new Set(access_key_id));
-        const foundAks = await this.accessKeyRepository.findBy({ id: In(akIds) });
-        if (foundAks.length !== akIds.length) {
-          const foundSet = new Set(foundAks.map((k) => k.id));
-          const missing = akIds.find((k) => !foundSet.has(k));
-          throw new BadRequestException(`Access key with ID ${missing} not found`);
-        }
-
-        const allModuleIds = Array.from(
-          new Set(
-            user_permission_presets.map((p) => p.module_ids).filter(Boolean),
-          ),
-        );
-        if (allModuleIds.length > 0) {
-          const foundModules = await this.moduleRepository.findBy({
-            id: In(allModuleIds),
-          });
-          if (foundModules.length !== allModuleIds.length) {
-            const foundSet = new Set(foundModules.map((m) => m.id));
-            const missing = allModuleIds.find((mid) => !foundSet.has(mid));
-            throw new BadRequestException(`Module with ID ${missing} not found`);
-          }
-        }
-
-        const allActionIds = Array.from(
-          new Set(
-            user_permission_presets
-              .flatMap((p) => p.action_ids || [])
-              .filter(Boolean),
-          ),
-        );
-        if (allActionIds.length > 0) {
-          const foundActions = await this.actionRepository.findBy({
-            id: In(allActionIds),
-          });
-          if (foundActions.length !== allActionIds.length) {
-            const foundSet = new Set(foundActions.map((a) => a.id));
-            const missing = allActionIds.find((aid) => !foundSet.has(aid));
-            throw new BadRequestException(`Action with ID ${missing} not found`);
-          }
-        }
-      }
-
-      // Fast validation for locations data if provided
-      if (location_ids && location_ids.length > 0) {
-        const uniqueLocIds = Array.from(new Set(location_ids));
-        const foundLocs = await this.locationRepository.findBy({
-          id: In(uniqueLocIds),
-        });
-        if (foundLocs.length !== uniqueLocIds.length) {
-          const foundSet = new Set(foundLocs.map((l) => l.id));
-          const missing = uniqueLocIds.find((lid) => !foundSet.has(lid));
-          throw new BadRequestException(`Location with ID ${missing} not found`);
-        }
-      }
-
-      // Update fields if provided
-      if (user_name !== undefined) {
-        if (user_name !== userToUpdate.user_name) {
-          const existingUser = await queryRunner.manager.findOne(User, {
-            where: { user_name },
-          });
-          if (existingUser && existingUser.id !== id) {
-            throw new BadRequestException(
-              "User with this username already exists.",
-            );
-          }
-        }
-        userToUpdate.user_name = user_name;
-      }
-
-      if (email !== undefined) {
-        if (email && email !== userToUpdate.email) {
-          const existingEmail = await queryRunner.manager.findOne(User, {
-            where: { email },
-          });
-          if (existingEmail && existingEmail.id !== id) {
-            throw new BadRequestException(
-              "User with this email already exists.",
-            );
-          }
-        }
-        userToUpdate.email = email;
-      }
-
-      // Update other fields
-      if (first_name !== undefined && first_name) {
-        userToUpdate.first_name = String(first_name).toUpperCase();
-      }
-      if (middle_name !== undefined && middle_name) {
-        userToUpdate.middle_name = String(middle_name).toUpperCase();
-      } else if (middle_name === null || middle_name === "") {
-        userToUpdate.middle_name = null; // Allow clearing middle name
-      }
-      if (last_name !== undefined && last_name) {
-        userToUpdate.last_name = String(last_name).toUpperCase();
-      }
-      if (role_id !== undefined) {
-        userToUpdate.role_id = role_id;
-        userToUpdate.role = await queryRunner.manager.findOne(Role, {
-          where: { id: role_id },
-        });
-      }
-      if (emp_number !== undefined) userToUpdate.emp_number = emp_number;
-      if (user_reset !== undefined) userToUpdate.user_reset = user_reset;
-      if (user_upline_id !== undefined)
-        userToUpdate.user_upline_id = user_upline_id;
-      if (email_switch !== undefined) userToUpdate.email_switch = email_switch;
-      if (status_id !== undefined) userToUpdate.status_id = status_id;
-      if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
-      if (profile_pic_url !== undefined)
-        userToUpdate.profile_pic_url = profile_pic_url;
-
-      // Hash new password if provided
-      if (password) {
-        const saltRounds = 10;
-        userToUpdate.password = await bcrypt.hash(password, saltRounds);
-      }
-
-      userToUpdate.updated_by = updated_by;
-
-      // Save user in transaction before updating permissions/locations
+      // 1. Save user inside transaction
       const savedUser = await queryRunner.manager.save(User, userToUpdate);
+      savedUserId = savedUser.id;
 
-      // Audit trail
-      await this.userAuditTrailCreateService.create(
-        {
-          service: "UsersService",
-          method: "update",
-          raw_data: JSON.stringify(userToUpdate),
-          description: `Updated user ${id} - ${userToUpdate.user_name} | ${userToUpdate.first_name} ${userToUpdate.last_name}`,
-          status_id: 1,
-        },
-        updateUserDto.updated_by,
-      );
-
-      // Determine if permissions and locations should be updated
-      // If roles_to_update is provided as an empty array, SKIP updating permissions/locations completely!
-      const shouldUpdatePermissions =
-        (roles_to_update !== undefined && roles_to_update.length > 0) ||
-        (roles_to_update === undefined && user_permission_presets !== undefined);
-
-      let permissionsMessage = "";
+      // 2. Update permissions if requested
       if (
         shouldUpdatePermissions &&
         access_key_id &&
@@ -1213,7 +1224,7 @@ export class UsersService {
         permissionsMessage = ` Updated/created ${activePermissions} permission(s).`;
       }
 
-      let locationsMessage = "";
+      // 3. Update locations if requested
       const effectiveAccessKeyIds =
         access_key_id && access_key_id.length > 0
           ? access_key_id
@@ -1258,6 +1269,7 @@ export class UsersService {
           location_ids,
           updated_by,
           effectiveAccessKeyIds,
+          queryRunner,
         );
 
         const activeLocations = await queryRunner.manager.count(
@@ -1271,42 +1283,6 @@ export class UsersService {
 
       // COMMIT TRANSACTION: All changes succeed atomically
       await queryRunner.commitTransaction();
-
-      // Fetch updated user with relations
-      const updatedUser = await this.usersRepository.findOne({
-        where: { id: savedUser.id },
-        relations: [
-          "role",
-          "userUpline",
-          "status",
-          "theme",
-          "createdBy",
-          "updatedBy",
-        ],
-      });
-
-      const responseMessage = `Successfully updated user with ID ${id}.${permissionsMessage}${locationsMessage}`;
-
-      // SSE Events
-      try {
-        this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
-        this.sseEventEmitter.emitUpdateSignal("users", 0);
-        this.sseEventEmitter.emitUpdateSignal("locations", 0);
-        await this.cacheInvalidationService.invalidateFindAll("users");
-        await this.cacheInvalidationService.invalidateWarehouseEmployees();
-        await this.cacheInvalidationService.invalidateWarehouseHurdles();
-        await this.cacheInvalidationService.invalidateReqTransactions();
-        await this.cacheInvalidationService.invalidateWarehouseRequirements();
-        await this.cacheInvalidationService.invalidateWarehouses();
-      } catch (err) {
-        logger.warn("SSE event failed for update:", err);
-      }
-
-      logger.info(`User updated successfully with ID: ${id}`);
-      return {
-        message: responseMessage,
-        user: await this.createFlattenedResponse(updatedUser!),
-      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       logger.error(`Error updating user with ID ${id}:`, error);
@@ -1316,10 +1292,62 @@ export class UsersService {
       ) {
         throw error;
       }
-      throw new Error(`Failed to update user with ID ${id}.`);
+      throw new Error(`Failed to update user with ID ${id}: ${this.getErrorMessage(error)}`);
     } finally {
       await queryRunner.release();
     }
+
+    // Perform audit trail AFTER transaction commit to avoid deadlock/lock wait timeout
+    try {
+      await this.userAuditTrailCreateService.create(
+        {
+          service: "UsersService",
+          method: "update",
+          raw_data: JSON.stringify(userToUpdate),
+          description: `Updated user ${id} - ${userToUpdate.user_name} | ${userToUpdate.first_name} ${userToUpdate.last_name}`,
+          status_id: 1,
+        },
+        updateUserDto.updated_by,
+      );
+    } catch (auditError) {
+      logger.warn(`Audit trail creation skipped or failed for user ID ${id}:`, auditError);
+    }
+
+    // Fetch updated user with relations
+    const updatedUser = await this.usersRepository.findOne({
+      where: { id: savedUserId },
+      relations: [
+        "role",
+        "userUpline",
+        "status",
+        "theme",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
+
+    const responseMessage = `Successfully updated user with ID ${id}.${permissionsMessage}${locationsMessage}`;
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("users", savedUserId);
+      this.sseEventEmitter.emitUpdateSignal("users", 0);
+      this.sseEventEmitter.emitUpdateSignal("locations", 0);
+      await this.cacheInvalidationService.invalidateFindAll("users");
+      await this.cacheInvalidationService.invalidateWarehouseEmployees();
+      await this.cacheInvalidationService.invalidateWarehouseHurdles();
+      await this.cacheInvalidationService.invalidateReqTransactions();
+      await this.cacheInvalidationService.invalidateWarehouseRequirements();
+      await this.cacheInvalidationService.invalidateWarehouses();
+    } catch (err) {
+      logger.warn("SSE event failed for update:", err);
+    }
+
+    logger.info(`User updated successfully with ID: ${id}`);
+    return {
+      message: responseMessage,
+      user: await this.createFlattenedResponse(updatedUser!),
+    };
   }
 
   async remove(id: number): Promise<any> {
