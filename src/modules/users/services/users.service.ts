@@ -1751,16 +1751,21 @@ export class UsersService {
 
               const module = roleModuleMap.get(moduleId);
 
-              // Add action to the module's actions array (if not already present)
+              // Add action to the module's actions array (if not already present for this access_key)
               if (
                 permission.action &&
-                !module.actions.find((a: any) => a.id === permission.action.id)
+                !module.actions.find(
+                  (a: any) =>
+                    a.id === permission.action.id &&
+                    a.access_key_id === permission.access_key_id,
+                )
               ) {
                 module.actions.push({
                   id: permission.action.id,
                   action_name: permission.action.action_name,
                   status_id: permission.action.status_id,
                   permission_status_id: permission.status_id,
+                  access_key_id: permission.access_key_id,
                 });
               }
             }
@@ -1825,16 +1830,21 @@ export class UsersService {
 
             const module = moduleMap.get(moduleId);
 
-            // Add action to the module's actions array (if not already present)
+            // Add action to the module's actions array (if not already present for this access_key)
             if (
               permission.action &&
-              !module.actions.find((a: any) => a.id === permission.action.id)
+              !module.actions.find(
+                (a: any) =>
+                  a.id === permission.action.id &&
+                  a.access_key_id === permission.access_key_id,
+              )
             ) {
               module.actions.push({
                 id: permission.action.id,
                 action_name: permission.action.action_name,
                 status_id: permission.action.status_id,
                 permission_status_id: permission.status_id,
+                access_key_id: permission.access_key_id,
               });
             }
           }

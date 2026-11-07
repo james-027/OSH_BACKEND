@@ -1474,13 +1474,30 @@ export class RoleActionPresetsService {
           apply_locations_to_users || apply_locations_to_users_only;
 
         if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
-          const userAccessKeys = await this.userPermissionsRepository
-            .createQueryBuilder("up")
-            .select("DISTINCT up.access_key_id", "access_key_id")
-            .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-            .getRawMany();
+          const [userPermKeys, userLocKeys] = await Promise.all([
+            this.userPermissionsRepository
+              .createQueryBuilder("up")
+              .select("DISTINCT up.access_key_id", "access_key_id")
+              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
+            this.userLocationsRepository
+              .createQueryBuilder("ul")
+              .select("DISTINCT ul.access_key_id", "access_key_id")
+              .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
+          ]);
 
-          const userKeys = userAccessKeys.map((uak) => uak.access_key_id);
+          let userKeys = Array.from(
+            new Set([
+              ...userPermKeys.map((k) => k.access_key_id),
+              ...userLocKeys.map((k) => k.access_key_id),
+            ]),
+          );
+
+          if (userKeys.length === 0) {
+            userKeys = cascadeTargetAccessKeyIds;
+          }
+
           const hasTenantConfigs =
             createRolePresetDto.tenant_configs &&
             Object.keys(createRolePresetDto.tenant_configs).length > 0;
@@ -1491,6 +1508,9 @@ export class RoleActionPresetsService {
                 createRolePresetDto.tenant_configs!,
               )) {
                 const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
                 const config = configObj as {
                   location_ids?: number[];
                   presets?: any[];
@@ -1528,6 +1548,9 @@ export class RoleActionPresetsService {
                 createRolePresetDto.tenant_configs!,
               )) {
                 const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
                 const config = configObj as {
                   location_ids?: number[];
                   presets?: any[];
@@ -1815,13 +1838,30 @@ export class RoleActionPresetsService {
           apply_locations_to_users || apply_locations_to_users_only;
 
         if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
-          const userAccessKeys = await this.userPermissionsRepository
-            .createQueryBuilder("up")
-            .select("DISTINCT up.access_key_id", "access_key_id")
-            .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-            .getRawMany();
+          const [userPermKeys, userLocKeys] = await Promise.all([
+            this.userPermissionsRepository
+              .createQueryBuilder("up")
+              .select("DISTINCT up.access_key_id", "access_key_id")
+              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
+            this.userLocationsRepository
+              .createQueryBuilder("ul")
+              .select("DISTINCT ul.access_key_id", "access_key_id")
+              .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
+          ]);
 
-          const userKeys = userAccessKeys.map((uak) => uak.access_key_id);
+          let userKeys = Array.from(
+            new Set([
+              ...userPermKeys.map((k) => k.access_key_id),
+              ...userLocKeys.map((k) => k.access_key_id),
+            ]),
+          );
+
+          if (userKeys.length === 0) {
+            userKeys = cascadeTargetAccessKeyIds;
+          }
+
           const hasTenantConfigs =
             updateRolePresetDto.tenant_configs &&
             Object.keys(updateRolePresetDto.tenant_configs).length > 0;
@@ -1832,6 +1872,9 @@ export class RoleActionPresetsService {
                 updateRolePresetDto.tenant_configs!,
               )) {
                 const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
                 const config = configObj as {
                   location_ids?: number[];
                   presets?: any[];
@@ -1869,6 +1912,9 @@ export class RoleActionPresetsService {
                 updateRolePresetDto.tenant_configs!,
               )) {
                 const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
                 const config = configObj as {
                   location_ids?: number[];
                   presets?: any[];
