@@ -2083,7 +2083,7 @@ export class RoleActionPresetsService {
     }
   }
 
-  // Helper method to update user permissions for multiple users
+  // Helper method to update user permissions for multiple users with batch optimization
   private async updateUserPermissions(
     userIds: number[],
     roleId: number,
@@ -2091,70 +2091,86 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    for (const userId of userIds) {
-      // Validate user exists
-      const user = await this.userRepository.findOneBy({ id: userId });
-      if (!user) {
-        logger.warn(
-          `Skipping user permissions update for non-existent user ID: ${userId}`,
-        );
-        continue;
-      }
+    if (!userIds.length || !presets.length || !accessKeyIds.length) return;
 
-      // First, mark all existing permissions for this user & role within target access keys as inactive (status_id = 2)
-      await this.userPermissionsRepository.update(
-        { user_id: userId, role_id: roleId, access_key_id: In(accessKeyIds) },
-        {
-          status_id: 2, // inactive
-          updated_by: updatedBy,
-          modified_at: new Date(),
-        },
+    // 1. Mark existing permissions for all target users, role, and access keys as inactive in 1 fast query
+    await this.userPermissionsRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2,
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // 2. Fetch existing permissions for this cohort in 1 query
+    const existing = await this.userPermissionsRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const permMap = new Map<string, UserPermissions>();
+    existing.forEach((p) => {
+      permMap.set(
+        `${p.user_id}_${p.role_id}_${p.access_key_id}_${p.module_id}_${p.action_id}`,
+        p,
       );
+    });
 
-      // Iterate through access keys first
+    // 3. Fast in-memory reconciliation
+    const toSave: UserPermissions[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
       for (const accessKeyId of accessKeyIds) {
-        // Then iterate through permission presets
         for (const preset of presets) {
-          // Then iterate through each action in the preset
-          for (const actionId of preset.action_ids) {
-            // Check if this combination already exists
-            const existingPermission =
-              await this.userPermissionsRepository.findOne({
-                where: {
-                  user_id: userId,
-                  role_id: roleId,
-                  module_id: preset.module_ids,
-                  action_id: actionId,
-                  access_key_id: accessKeyId,
-                },
-              });
+          const moduleId = preset.module_ids;
+          const actionIds = Array.isArray(preset.action_ids)
+            ? preset.action_ids
+            : [];
 
-            if (existingPermission) {
-              // Update existing permission back to active status
-              existingPermission.status_id = 1; // active
-              existingPermission.updated_by = updatedBy;
-              existingPermission.modified_at = new Date();
-              await this.userPermissionsRepository.save(existingPermission);
+          for (const actionId of actionIds) {
+            const key = `${userId}_${roleId}_${accessKeyId}_${moduleId}_${actionId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const existingPerm = permMap.get(key);
+            if (existingPerm) {
+              existingPerm.status_id = 1;
+              existingPerm.updated_by = updatedBy;
+              existingPerm.modified_at = new Date();
+              toSave.push(existingPerm);
             } else {
-              // Create new permission with active status
-              const userPermission = this.userPermissionsRepository.create({
+              const newPerm = this.userPermissionsRepository.create({
                 user_id: userId,
                 role_id: roleId,
-                module_id: preset.module_ids,
+                module_id: moduleId,
                 action_id: actionId,
                 access_key_id: accessKeyId,
-                status_id: 1, // active
+                status_id: 1,
                 created_by: updatedBy,
               });
-              await this.userPermissionsRepository.save(userPermission);
+              toSave.push(newPerm);
             }
           }
         }
       }
     }
+
+    // 4. Batch save in chunks of 500 for optimal database performance
+    if (toSave.length > 0) {
+      await this.userPermissionsRepository.save(toSave, { chunk: 500 });
+    }
   }
 
-  // Helper method to update user locations for multiple users
+  // Helper method to update user locations for multiple users with batch optimization
   private async updateUserLocations(
     userIds: number[],
     roleId: number,
@@ -2162,59 +2178,74 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    for (const userId of userIds) {
-      // Validate user exists
-      const user = await this.userRepository.findOneBy({ id: userId });
-      if (!user) {
-        logger.warn(
-          `Skipping user locations update for non-existent user ID: ${userId}`,
-        );
-        continue;
-      }
+    if (!userIds.length || !locationIds.length || !accessKeyIds.length) return;
 
-      // First, mark all existing locations for this user & role within target access keys as inactive (status_id = 2)
-      await this.userLocationsRepository.update(
-        { user_id: userId, role_id: roleId, access_key_id: In(accessKeyIds) },
-        {
-          status_id: 2, // inactive
-          updated_by: updatedBy,
-          modified_at: new Date(),
-        },
+    // 1. Mark existing locations for all target users, role, and access keys as inactive in 1 fast query
+    await this.userLocationsRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2,
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // 2. Fetch existing locations for this cohort in 1 query
+    const existing = await this.userLocationsRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const locMap = new Map<string, UserLocations>();
+    existing.forEach((l) => {
+      locMap.set(
+        `${l.user_id}_${l.role_id}_${l.access_key_id}_${l.location_id}`,
+        l,
       );
+    });
 
-      // Iterate through access keys and location IDs
+    // 3. Fast in-memory reconciliation
+    const toSave: UserLocations[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
       for (const accessKeyId of accessKeyIds) {
         for (const locationId of locationIds) {
-          // Check if this combination already exists
-          const existingLocation = await this.userLocationsRepository.findOne({
-            where: {
-              user_id: userId,
-              role_id: roleId,
-              location_id: locationId,
-              access_key_id: accessKeyId,
-            },
-          });
+          const key = `${userId}_${roleId}_${accessKeyId}_${locationId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
-          if (existingLocation) {
-            // Update existing location back to active status
-            existingLocation.status_id = 1; // active
-            existingLocation.updated_by = updatedBy;
-            existingLocation.modified_at = new Date();
-            await this.userLocationsRepository.save(existingLocation);
+          const existingLoc = locMap.get(key);
+          if (existingLoc) {
+            existingLoc.status_id = 1;
+            existingLoc.updated_by = updatedBy;
+            existingLoc.modified_at = new Date();
+            toSave.push(existingLoc);
           } else {
-            // Create new location with active status
-            const userLocation = this.userLocationsRepository.create({
+            const newLoc = this.userLocationsRepository.create({
               user_id: userId,
               role_id: roleId,
               location_id: locationId,
               access_key_id: accessKeyId,
-              status_id: 1, // active
+              status_id: 1,
               created_by: updatedBy,
             });
-            await this.userLocationsRepository.save(userLocation);
+            toSave.push(newLoc);
           }
         }
       }
+    }
+
+    // 4. Batch save in chunks of 500 for optimal database performance
+    if (toSave.length > 0) {
+      await this.userLocationsRepository.save(toSave, { chunk: 500 });
     }
   }
 }
