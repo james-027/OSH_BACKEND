@@ -311,6 +311,10 @@ export class UsersService {
         .addSelect("user.last_name", "last_name")
         .addSelect("user.user_name", "user_name")
         .addSelect("user.emp_number", "emp_number")
+        .addSelect(
+          "GROUP_CONCAT(DISTINCT role.role_name SEPARATOR ', ')",
+          "role_name",
+        )
         .where("up.role_id IN (:...role_ids)", { role_ids })
         .andWhere("up.status_id = :status_id", { status_id })
         .andWhere("user.status_id = 1");
@@ -346,6 +350,7 @@ export class UsersService {
         user_name: row.user_name,
         emp_number: row.emp_number,
         full_name: `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ""}`.trim(),
+        role_name: row.role_name || "",
       }));
     } catch (error) {
       logger.error("Error retrieving users by roles and locations:", error);
