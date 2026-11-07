@@ -78,6 +78,13 @@ export class UsersController {
     });
   }
 
+  @Post("by-roles-and-locations")
+  async findUsersByRolesAndLocations(
+    @Body() body: { role_ids: number[]; location_ids?: number[]; status_id?: number },
+  ) {
+    return this.usersService.findUsersByRolesAndLocations(body);
+  }
+
   @Get("view-email-template")
   async viewEmailTemplate(@Request() req) {
     return this.usersService.viewEmailTemplate(

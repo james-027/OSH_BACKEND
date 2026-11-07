@@ -289,6 +289,70 @@ export class UsersService {
     }
   }
 
+  async findUsersByRolesAndLocations(body: {
+    role_ids: number[];
+    location_ids?: number[];
+    status_id?: number;
+  }): Promise<any[]> {
+    try {
+      const { role_ids = [], location_ids = [], status_id = 1 } = body;
+
+      if (!Array.isArray(role_ids) || role_ids.length === 0) {
+        return [];
+      }
+
+      let query = this.userPermissionsRepository
+        .createQueryBuilder("up")
+        .leftJoin("up.user", "user")
+        .leftJoin("up.role", "role")
+        .select("user.id", "id")
+        .addSelect("user.first_name", "first_name")
+        .addSelect("user.middle_name", "middle_name")
+        .addSelect("user.last_name", "last_name")
+        .addSelect("user.user_name", "user_name")
+        .addSelect("user.emp_number", "emp_number")
+        .where("up.role_id IN (:...role_ids)", { role_ids })
+        .andWhere("up.status_id = :status_id", { status_id })
+        .andWhere("user.status_id = 1");
+
+      // If location_ids filter is provided and not empty
+      if (Array.isArray(location_ids) && location_ids.length > 0) {
+        query = query.andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select("ul.user_id")
+            .from("user_locations", "ul")
+            .where("ul.location_id IN (:...location_ids)", { location_ids })
+            .andWhere("ul.status_id = :status_id", { status_id })
+            .getQuery();
+          return `up.user_id IN ${subQuery}`;
+        });
+      }
+
+      query = query
+        .groupBy("user.id")
+        .addGroupBy("user.first_name")
+        .addGroupBy("user.middle_name")
+        .addGroupBy("user.last_name")
+        .addGroupBy("user.user_name")
+        .addGroupBy("user.emp_number")
+        .orderBy("user.last_name", "ASC")
+        .addOrderBy("user.first_name", "ASC");
+
+      const rawResults = await query.getRawMany();
+
+      return rawResults.map((row) => ({
+        id: row.id,
+        user_name: row.user_name,
+        emp_number: row.emp_number,
+        full_name: `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ""}`.trim(),
+      }));
+    } catch (error) {
+      logger.error("Error retrieving users by roles and locations:", error);
+      throw error;
+    }
+  }
+
   async nested(): Promise<any[]> {
     try {
       // Get all users with relations
