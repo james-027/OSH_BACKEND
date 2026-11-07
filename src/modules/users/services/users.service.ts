@@ -2255,6 +2255,7 @@ export class UsersService {
         "User Reset": { format: "none", nullable: true },
         "Send Email Notif": { format: "none", nullable: true },
         "Location(s)": { format: "none", nullable: true },
+        "Overwrite Roles & Locations": { format: "none", nullable: true },
       },
     };
 
@@ -2316,25 +2317,52 @@ export class UsersService {
           roles.push(role);
           allRoleIds.push(role.id);
 
-          // 3. Lookup role_action_preset for each role
+          // 3. Lookup role_action_preset for each role and generate per-access-key presets
           const roleActionPresets = await this.usersRepository.manager
             .getRepository("RoleActionPreset")
             .find({ where: { role_id: role.id, status_id: 1 } });
 
-          // Build permission presets for this role
-          roleActionPresets.forEach((preset) => {
-            allRoleActionPresets.push({
-              role_id: preset.role_id,
-              module_ids: preset.module_id,
-              action_ids: [preset.action_id],
+          // Multi-tenant: generate presets for EACH target access key
+          for (const ak of accessKeys) {
+            let akPresets = roleActionPresets.filter(
+              (p) => p.access_key_id === ak.id,
+            );
+            // Fallback to role presets without specific access key if none matched
+            if (akPresets.length === 0) {
+              akPresets = roleActionPresets;
+            }
+
+            const moduleMap = new Map<number, number[]>();
+            akPresets.forEach((preset) => {
+              if (!moduleMap.has(preset.module_id)) {
+                moduleMap.set(preset.module_id, []);
+              }
+              moduleMap.get(preset.module_id)!.push(preset.action_id);
             });
-          });
+
+            moduleMap.forEach((actions, moduleId) => {
+              allRoleActionPresets.push({
+                role_id: role.id,
+                access_key_id: ak.id,
+                module_ids: moduleId,
+                action_ids: actions,
+              });
+            });
+          }
         }
 
         // Use first role as default role_id
         const primaryRole = roles[0];
 
-        // Check if Location(s) column has values and build user_location_presets
+        // Parse Overwrite mode: 1/true/yes = overwrite, 0/false/empty = Smart Append (default)
+        const rawOverwrite = formattedRow["Overwrite Roles & Locations"];
+        const isOverwrite =
+          rawOverwrite === 1 ||
+          rawOverwrite === "1" ||
+          String(rawOverwrite || "").trim().toLowerCase() === "true" ||
+          String(rawOverwrite || "").trim().toLowerCase() === "yes";
+
+        // Check if Location(s) column has values and build user_location_presets per access key
         let userLocationPresets: any[] = [];
 
         if (
@@ -2355,15 +2383,17 @@ export class UsersService {
 
             // Check if at least one location was found
             if (locations.length > 0) {
-              // At least one location found, use the ones that were found
               const locationIds = locations.map((loc) => loc.id);
 
-              // Build user_location_presets for each role with the same locations
+              // Build user_location_presets for each role AND each access key
               for (const role of roles) {
-                userLocationPresets.push({
-                  role_id: role.id,
-                  location_ids: locationIds,
-                });
+                for (const ak of accessKeys) {
+                  userLocationPresets.push({
+                    role_id: role.id,
+                    access_key_id: ak.id,
+                    location_ids: locationIds,
+                  });
+                }
               }
 
               // Log any locations that weren't found
@@ -2389,22 +2419,31 @@ export class UsersService {
           }
         }
 
-        // If no user_location_presets built yet, use role location presets for each role
+        // If no user_location_presets built yet, use role location presets for each role & access key
         if (userLocationPresets.length === 0) {
           for (const role of roles) {
             const roleLocationPresets = await this.usersRepository.manager
               .getRepository("RoleLocationPreset")
               .find({ where: { role_id: role.id, status_id: 1 } });
 
-            const roleLocationIds = roleLocationPresets.map(
-              (preset) => preset.location_id,
-            );
+            for (const ak of accessKeys) {
+              let akLocs = roleLocationPresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akLocs.length === 0) {
+                akLocs = roleLocationPresets;
+              }
+              const roleLocationIds = Array.from(
+                new Set(akLocs.map((preset) => preset.location_id)),
+              );
 
-            if (roleLocationIds.length > 0) {
-              userLocationPresets.push({
-                role_id: role.id,
-                location_ids: roleLocationIds,
-              });
+              if (roleLocationIds.length > 0) {
+                userLocationPresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  location_ids: roleLocationIds,
+                });
+              }
             }
           }
         }
@@ -2434,28 +2473,114 @@ export class UsersService {
         }
 
         if (existingUser) {
-          // Update logic
-          const updateUserDto: any = {
-            user_name: formattedRow["Username"],
-            emp_number: formattedRow["Employee No."],
-            first_name: formattedRow["First Name"],
-            last_name: formattedRow["Last Name"],
-            middle_name: formattedRow["Middle Name"],
-            email: formattedRow["Email"],
-            password: formattedRow["Password"],
-            current_access_key: accessKeys[0]?.id,
-            role_id: primaryRole.id, // Use primary (first) role as default
-            role_ids: allRoleIds, // Multiple roles
-            status_id: 1,
-            updated_by: created_by,
-            user_reset: formattedRow["User Reset"] || false,
-            theme_id: formattedRow["Theme ID"] || 1,
-            // Permissions/locations with role_ids from presets
-            access_key_id: accessKeys.map((k) => k.id),
-            user_permission_presets: allRoleActionPresets,
-            user_location_presets: userLocationPresets,
-          };
-          await this.update(existingUser.id, updateUserDto);
+          // Query existing active user permissions to determine currently assigned roles & access keys
+          const existingPermissions = await this.userPermissionsRepository.find({
+            where: { user_id: existingUser.id, status_id: 1 },
+            select: ["role_id", "access_key_id"],
+          });
+          const existingRoleIds = Array.from(
+            new Set(
+              existingPermissions
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+          const existingAccessKeyIds = Array.from(
+            new Set(
+              existingPermissions
+                .map((p) => p.access_key_id)
+                .filter((k): k is number => typeof k === "number" && k > 0),
+            ),
+          );
+
+          const newAccessKeyIds = accessKeys.map((k) => k.id);
+          let updateUserDto: any;
+
+          if (isOverwrite) {
+            // OVERWRITE MODE (1):
+            // Soft-deactivate previous roles and locations that are not present in this Excel row
+            const rolesToDeactivate = existingRoleIds.filter(
+              (rId) => !allRoleIds.includes(rId),
+            );
+            if (rolesToDeactivate.length > 0) {
+              await this.userPermissionsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userLocationsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
+            updateUserDto = {
+              user_name: formattedRow["Username"],
+              emp_number: formattedRow["Employee No."],
+              first_name: formattedRow["First Name"],
+              last_name: formattedRow["Last Name"],
+              middle_name: formattedRow["Middle Name"],
+              email: formattedRow["Email"],
+              ...(formattedRow["Password"]
+                ? { password: formattedRow["Password"] }
+                : {}),
+              current_access_key: accessKeys[0]?.id,
+              role_id: primaryRole.id,
+              role_ids: allRoleIds,
+              status_id: 1,
+              updated_by: created_by,
+              user_reset: formattedRow["User Reset"] || false,
+              theme_id: formattedRow["Theme ID"] || 1,
+              access_key_id: newAccessKeyIds,
+              user_permission_presets: allRoleActionPresets,
+              user_location_presets: userLocationPresets,
+              roles_to_update: allRoleIds,
+            };
+            await this.update(existingUser.id, updateUserDto);
+          } else {
+            // SMART APPEND / MERGE MODE (Default: 0 / Blank):
+            // Preserve existing active roles & access keys; only update the newly uploaded roles!
+            const mergedRoleIds = Array.from(
+              new Set([...existingRoleIds, ...allRoleIds]),
+            );
+            const mergedAccessKeyIds = Array.from(
+              new Set([...existingAccessKeyIds, ...newAccessKeyIds]),
+            );
+
+            updateUserDto = {
+              user_name: formattedRow["Username"],
+              emp_number: formattedRow["Employee No."],
+              first_name: formattedRow["First Name"],
+              last_name: formattedRow["Last Name"],
+              middle_name: formattedRow["Middle Name"],
+              email: formattedRow["Email"],
+              ...(formattedRow["Password"]
+                ? { password: formattedRow["Password"] }
+                : {}),
+              current_access_key:
+                existingUser.current_access_key || accessKeys[0]?.id,
+              role_id: existingUser.role_id || primaryRole.id,
+              role_ids: mergedRoleIds,
+              status_id: 1,
+              updated_by: created_by,
+              user_reset:
+                formattedRow["User Reset"] ?? existingUser.user_reset ?? false,
+              theme_id:
+                formattedRow["Theme ID"] || existingUser.theme_id || 1,
+              access_key_id: mergedAccessKeyIds,
+              user_permission_presets: allRoleActionPresets,
+              user_location_presets: userLocationPresets,
+              roles_to_update: allRoleIds, // Only update the uploaded roles; other roles remain untouched and active!
+            };
+            await this.update(existingUser.id, updateUserDto);
+          }
           // Audit trail for update
           await this.userAuditTrailCreateService.create(
             {
