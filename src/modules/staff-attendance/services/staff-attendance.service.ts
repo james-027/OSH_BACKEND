@@ -554,12 +554,13 @@ export class StaffAttendanceService {
     dateTo?: string,
     vendorIds?: number[],
     locationIds?: number[],
+    statusIds?: number[],
     userId?: number,
     roleId?: number,
   ): Promise<any[]> {
     try {
       const where: any = {
-        attendance_status_id: STATUS_IDS.VALIDATED,
+        attendance_status_id: In(statusIds),
       };
 
       // Filter by access key through ScheduleHeader
@@ -1368,6 +1369,7 @@ export class StaffAttendanceService {
               ? await this.actualLogsDetailRepository.findOne({
                   where: {
                     id: scheduleDetail.actual_logs_detail_id,
+                    status_id: STATUS_IDS.ACTIVE
                   },
                 })
               : null;

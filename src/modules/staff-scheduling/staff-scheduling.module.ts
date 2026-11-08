@@ -21,7 +21,7 @@ import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
 import { Status } from "src/entities/Status";
 import { ScheduleHeader } from "src/entities/ScheduleHeader";
-import { RegularHoliday } from "src/entities/RegularHoliday";
+import { CalendarHoliday } from "src/entities/CalendarHoliday";
 import { PayrollDetails } from "src/entities/PayrollDetails";
 import { LogsType } from "src/entities/LogsType";
 import { StaffSalary } from "src/entities/StaffSalary";
@@ -57,7 +57,7 @@ import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
       TransactionSequence,
       StaffHistory,
       Status,
-      RegularHoliday,
+      CalendarHoliday,
       TimeKeepingConfig,
       LogsType,
       PayrollDetails

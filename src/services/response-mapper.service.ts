@@ -53,6 +53,7 @@ export class ResponseMapperService {
           "actualLogsDetail",
           "payrollHeader",
           "scheduleDetail",
+          "actualHeader"
         ].includes(key)
       ) {
         if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
@@ -136,6 +137,7 @@ export class ResponseMapperService {
         entity.staff.first_name && entity.staff.last_name
           ? `${entity.staff.first_name} ${entity.staff.last_name}`
           : null;
+      response.position_name = entity.staff.position?.position_name || null;
     }
 
     // Latest Brand
@@ -255,6 +257,12 @@ export class ResponseMapperService {
     if (entity.payrollHeader && typeof entity.payrollHeader === "object") {
       response.payroll_date_from = entity.payrollHeader.payroll_date_from || null;
       response.payroll_date_to = entity.payrollHeader.payroll_date_to || null;
+    }
+    if (entity.actualHeader && typeof entity.actualHeader === "object") {
+      response.actual_header_status = entity.actualHeader.status?.status_name || null;
+      response.actual_header_status_id = entity.actualHeader.status_id;
+      response.actual_header_is_cancel_allowed = entity.actualHeader.logsType?.is_cancel_allowed;
+      response.tagging = entity.actualHeader.tagging || null;
     }
         // Map Schedule Detail relation
     if (entity.scheduleDetail && typeof entity.scheduleDetail === "object") {

@@ -322,7 +322,7 @@ export class PayrollHeader {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_cash_bond: number;
-
+  
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_billing: number;
 

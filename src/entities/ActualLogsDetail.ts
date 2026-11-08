@@ -14,38 +14,42 @@ import { Warehouse } from "./Warehouse";
 import { Location } from "./Location";
 import { Vendor } from "./Vendor";
 import { AccessKey } from "./AccessKey";
+import { Staff } from "./Staff";
 
 @Entity("actual_log_details")
 export class ActualLogsDetail {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   actual_header_id: number;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   staff_id: number;
 
   @Column({ length: 255 })
   staff_code: string;
 
-  @Column({ nullable:true,length: 255 })
+  @Column({ nullable: true, length: 255 })
   dws_no: string;
 
   @Column({ length: 255 })
   remarks: string;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   warehouse_id: number;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   location_id: number;
 
-  @Column({nullable:true})
+  @Column({ nullable: true })
   service_provider_id: number;
 
   @Column({ nullable: true })
   access_key_id: number;
+
+  @Column({ nullable: true })
+  status_id: number;
 
   @Column({ type: "date", nullable: true })
   logs_date: Date;
@@ -94,15 +98,14 @@ export class ActualLogsDetail {
 
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
   break_hours: number;
-  
+
   @Column({
     type: "tinyint",
     nullable: true,
-    comment:
-      "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
+    comment: "Shift type: 1 = Night Shift, 2 = First Shift, 3 = Second Shift",
   })
   shift_type: number;
-  
+
   @Column({ nullable: true })
   created_by: number;
 
@@ -178,7 +181,11 @@ export class ActualLogsDetail {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
-      @ManyToOne(() => AccessKey, { eager: false })
-      @JoinColumn({ name: "access_key_id" })
-      accessKey: AccessKey;
+  @ManyToOne(() => AccessKey, { eager: false })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
+
+  @ManyToOne(() => Staff, { eager: false })
+  @JoinColumn({ name: "staff_id" })
+  staff: Staff;
 }
