@@ -58,20 +58,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return {
         id: user.id,
         user_name: user.user_name,
-        role_id: user.role_id,
+        role_id: payload.role_id || user.role_id,
         status_id: user.status_id,
         role: user.role,
         session_id: session.id,
-        current_access_key: payload.current_access_key,
+        current_access_key:
+          payload.current_access_key || user.current_access_key,
       };
     }
     return {
       id: user.id,
       user_name: user.user_name,
-      role_id: user.role_id,
+      role_id: payload.role_id || user.role_id,
       status_id: user.status_id,
       role: user.role,
-      current_access_key: payload.current_access_key,
+      current_access_key: payload.current_access_key || user.current_access_key,
     };
   }
 }
