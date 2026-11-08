@@ -39,6 +39,9 @@ export class DashboardController {
         .filter((id) => !isNaN(id));
     }
     const user = req?.user || {};
+    const effectiveAccessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : user.current_access_key;
     return this.service.generateTransactionReport({
       location_ids: locationIdsArr,
       trans_date,
@@ -46,7 +49,7 @@ export class DashboardController {
       status_id: status_id ? Number(status_id) : undefined,
       user_id: user.id,
       role_id: user.role_id,
-      current_access_key: user.current_access_key,
+      current_access_key: effectiveAccessKeyId,
     });
   }
 
@@ -72,7 +75,9 @@ export class DashboardController {
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
-    const accessKeyId = req.user.current_access_key;
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user.current_access_key;
     const warehouseRemStatusId: number[] = store_status_ids
       ? store_status_ids.split(",").map((id) => Number(id.trim()))
       : [8];
