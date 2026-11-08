@@ -5,7 +5,13 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, MoreThanOrEqual, In, DataSource, QueryRunner } from "typeorm";
+import {
+  Repository,
+  MoreThanOrEqual,
+  In,
+  DataSource,
+  QueryRunner,
+} from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "../../../entities/User";
 import { Role } from "../../../entities/Role";
@@ -349,7 +355,8 @@ export class UsersService {
         id: row.id,
         user_name: row.user_name,
         emp_number: row.emp_number,
-        full_name: `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ""}`.trim(),
+        full_name:
+          `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ""}`.trim(),
         role_name: row.role_name || "",
       }));
     } catch (error) {
@@ -1133,7 +1140,9 @@ export class UsersService {
       if (foundAks.length !== akIds.length) {
         const foundSet = new Set(foundAks.map((k) => k.id));
         const missing = akIds.find((k) => !foundSet.has(k));
-        throw new BadRequestException(`Access key with ID ${missing} not found`);
+        throw new BadRequestException(
+          `Access key with ID ${missing} not found`,
+        );
       }
 
       const allModuleIds = Array.from(
@@ -1205,9 +1214,7 @@ export class UsersService {
           where: { email },
         });
         if (existingEmail && existingEmail.id !== id) {
-          throw new BadRequestException(
-            "User with this email already exists.",
-          );
+          throw new BadRequestException("User with this email already exists.");
         }
       }
       userToUpdate.email = email;
@@ -1313,12 +1320,9 @@ export class UsersService {
           queryRunner,
         );
 
-        const activeLocations = await queryRunner.manager.count(
-          UserLocations,
-          {
-            where: { user_id: id, status_id: 1 },
-          },
-        );
+        const activeLocations = await queryRunner.manager.count(UserLocations, {
+          where: { user_id: id, status_id: 1 },
+        });
         locationsMessage = ` Updated/created ${activeLocations} location(s).`;
       } else if (
         shouldUpdatePermissions &&
@@ -1341,12 +1345,9 @@ export class UsersService {
           queryRunner,
         );
 
-        const activeLocations = await queryRunner.manager.count(
-          UserLocations,
-          {
-            where: { user_id: id, status_id: 1 },
-          },
-        );
+        const activeLocations = await queryRunner.manager.count(UserLocations, {
+          where: { user_id: id, status_id: 1 },
+        });
         locationsMessage = ` Updated/created ${activeLocations} location(s).`;
       }
 
@@ -1361,7 +1362,9 @@ export class UsersService {
       ) {
         throw error;
       }
-      throw new Error(`Failed to update user with ID ${id}: ${this.getErrorMessage(error)}`);
+      throw new Error(
+        `Failed to update user with ID ${id}: ${this.getErrorMessage(error)}`,
+      );
     } finally {
       await queryRunner.release();
     }
@@ -1379,7 +1382,10 @@ export class UsersService {
         updateUserDto.updated_by,
       );
     } catch (auditError) {
-      logger.warn(`Audit trail creation skipped or failed for user ID ${id}:`, auditError);
+      logger.warn(
+        `Audit trail creation skipped or failed for user ID ${id}:`,
+        auditError,
+      );
     }
 
     // Fetch updated user with relations
@@ -1854,9 +1860,14 @@ export class UsersService {
         ],
       });
 
+      let whereUserLocations: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserLocations.access_key_id = user.current_access_key;
+        whereUserLocations.role_id = user.role_id;
+      }
       // Get user locations for this user (all locations regardless of role for now)
       const userLocations = await this.userLocationsRepository.find({
-        where: { user_id: user.id, status_id: 1 },
+        where: whereUserLocations,
         relations: ["location", "status"],
       });
 
@@ -2428,8 +2439,12 @@ export class UsersService {
         const isOverwrite =
           rawOverwrite === 1 ||
           rawOverwrite === "1" ||
-          String(rawOverwrite || "").trim().toLowerCase() === "true" ||
-          String(rawOverwrite || "").trim().toLowerCase() === "yes";
+          String(rawOverwrite || "")
+            .trim()
+            .toLowerCase() === "true" ||
+          String(rawOverwrite || "")
+            .trim()
+            .toLowerCase() === "yes";
 
         // Check if Location(s) column has values and build user_location_presets per access key
         let userLocationPresets: any[] = [];
@@ -2543,10 +2558,12 @@ export class UsersService {
 
         if (existingUser) {
           // Query existing active user permissions to determine currently assigned roles & access keys
-          const existingPermissions = await this.userPermissionsRepository.find({
-            where: { user_id: existingUser.id, status_id: 1 },
-            select: ["role_id", "access_key_id"],
-          });
+          const existingPermissions = await this.userPermissionsRepository.find(
+            {
+              where: { user_id: existingUser.id, status_id: 1 },
+              select: ["role_id", "access_key_id"],
+            },
+          );
           const existingRoleIds = Array.from(
             new Set(
               existingPermissions
@@ -2641,8 +2658,7 @@ export class UsersService {
               updated_by: created_by,
               user_reset:
                 formattedRow["User Reset"] ?? existingUser.user_reset ?? false,
-              theme_id:
-                formattedRow["Theme ID"] || existingUser.theme_id || 1,
+              theme_id: formattedRow["Theme ID"] || existingUser.theme_id || 1,
               access_key_id: mergedAccessKeyIds,
               user_permission_presets: allRoleActionPresets,
               user_location_presets: userLocationPresets,
