@@ -51,7 +51,10 @@ export class LocationsService {
           );
       }
       const where: any = {};
-      if (allowedLocationIds && allowedLocationIds.length > 0) {
+      if (allowedLocationIds !== undefined) {
+        if (allowedLocationIds.length === 0) {
+          return [];
+        }
         where.id = In(allowedLocationIds);
       }
       const locations = await this.locationsRepository.find({

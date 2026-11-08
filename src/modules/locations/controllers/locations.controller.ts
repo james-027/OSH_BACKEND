@@ -29,7 +29,9 @@ export class LocationsController {
   async findAll(@Request() req) {
     const userId = req.user?.id;
     const roleId = req.user?.role_id;
-    const accessKeyId = req.user?.current_access_key;
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
     return this.locationsService.findAll(userId, roleId, accessKeyId);
   }
 
