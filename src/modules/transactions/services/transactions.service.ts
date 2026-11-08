@@ -55,6 +55,7 @@ export class TransactionsService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           user_id,
           role_id,
+          current_access_key,
         );
     }
     const where: any = {};
@@ -898,6 +899,7 @@ export class TransactionsService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           user_id,
           role_id,
+          access_key_id,
         );
     }
     const filteredLocationIds = allowedLocationIds
@@ -1145,6 +1147,7 @@ export class TransactionsService {
           warehousesWithNoAssignment,
           created_by,
           trans_date,
+          access_key_id,
         ).catch((err) => {
           logger.error(
             `Background email sending failed for location ${location_name}:`,
@@ -1342,6 +1345,7 @@ export class TransactionsService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           filters.user_id,
           filters.role_id,
+          filters.current_access_key,
         );
     }
 
@@ -1464,8 +1468,16 @@ export class TransactionsService {
     }>,
     createdBy: number,
     periodDate: string, // YYYY-MM-DD format (e.g., "2026-05-01")
+    accessKeyId?: number,
   ): Promise<void> {
     try {
+      const queryParams: any[] = [locationId, PERSONNEL_NOTIFICATION_ROLE_IDS];
+      let accessKeyFilter = "";
+      if (accessKeyId) {
+        accessKeyFilter = " AND ul.access_key_id = ?";
+        queryParams.push(accessKeyId);
+      }
+
       // Query active users in this location with specified role_ids
       const recipients = await this.dataSource.query(
         `
@@ -1474,11 +1486,12 @@ export class TransactionsService {
         INNER JOIN user_locations ul ON u.id = ul.user_id
         WHERE ul.location_id = ?
           AND ul.role_id IN (?)
+          ${accessKeyFilter}
           AND u.status_id = 1
           AND ul.status_id = 1
         ORDER BY u.first_name ASC
       `,
-        [locationId, PERSONNEL_NOTIFICATION_ROLE_IDS],
+        queryParams,
       );
 
       if (!recipients || recipients.length === 0) {

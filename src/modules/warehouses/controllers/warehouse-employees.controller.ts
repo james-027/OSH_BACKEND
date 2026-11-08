@@ -219,11 +219,13 @@ export class WarehouseEmployeesController {
 
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
     // Get allowed location_ids for this user/role
     const allowedLocationIds =
       await this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
     // Preload all warehouses, employees (with their locations), and statuses for fast lookup
@@ -464,7 +466,6 @@ export class WarehouseEmployeesController {
       }
     }
     // const userId = req.user.id;
-    const accessKeyId = req.user.current_access_key;
     const result = await this.warehouseEmployeesService.bulkUpload(
       records,
       userId,

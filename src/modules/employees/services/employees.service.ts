@@ -44,6 +44,7 @@ export class EmployeesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          accessKeyId,
         );
     }
     // Build where as a single object so multiple conditions are AND'd (not OR'd)
@@ -162,6 +163,7 @@ export class EmployeesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          createEmployeeDto.access_key_id,
         );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
@@ -234,6 +236,7 @@ export class EmployeesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          updateEmployeeDto.access_key_id,
         );
       for (const locId of location_ids) {
         if (!allowedLocationIds.includes(locId)) {
@@ -375,6 +378,7 @@ export class EmployeesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          accessKeyId,
         );
     }
     // --- Preprocess for batch duplicate checks ---

@@ -84,6 +84,7 @@ export class StaffWarehousesService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accesskeyId,
           );
         where.location_id = In(allowedLocationIds);
       }

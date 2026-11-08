@@ -134,6 +134,7 @@ export class WarehousesController {
       await this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
     const excelValidationConfig: ExcelValidationConfig = {

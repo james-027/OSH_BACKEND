@@ -64,7 +64,11 @@ export class LocationHurdlesService {
     userId?: number,
     roleId?: number,
   ): Promise<any[]> {
-    const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+    const allowedLocationIds = await this.getAllowedLocationIds(
+      userId,
+      roleId,
+      accessKeyId,
+    );
     const query = this.locationHurdlesRepository
       .createQueryBuilder("lh")
       .innerJoinAndSelect("lh.location", "location")
@@ -657,6 +661,7 @@ export class LocationHurdlesService {
   async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -664,6 +669,7 @@ export class LocationHurdlesService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
     );
   }
 

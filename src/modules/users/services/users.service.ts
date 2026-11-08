@@ -2843,10 +2843,17 @@ export class UsersService {
     }
   }
 
-  async getUserLocationsByLocation(location_id: number): Promise<number[]> {
+  async getUserLocationsByLocation(
+    location_id: number,
+    access_key_id?: number,
+  ): Promise<number[]> {
     try {
+      const where: any = { location_id, status_id: 1 };
+      if (access_key_id) {
+        where.access_key_id = access_key_id;
+      }
       const userLocations = await this.userLocationsRepository.find({
-        where: { location_id, status_id: 1 },
+        where,
       });
       const ids = userLocations
         .filter((ul) => ul.user_id !== null)

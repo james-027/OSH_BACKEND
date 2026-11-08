@@ -364,8 +364,15 @@ export class UsersController {
   @Get("/user-locations-by-location/:location_id")
   async getUserLocationsByLocation(
     @Param("location_id", ParseIntPipe) location_id: number,
+    @Request() req,
   ) {
-    return this.usersService.getUserLocationsByLocation(location_id);
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
+    return this.usersService.getUserLocationsByLocation(
+      location_id,
+      accessKeyId,
+    );
   }
 
   @Get(":user_id/:access_key_id/permissions-roles-systems")

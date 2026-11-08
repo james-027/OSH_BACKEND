@@ -38,7 +38,7 @@ export class LocationsService {
   //   });
   // }
 
-  async findAll(userId?: number, roleId?: number): Promise<any[]> {
+  async findAll(userId?: number, roleId?: number, accessKeyId?: number): Promise<any[]> {
     try {
       let allowedLocationIds: number[] | undefined = undefined;
 
@@ -47,6 +47,7 @@ export class LocationsService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
       }
       const where: any = {};

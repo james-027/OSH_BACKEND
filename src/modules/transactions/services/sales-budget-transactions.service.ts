@@ -5,6 +5,7 @@ import { SalesBudgetTransaction } from "../../../entities/SalesBudgetTransaction
 import { CreateSalesBudgetTransactionDto } from "../dto/CreateSalesBudgetTransactionDto";
 import { UpdateSalesBudgetTransactionDto } from "../dto/UpdateSalesBudgetTransactionDto";
 import { UserLocationsService } from "../../users/services/user-locations.service";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import * as XLSX from "xlsx";
 import { Warehouse } from "../../../entities/Warehouse";
 import { UserLocations } from "../../../entities/UserLocations";
@@ -15,6 +16,7 @@ export class SalesBudgetTransactionsService {
     @InjectRepository(SalesBudgetTransaction)
     private salesBudgetTransactionsRepository: Repository<SalesBudgetTransaction>,
     private userLocationsService: UserLocationsService,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   async findAll(
@@ -26,13 +28,12 @@ export class SalesBudgetTransactionsService {
     // Get allowed location IDs for user
     let allowedLocationIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.userLocationsService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
     }
     // Query builder: join warehouses, filter by access_key_id and allowed locations
     const qb = this.salesBudgetTransactionsRepository
@@ -254,12 +255,12 @@ export class SalesBudgetTransactionsService {
     // 4. Get allowed location_ids for user
     let allowedLocationIds: number[] = [];
     if (user.id && user.role_id) {
-      const userLocs = await this.salesBudgetTransactionsRepository.manager
-        .getRepository(UserLocations)
-        .find({
-          where: { user_id: user.id, role_id: user.role_id, status_id: 1 },
-        });
-      allowedLocationIds = userLocs.map((ul) => ul.location_id);
+      allowedLocationIds =
+        await this.commonUtilitiesService.getUserAllowedLocationIds(
+          user.id,
+          user.role_id,
+          user.current_access_key,
+        );
     }
     // Prepare all unique keys from input for batch DB query
     const uniqueKeys = rows.map((row) => ({

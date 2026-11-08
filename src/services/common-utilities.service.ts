@@ -42,12 +42,12 @@ export class CommonUtilitiesService {
       if (accessKeyId) {
         whereClause.access_key_id = accessKeyId;
       }
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: whereClause,
-        select: ["location_id"],
-      });
+      const userLocations = await this.dataSource
+        .getRepository(UserLocations)
+        .find({
+          where: whereClause,
+          select: ["location_id"],
+        });
       return userLocations.map((ul) => ul.location_id);
     } catch (error) {
       console.error("Error fetching user location IDs:", error);
@@ -94,6 +94,7 @@ export class CommonUtilitiesService {
     userIds: number[],
     targetLocationIds: number[],
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userIds || userIds.length === 0 || !targetLocationIds || targetLocationIds.length === 0) {
       return [];
@@ -110,6 +111,9 @@ export class CommonUtilitiesService {
     if (roleId) {
       query.andWhere("ul.role_id = :roleId", { roleId });
     }
+    if (accessKeyId) {
+      query.andWhere("ul.access_key_id = :accessKeyId", { accessKeyId });
+    }
 
     const rows = await query.getRawMany();
     return rows.map((r) => Number(r.userId));
@@ -122,6 +126,7 @@ export class CommonUtilitiesService {
   async getUsersAllowedLocationIdsBatch(
     userIds: number[],
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<Map<number, number[]>> {
     const result = new Map<number, number[]>();
     if (!userIds || userIds.length === 0) return result;
@@ -135,6 +140,9 @@ export class CommonUtilitiesService {
 
     if (roleId) {
       query.andWhere("ul.role_id = :roleId", { roleId });
+    }
+    if (accessKeyId) {
+      query.andWhere("ul.access_key_id = :accessKeyId", { accessKeyId });
     }
 
     const rows = await query.getMany();

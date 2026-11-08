@@ -131,12 +131,14 @@ export class WarehouseBudgetHoursController {
     const json = normalizeKeysArray(rawRows);
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
 
     // Get allowed location_ids for this user/role
     const allowedLocationIds =
       await this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
     const excelValidationConfig: ExcelValidationConfig = {

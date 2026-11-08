@@ -223,6 +223,7 @@ export class NotificationsService {
             await this.commonUtilitiesService.getUserAllowedLocationIds(
               creator.id,
               creator.role_id,
+              resolvedAccessKeyId ?? undefined,
             );
         }
 
@@ -233,6 +234,8 @@ export class NotificationsService {
               await this.commonUtilitiesService.filterUsersByAllowedLocations(
                 Array.from(candidateRoleUserIds),
                 targetLocIds,
+                undefined,
+                resolvedAccessKeyId ?? undefined,
               );
             matchedUserIds.forEach((uid) => targetUserIds.add(uid));
           } else {

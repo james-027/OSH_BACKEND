@@ -101,6 +101,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.details = {
           location_id: In(allowedLocationIds),
@@ -431,6 +432,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }
@@ -497,6 +499,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }
@@ -606,6 +609,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
 
         if (where.location_id) {
@@ -669,6 +673,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
 
         if (!allowedLocationIds.length) {

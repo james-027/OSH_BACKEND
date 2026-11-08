@@ -129,6 +129,7 @@ export class WarehousesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          accessKeyId,
         );
       where.location_id = In(allowedLocationIds);
     }
@@ -163,6 +164,7 @@ export class WarehousesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          accessKeyId,
         );
       where.location_id = In(allowedLocationIds);
     }

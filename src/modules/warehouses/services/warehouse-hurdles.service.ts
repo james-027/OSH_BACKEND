@@ -61,7 +61,11 @@ export class WarehouseHurdlesService {
     roleId?: number,
     hurdleDate?: string,
   ): Promise<any[]> {
-    const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+    const allowedLocationIds = await this.getAllowedLocationIds(
+      userId,
+      roleId,
+      accessKeyId,
+    );
     const query = this.warehouseHurdlesRepository
       .createQueryBuilder("wh")
       .innerJoinAndSelect("wh.warehouse", "warehouse")
@@ -505,6 +509,7 @@ export class WarehouseHurdlesService {
   async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -512,6 +517,7 @@ export class WarehouseHurdlesService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
     );
   }
 

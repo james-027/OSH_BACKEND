@@ -123,6 +123,7 @@ export class StaffSchedulingService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.details = {
           location_id: In(allowedLocationIds),
@@ -189,6 +190,7 @@ export class StaffSchedulingService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }

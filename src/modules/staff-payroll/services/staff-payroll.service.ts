@@ -171,6 +171,7 @@ export class StaffPayrollService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
 
         where.details = {
@@ -3598,6 +3599,7 @@ export class StaffPayrollService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }

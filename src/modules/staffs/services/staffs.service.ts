@@ -122,6 +122,7 @@ export class StaffsService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }
@@ -2771,6 +2772,7 @@ export class StaffsService {
             await this.commonUtilitiesService.getUserAllowedLocationIds(
               userId,
               roleId,
+              accessKeyId,
             );
         }
 

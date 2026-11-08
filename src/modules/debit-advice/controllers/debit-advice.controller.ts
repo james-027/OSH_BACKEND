@@ -77,6 +77,7 @@ export class DebitAdviceController {
   ) {
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
 
     return this.debitAdviceService.GetbysearchAndPages(
       Number(page),
@@ -84,7 +85,8 @@ export class DebitAdviceController {
       search,
       statusId,
       userId,
-            roleId
+      roleId,
+      accessKeyId,
     );
   }
 

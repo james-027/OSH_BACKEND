@@ -69,6 +69,7 @@ export class StaffVendorSalariesService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.location_id = In(allowedLocationIds);
       }

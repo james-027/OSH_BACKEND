@@ -89,6 +89,7 @@ export class WarehouseRequirementsService {
   private async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -96,6 +97,7 @@ export class WarehouseRequirementsService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
     );
   }
 
@@ -943,6 +945,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       // Step 2: Build warehouse query conditions
@@ -1611,6 +1614,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
       // const allowedLocationIds = [1];
 
@@ -1751,6 +1755,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       // Step 2: Get warehouse list (minimal query, no nested relations)
@@ -1998,6 +2003,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       // Step 4: Determine final location IDs to use
@@ -2301,6 +2307,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       // Step 4: Determine final location IDs to use
@@ -2730,6 +2737,7 @@ export class WarehouseRequirementsService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       // Step 2: Parse location_ids if provided (comma-separated)

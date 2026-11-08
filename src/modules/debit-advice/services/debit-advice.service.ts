@@ -2098,6 +2098,7 @@ export class DebitAdviceService {
   private async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -2105,6 +2106,7 @@ export class DebitAdviceService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
     );
   }
 
@@ -2115,6 +2117,7 @@ export class DebitAdviceService {
     statusId: number | string,
     userId: number,
     roleId: number,
+    accessKeyId?: number,
   ) {
     try {
       const query = this.debitAdviceRepository.createQueryBuilder("da");
@@ -2122,6 +2125,7 @@ export class DebitAdviceService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       query

@@ -182,6 +182,7 @@ export class WarehouseEmployeesService {
         await this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
+          accessKeyId,
         );
     }
     const query = this.warehouseEmployeesRepository
@@ -977,6 +978,7 @@ export class WarehouseEmployeesService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
       }
 
