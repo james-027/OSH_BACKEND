@@ -333,6 +333,7 @@ export class UsersService {
             .select("ul.user_id")
             .from("user_locations", "ul")
             .where("ul.location_id IN (:...location_ids)", { location_ids })
+            .andWhere("ul.role_id IN (:...role_ids)", { role_ids })
             .andWhere("ul.status_id = :status_id", { status_id })
             .getQuery();
           return `up.user_id IN ${subQuery}`;
