@@ -142,8 +142,11 @@ export class WarehousesController {
         "STORE IFS": { format: "uppercase-trim" },
         "STORE CODE": { format: "uppercase-trim" },
         "STORE NAME": { format: "uppercase-trim" },
-        "LOCATION ID": { format: "number-trim" },
-        "SEGMENT ID": { format: "number-trim" },
+        LOCATION: { format: "uppercase-trim" },
+        SEGMENT: { format: "uppercase-trim" },
+        "START OPERATION DATE": { format: "trim" },
+        "START TIME": { format: "trim" },
+        "END TIME": { format: "trim" },
       },
       optionalFields: {
         ADDRESS: { format: "trim", nullable: true },
@@ -154,17 +157,36 @@ export class WarehousesController {
         "REM STATUS": { format: "uppercase-trim", nullable: true },
         "POS AVAILABILITY": { format: "uppercase-trim", nullable: true },
         ALLOWANCE: { format: "number-trim", nullable: true },
+        "END OPERATION DATE": { format: "trim", nullable: true },
       },
     };
 
     // Map Excel columns to DTOs using validateAndFormatExcelRow
     const records = json.map((row, idx) => {
-      // Support aliases (e.g., STORE BOS CODE -> STORE IFS, BRAND ID -> SEGMENT ID)
+      // Support aliases (e.g., STORE BOS CODE -> STORE IFS, BRAND -> SEGMENT, LOCATION NAME / ID -> LOCATION)
       if (!row["STORE IFS"] && row["STORE BOS CODE"]) {
         row["STORE IFS"] = row["STORE BOS CODE"];
       }
-      if (!row["SEGMENT ID"] && row["BRAND ID"]) {
-        row["SEGMENT ID"] = row["BRAND ID"];
+      if (!row["LOCATION"] && row["LOCATION NAME"]) {
+        row["LOCATION"] = row["LOCATION NAME"];
+      }
+      if (!row["LOCATION"] && row["LOCATION ID"]) {
+        row["LOCATION"] = row["LOCATION ID"];
+      }
+      if (!row["SEGMENT"] && row["SEGMENT NAME"]) {
+        row["SEGMENT"] = row["SEGMENT NAME"];
+      }
+      if (!row["SEGMENT"] && row["SEGMENT ID"]) {
+        row["SEGMENT"] = row["SEGMENT ID"];
+      }
+      if (!row["SEGMENT"] && row["BRAND"]) {
+        row["SEGMENT"] = row["BRAND"];
+      }
+      if (!row["SEGMENT"] && row["BRAND NAME"]) {
+        row["SEGMENT"] = row["BRAND NAME"];
+      }
+      if (!row["SEGMENT"] && row["BRAND ID"]) {
+        row["SEGMENT"] = row["BRAND ID"];
       }
       if (!row["WAREHOUSE TYPE"] && row["STORE TYPE"]) {
         row["WAREHOUSE TYPE"] = row["STORE TYPE"];
@@ -178,6 +200,36 @@ export class WarehousesController {
       if (!row["POS AVAILABILITY"] && row["POS AVAILABILITY ID"]) {
         row["POS AVAILABILITY"] = row["POS AVAILABILITY ID"];
       }
+      if (!row["START OPERATION DATE"] && row["START OPERATION"]) {
+        row["START OPERATION DATE"] = row["START OPERATION"];
+      }
+      if (!row["START OPERATION DATE"] && row["START_OPERATION"]) {
+        row["START OPERATION DATE"] = row["START_OPERATION"];
+      }
+      if (!row["END OPERATION DATE"] && row["END OPERATION"]) {
+        row["END OPERATION DATE"] = row["END OPERATION"];
+      }
+      if (!row["END OPERATION DATE"] && row["END_OPERATION"]) {
+        row["END OPERATION DATE"] = row["END_OPERATION"];
+      }
+      if (!row["START TIME"] && row["STARTING TIME"]) {
+        row["START TIME"] = row["STARTING TIME"];
+      }
+      if (!row["START TIME"] && row["START_TIME"]) {
+        row["START TIME"] = row["START_TIME"];
+      }
+      if (!row["START TIME"] && row["STARTING_TIME"]) {
+        row["START TIME"] = row["STARTING_TIME"];
+      }
+      if (!row["END TIME"] && row["ENDING TIME"]) {
+        row["END TIME"] = row["ENDING TIME"];
+      }
+      if (!row["END TIME"] && row["END_TIME"]) {
+        row["END TIME"] = row["END_TIME"];
+      }
+      if (!row["END TIME"] && row["ENDING_TIME"]) {
+        row["END TIME"] = row["ENDING_TIME"];
+      }
 
       const formattedRow = validateAndFormatExcelRow(
         row,
@@ -188,8 +240,8 @@ export class WarehousesController {
         warehouse_ifs: formattedRow["STORE IFS"],
         warehouse_code: formattedRow["STORE CODE"],
         warehouse_name: formattedRow["STORE NAME"],
-        location_id: Number(formattedRow["LOCATION ID"]),
-        segment_id: Number(formattedRow["SEGMENT ID"]),
+        location: formattedRow["LOCATION"],
+        segment: formattedRow["SEGMENT"],
         address: formattedRow["ADDRESS"] || "",
         latitude:
           formattedRow["LATITUDE"] !== null &&
@@ -202,12 +254,16 @@ export class WarehousesController {
             ? Number(formattedRow["LONGITUDE"])
             : null,
         warehouse_type: formattedRow["WAREHOUSE TYPE"] || null,
-        status: formattedRow["STATUS"] || null,
+        status: formattedRow["STATUS"] || STATUS_IDS.ACTIVE, // Default to ACTIVE if not provided
         rem_status: formattedRow["REM STATUS"] || null,
         pos_availability: formattedRow["POS AVAILABILITY"] || null,
         allowance: formattedRow["ALLOWANCE"]
           ? Number(formattedRow["ALLOWANCE"])
           : 0,
+        start_operation: formattedRow["START OPERATION DATE"] || null,
+        end_operation: formattedRow["END OPERATION DATE"] || null,
+        starting_time: formattedRow["START TIME"] || null,
+        ending_time: formattedRow["END TIME"] || null,
         __rowNum__: idx + 2,
       };
     });

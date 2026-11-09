@@ -9,6 +9,8 @@ import { Warehouse } from "../../../entities/Warehouse";
 import { WarehouseType } from "../../../entities/WarehouseType";
 import { PosAvailability } from "../../../entities/PosAvailability";
 import { Status } from "../../../entities/Status";
+import { Location } from "../../../entities/Location";
+import { Segment } from "../../../entities/Segment";
 import { UsersService } from "../../users/services/users.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
@@ -24,6 +26,7 @@ import { CacheInvalidationService } from "../../cache/services/cache-invalidatio
 import { ActionLogsService } from "../../actions/services/action-logs.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
+import { parseExcelDateToYMD, parseExcelTimeToHMS } from "src/utils/date.utils";
 
 @Injectable()
 export class WarehousesService {
@@ -48,6 +51,10 @@ export class WarehousesService {
     private posAvailabilityRepository: Repository<PosAvailability>,
     @InjectRepository(Status)
     private statusRepository: Repository<Status>,
+    @InjectRepository(Location)
+    private locationsRepository: Repository<Location>,
+    @InjectRepository(Segment)
+    private segmentsRepository: Repository<Segment>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -578,12 +585,19 @@ export class WarehousesService {
     accessKeyId?: number,
     filename?: string,
   ): Promise<any> {
-    const [existingWarehouses, warehouseTypes, posAvailabilities] =
-      await Promise.all([
-        this.warehousesRepository.find(),
-        this.warehouseTypesRepository.find(),
-        this.posAvailabilityRepository.find(),
-      ]);
+    const [
+      existingWarehouses,
+      warehouseTypes,
+      posAvailabilities,
+      locations,
+      segments,
+    ] = await Promise.all([
+      this.warehousesRepository.find(),
+      this.warehouseTypesRepository.find(),
+      this.posAvailabilityRepository.find(),
+      this.locationsRepository.find(),
+      this.segmentsRepository.find(),
+    ]);
 
     const warehouseByIfs = new Map(
       existingWarehouses.map((w) => [w.warehouse_ifs?.toUpperCase(), w]),
@@ -594,6 +608,33 @@ export class WarehousesService {
     const warehouseByName = new Map(
       existingWarehouses.map((w) => [w.warehouse_name?.toUpperCase(), w]),
     );
+
+    // Map Location by name, code, abbr, and id
+    const locationByNameOrCode = new Map<string, Location>();
+    for (const loc of locations) {
+      if (loc.location_name) {
+        locationByNameOrCode.set(loc.location_name.trim().toUpperCase(), loc);
+      }
+      if (loc.location_code) {
+        locationByNameOrCode.set(loc.location_code.trim().toUpperCase(), loc);
+      }
+      if (loc.location_abbr) {
+        locationByNameOrCode.set(loc.location_abbr.trim().toUpperCase(), loc);
+      }
+      locationByNameOrCode.set(String(loc.id), loc);
+    }
+
+    // Map Segment by name, abbr, and id
+    const segmentByNameOrAbbr = new Map<string, Segment>();
+    for (const seg of segments) {
+      if (seg.segment_name) {
+        segmentByNameOrAbbr.set(seg.segment_name.trim().toUpperCase(), seg);
+      }
+      if (seg.segment_abbr) {
+        segmentByNameOrAbbr.set(seg.segment_abbr.trim().toUpperCase(), seg);
+      }
+      segmentByNameOrAbbr.set(String(seg.id), seg);
+    }
 
     // Map WarehouseType by name, abbr, and id
     const typeByNameOrAbbr = new Map<string, WarehouseType>();
@@ -651,18 +692,80 @@ export class WarehousesService {
         warehouseByCode.get(codeKey) ||
         warehouseByName.get(nameKey);
 
-      const targetLocationId = Number(row.location_id ?? existing?.location_id);
+      // Validate and resolve Location from text (or id/code/abbr)
+      let resolvedLocationId: number | null = null;
+      const rawLocation = row.location ?? row.location_id;
+      if (
+        rawLocation !== null &&
+        rawLocation !== undefined &&
+        String(rawLocation).trim() !== ""
+      ) {
+        const key = String(rawLocation).trim().toUpperCase();
+        const matched = locationByNameOrCode.get(key);
+        if (!matched) {
+          const allowedLocations = Array.from(
+            new Set(locations.map((l) => l.location_name || l.location_code)),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid LOCATION: '${rawLocation}'. Allowed values: ${allowedLocations.slice(0, 20).join(", ")}${allowedLocations.length > 20 ? "..." : ""}`,
+          });
+          continue;
+        }
+        resolvedLocationId = matched.id;
+      } else if (existing) {
+        resolvedLocationId = existing.location_id;
+      } else {
+        errors.push({
+          row: rowNum,
+          error: "LOCATION is required for new store records.",
+        });
+        continue;
+      }
 
       // Location permission check
       if (
         allowedLocationIds &&
         allowedLocationIds.length > 0 &&
-        targetLocationId &&
-        !allowedLocationIds.includes(targetLocationId)
+        resolvedLocationId &&
+        !allowedLocationIds.includes(resolvedLocationId)
       ) {
+        const matchedLoc = locations.find((l) => l.id === resolvedLocationId);
+        const locName = matchedLoc ? matchedLoc.location_name : resolvedLocationId;
         errors.push({
           row: rowNum,
-          error: `You do not have permission for Location ID ${targetLocationId} (${row.warehouse_ifs || row.warehouse_name}), based on your allowed location.`,
+          error: `You do not have permission for Location '${locName}' (${row.warehouse_ifs || row.warehouse_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+
+      // Validate and resolve Segment from text (or id/name/abbr)
+      let resolvedSegmentId: number | null = null;
+      const rawSegment = row.segment ?? row.segment_id ?? row.brand_id;
+      if (
+        rawSegment !== null &&
+        rawSegment !== undefined &&
+        String(rawSegment).trim() !== ""
+      ) {
+        const key = String(rawSegment).trim().toUpperCase();
+        const matched = segmentByNameOrAbbr.get(key);
+        if (!matched) {
+          const allowedSegments = Array.from(
+            new Set(segments.map((s) => s.segment_abbr || s.segment_name)),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid SEGMENT: '${rawSegment}'. Allowed values: ${allowedSegments.join(", ")}`,
+          });
+          continue;
+        }
+        resolvedSegmentId = matched.id;
+      } else if (existing) {
+        resolvedSegmentId = existing.segment_id;
+      } else {
+        errors.push({
+          row: rowNum,
+          error: "SEGMENT is required for new store records.",
         });
         continue;
       }
@@ -775,6 +878,86 @@ export class WarehousesService {
           ? Number(row.longitude)
           : null;
 
+      // Parse and validate start_operation and end_operation using parseExcelDateToYMD
+      let resolvedStartOperation: string | null = null;
+      if (
+        row.start_operation !== null &&
+        row.start_operation !== undefined &&
+        String(row.start_operation).trim() !== ""
+      ) {
+        try {
+          resolvedStartOperation = parseExcelDateToYMD(row.start_operation);
+        } catch (err) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid START OPERATION DATE: '${row.start_operation}'.`,
+          });
+          continue;
+        }
+      }
+
+      let resolvedEndOperation: string | null = null;
+      if (
+        row.end_operation !== null &&
+        row.end_operation !== undefined &&
+        String(row.end_operation).trim() !== ""
+      ) {
+        try {
+          resolvedEndOperation = parseExcelDateToYMD(row.end_operation);
+        } catch (err) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid END OPERATION DATE: '${row.end_operation}'.`,
+          });
+          continue;
+        }
+      }
+
+      if (
+        resolvedStartOperation &&
+        resolvedEndOperation &&
+        resolvedStartOperation > resolvedEndOperation
+      ) {
+        errors.push({
+          row: rowNum,
+          error: `START OPERATION DATE (${resolvedStartOperation}) cannot be later than END OPERATION DATE (${resolvedEndOperation}).`,
+        });
+        continue;
+      }
+
+      // Parse and validate starting_time and ending_time using parseExcelTimeToHMS
+      let resolvedStartingTime: string | null = null;
+      if (
+        row.starting_time !== null &&
+        row.starting_time !== undefined &&
+        String(row.starting_time).trim() !== ""
+      ) {
+        resolvedStartingTime = parseExcelTimeToHMS(row.starting_time);
+        if (!resolvedStartingTime) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid START TIME: '${row.starting_time}'. Expected format: HH:MM or HH:MM:SS.`,
+          });
+          continue;
+        }
+      }
+
+      let resolvedEndingTime: string | null = null;
+      if (
+        row.ending_time !== null &&
+        row.ending_time !== undefined &&
+        String(row.ending_time).trim() !== ""
+      ) {
+        resolvedEndingTime = parseExcelTimeToHMS(row.ending_time);
+        if (!resolvedEndingTime) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid END TIME: '${row.ending_time}'. Expected format: HH:MM or HH:MM:SS.`,
+          });
+          continue;
+        }
+      }
+
       try {
         let action: "inserted" | "updated";
         let saved: Warehouse;
@@ -783,8 +966,8 @@ export class WarehousesService {
           if (row.warehouse_name) existing.warehouse_name = row.warehouse_name;
           if (row.warehouse_ifs) existing.warehouse_ifs = row.warehouse_ifs;
           if (row.warehouse_code) existing.warehouse_code = row.warehouse_code;
-          if (row.location_id) existing.location_id = Number(row.location_id);
-          if (row.segment_id) existing.segment_id = Number(row.segment_id);
+          existing.location_id = resolvedLocationId;
+          existing.segment_id = resolvedSegmentId;
           existing.warehouse_type_id = resolvedWarehouseTypeId;
           if (row.address !== undefined && row.address !== null) {
             existing.address = String(row.address);
@@ -805,6 +988,18 @@ export class WarehousesService {
           ) {
             existing.allowance = Number(row.allowance);
           }
+          if (resolvedStartOperation !== null) {
+            existing.start_operation = resolvedStartOperation as any;
+          }
+          if (resolvedEndOperation !== null) {
+            existing.end_operation = resolvedEndOperation as any;
+          }
+          if (resolvedStartingTime !== null) {
+            existing.starting_time = resolvedStartingTime;
+          }
+          if (resolvedEndingTime !== null) {
+            existing.ending_time = resolvedEndingTime;
+          }
           existing.updated_by = userId;
 
           saved = await this.warehousesRepository.save(existing);
@@ -817,8 +1012,8 @@ export class WarehousesService {
             warehouse_ifs: row.warehouse_ifs,
             warehouse_code: row.warehouse_code,
             warehouse_type_id: resolvedWarehouseTypeId,
-            location_id: Number(row.location_id),
-            segment_id: Number(row.segment_id),
+            location_id: resolvedLocationId,
+            segment_id: resolvedSegmentId,
             address: row.address ? String(row.address) : "",
             latitude: latVal !== null && !isNaN(latVal) ? latVal : null,
             longitude: longVal !== null && !isNaN(longVal) ? longVal : null,
@@ -829,6 +1024,10 @@ export class WarehousesService {
               row.allowance && !isNaN(Number(row.allowance))
                 ? Number(row.allowance)
                 : 0,
+            start_operation: (resolvedStartOperation as any) || null,
+            end_operation: (resolvedEndOperation as any) || null,
+            starting_time: resolvedStartingTime || null,
+            ending_time: resolvedEndingTime || null,
             access_key_id: accessKeyId || 1,
             created_by: userId,
             updated_by: userId,
@@ -851,6 +1050,12 @@ export class WarehousesService {
           }
         }
 
+        const matchedLocation = locations.find(
+          (l) => l.id === saved.location_id,
+        );
+        const matchedSegment = segments.find(
+          (s) => s.id === saved.segment_id,
+        );
         const matchedPosType = posAvailabilities.find(
           (p) => p.id === saved.pos_availability_id,
         );
@@ -864,12 +1069,19 @@ export class WarehousesService {
           warehouse_code: saved.warehouse_code,
           warehouse_name: saved.warehouse_name,
           location_id: saved.location_id,
+          location_name: matchedLocation?.location_name || null,
           segment_id: saved.segment_id,
+          segment_name: matchedSegment?.segment_name || null,
+          segment_abbr: matchedSegment?.segment_abbr || null,
           warehouse_type_id: saved.warehouse_type_id,
           warehouse_type_name:
             matchedWarehouseType?.warehouse_type_name || null,
           pos_availability_id: saved.pos_availability_id,
           pos_availability_name: matchedPosType?.pos_availability || null,
+          start_operation: saved.start_operation,
+          end_operation: saved.end_operation,
+          starting_time: saved.starting_time,
+          ending_time: saved.ending_time,
           latitude:
             saved.latitude !== null && saved.latitude !== undefined
               ? Number(saved.latitude)

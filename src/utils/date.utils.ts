@@ -495,3 +495,96 @@ export function parseExcelDateToYMD(
   // Kung hindi talaga ma-parse, mag-throw ng error
   throw new Error(`Invalid date format received from Excel: "${value}"`);
 }
+
+/**
+ * Safely converts string time (e.g. "08:00", "8:00 AM", "17:30:00"), JS Date, or Excel serial fraction into HH:MM:SS.
+ */
+export function parseExcelTimeToHMS(value: any): string | null {
+  if (value === null || value === undefined) return null;
+
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    const h = String(value.getHours()).padStart(2, "0");
+    const m = String(value.getMinutes()).padStart(2, "0");
+    const s = String(value.getSeconds()).padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  }
+
+  const strValue = String(value).trim();
+  if (strValue === "") return null;
+
+  // Number / Excel serial time (e.g. 0.375 for 09:00:00)
+  if (
+    typeof value === "number" ||
+    (/^\d+(\.\d+)?$/.test(strValue) && !strValue.includes(":"))
+  ) {
+    const num = Number(value);
+    if (!isNaN(num) && num >= 0) {
+      try {
+        const XLSX = require("xlsx");
+        const parsed = XLSX.SSF.parse_date_code(num);
+        if (parsed) {
+          const h = String(parsed.H || 0).padStart(2, "0");
+          const m = String(parsed.M || 0).padStart(2, "0");
+          const s = String(parsed.S || 0).padStart(2, "0");
+          return `${h}:${m}:${s}`;
+        }
+      } catch (error) {
+        // Fallback
+      }
+    }
+  }
+
+  // String match: 12-hour or 24-hour (e.g., "8:00 AM", "08:30:00", "17:00")
+  const timeMatch = strValue.match(
+    /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i,
+  );
+  if (timeMatch) {
+    let hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const seconds = Number(timeMatch[3] || 0);
+    const meridiem = timeMatch[4]?.toUpperCase();
+
+    if (meridiem) {
+      if (meridiem === "AM" && hours === 12) {
+        hours = 0;
+      } else if (meridiem === "PM" && hours < 12) {
+        hours += 12;
+      }
+    }
+
+    if (
+      hours >= 0 &&
+      hours < 24 &&
+      minutes >= 0 &&
+      minutes < 60 &&
+      seconds >= 0 &&
+      seconds < 60
+    ) {
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+  }
+
+  const dayjs = require("dayjs");
+  const customParseFormat = require("dayjs/plugin/customParseFormat");
+  dayjs.extend(customParseFormat);
+
+  const timeFormats = [
+    "HH:mm:ss",
+    "HH:mm",
+    "H:mm:ss",
+    "H:mm",
+    "hh:mm:ss A",
+    "hh:mm A",
+    "h:mm:ss A",
+    "h:mm A",
+  ];
+  for (const fmt of timeFormats) {
+    const parsed = dayjs(strValue, fmt, true);
+    if (parsed.isValid()) {
+      return parsed.format("HH:mm:ss");
+    }
+  }
+
+  return null;
+}
