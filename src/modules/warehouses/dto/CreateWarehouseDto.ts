@@ -100,4 +100,3 @@ export class CreateWarehouseDto {
   @IsInt()
   access_key_id?: number;
 }
-
