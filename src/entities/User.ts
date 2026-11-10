@@ -68,6 +68,9 @@ export class User {
   @Column({ type: "varchar", nullable: true })
   profile_pic_url!: string | null;
 
+  @Column({ type: "varchar", nullable: true })
+  signature_url!: string | null;
+
   @CreateDateColumn()
   created_at!: Date;
 

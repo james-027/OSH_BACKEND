@@ -177,6 +177,62 @@ export class UsersController {
     return { profile_pic_url: url };
   }
 
+  @Post(":id/signature")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/signatures",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: imageFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.IMAGE_5MB },
+    }),
+  )
+  async uploadSignature(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: FileType,
+    @Request() req,
+  ) {
+    if (!file)
+      throw new BadRequestException("No file uploaded or invalid file type.");
+    // Save the file path as a URL
+    const url = `/uploads/signatures/${file.filename}`;
+    await this.usersService.update(id, {
+      signature_url: url,
+      updated_by: req.user.id,
+    });
+    return { signature_url: url };
+  }
+
+  @Delete(":id/signature")
+  async removeSignature(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    const user = await this.usersService.findUserById(id);
+    if (!user) {
+      throw new BadRequestException("User not found.");
+    }
+
+    if (user.signature_url) {
+      const filePath = `.${user.signature_url}`;
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // File deletion non-fatal
+        }
+      }
+    }
+
+    await this.usersService.update(id, {
+      signature_url: null,
+      updated_by: req.user.id,
+    });
+
+    return { message: "Signature removed successfully.", signature_url: null };
+  }
+
   @Throttle({ default: { limit: 100, ttl: 60000 } })
   @Put(":user_id/password")
   async updatePassword(

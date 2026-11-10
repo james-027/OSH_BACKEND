@@ -588,6 +588,7 @@ export class UsersService {
       status_id,
       theme_id,
       profile_pic_url,
+      signature_url,
       access_key_id,
       user_permission_presets,
       location_ids,
@@ -679,6 +680,7 @@ export class UsersService {
       user.theme_id = theme_id;
       user.profile_pic_url =
         profile_pic_url || "/uploads/profile_pics/default_profile.jpg";
+      user.signature_url = signature_url || null;
       user.created_by = created_by;
 
       // Set current_access_key to the first access key if provided
@@ -1102,6 +1104,7 @@ export class UsersService {
       status_id,
       theme_id,
       profile_pic_url,
+      signature_url,
       // UserPermissions fields
       access_key_id,
       user_permission_presets,
@@ -1248,6 +1251,8 @@ export class UsersService {
     if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
     if (profile_pic_url !== undefined)
       userToUpdate.profile_pic_url = profile_pic_url;
+    if (signature_url !== undefined)
+      userToUpdate.signature_url = signature_url;
 
     // Hash new password if provided
     if (password) {
@@ -1766,6 +1771,7 @@ export class UsersService {
       status_id: user.status_id,
       theme_id: user.theme_id,
       profile_pic_url: user.profile_pic_url,
+      signature_url: user.signature_url,
       created_at: user.created_at,
       created_by: user.created_by,
       updated_by: user.updated_by,
@@ -2096,6 +2102,7 @@ export class UsersService {
           user_upline_id: user.user_upline_id,
           email_switch: user.email_switch,
           profile_pic_url: user.profile_pic_url,
+          signature_url: user.signature_url,
           current_access_key: user.current_access_key,
           current_access_key_name: currentAccessKeyName,
           created_at: user.created_at,

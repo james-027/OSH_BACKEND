@@ -90,6 +90,10 @@ export class CreateUserDto {
   @IsString({ message: "Profile picture URL must be a string" })
   profile_pic_url?: string;
 
+  @IsOptional()
+  @IsString({ message: "Signature URL must be a string" })
+  signature_url?: string;
+
   // UserPermissions fields
   @IsOptional()
   @IsArray({ message: "Access key IDs must be an array" })
