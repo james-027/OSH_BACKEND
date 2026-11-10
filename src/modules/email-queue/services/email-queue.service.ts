@@ -79,6 +79,7 @@ export class EmailQueueService {
           dto.transaction_id,
           dto.trigger_status_id,
           moduleId,
+          dto.created_by,
         );
       if (recipient) {
         recipientTo = recipient.to;
@@ -248,6 +249,7 @@ export class EmailQueueService {
         await this.emailNotificationSenderService.getApprovalSummaryDocument(
           queue.transaction_id,
           queue.trigger_status_id,
+          queue.module_id,
         );
       this.logger.warn(
         `After getApprovalSummaryDocument ${queue.document_number}`,

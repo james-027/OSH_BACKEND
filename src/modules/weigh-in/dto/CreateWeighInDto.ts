@@ -102,4 +102,9 @@ export class CreateWeighInDto {
     @IsOptional()
     @IsNumber()
     status_id?: number;
+
+    @IsOptional()
+    @IsString()
+    tally_sheet_pdf?: string;
+    
 }

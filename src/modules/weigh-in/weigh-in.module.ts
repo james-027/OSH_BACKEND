@@ -15,6 +15,8 @@ import { TransactionSequence } from "../../entities/TransactionSequence";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { ActionLog } from "src/entities/ActionLog";
 import { TransactionAttachment } from "src/entities/TransactionAttachment";
+import { EmailQueueModule } from "../email-queue/email-queue.module";
+import { EmailNotificationMatrixModule } from "../email-notification-matrix/email-notification-matrix.module";
 
 @Module({
   imports: [
@@ -26,10 +28,12 @@ import { TransactionAttachment } from "src/entities/TransactionAttachment";
       Action,
       TransactionSequence,
       ActionLog,
-      TransactionAttachment,
+      TransactionAttachment
     ]),
     UsersModule,
     SSEModule,
+    EmailNotificationMatrixModule,
+    EmailQueueModule
   ],
   controllers: [WeighInController],
   providers: [

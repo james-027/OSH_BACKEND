@@ -69,7 +69,7 @@ export class WeighInController {
   @Get("pagination")
   async Getbypagination(
     @Query("page") page = 1,
-    @Query("pageSize") pageSize = 5,
+    @Query("pageSize") pageSize = 7,
     @Query("search") search = "",
     @Query("statusid") statusId = "",
     @Request() req: any,

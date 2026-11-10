@@ -20,10 +20,12 @@ import { TransactionAttachment } from "src/entities/TransactionAttachment";
 import { Module } from "src/entities/Module";
 import * as fs from "fs";
 import * as path from "path";
+import { EmailQueueService } from "src/modules/email-queue/services/email-queue.service";
 
 @Injectable()
 export class WeighInService {
   constructor(
+    private readonly emailQueueService: EmailQueueService,
     @InjectRepository(WeighIn_header)
     private weighInRepository: Repository<WeighIn_header>,
     @InjectRepository(WeighInLine)
@@ -40,9 +42,9 @@ export class WeighInService {
     private moduleRepository: Repository<Module>,
   ) {}
 
-  private readonly module_name = "WEIGH IN";
+  private readonly module_name = "DIGITAL CRANE SCALE";
 
-  private mapWeighInResponse(item: WeighIn_header, includeLines = false) {
+  private mapWeighInResponse(item: WeighIn_header, includeLines = false, includeDriverLicenseImage = false) {
     return {
       id: item.id,
       control_no: item.control_no,
@@ -56,7 +58,7 @@ export class WeighInService {
       buyer_rep: item.buyer_rep,
       buyer_signature: item.buyer_signature,
       driver_license: item.driver_license,
-      driver_license_image: item.driver_license_image,
+     ...(includeDriverLicenseImage && { driver_license_image: item.driver_license_image }),
       truck_plate: item.truck_plate,
       target_heads: item.target_heads,
       checked_by: item.checked_by,
@@ -114,7 +116,8 @@ export class WeighInService {
 
       query
         .leftJoinAndSelect("wi.status", "status")
-        .leftJoinAndSelect("wi.createdBy", "createdBy");
+        .leftJoinAndSelect("wi.createdBy", "createdBy")
+        .leftJoinAndSelect("wi.lines", "lines"); // Included weigh-in lines
 
       if (roleId !== 1) {
         query.where("wi.created_by = :userId", { userId });
@@ -146,12 +149,12 @@ export class WeighInService {
 
       query.skip((page - 1) * pageSize);
       query.take(pageSize);
-      query.orderBy("wi.id", "ASC");
-
+      // Change 'ASC' to 'DESC' to get the latest transactions first
+      query.orderBy("wi.id", "DESC").addOrderBy("lines.id", "ASC");
       const [items, totalCount] = await query.getManyAndCount();
 
       return {
-        items: items.map((item) => this.mapWeighInResponse(item, false)),
+        items: items.map((item) => this.mapWeighInResponse(item, true)), // Set to true to include lines
         totalCount,
         page,
         pageSize,
@@ -175,7 +178,8 @@ export class WeighInService {
       if (!weighIn) {
         throw new NotFoundException(`Weigh-in with ID ${id} not found`);
       }
-      return this.mapWeighInResponse(weighIn, true);
+      // Set to true so PC/Web client receives the driver license image
+      return this.mapWeighInResponse(weighIn, true, true);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -211,23 +215,23 @@ export class WeighInService {
     createWeighInDto: CreateWeighInDto,
     userId: number,
     accessKeyId: number,
-    controlNo?: string,
+    poNumber?: string,
     roleId?: number,
   ): Promise<any> {
     let savedWeighIn: any;
     try {
-      let trans_number = createWeighInDto.control_no || "";
+      let trans_number = createWeighInDto.po_number || "";
 
       if (trans_number) {
         const existingWeighIn = await this.weighInRepository.findOne({
-          where: { control_no: trans_number },
+          where: { po_number: trans_number },
         });
         if (existingWeighIn) {
-          throw new BadRequestException("Weigh-in control number already exists");
+          throw new BadRequestException("Weigh-in PO number already exists");
         }
       } else {
         trans_number = await this.commonUtilitiesService.generateTransactionNumber({
-          transaction_type: "WEIGH IN",
+          transaction_type: "DIGITAL CRANE SCALE",
           location_id: 1,
           vendor_id: 0,
           access_key_id: accessKeyId,
@@ -242,8 +246,8 @@ export class WeighInService {
 
       const newWeighIn = this.weighInRepository.create({
         createdBy: { id: userId } as any,
-        control_no: trans_number,
-        po_number: createWeighInDto.po_number,
+        control_no: createWeighInDto.control_no,
+        po_number: trans_number,
         transaction_date: createWeighInDto.transaction_date
           ? new Date(createWeighInDto.transaction_date)
           : new Date(),
@@ -262,6 +266,7 @@ export class WeighInService {
         checked_signature: createWeighInDto.checked_signature,
         attested_by: createWeighInDto.attested_by,
         attested_signature: createWeighInDto.attested_signature,
+        tally_sheet_pdf: createWeighInDto.tally_sheet_pdf,
         status_id: createWeighInDto.status_id ?? 1,
         lines: (createWeighInDto.line || []).map((item) => ({
           ...item,
@@ -289,7 +294,7 @@ export class WeighInService {
         action_id: 1,
         ref_id: reloadedWeighIn.id,
         module_name: this.module_name,
-        description: `Created weigh-in with control number ${reloadedWeighIn.control_no}`,
+        description: `Created weigh-in with SI number ${reloadedWeighIn.po_number}`,
         raw_data: JSON.stringify(reloadedWeighIn),
         created_by: userId,
       });
@@ -299,11 +304,31 @@ export class WeighInService {
           service: "WEIGH_INS",
           method: "create",
           raw_data: JSON.stringify(reloadedWeighIn),
-          description: `Created weigh-in: ${reloadedWeighIn.control_no}`,
+          description: `Created weigh-in: ${reloadedWeighIn.po_number}`,
           status_id: reloadedWeighIn.status_id,
         },
         userId,
       );
+
+      const module = await this.moduleRepository.findOne({
+        where: {
+          module_name: this.module_name,
+          status_id: 1,
+        },
+      });
+
+      if (!module) {
+        throw new NotFoundException(`Module '${this.module_name}' not found`);
+      }
+
+      await this.emailQueueService.enqueue({
+        document_number: reloadedWeighIn.po_number,
+        transaction_id: reloadedWeighIn.id,
+        module_name: this.module_name,
+        trigger_status_id: 4,
+        created_by: userId,
+        email_subject: `[${this.module_name}] POSTED`,
+      });
 
       return this.mapWeighInResponse(reloadedWeighIn, true);
     } catch (error) {
@@ -316,7 +341,7 @@ export class WeighInService {
   }
 
   async update(
-    controlNo: string,
+    poNumber: string,
     updateWeighInDto: UpdateWeighInDto,
     userId: number,
     accessKeyId: number,
@@ -324,11 +349,11 @@ export class WeighInService {
     let updatedWeighIn: any;
     try {
       const weighIn = await this.weighInRepository.findOne({
-        where: { control_no: controlNo },
+        where: { po_number: poNumber },
       });
       if (!weighIn) {
         throw new NotFoundException(
-          `Weigh-in with control number ${controlNo} not found`,
+          `Weigh-in with PO number ${poNumber} not found`,
         );
       }
 
@@ -385,7 +410,7 @@ export class WeighInService {
         action_id: 2,
         ref_id: reloadedWeighIn.id,
         module_name: this.module_name,
-        description: `Updated Weigh-In Document ${reloadedWeighIn.control_no}`,
+        description: `Updated Weigh-In Document ${reloadedWeighIn.po_number}`,
         raw_data: JSON.stringify(reloadedWeighIn),
         created_by: userId,
       });
@@ -395,7 +420,7 @@ export class WeighInService {
           service: "WEIGH_INS",
           method: reloadedWeighIn.status?.status_name || "UPDATE",
           raw_data: JSON.stringify(reloadedWeighIn),
-          description: `Updated weigh-in: ${reloadedWeighIn.control_no}`,
+          description: `Updated weigh-in: ${reloadedWeighIn.po_number}`,
           status_id: reloadedWeighIn.status_id,
         },
         userId,
@@ -408,14 +433,14 @@ export class WeighInService {
     }
   }
 
-  async delete(controlNo: string, userId: number): Promise<any> {
+  async delete(poNumber: string, userId: number): Promise<any> {
     try {
       const weighIn = await this.weighInRepository.findOne({
-        where: { control_no: controlNo },
+        where: { po_number: poNumber },
       });
       if (!weighIn) {
         throw new NotFoundException(
-          `Weigh-in with control number ${controlNo} not found`,
+          `Weigh-in with PO number ${poNumber} not found`,
         );
       }
 
@@ -427,7 +452,7 @@ export class WeighInService {
           service: "WEIGH_INS",
           method: "DELETE",
           raw_data: JSON.stringify(weighIn),
-          description: `Deleted weigh-in: ${weighIn.control_no}`,
+          description: `Deleted weigh-in: ${weighIn.po_number}`,
           status_id: 14,
         },
         userId,
@@ -481,9 +506,9 @@ export class WeighInService {
     return await this.attachmentRepository.save(attachment);
   }
 
-  async findAttachment(controlNo: string) {
+  async findAttachment(poNumber: string) {
     return await this.attachmentRepository.find({
-      where: { document_number: controlNo, isdeleted: 0 },
+      where: { document_number: poNumber, isdeleted: 0 },
     });
   }
 

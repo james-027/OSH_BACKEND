@@ -130,6 +130,7 @@ import { StaffPayrollModule } from "./modules/staff-payroll/staff-payroll.module
 import { HolidaysModule } from "./modules/holidays/holidays.module";
 import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log.module";
 import { Customer } from "./entities/Customer";
+import { WeighInModule } from "./modules/weigh-in/weigh-in.module";
 import { CustomerModule } from "./modules/customer/customer.module";
 @Module({
   imports: [
@@ -250,6 +251,7 @@ import { CustomerModule } from "./modules/customer/customer.module";
     StaffPayrollModule,
     HolidaysModule,
     ActualTimeLogsModule,
+    WeighInModule,
     CustomerModule
   ],
   providers: [

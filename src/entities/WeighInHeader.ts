@@ -109,6 +109,10 @@ export class WeighIn_header {
     @JoinColumn({ name: "updated_by" })
     updatedBy: User;
 
+    @Column({ type: "longtext", nullable: true })
+    tally_sheet_pdf: string;
+
+
     // Relationship to Line Items
     @OneToMany(() => WeighInLine, (line) => line.header, { cascade: true })
     lines: WeighInLine[];
