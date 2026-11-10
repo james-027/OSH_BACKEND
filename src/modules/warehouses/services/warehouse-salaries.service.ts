@@ -48,7 +48,7 @@ export class WarehouseSalariesService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  private readonly module_name = "STORE SALARIES";
+  private readonly module_name = "STORE SALARIES - BPLUS";
 
   private async resolveVendorId(vendor_id?: number): Promise<number> {
     if (vendor_id === undefined || vendor_id === null) {
@@ -442,6 +442,7 @@ export class WarehouseSalariesService {
       warehouse_id: salary.warehouse_id,
       warehouse_ifs: salary.warehouse?.warehouse_ifs,
       warehouse_name: salary.warehouse?.warehouse_name,
+      warehouse_type_id: salary.warehouse?.warehouse_type_id,
       location_id: salary.warehouse ? salary.warehouse.location_id : null,
       location_name:
         salary.warehouse && salary.warehouse.location

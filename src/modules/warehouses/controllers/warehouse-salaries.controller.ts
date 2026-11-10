@@ -48,7 +48,10 @@ export class WarehouseSalariesController {
   ) {}
 
   @Get()
-  @RequirePermissions({ module: "STORE SALARIES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "VIEW",
+  })
   async findAll(
     @Query("status_id") statusId?: string,
     @Query("hide_historical") hideHistorical?: string,
@@ -70,26 +73,38 @@ export class WarehouseSalariesController {
   }
 
   @Get("history/:id")
-  @RequirePermissions({ module: "STORE SALARIES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "VIEW",
+  })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseSalariesService.findOneHistory(id);
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "STORE SALARIES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseSalariesService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "STORE SALARIES", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "ADD",
+  })
   async create(@Body() createDto: CreateWarehouseSalaryDto, @Request() req) {
     const userId = req.user.id;
     return this.warehouseSalariesService.create(createDto, userId);
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STORE SALARIES", action: "EDIT" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseSalaryDto,
@@ -100,7 +115,10 @@ export class WarehouseSalariesController {
   }
 
   @Post("/change-bulk-status")
-  @RequirePermissions({ module: "STORE SALARIES", action: ["POST", "APPROVE"] })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: ["POST", "APPROVE"],
+  })
   async toggleBulkStatus(
     @Body() body: { ids: number[]; status_id: number; undo_reason?: string },
     @Request() req,
@@ -121,7 +139,10 @@ export class WarehouseSalariesController {
   }
 
   @Patch(":id/toggle-status-approved")
-  @RequirePermissions({ module: "STORE SALARIES", action: "APPROVE" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "APPROVE",
+  })
   async toggleStatusApproved(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -135,7 +156,10 @@ export class WarehouseSalariesController {
   }
 
   @Patch(":id/toggle-status-for-approval")
-  @RequirePermissions({ module: "STORE SALARIES", action: "EDIT" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "EDIT",
+  })
   async toggleStatusForApproval(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -149,7 +173,10 @@ export class WarehouseSalariesController {
   }
 
   @Patch(":id/toggle-status-back-to-pending")
-  @RequirePermissions({ module: "STORE SALARIES", action: "REVERT" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "REVERT",
+  })
   async toggleStatusBackToPending(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: { undo_reason?: string },
@@ -166,7 +193,10 @@ export class WarehouseSalariesController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STORE SALARIES", action: "ACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "ACTIVATE",
+  })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -180,7 +210,10 @@ export class WarehouseSalariesController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STORE SALARIES", action: "DEACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "DEACTIVATE",
+  })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -194,7 +227,10 @@ export class WarehouseSalariesController {
   }
 
   @Post("upload-excel")
-  @RequirePermissions({ module: "STORE SALARIES", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE SALARIES - BPLUS", "STORE SALARIES"],
+    action: "ADD",
+  })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({

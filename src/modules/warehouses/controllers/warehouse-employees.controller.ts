@@ -58,7 +58,10 @@ export class WarehouseEmployeesController {
 
   @Get()
   @CacheCustom(buildWarehouseEmployeeKey, CACHE_TTL.COUNTS)
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "VIEW",
+  })
   async findAll(@Request() req, @Query() queryParams: DateFilterQueryDto) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
@@ -78,7 +81,10 @@ export class WarehouseEmployeesController {
   }
 
   @Get("get-warehouses-with-no-record")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "DATA ACCESS" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "DATA ACCESS",
+  })
   async getWarehousesWithNoRecord(
     @Query("location_ids") locationIdsParam: string,
     @Query("assignment_date") assignmentDateParam: string,
@@ -113,19 +119,28 @@ export class WarehouseEmployeesController {
   }
 
   @Get("history/:id")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "VIEW",
+  })
   async findOneHistory(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseEmployeesService.findOneHistory(id);
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseEmployeesService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "ADD",
+  })
   async create(@Body() createDto: CreateWarehouseEmployeeDto, @Request() req) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
@@ -136,7 +151,10 @@ export class WarehouseEmployeesController {
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "EDIT" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseEmployeeDto,
@@ -152,13 +170,19 @@ export class WarehouseEmployeesController {
   }
 
   @Delete(":id")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "CANCEL" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "CANCEL",
+  })
   async remove(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseEmployeesService.remove(id);
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "ACTIVATE",
+  })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -168,7 +192,10 @@ export class WarehouseEmployeesController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "DEACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "DEACTIVATE",
+  })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -178,7 +205,10 @@ export class WarehouseEmployeesController {
   }
 
   @Post("upload")
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "ADD",
+  })
   async bulkUpload(
     @Body() records: CreateWarehouseEmployeeDto[],
     @Request() req,
@@ -206,7 +236,10 @@ export class WarehouseEmployeesController {
       limits: { fileSize: FILE_SIZE_LIMITS.EXCEL_8MB },
     }),
   )
-  @RequirePermissions({ module: "STORE_EMPLOYEES", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE_EMPLOYEES_BPLUS", "STORE EMPLOYEES"],
+    action: "ADD",
+  })
   async uploadExcel(@UploadedFile() file: FileType, @Request() req) {
     if (!file) {
       throw new BadRequestException("No file uploaded or invalid file type.");

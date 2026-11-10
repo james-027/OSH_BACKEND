@@ -50,7 +50,10 @@ export class WarehousesController {
 
   @Get("/stores")
   @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "VIEW",
+  })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user?.id;
@@ -65,7 +68,10 @@ export class WarehousesController {
   }
 
   @Get("/stores/:warehouse_type_id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "VIEW",
+  })
   async findAllByType(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,
     @Request() req,
@@ -83,7 +89,10 @@ export class WarehousesController {
   }
 
   @Post("/change-bulk-status")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "POST" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "POST",
+  })
   async toggleBulkStatus(
     @Body() bulkStatusDto: BulkChangeWarehouseStatusDto,
     @Request() req,
@@ -91,14 +100,17 @@ export class WarehousesController {
     const userId = req.user.id;
     return this.warehousesService.toggleBulkStatus(
       bulkStatusDto.ids,
-      bulkStatusDto.status_id,
+      bulkStatusDto.rem_status_id,
       userId,
       bulkStatusDto.undo_reason,
     );
   }
 
   @Post("upload-excel")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "ADD" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "ADD",
+  })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
@@ -290,13 +302,19 @@ export class WarehousesController {
   }
 
   @Get(":id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "VIEW" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehousesService.findOne(id);
   }
 
   @Post()
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "ADD" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "ADD",
+  })
   async create(@Body() createDto: CreateWarehouseDto, @Request() req) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
@@ -307,7 +325,10 @@ export class WarehousesController {
   }
 
   @Patch(":id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "EDIT" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseDto,
@@ -318,7 +339,10 @@ export class WarehousesController {
   }
 
   @Patch(":id/change-status")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "POST" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "POST",
+  })
   async changeStatus(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: { status_id: number; undo_reason?: string },
@@ -334,14 +358,20 @@ export class WarehousesController {
   }
 
   @Delete(":id")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "CANCEL" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "CANCEL",
+  })
   async remove(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const userId = req.user?.id;
     return this.warehousesService.remove(id, userId);
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "ACTIVATE" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "ACTIVATE",
+  })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -351,7 +381,10 @@ export class WarehousesController {
   }
 
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "TAKEOUTSTORES", action: "DEACTIVATE" })
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "DEACTIVATE",
+  })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,

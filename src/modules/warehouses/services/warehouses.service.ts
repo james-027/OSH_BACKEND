@@ -30,7 +30,7 @@ import { parseExcelDateToYMD, parseExcelTimeToHMS } from "src/utils/date.utils";
 
 @Injectable()
 export class WarehousesService {
-  private readonly moduleName = "TAKEOUTSTORES";
+  private readonly moduleName = "TAKE OUT STORES";
   private readonly defaultRelations = [
     "warehouseType",
     "location",
@@ -731,7 +731,9 @@ export class WarehousesService {
         !allowedLocationIds.includes(resolvedLocationId)
       ) {
         const matchedLoc = locations.find((l) => l.id === resolvedLocationId);
-        const locName = matchedLoc ? matchedLoc.location_name : resolvedLocationId;
+        const locName = matchedLoc
+          ? matchedLoc.location_name
+          : resolvedLocationId;
         errors.push({
           row: rowNum,
           error: `You do not have permission for Location '${locName}' (${row.warehouse_ifs || row.warehouse_name}), based on your allowed location.`,
@@ -1053,9 +1055,7 @@ export class WarehousesService {
         const matchedLocation = locations.find(
           (l) => l.id === saved.location_id,
         );
-        const matchedSegment = segments.find(
-          (s) => s.id === saved.segment_id,
-        );
+        const matchedSegment = segments.find((s) => s.id === saved.segment_id);
         const matchedPosType = posAvailabilities.find(
           (p) => p.id === saved.pos_availability_id,
         );

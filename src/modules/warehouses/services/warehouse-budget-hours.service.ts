@@ -154,6 +154,7 @@ export class WarehouseBudgetHoursService {
       warehouse_id: budgetHour.warehouse_id,
       warehouse_ifs: budgetHour.warehouse?.warehouse_ifs,
       warehouse_name: budgetHour.warehouse?.warehouse_name,
+      warehouse_type_id: budgetHour.warehouse?.warehouse_type_id,
       location_id: budgetHour.warehouse
         ? budgetHour.warehouse.location_id
         : null,

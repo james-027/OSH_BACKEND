@@ -44,7 +44,7 @@ export class WarehouseEmployeesService {
     private actionLogsService: ActionLogsService,
   ) {}
 
-  private readonly module_name = "STORE_EMPLOYEES";
+  private readonly module_name = "STORE EMPLOYEES";
 
   private getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -227,6 +227,7 @@ export class WarehouseEmployeesService {
       warehouse_ifs: rec.warehouse ? rec.warehouse.warehouse_ifs : null,
       warehouse_code: rec.warehouse ? rec.warehouse.warehouse_code : null,
       warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
+      warehouse_type_id: rec.warehouse ? rec.warehouse.warehouse_type_id : null,
       location_id: rec.warehouse ? rec.warehouse.location_id : null,
       location_name:
         rec.warehouse && rec.warehouse.location
