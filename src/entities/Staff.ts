@@ -143,7 +143,7 @@ export class Staff {
   @Column({ type: "date", nullable: true })
   activate_effectivity_date: Date;
 
-  @Column({ length: 255, nullable: true, unique: true })
+  @Column({ length: 255, nullable: true })
   old_dws_code: string;
 
   @Column({ nullable: true, unique: true })
