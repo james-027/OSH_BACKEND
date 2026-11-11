@@ -53,12 +53,19 @@ export class ResponseMapperService {
           "actualLogsDetail",
           "payrollHeader",
           "scheduleDetail",
-          "actualHeader"
+          "actualHeader",
+          "module",
+          "signatoryHeader",
+          "signatoree",
         ].includes(key)
       ) {
-        if (typeof entity[key] !== "object" || entity[key] === null ||   (entity[key] as any) instanceof Date) {
+        if (
+          typeof entity[key] !== "object" ||
+          entity[key] === null ||
+          (entity[key] as any) instanceof Date
+        ) {
           response[key] = entity[key];
-        } 
+        }
       }
     }
 
@@ -70,6 +77,15 @@ export class ResponseMapperService {
           : null;
     } else {
       response.created_user = null;
+    }
+    //Map signatoree Relation
+    if (entity.signatoree && typeof entity.signatoree === "object") {
+      response.signatoree_name =
+        entity.signatoree.first_name && entity.signatoree.last_name
+          ? `${entity.signatoree.first_name} ${entity.signatoree.last_name}`
+          : null;
+    } else {
+      response.signatoree_name = null;
     }
 
     // Map updatedBy relation
@@ -145,7 +161,7 @@ export class ResponseMapperService {
       ? [...entity.staffBrands].sort((a, b) => b.id - a.id)[0]
       : null;
 
-      // Latest Category
+    // Latest Category
     const latestCategoryType = entity.staffCategoryTypes?.length
       ? [...entity.staffCategoryTypes].sort((a, b) => b.id - a.id)[0]
       : null;
@@ -154,7 +170,7 @@ export class ResponseMapperService {
       ? [...entity.staffVendorSalaries].sort((a, b) => b.id - a.id)[0]
       : null;
 
-      // Latest Salary
+    // Latest Salary
     const latestSalary = entity.staffSalaries?.length
       ? [...entity.staffSalaries].sort((a, b) => b.id - a.id)[0]
       : null;
@@ -172,7 +188,6 @@ export class ResponseMapperService {
         effectivity_date: transfer.effectivity_date,
         status: transfer.status,
       }));
-
     }
 
     if (latestBrand) {
@@ -195,31 +210,33 @@ export class ResponseMapperService {
       response.staff_vendor_id = latestSalary.staff_vendor_id;
       response.allowance = latestSalary.allowance;
       response.salary_rate = latestSalary.salary_rate;
-      response.phil_health_contri_perc = latestSalary.phil_health_contri_perc || null;
+      response.phil_health_contri_perc =
+        latestSalary.phil_health_contri_perc || null;
       response.pagibig_number_perc = latestSalary.pagibig_number_perc || null;
-
     }
 
     // Map brand relation
     if (entity.brand && typeof entity.brand === "object") {
       response.brand_name = entity.brand.brand_name || null;
     }
-    
+
     // Map Actual Logs Detail relation
-    if (entity.actualLogsDetail && typeof entity.actualLogsDetail === "object") {
+    if (
+      entity.actualLogsDetail &&
+      typeof entity.actualLogsDetail === "object"
+    ) {
       response.actual_time_in = entity.actualLogsDetail.time_in || null;
       response.actual_time_out = entity.actualLogsDetail.time_out || null;
       response.actual_break_in = entity.actualLogsDetail.break_in || null;
       response.actual_break_out = entity.actualLogsDetail.break_out || null;
       response.actual_overtime_in = entity.actualLogsDetail.overtime_in || null;
-      response.actual_overtime_out = entity.actualLogsDetail.overtime_out || null;
+      response.actual_overtime_out =
+        entity.actualLogsDetail.overtime_out || null;
       response.actual_regular = entity.actualLogsDetail.regular || null;
       response.actual_twh = entity.actualLogsDetail.twh || null;
       response.actual_overtime = entity.actualLogsDetail.overtime || null;
       response.actual_break_hours = entity.actualLogsDetail.break_hours || null;
     }
-
-
 
     // Map categoryType relation
     if (entity.categoryType && typeof entity.categoryType === "object") {
@@ -241,30 +258,48 @@ export class ResponseMapperService {
       response.sub_status_name = entity.subStatus.status_name || null;
     }
     // Map attendance status relation
-    if (entity.attendanceStatus && typeof entity.attendanceStatus === "object") {
+    if (
+      entity.attendanceStatus &&
+      typeof entity.attendanceStatus === "object"
+    ) {
       response.status_name = entity.attendanceStatus.status_name || null;
     }
     // Map working days relation
     if (entity.workingDays && typeof entity.workingDays === "object") {
       response.working_day_name = entity.workingDays.description || null;
     }
-        // Map Schedule Header relation
+    // Map Schedule Header relation
     if (entity.scheduleHeader && typeof entity.scheduleHeader === "object") {
       response.schedule_entry_no = entity.scheduleHeader.entry_no || null;
       response.schedule_date = entity.scheduleHeader.schedule_date || null;
     }
-        // Map Payroll Header relation
+    // Map Payroll Header relation
     if (entity.payrollHeader && typeof entity.payrollHeader === "object") {
-      response.payroll_date_from = entity.payrollHeader.payroll_date_from || null;
+      response.payroll_date_from =
+        entity.payrollHeader.payroll_date_from || null;
       response.payroll_date_to = entity.payrollHeader.payroll_date_to || null;
     }
     if (entity.actualHeader && typeof entity.actualHeader === "object") {
-      response.actual_header_status = entity.actualHeader.status?.status_name || null;
+      response.actual_header_status =
+        entity.actualHeader.status?.status_name || null;
       response.actual_header_status_id = entity.actualHeader.status_id;
-      response.actual_header_is_cancel_allowed = entity.actualHeader.logsType?.is_cancel_allowed;
+      response.actual_header_is_cancel_allowed =
+        entity.actualHeader.logsType?.is_cancel_allowed;
       response.tagging = entity.actualHeader.tagging || null;
     }
-        // Map Schedule Detail relation
+
+    if (entity.module && typeof entity.module === "object") {
+      response.module_name = entity.module.module_name || null;
+    }
+    if (entity.signatoryHeader && typeof entity.signatoryHeader === "object") {
+      response.module_name = entity.signatoryHeader.module?.module_name || null;
+      response.module_id = entity.signatoryHeader.module?.id || null;
+    }
+    if (entity.signatoryType && typeof entity.signatoryType === "object") {
+      response.signatory_type_name = entity.signatoryType.description || null;
+      response.signatory_type_code = entity.signatoryType.code || null;
+    }
+    // Map Schedule Detail relation
     if (entity.scheduleDetail && typeof entity.scheduleDetail === "object") {
       response.just_time_in = entity.scheduleDetail.just_time_in || null;
       response.just_time_out = entity.scheduleDetail.just_time_out || null;

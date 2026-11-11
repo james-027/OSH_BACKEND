@@ -41,7 +41,7 @@ export class SignatoryDetail {
   access_key_id: number;
 
   @Column({ nullable: true })
-  module_id: number;
+  signatoree_id: number;
 
   @CreateDateColumn({
     type: "timestamp",
@@ -111,4 +111,12 @@ export class SignatoryDetail {
   })
   @JoinColumn({ name: "position_id" })
   position: Position;
+
+  @ManyToOne(() => User, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "signatoree_id" })
+  signatoree: User;
 }

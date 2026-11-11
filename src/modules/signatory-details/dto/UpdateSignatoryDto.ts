@@ -1,4 +1,4 @@
 import { PartialType } from "@nestjs/mapped-types";
-import { CreateSignatoryDetailDto } from "./CreateSignatoryDto";
+import { CreateSignatoryHeaderDto } from "./CreateSignatoryDto";
 
-export class UpdateSignatoryDetailDto extends PartialType(CreateSignatoryDetailDto) {}
+export class UpdateSignatoryHeaderDto extends PartialType(CreateSignatoryHeaderDto) {}

@@ -17,9 +17,6 @@ export class SignatoryHeader {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 255 })
-  description: string;
-
   @Column({ default: 1 })
   status_id: number;
 
