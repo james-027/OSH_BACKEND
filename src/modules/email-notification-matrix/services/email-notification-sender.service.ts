@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 
 import { EmailNotificationMatrix } from "../../../entities/EmailNotificationMatrix";
 import { EmailNotificationMatrixDetails } from "../../../entities/EmailNotificationMatrixDetails";
@@ -16,6 +16,7 @@ import { Module } from "src/entities/Module";
 export class EmailNotificationSenderService {
   private readonly logger = new Logger(EmailNotificationSenderService.name);
   constructor(
+    private readonly dataSource: DataSource,
     private readonly emailNotificationMailService: EmailNotificationMailService,
     @InjectRepository(EmailNotificationMatrix)
     private readonly emailNotificationMatrixRepository: Repository<EmailNotificationMatrix>,
@@ -38,8 +39,7 @@ export class EmailNotificationSenderService {
     @InjectRepository(DebitAdvice_header)
     private readonly debitAdviceRepository: Repository<DebitAdvice_header>,
   ) {}
-
-  // Helper to format dates to: 8/4/2026, 9:56 AM
+// Helper to format dates to: 8/4/2026, 9:56 AM
   private formatDate(dateInput: Date | string | null | undefined): string {
     if (!dateInput) return "-";
     const date = new Date(dateInput);
@@ -53,6 +53,151 @@ export class EmailNotificationSenderService {
       minute: "2-digit",
       hour12: true,
     });
+  }
+
+  /**
+   * Dynamically resolves any module's transaction without hardcoding module names.
+   * Matches the transaction via EmailQueue (document_number + module_id + transaction_id)
+   * and normalizes fields so existing email templates work for ALL modules.
+   */
+  private async resolveDynamicTransaction(
+    moduleId: number,
+    transactionId: number,
+  ): Promise<any> {
+    // 1. Get the queue record (which already holds document_number & creator for ANY module)
+    const queueRecord = await this.emailQueueRepository.findOne({
+      where: {
+        module_id: moduleId,
+        transaction_id: transactionId,
+      },
+      relations: ["creator"],
+      order: { id: "DESC" },
+    });
+
+    // 2. Scan registered TypeORM entities to find the matching header record dynamically
+    for (const meta of this.dataSource.entityMetadatas) {
+      const hasLines = meta.relations.some((r) => r.propertyName === "lines");
+      const hasCreatedBy = meta.relations.some(
+        (r) => r.propertyName === "createdBy",
+      );
+      if (!hasLines || !hasCreatedBy) continue;
+
+      // Check if this entity has a document/PO/control column matching our queued document_number
+      const docColumns = ["document_number", "po_number", "control_no"].filter(
+        (col) => meta.findColumnWithPropertyName(col),
+      );
+      if (docColumns.length === 0) continue;
+
+      const repo = this.dataSource.getRepository(meta.target);
+      const record: any = await repo.findOne({
+        where: { id: transactionId },
+        relations: ["createdBy", "lines"],
+      });
+
+      if (record) {
+        const recordDocNo =
+          record.document_number ?? record.po_number ?? record.control_no;
+
+        // Verify it matches the queue's document_number (prevents ID collision across tables)
+        if (!queueRecord || recordDocNo === queueRecord.document_number) {
+          // If tally_sheet_pdf exists in DB table but wasn't decorated in TypeORM entity yet, fetch it safely
+          if (record.tally_sheet_pdf === undefined && meta.tableName) {
+            try {
+              const rawRows = await this.dataSource.query(
+                `SELECT tally_sheet_pdf FROM \`${meta.tableName}\` WHERE id = ? LIMIT 1`,
+                [transactionId],
+              );
+              if (rawRows?.[0]?.tally_sheet_pdf) {
+                record.tally_sheet_pdf = rawRows[0].tally_sheet_pdf;
+              }
+            } catch {
+              // Ignore if column does not exist on this table
+            }
+          }
+
+          const allLines = Array.isArray(record.lines) ? record.lines : [];
+          return {
+            ...record,
+            document_number: recordDocNo,
+            transaction_date: record.transaction_date ?? record.created_at,
+            remarks:
+              record.remarks ??
+              (record.grower
+                ? `Grower: ${record.grower} | Plate: ${record.truck_plate ?? "-"}`
+                : "-"),
+            rawLines: allLines,
+            // Financial lines (Debit Advice) have .amount; Weighing lines have .weight
+            lines: allLines.filter((l: any) => l.amount !== undefined),
+            weighLines: allLines.filter((l: any) => l.weight !== undefined),
+          };
+        }
+      }
+    }
+
+    // 3. Fallback: Even if a brand-new module has a completely different table structure,
+    // build the transaction object directly from EmailQueue so it NEVER fails!
+    if (queueRecord) {
+      return {
+        id: transactionId,
+        document_number: queueRecord.document_number,
+        transaction_date: queueRecord.queued_date,
+        createdBy: queueRecord.creator,
+        updated_by: queueRecord.created_by,
+        updated_at: queueRecord.updated_at,
+        remarks: "-",
+        lines: [],
+      };
+    }
+
+    return null;
+  }
+
+
+ /* Extracts Tally Sheet PDF attachment (`tally_sheet_pdf`)
+   */
+  private extractDynamicAttachments(record: any): {
+    attachments: any[];
+    cidMap: Record<string, string>;
+  } {
+    const attachments: any[] = [];
+    const cidMap: Record<string, string> = {};
+
+    // Check tally_sheet_pdf (or fallback if PDF was stored in buyer_signature / driver_license_image)
+    const rawPdfSource =
+      record?.["tally_sheet_pdf"] ||
+      (typeof record?.["buyer_signature"] === "string" &&
+      record["buyer_signature"].includes("application/pdf")
+        ? record["buyer_signature"]
+        : null);
+
+    if (rawPdfSource && typeof rawPdfSource === "string") {
+      const trimmed = rawPdfSource.trim();
+      let base64Data = trimmed;
+
+      // Strip any data URI prefix (e.g. data:application/pdf;base64, or data:binary/octet-stream;base64,)
+      if (trimmed.includes(";base64,")) {
+        base64Data = trimmed.split(";base64,")[1];
+      } else if (trimmed.startsWith("data:")) {
+        const commaIdx = trimmed.indexOf(",");
+        if (commaIdx !== -1) {
+          base64Data = trimmed.substring(commaIdx + 1);
+        }
+      }
+
+      // Clean any whitespace or line breaks inside the base64 string
+      const cleanBase64 = base64Data.replace(/[\r\n\s]+/g, "");
+
+      if (cleanBase64.length > 0) {
+        attachments.push({
+          filename: `Tally_Sheet_${record?.po_number || record?.document_number || "Document"}.pdf`,
+          content: Buffer.from(cleanBase64, "base64"),
+          contentType: "application/pdf",
+          contentDisposition: "attachment",
+        });
+      }
+    }
+
+    return { attachments, cidMap };
   }
 
   private buildDebitAdviceEmail({
@@ -72,6 +217,7 @@ export class EmailNotificationSenderService {
     showConfirmationRow,
     showApprovalRemarks,
     isFinalApproved,
+    moduleName = "Debit Advice",
   }: {
     debitAdvice: any;
     currentStatus: any;
@@ -89,6 +235,7 @@ export class EmailNotificationSenderService {
     showNextApprover: boolean;
     showConfirmationRow: boolean;
     showApprovalRemarks: boolean;
+    moduleName?: string;
   }): string {
     const approvalUrl = `${process.env.FRONTEND_URL}/debit-advice-approval?docno=${debitAdvice.document_number}`;
 
@@ -97,7 +244,7 @@ export class EmailNotificationSenderService {
       <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Debit Advice Notification</title>
+            <title>${moduleName} Notification</title>
             <style>
               @media only screen and (max-width: 600px) {
                 .mobile-block {
@@ -143,8 +290,8 @@ export class EmailNotificationSenderService {
               <tr>
                 <td align="center">
                   
-                  <!-- Main Card -->
-                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 680px; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
+                 <!-- Main Card -->
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="min-width: 600px; max-width: 680px; width: 100%; background-color: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
                     
                     <!-- Header -->
                     <tr>
@@ -155,8 +302,8 @@ export class EmailNotificationSenderService {
                               <h1 style="margin: 0; color: #1E293B; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">
                                 Operation's System Hub
                               </h1>
-                              <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                                Debit Advice Notification
+                             <p style="margin: 4px 0 0 0; color: #334155; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                                ${moduleName} Notification
                               </p>
                             </td>
                           </tr>
@@ -182,7 +329,75 @@ export class EmailNotificationSenderService {
                           </tr>
                         </table>
 
-                   <!-- Section: Transaction Details (2-Column Grid Layout) -->
+           <!-- Section: Transaction Details (2-Column Grid Layout) -->
+                        ${
+                          debitAdvice.control_no !== undefined
+                            ? `
+                        <!-- Weighing / DCS Header Details (Same Sizing & Alignment as Debit Advice) -->
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; table-layout: fixed; margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
+                          <tr>
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Control No.</td>
+                            <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700; font-family: monospace;">${debitAdvice.control_no ?? "-"}</td>
+                            <td class="mobile-block mobile-label" width="20%" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Date</td>
+                            <td class="mobile-block mobile-value" width="30%" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.transaction_date ? new Date(debitAdvice.transaction_date).toISOString().split("T")[0] : "-"}</td>
+                          </tr>
+                          <tr>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">PO Number</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.po_number ?? debitAdvice.document_number ?? "-"}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Truck Plate</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.truck_plate ?? "-"}</td>
+                          </tr>
+                          <tr>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Grower</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.grower ?? "-"}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Farm Location</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.farm_location ?? "-"}</td>
+                          </tr>
+                          <tr>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Sold To</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.sold_to ?? "-"}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Driver License No.</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px;">${debitAdvice.driver_license ?? "-"}</td>
+                          </tr>
+                          <tr>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Total Heads</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700;">${(() => {
+                              const heads = Array.isArray(debitAdvice.weighLines) ? debitAdvice.weighLines.reduce((sum: number, l: any) => sum + Number(l.heads ?? 0), 0) : 0;
+                              return heads.toLocaleString();
+                            })()}</td>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 12px; font-weight: 600;">Actual Live Weight</td>
+                            <td class="mobile-block mobile-value" style="padding: 10px 12px; background-color: #FFFFFF; border-bottom: 1px solid #E2E8F0; color: #0F172A; font-size: 12px; font-weight: 700;">${(() => {
+                              const heads = Array.isArray(debitAdvice.weighLines) ? debitAdvice.weighLines.reduce((sum: number, l: any) => sum + Number(l.heads ?? 0), 0) : 0;
+                              const kilos = Array.isArray(debitAdvice.weighLines) ? debitAdvice.weighLines.reduce((sum: number, l: any) => sum + Number(l.weight ?? 0), 0) : 0;
+                              const avg = heads > 0 ? (kilos / heads) : 0;
+                              return avg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            })()}</td>
+                          </tr>
+                          <tr>
+                            <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; color: #64748B; font-size: 12px; font-weight: 600;">Total Kilos</td>
+                            <td class="mobile-block mobile-value" colspan="3" style="padding: 10px 12px; background-color: #FFFFFF; color: #0F172A; font-size: 12px; font-weight: 700;">${(() => {
+                              const kilos = Array.isArray(debitAdvice.weighLines) ? debitAdvice.weighLines.reduce((sum: number, l: any) => sum + Number(l.weight ?? 0), 0) : 0;
+                              return `${kilos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
+                            })()}</td>
+                          </tr>
+                        </table>
+
+                        <!-- Tally Sheet Attachment Banner (Red Alert UI Style) -->
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 8px;">
+                          <tr>
+                            <td style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 18px 20px; border-radius: 0 8px 8px 0;">
+                              <p style="margin: 0 0 6px 0; color: #991B1B; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">
+                                ATTACHMENT NOTIFICATION
+                              </p>
+                              <p style="margin: 0; color: #1E293B; font-size: 15px; font-weight: 600; line-height: 1.4;">
+                                &#128206; Tally sheet is attached in this email.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                        `
+                            : `
+                        <!-- Standard Financial / Approval Header Details -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden;">
                           <!-- Row 1: Document No & Date -->
                           <tr>
@@ -258,7 +473,7 @@ export class EmailNotificationSenderService {
                               : ""
                           }
 
-                       <!-- Row 5: Remarks -->
+                          <!-- Row 5: Remarks -->
                           <tr>
                             <td class="mobile-block mobile-label" style="padding: 10px 12px; background-color: #F8FAFC; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #64748B; font-size: 12px; font-weight: 600;">Remarks</td>
                             <td class="mobile-block mobile-value" colspan="3" style="padding: 10px 12px; background-color: #FFFFFF; ${showApprovalRemarks ? "border-bottom: 1px solid #E2E8F0;" : ""} color: #334155; font-size: 12px;">${debitAdvice.remarks ?? "-"}</td>
@@ -276,8 +491,14 @@ export class EmailNotificationSenderService {
                               : ""
                           }
                         </table>
-                          
-                        <!-- Section: Items Breakdown -->
+                        `
+                        }
+
+                        <!-- Section: Financial Items Breakdown (Only if financial lines exist) -->
+                        ${
+                          Array.isArray(debitAdvice.lines) &&
+                          debitAdvice.lines.length > 0
+                            ? `
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 36px; border-collapse: collapse;">
                           <thead>
                             <tr style="background-color: #F1F5F9;">
@@ -310,29 +531,44 @@ export class EmailNotificationSenderService {
                               .join("")}
                           </tbody>
                         </table>
+                        `
+                            : ""
+                        }
 
                     <!-- Total Amount Footer & Action Button -->
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; margin-bottom: 16px;">
                           <tr>
-                            <!-- Left: Total Advice Block -->
+                            <!-- Left: Total Block -->
                             <td class="mobile-footer-td" align="left" valign="bottom">
+                              ${
+                                Array.isArray(debitAdvice.lines) &&
+                                debitAdvice.lines.length > 0
+                                  ? `
                               <p style="margin: 0 0 4px 0; font-size: 10px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.8px;">
                                 Total Amount
                               </p>
                               <p style="margin: 0; font-size: 18px; font-weight: 800; color: #0F172A;">
                                 &#8369; ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
+                              `
+                                  : ""
+                              }
                             </td>
 
                             <!-- Right: Open in OSH System Button -->
                             <td class="mobile-footer-td" align="right" valign="bottom">
+                              ${
+                                debitAdvice.control_no === undefined
+                                  ? `
                               <a class="mobile-btn" href="${approvalUrl}" target="_blank" style="display: inline-block; background-color: #52CDB1; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none; padding: 12px 22px; border-radius: 6px; box-shadow: 0 2px 4px rgba(82, 205, 177, 0.25);">
                                 Open in OSH System &rarr;
                               </a>
+                              `
+                                  : ""
+                              }
                             </td>
                           </tr>
                         </table>
-
                       </td>
                     </tr>
 
@@ -766,11 +1002,24 @@ export class EmailNotificationSenderService {
       approverName: `${approver.first_name} ${approver.last_name}`,
     };
   }
-  public async getGroupedApprovalRecipient(
+ public async getGroupedApprovalRecipient(
     transactionId: number,
     triggerStatusId: number,
     moduleId: number,
+    createdByUserId?: number,
   ) {
+    // Helper to resolve Maker email dynamically for ANY module
+    const getMakerEmail = async (): Promise<string | null> => {
+      if (createdByUserId) {
+        const user = await this.userRepository.findOne({
+          where: { id: Number(createdByUserId) },
+        });
+        if (user?.email) return user.email;
+      }
+      const tx = await this.resolveDynamicTransaction(moduleId, transactionId);
+      return tx?.createdBy?.email ?? null;
+    };
+
     // 1. Check the matrix configuration first
     const matrix = await this.emailNotificationMatrixRepository.findOne({
       where: { module: moduleId, status_id: 1 },
@@ -804,14 +1053,7 @@ export class EmailNotificationSenderService {
         // TO = Transaction created_by email
         // ==========================================
         if (makerConfigured) {
-          const debitAdvice = await this.debitAdviceRepository.findOne({
-            where: {
-              id: transactionId,
-            },
-            relations: ["createdBy"],
-          });
-
-          const makerEmail = debitAdvice?.createdBy?.email;
+          const makerEmail = await getMakerEmail();
 
           if (makerEmail) {
             return {
@@ -848,19 +1090,14 @@ export class EmailNotificationSenderService {
 
     // Approved / Final Approved / Returned / Posted
     if ([4, 7, 15].includes(triggerStatusId)) {
-      const debitAdvice = await this.debitAdviceRepository.findOne({
-        where: {
-          id: transactionId,
-        },
-        relations: ["createdBy"],
-      });
+      const makerEmail = await getMakerEmail();
 
-      if (!debitAdvice?.createdBy?.email) {
+      if (!makerEmail) {
         return null;
       }
 
       return {
-        to: debitAdvice.createdBy.email,
+        to: makerEmail,
         cc: [],
       };
     }
@@ -877,10 +1114,11 @@ export class EmailNotificationSenderService {
     });
   }
 
-  public getStatusConfig(
+ public getStatusConfig(
     triggerStatusId: number,
     title: string,
     documentNumber?: string,
+    moduleName: string = "Document",
   ) {
     switch (triggerStatusId) {
       case 3:
@@ -888,8 +1126,8 @@ export class EmailNotificationSenderService {
           title: "APPROVAL REQUIRED",
           label: "PENDING APPROVAL",
           message: documentNumber
-            ? `Please review and approve Debit Advice ${documentNumber}.`
-            : "Please review and approve the Debit Advice.",
+            ? `Please review and approve ${moduleName} ${documentNumber}.`
+            : `Please review and approve the ${moduleName}.`,
           badgeBg: "#FEF3C7",
           badgeText: "#92400E",
           border: "#F59E0B",
@@ -900,7 +1138,7 @@ export class EmailNotificationSenderService {
           title: "DOCUMENT NOTIFICATION",
           label: "POSTED",
           message: documentNumber
-            ? `Debit Advice ${documentNumber} has been successfully posted.`
+            ? `${moduleName} ${documentNumber} has been successfully posted.`
             : "Document has been successfully posted.",
           badgeBg: "#D1FAE5",
           badgeText: "#065F46",
@@ -913,8 +1151,8 @@ export class EmailNotificationSenderService {
           label: title, // APPROVED or FINAL APPROVED
           message: documentNumber
             ? title === "FINAL APPROVED"
-              ? `Debit Advice ${documentNumber} has been fully approved.`
-              : `Debit Advice ${documentNumber} has been approved.`
+              ? `${moduleName} ${documentNumber} has been fully approved.`
+              : `${moduleName} ${documentNumber} has been approved.`
             : title === "FINAL APPROVED"
               ? "Document has been fully approved."
               : "Document has been approved.",
@@ -928,7 +1166,7 @@ export class EmailNotificationSenderService {
           title: "DOCUMENT NOTIFICATION",
           label: "RETURNED TO MAKER",
           message: documentNumber
-            ? `Debit Advice ${documentNumber} has been returned to the maker.`
+            ? `${moduleName} ${documentNumber} has been returned to the maker.`
             : "Document has been returned to the maker.",
           badgeBg: "#FEE2E2",
           badgeText: "#991B1B",
@@ -946,16 +1184,19 @@ export class EmailNotificationSenderService {
         };
     }
   }
-  public async getApprovalSummaryDocument(
+public async getApprovalSummaryDocument(
     transactionId: number,
     triggerStatusId: number,
+    moduleId?: number,
   ) {
-    const debitAdvice = await this.debitAdviceRepository.findOne({
-      where: {
-        id: transactionId,
-      },
-      relations: ["status", "createdBy", "lines"],
-    });
+    const debitAdvice = moduleId
+      ? await this.resolveDynamicTransaction(moduleId, transactionId)
+      : await this.debitAdviceRepository.findOne({
+          where: {
+            id: transactionId,
+          },
+          relations: ["status", "createdBy", "lines"],
+        });
 
     if (!debitAdvice) {
       return null;
@@ -1181,15 +1422,15 @@ export class EmailNotificationSenderService {
       return;
     }
     
-    const debitAdvice = await this.debitAdviceRepository.findOne({
-      where: {
-        id: transactionId,
-      },
-      relations: ["createdBy", "lines", "lines.glItems"],
-    });
+   const debitAdvice = await this.resolveDynamicTransaction(
+      moduleId,
+      transactionId,
+    );
 
     if (!debitAdvice) {
-      this.logger.error("Debit Advice not found.");
+      this.logger.error(
+        `Transaction ${transactionId} for module ${moduleId} not found.`,
+      );
       return;
     }
 
@@ -1372,10 +1613,16 @@ export class EmailNotificationSenderService {
         message = "";
     }
 
+    const moduleRecord = await this.moduleRepository.findOne({
+        where: { id: moduleId },
+      });
+    const dynamicModuleName = moduleRecord?.module_name ?? "Document";
+
     const currentStatus = this.getStatusConfig(
       triggerStatusId,
       title,
       debitAdvice.document_number,
+      dynamicModuleName,
     );
     // ==========================================
     // SEND EMAIL
@@ -1508,6 +1755,10 @@ export class EmailNotificationSenderService {
     const moduleName = module?.module_name ?? "System";
     const emailSubject = `[${moduleName}] ${title} - Document No: ${debitAdvice.document_number}`;
 
+    const { attachments, cidMap } =
+      this.extractDynamicAttachments(debitAdvice);
+    debitAdvice.cidMap = cidMap;
+
     const emailData = {
       debitAdvice,
       currentStatus,
@@ -1533,6 +1784,7 @@ export class EmailNotificationSenderService {
       showNextApprover,
       showConfirmationRow,
       showApprovalRemarks,
+      moduleName,
     };
 
     await this.emailNotificationMailService.sendMail({
@@ -1541,6 +1793,7 @@ export class EmailNotificationSenderService {
       cc,
       subject: emailSubject,
       html: this.buildDebitAdviceEmail(emailData),
+      attachments,
     });
   }
   public async sendApprovalSummaryEmail({

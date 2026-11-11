@@ -12,13 +12,14 @@ export class EmailNotificationMailService {
     private readonly emailNotificationMatrixRepository: Repository<EmailNotificationMatrix>,
   ) {}
 
-  async sendMail(options: {
+ async sendMail(options: {
     moduleId: number;
     to: string;
     cc?: string | string[];
     subject: string;
     html: string;
     text?: string;
+    attachments?: any[];
   }) {
     const config = await this.emailNotificationMatrixRepository.findOne({
       where: {
@@ -78,6 +79,7 @@ export class EmailNotificationMailService {
         subject: options.subject,
         html: options.html,
         text: options.text,
+        attachments: options.attachments ?? [],
 
         headers: {
           "Message-ID": threadId,
