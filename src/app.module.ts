@@ -255,7 +255,6 @@ import { SignatoryDetailModule } from "./modules/signatory-details/signatory-det
     HolidaysModule,
     ActualTimeLogsModule,
     CrewHubModule,
-    ,
     WeighInModule,
     CustomerModule,
     SignatoryDetailModule,
