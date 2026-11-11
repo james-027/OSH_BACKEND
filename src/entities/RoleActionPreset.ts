@@ -66,7 +66,7 @@ export class RoleActionPreset {
   @JoinColumn({ name: "access_key_id" })
   accessKey!: AccessKey;
 
-  @Column()
+  @Column({ default: 1 })
   access_key_id!: number;
 
   // Foreign key to Status entity

@@ -41,7 +41,7 @@ export class UserLocations {
   @Column()
   location_id!: number;
 
-  @Column()
+  @Column({ default: 1 })
   access_key_id!: number;
 
   @Column({ default: 1 })
