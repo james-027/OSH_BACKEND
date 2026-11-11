@@ -9,6 +9,7 @@ import {
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
+import { AccessKey } from "./AccessKey";
 
 @Entity("sales_territories")
 export class SalesTerritory {
@@ -40,6 +41,9 @@ export class SalesTerritory {
   })
   modified_at: Date;
 
+  @Column({ nullable: true })
+  access_key_id: number;
+
   @ManyToOne(() => Status, {
     eager: false,
     onDelete: "RESTRICT",
@@ -64,4 +68,11 @@ export class SalesTerritory {
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
 
+  @ManyToOne(() => AccessKey, {
+    eager: false,
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE",
+  })
+  @JoinColumn({ name: "access_key_id" })
+  accessKey: AccessKey;
 }

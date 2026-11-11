@@ -133,6 +133,7 @@ import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log
 import { Customer } from "./entities/Customer";
 import { WeighInModule } from "./modules/weigh-in/weigh-in.module";
 import { CustomerModule } from "./modules/customer/customer.module";
+import { SalesTerritoriesModule } from "./modules/sales-territories/sales-territories.module";
 import { SignatoryDetailModule } from "./modules/signatory-details/signatory-details.module";
 
 @Module({
@@ -257,6 +258,7 @@ import { SignatoryDetailModule } from "./modules/signatory-details/signatory-det
     CrewHubModule,
     WeighInModule,
     CustomerModule,
+    SalesTerritoriesModule,
     SignatoryDetailModule,
   ],
   providers: [
