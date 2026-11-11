@@ -163,7 +163,7 @@ export class WarehouseMasterDataService {
             }
 
             return {
-                message: "Warehouse sync completed successfully.11",
+                message: "Warehouse sync completed successfully.",
                 totalFetched: apiWarehouses.length,
                 totalInserted: warehousesToInsert.length,
                 skippedExisting: skippedExistingCount,
