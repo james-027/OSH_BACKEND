@@ -18,7 +18,7 @@ import { AccessKey } from "./AccessKey";
 import { WarehouseRequirement } from "./WarehouseRequirement";
 import { ReqTransactionHeader } from "./ReqTransactionHeader";
 import { PosAvailability } from "./PosAvailability";
-import { Profitcenter } from "./ProfitCenter";
+import { Profitcenter } from "./Profitcenter";
 import { SalesTerritory } from "./SalesTerritory";
 
 @Entity("warehouses")
@@ -153,7 +153,7 @@ export class Warehouse {
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
 
-  @ManyToOne("Profitcenter", { eager: false })
+  @ManyToOne(() => Profitcenter, { eager: false })
   @JoinColumn({ name: "profit_center_id" })
   profitCenter: Profitcenter;
 
