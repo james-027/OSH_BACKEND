@@ -504,7 +504,7 @@ async uploadStaffVendorSalaries(
 
     try {
       const requiredFields = [
-        "DWS Code",
+        "DWS ID",
         "Agency",
         "Location",
         "PhilHealth",
@@ -527,7 +527,7 @@ async uploadStaffVendorSalaries(
         continue;
       }
 
-      const dwsCode = String(row["DWS Code"]).trim();
+      const dwsID = String(row["DWS ID"]).trim();
 
       const staffCode =
         row["Staff Code"] != null &&
@@ -560,7 +560,7 @@ async uploadStaffVendorSalaries(
       }
 
       const whereCondition: any = {
-        old_dws_code: dwsCode,
+        old_dws_id: dwsID,
       };
 
       if (
@@ -578,7 +578,7 @@ async uploadStaffVendorSalaries(
       if (!staff) {
         errors.push({
           row: excelRow,
-          error: `Staff with DWS Code '${dwsCode}'${
+          error: `Staff with DWS ID '${dwsID}'${
             whereCondition.staff_code
               ? ` and Staff Code '${staffCode}'`
               : ""

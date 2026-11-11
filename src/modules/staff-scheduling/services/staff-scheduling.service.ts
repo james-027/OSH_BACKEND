@@ -4162,7 +4162,8 @@ export class StaffSchedulingService {
           updated_by: detail.updated_by,
           just_remarks: detail.just_remarks,
           payroll_remarks: detail.payroll_remarks,
-          /* * HOURS */ regular: toFixed(staffSummary.regular),
+          salary_rate_effectivity: detail.salary_rate_effectivity,
+          regular: toFixed(staffSummary.regular),
           overtime: toFixed(staffSummary.overtime),
           twh: toFixed(staffSummary.twh),
           break: toFixed(staffSummary.break),
@@ -4419,6 +4420,16 @@ export class StaffSchedulingService {
         cash_bond: toFixed(grandTotalsAcc.cash_bond),
         miscellaneous_income: toFixed(grandTotalsAcc.miscellaneous_income),
         total_billing: toFixed(grandTotalsAcc.total_billing),
+        gross_employees_expense: toFixed(
+        grandTotalsAcc.gross_pay +
+        grandTotalsAcc.thirteen_month_pay +
+        grandTotalsAcc.sss_share +
+        grandTotalsAcc.phil_health_share +
+        grandTotalsAcc.pag_ibig_share +
+        grandTotalsAcc.asf +
+        grandTotalsAcc.allowance +
+        grandTotalsAcc.vat
+      ),
       };
       return { data, totals };
     } catch (error) {

@@ -42,6 +42,7 @@ import {
   POS_AVAILABILITY_IDS,
   ACTION_IDS,
   TOGGLE_NAMES,
+  ACCESS_PROCESS,
 } from "src/constants/customConstants";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffTraining } from "src/entities/StaffTrainings";
@@ -267,7 +268,7 @@ export class StaffsService {
   }
 
   private validateBirthday(birthday?: string | Date | null): void {
-    if (!birthday) return; 
+    if (!birthday) return;
 
     const birthDate = new Date(birthday);
     if (isNaN(birthDate.getTime())) {
@@ -293,6 +294,53 @@ export class StaffsService {
     }
   }
 
+  private async generateStaffCode(
+    vendorId: number,
+    locationId: number,
+    accessKeyId?: number,
+  ): Promise<string> {
+    const vendor = await this.vendorRepository.findOne({
+      where: { id: vendorId },
+    });
+
+    const location = await this.locationRepository.findOne({
+      where: { id: locationId },
+    });
+
+    if (!vendor) {
+      throw new BadRequestException("Vendor not found");
+    }
+
+    if (!location) {
+      throw new BadRequestException("Location not found");
+    }
+
+    const serviceProviderCode = vendor.service_provider_code ?? "";
+    const locationCode = location.location_code ?? "";
+
+    const prefix = `${serviceProviderCode}${locationCode}`;
+
+    const transNumber =
+      await this.commonUtilitiesService.generateTransactionNumber({
+        transaction_type: `STAFF CODE ${locationCode}`,
+        vendor_id: vendor.id,
+        location_id: location.id,
+        access_key_id: accessKeyId,
+        format: "D{abbr}{key}{year}-{seq:6}",
+        reset_per_year: false,
+        currentDate: new Date(),
+        abbr: serviceProviderCode,
+      });
+
+    const series = transNumber.match(/\d+$/)?.[0];
+
+    if (!series) {
+      throw new Error("Failed to generate staff code sequence");
+    }
+
+    return `${prefix}-${series}`;
+  }
+
   async create(
     createStaffDto: CreateStaffDto,
     userId: number,
@@ -303,6 +351,10 @@ export class StaffsService {
       if (!createdByUser) {
         throw new BadRequestException("Authenticated user not found");
       }
+
+      const requiresTraining = ACCESS_PROCESS.STAFF_TRAINING.includes(
+        Number(accessKeyId),
+      );
 
       this.validateBirthday(createStaffDto.birthday);
 
@@ -367,10 +419,19 @@ export class StaffsService {
         );
       }
 
+      let generatedStaffCode: string | null =
+        createStaffDto.staff_code?.trim().toUpperCase() || null;
+
+      if (!requiresTraining && !generatedStaffCode) {
+        generatedStaffCode = await this.generateStaffCode(
+          createStaffDto.vendor_id,
+          createStaffDto.location_id,
+          accessKeyId,
+        );
+      }
+
       const newStaff = this.staffsRepository.create({
-        staff_code: createStaffDto.staff_code
-          ? createStaffDto.staff_code.toUpperCase()
-          : null,
+        staff_code: generatedStaffCode,
         last_name: createStaffDto.last_name.toUpperCase(),
         first_name: createStaffDto.first_name.toUpperCase(),
         middle_name: createStaffDto.middle_name
@@ -379,7 +440,9 @@ export class StaffsService {
         location_id: createStaffDto.location_id,
         email: createStaffDto.email || null,
         vendor_id: createStaffDto.vendor_id,
-        assign_status_id: 20,
+        assign_status_id: requiresTraining
+          ? STATUS_IDS.TRAINEE
+          : STATUS_IDS.PASSED,
         position_id: createStaffDto.position_id,
         is_institutional: createStaffDto.is_institutional,
         access_key_id: accessKeyId,
@@ -495,29 +558,6 @@ export class StaffsService {
       const savedStaffVendorSalary =
         await this.staffVendorSalaryRepository.save(newStaffVendorSalary);
 
-      // let savedStaffSalary: StaffSalary | null = null;
-
-      // if (
-      //   (createStaffDto.allowance !== undefined &&
-      //     createStaffDto.allowance !== null) ||
-      //   (createStaffDto.salary_rate !== undefined &&
-      //     createStaffDto.salary_rate !== null)
-      // ) {
-      //   const newStaffSalary = this.staffSalaryRepository.create({
-      //     staff_id: savedStaff.id,
-      //     staff_vendor_id: newStaffVendorSalary.id,
-      //     allowance: createStaffDto.allowance,
-      //     salary_rate: createStaffDto.salary_rate,
-      //     access_key_id: accessKeyId,
-      //     status_id: 1,
-      //     created_by: userId,
-      //     updated_by: userId,
-      //   });
-
-      //   const savedStaffSalary =
-      //     await this.staffSalaryRepository.save(newStaffSalary);
-      // }
-
       // Audit trail
       await this.userAuditTrailCreateService.create(
         {
@@ -616,11 +656,13 @@ export class StaffsService {
 
         this.sseEventEmitter.emitCreate("staff_brands", response.id, response);
 
+        if (requiresTraining) {
         this.sseEventEmitter.emitCreate(
           "staff_trainings",
           response.id,
           response,
         );
+      }
 
         this.sseEventEmitter.emitCreate(
           "staff_category_types",
@@ -1208,28 +1250,11 @@ export class StaffsService {
 
           let generatedStaffCode: string | null = null;
 
-          // if (isVendorChanged || isLocationChanged) {
-          const serviceProviderCode = vendor.service_provider_code ?? "";
-
-          const locationCode = location.location_code ?? "";
-
-          const prefix = `${serviceProviderCode}${locationCode}`;
-
-          const trans_number =
-            await this.commonUtilitiesService.generateTransactionNumber({
-              transaction_type: `STAFF CODE ${locationCode}`,
-              vendor_id: transfer.new_vendor_id,
-              location_id: transfer.new_location_id,
-              access_key_id: transfer.access_key_id,
-              format: "D{abbr}{key}{year}-{seq:6}",
-              reset_per_year: false,
-              currentDate: new Date(),
-              abbr: vendor.service_provider_code ?? "",
-            });
-
-          const series = trans_number.match(/\d+$/)?.[0];
-
-          generatedStaffCode = `${prefix}-${series}`;
+          generatedStaffCode = await this.generateStaffCode(
+            transfer.new_vendor_id,
+            transfer.new_location_id,
+            transfer.access_key_id,
+          );
 
           await queryRunner.manager.update(Staff, updatedStaff.id, {
             staff_code: generatedStaffCode,
@@ -1903,13 +1928,14 @@ export class StaffsService {
 
       return response;
     } catch (error) {
+      logger.error("Staff deploy failed:", error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
       ) {
         throw error;
       }
-      throw new Error("Failed to process staff deploy");
+      throw error;
     }
   }
 
@@ -1929,7 +1955,6 @@ export class StaffsService {
     const XLSX = require("xlsx");
 
     const workbook = XLSX.readFile(file.path);
-
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
     const rows = XLSX.utils.sheet_to_json(sheet, {
@@ -1939,6 +1964,10 @@ export class StaffsService {
 
     const success = [];
     const errors = [];
+
+    const requiresTraining = ACCESS_PROCESS.STAFF_TRAINING.includes(
+      Number(accessKeyId),
+    );
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -2051,6 +2080,7 @@ export class StaffsService {
           });
           continue;
         }
+
         if (!categoryType) {
           errors.push({
             row: i + 2,
@@ -2068,7 +2098,6 @@ export class StaffsService {
 
         const isInstitutional = this.parseExcelBoolean(row["Is Institutional"]);
 
-
         let existingRecord = null;
 
         if (staffCode) {
@@ -2078,7 +2107,7 @@ export class StaffsService {
             },
           });
         }
-        
+
         if (!existingRecord && dwsId) {
           existingRecord = await this.staffsRepository.findOne({
             where: {
@@ -2087,15 +2116,15 @@ export class StaffsService {
           });
         }
 
-        if (!existingRecord && dwsCode) {
-          existingRecord = await this.staffsRepository.findOne({
-            where: {
-              old_dws_code: dwsCode,
-            },
-          });
-        }
+        // if (!existingRecord && dwsCode) {
+        //   existingRecord = await this.staffsRepository.findOne({
+        //     where: {
+        //       old_dws_code: dwsCode,
+        //     },
+        //   });
+        // }
 
-        if (!existingRecord) {
+        if (!existingRecord && !staffCode && !dwsId) {
           const whereCondition: any = {
             first_name: firstName,
             last_name: lastName,
@@ -2109,8 +2138,6 @@ export class StaffsService {
             where: whereCondition,
           });
         }
-
-
 
         const TIN = String(row["TIN"] || "").trim();
         const SSS = String(row["SSS Number"] || "").trim();
@@ -2181,6 +2208,7 @@ export class StaffsService {
           });
           continue;
         }
+
         if (!PHILHEALTH) {
           errors.push({
             row: i + 2,
@@ -2203,15 +2231,19 @@ export class StaffsService {
         const existingTin = await this.staffsRepository.findOne({
           where: { tin: TIN },
         });
+
         const existingSSS = await this.staffsRepository.findOne({
           where: { sss_number: SSS },
         });
+
         const existingPagibig = await this.staffsRepository.findOne({
           where: { pagibig_number: PAGIBIG },
         });
+
         const existingPhilHealth = await this.staffsRepository.findOne({
           where: { phil_health_number: PHILHEALTH },
         });
+
         const existingEmail = await this.staffsRepository.findOne({
           where: { email: EMAIL },
         });
@@ -2223,6 +2255,7 @@ export class StaffsService {
           });
           continue;
         }
+
         if (existingSSS && existingSSS.id !== existingRecord?.id) {
           errors.push({
             row: i + 2,
@@ -2230,6 +2263,7 @@ export class StaffsService {
           });
           continue;
         }
+
         if (existingPagibig && existingPagibig.id !== existingRecord?.id) {
           errors.push({
             row: i + 2,
@@ -2237,6 +2271,7 @@ export class StaffsService {
           });
           continue;
         }
+
         if (
           existingPhilHealth &&
           existingPhilHealth.id !== existingRecord?.id
@@ -2255,7 +2290,12 @@ export class StaffsService {
 
         if (existingRecord) {
           existingRecord.contact_number = row["Contact Number"];
-          existingRecord.staff_code = staffCode;
+
+          // Retain existing staff code if Excel does not provide one.
+          if (staffCode) {
+            existingRecord.staff_code = staffCode;
+          }
+
           existingRecord.first_name = firstName;
           existingRecord.last_name = lastName;
           existingRecord.email = row["Email"];
@@ -2274,27 +2314,35 @@ export class StaffsService {
           existingRecord.pagibig_number = row["PAGIBIG Number"];
           existingRecord.phil_health_number = row["Phil Health Number"];
           existingRecord.remarks = row["Remarks"];
+
           existingRecord.hired_date = this.formatDateToString(
             row["Hired Date"],
           );
+
           existingRecord.to_hr_date = this.formatDateToString(
             row["To HR Date"],
           );
+
           existingRecord.separated_date = this.formatDateToString(
             row["Seperated Date"],
           );
+
           existingRecord.to_sts_date = this.formatDateToString(
             row["To STS Date"],
           );
+
           existingRecord.approved_eprf_date = this.formatDateToString(
             row["Approved EPRF Date"],
           );
+
           existingRecord.req_completion_date = this.formatDateToString(
             row["Req Completion Date"],
           );
+
           existingRecord.actual_deployment_date = this.formatDateToString(
             row["Actual Deployment Date"],
           );
+
           existingRecord.overall_remarks = row["Overall Remarks"];
           existingRecord.updated_by = userId;
 
@@ -2358,44 +2406,46 @@ export class StaffsService {
               );
           }
 
-          let existingVendorSalary =
-            await this.staffVendorSalaryRepository.findOne({
-              where: {
-                staff_id: savedStaff.id,
-                access_key_id: accessKeyId,
+          const queryRunner =
+            this.staffsRepository.manager.connection.createQueryRunner();
+
+          try {
+            await queryRunner.connect();
+
+            const result = await this.syncVendorAndSalary(
+              queryRunner,
+              savedStaff,
+              {
+                vendor_id: vendor.id,
+                location_id: location.id,
+                salary_rate: 0,
+                allowance: 0,
+                status_id: STATUS_IDS.ACTIVE,
               },
-            });
+              userId,
+            );
 
-          if (existingVendorSalary) {
-            existingVendorSalary.vendor_id = vendor.id;
-            existingVendorSalary.location_id = location.id;
-            // existingVendorSalary.allowance = row["Allowance"] || null;
-            // existingVendorSalary.salary_rate = row["Salary Rate"] || null;
-            existingVendorSalary.status_id = 1;
-            existingVendorSalary.updated_by = userId;
-
-            savedStaffVendorSalary =
-              await this.staffVendorSalaryRepository.save(existingVendorSalary);
-          } else {
-            savedStaffVendorSalary =
-              await this.staffVendorSalaryRepository.save(
-                this.staffVendorSalaryRepository.create({
-                  staff_id: savedStaff.id,
-                  vendor_id: vendor.id,
-                  location_id: location.id,
-                  access_key_id: accessKeyId,
-                  // allowance: row["Allowance"] || null,
-                  // salary_rate: row["Salary Rate"] || null,
-                  status_id: 1,
-                  created_by: userId,
-                  updated_by: userId,
-                }),
-              );
+            savedStaffVendorSalary = result.staffVendorSalary;
+          } finally {
+            await queryRunner.release();
           }
         } else {
+          // NEW STAFF ONLY:
+          // Generate staff code automatically when training is not required
+
+          let generatedStaffCode: string | null = staffCode || null;
+
+          if (!requiresTraining && !generatedStaffCode) {
+            generatedStaffCode = await this.generateStaffCode(
+              vendor.id,
+              location.id,
+              accessKeyId,
+            );
+          }
+
           const newStaff = this.staffsRepository.create({
             first_name: firstName,
-            staff_code: staffCode,
+            staff_code: generatedStaffCode,
             contact_number: row["Contact Number"],
             last_name: lastName,
             middle_name: middleName,
@@ -2406,7 +2456,13 @@ export class StaffsService {
             position_id: position.id,
             is_institutional: isInstitutional,
             access_key_id: accessKeyId,
-            assign_status_id: 20,
+
+            // Training-required access keys retain the existing assignment status.
+            // Access keys without training are automatically PASSED.
+            assign_status_id: requiresTraining
+              ? STATUS_IDS.TRAINEE
+              : STATUS_IDS.PASSED,
+
             store_request: row["Store Request"],
             sss_number: SSS,
             tin: TIN,
@@ -2429,7 +2485,8 @@ export class StaffsService {
               row["Actual Deployment Date"],
             ),
             overall_remarks: row["Overall Remarks"],
-            status_id: 1,
+
+            status_id: STATUS_IDS.ACTIVE,
             created_by: userId,
             updated_by: userId,
           });
@@ -2454,7 +2511,7 @@ export class StaffsService {
               staff_id: savedStaff.id,
               brand_id: brand.id,
               access_key_id: accessKeyId,
-              status_id: 1,
+              status_id: STATUS_IDS.ACTIVE,
               created_by: userId,
               updated_by: userId,
             }),
@@ -2465,25 +2522,35 @@ export class StaffsService {
               staff_id: savedStaff.id,
               category_type_id: categoryType.id,
               access_key_id: accessKeyId,
-              status_id: 1,
+              status_id: STATUS_IDS.ACTIVE,
               created_by: userId,
               updated_by: userId,
             }),
           );
 
-          savedStaffVendorSalary = await this.staffVendorSalaryRepository.save(
-            this.staffVendorSalaryRepository.create({
-              staff_id: savedStaff.id,
-              vendor_id: vendor.id,
-              location_id: location.id,
-              access_key_id: accessKeyId,
-              // allowance: row["Allowance"] || null,
-              // salary_rate: row["Salary Rate"] || null,
-              status_id: 1,
-              created_by: userId,
-              updated_by: userId,
-            }),
-          );
+          const queryRunner =
+            this.staffsRepository.manager.connection.createQueryRunner();
+
+          try {
+            await queryRunner.connect();
+
+            const result = await this.syncVendorAndSalary(
+              queryRunner,
+              savedStaff,
+              {
+                vendor_id: vendor.id,
+                location_id: location.id,
+                salary_rate: 0,
+                allowance: 0,
+                status_id: STATUS_IDS.ACTIVE,
+              },
+              userId,
+            );
+
+            savedStaffVendorSalary = result.staffVendorSalary;
+          } finally {
+            await queryRunner.release();
+          }
         }
 
         await this.userAuditTrailCreateService.create(
@@ -2669,8 +2736,6 @@ export class StaffsService {
           // "Staff Code",
           "New Agency",
           "New Location",
-          "Allowance",
-          "Salary Rate",
           "Effectivity Date",
         ];
 
@@ -2752,16 +2817,16 @@ export class StaffsService {
           existingRecord = await this.staffsRepository.findOne({
             where: {
               staff_code: staffCode,
-              status_id:STATUS_IDS.ACTIVE
+              status_id: STATUS_IDS.ACTIVE,
             },
           });
-        } 
+        }
 
-
-        else if (dwsCode) {
+        if (!existingRecord && dwsCode) {
           existingRecord = await this.staffsRepository.findOne({
             where: {
               old_dws_code: dwsCode,
+              status_id: STATUS_IDS.ACTIVE,
             },
           });
         }
@@ -2769,7 +2834,7 @@ export class StaffsService {
         if (!existingRecord) {
           errors.push({
             row: i + 2,
-            error: `Staff not found`,
+            error: `Staff not found. Staff Code: ${staffCode || "N/A"}, DWS Code: ${dwsCode || "N/A"}`,
           });
           continue;
         }
@@ -2894,7 +2959,7 @@ export class StaffsService {
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = ["New Store", "Effectivity Date"];
+        const requiredFields = ["DWS ID", "New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -2913,7 +2978,7 @@ export class StaffsService {
         }
 
         const staffCode = row["Staff Code"]?.toString().trim();
-        const dwsCode = row["DWS Code"]?.toString().trim();
+        const dwsID = row["DWS ID"]?.toString().trim();
 
         let existingRecord = null;
 
@@ -2923,10 +2988,12 @@ export class StaffsService {
               staff_code: staffCode,
             },
           });
-        } else if (dwsCode) {
+        }
+
+        if (!existingRecord && dwsID) {
           existingRecord = await this.staffsRepository.findOne({
             where: {
-              old_dws_code: dwsCode,
+              old_dws_id: dwsID,
             },
           });
         }
@@ -2934,7 +3001,7 @@ export class StaffsService {
         if (!existingRecord) {
           errors.push({
             row: i + 2,
-            error: `Staff Not found`,
+            error: `Staff not found. Staff Code: ${staffCode || "N/A"}, DWS ID: ${dwsID || "N/A"}`,
           });
           continue;
         }
@@ -2947,8 +3014,13 @@ export class StaffsService {
           );
         }
 
+        const warehouseName = String(row["New Store"]).trim();
+
         const warehouse = await this.warehouseRepository.findOne({
-          where: { warehouse_name: row["New Store"] },
+          where: {
+            warehouse_name: warehouseName,
+            status_id: STATUS_IDS.ACTIVE,
+          },
         });
 
         if (!warehouse) {

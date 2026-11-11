@@ -51,6 +51,7 @@ export const STATUS_IDS = {
   PERMANENT_CLOSED: 10,
   CANCELLED_DECLINED: 11,
   TEMPORARY_CLOSED: 12,
+  PASSED:19,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -84,7 +85,9 @@ export const LOGS_TYPE_ID = {
 
 export const ACCESS_PROCESS = {
   AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
+  STAFF_TRAINING: [ACCESS_KEY_IDS.CTGI_ACCESS] as number[],
 };
+
 
 export const STATUS_NAMES = {
   [STATUS_IDS.PENDING]: "Pending",
