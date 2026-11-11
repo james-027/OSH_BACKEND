@@ -153,9 +153,9 @@ export class Warehouse {
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
 
-  // @ManyToOne(() => Profitcenter, { eager: false })
-  // @JoinColumn({ name: "profit_center_id" })
-  // profitCenter: Profitcenter;
+  @ManyToOne("Profitcenter", { eager: false })
+  @JoinColumn({ name: "profit_center_id" })
+  profitCenter: Profitcenter;
 
   @ManyToOne(() => SalesTerritory, { eager: false })
   @JoinColumn({ name: "sales_territory_id" })
