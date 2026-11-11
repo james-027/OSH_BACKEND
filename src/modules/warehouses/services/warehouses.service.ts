@@ -11,6 +11,8 @@ import { PosAvailability } from "../../../entities/PosAvailability";
 import { Status } from "../../../entities/Status";
 import { Location } from "../../../entities/Location";
 import { Segment } from "../../../entities/Segment";
+import { Profitcenter } from "../../../entities/Profitcenter";
+import { SalesTerritory } from "../../../entities/SalesTerritory";
 import { UsersService } from "../../users/services/users.service";
 import { CreateWarehouseDto } from "../dto/CreateWarehouseDto";
 import { UpdateWarehouseDto } from "../dto/UpdateWarehouseDto";
@@ -38,6 +40,8 @@ export class WarehousesService {
     "status",
     "remStatus",
     "posAvailability",
+    "profitCenter",
+    "salesTerritory",
     "createdBy",
     "updatedBy",
   ];
@@ -55,6 +59,10 @@ export class WarehousesService {
     private locationsRepository: Repository<Location>,
     @InjectRepository(Segment)
     private segmentsRepository: Repository<Segment>,
+    @InjectRepository(Profitcenter)
+    private profitcentersRepository: Repository<Profitcenter>,
+    @InjectRepository(SalesTerritory)
+    private salesTerritoriesRepository: Repository<SalesTerritory>,
     private usersService: UsersService,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private commonUtilitiesService: CommonUtilitiesService,
@@ -104,6 +112,21 @@ export class WarehousesService {
       pos_availability_name: w.posAvailability
         ? w.posAvailability.pos_availability
         : null,
+      profit_center_id: w.profit_center_id ?? null,
+      profit_center_code: w.profitCenter
+        ? w.profitCenter.profitcenter_code
+        : null,
+      profit_center_name: w.profitCenter
+        ? w.profitCenter.profitcenter_name
+        : null,
+      sales_territory_id: w.sales_territory_id ?? null,
+      sales_territory_description: w.salesTerritory
+        ? w.salesTerritory.description
+        : null,
+      allowed_geofence:
+        w.allowed_geofence !== null && w.allowed_geofence !== undefined
+          ? Number(w.allowed_geofence)
+          : null,
       created_user: w.createdBy
         ? `${w.createdBy.first_name} ${w.createdBy.last_name}`
         : null,
@@ -225,6 +248,13 @@ export class WarehousesService {
         createDto.longitude !== undefined && createDto.longitude !== null
           ? Number(createDto.longitude)
           : null,
+      profit_center_id: createDto.profit_center_id ?? null,
+      sales_territory_id: createDto.sales_territory_id ?? null,
+      allowed_geofence:
+        createDto.allowed_geofence !== undefined &&
+        createDto.allowed_geofence !== null
+          ? Number(createDto.allowed_geofence)
+          : null,
       access_key_id: createDto.access_key_id,
       created_by: userId,
       updated_by: userId,
@@ -320,6 +350,18 @@ export class WarehousesService {
     if (updateDto.longitude !== undefined) {
       updatePayload.longitude =
         updateDto.longitude !== null ? Number(updateDto.longitude) : null;
+    }
+    if (updateDto.profit_center_id !== undefined) {
+      updatePayload.profit_center_id = updateDto.profit_center_id;
+    }
+    if (updateDto.sales_territory_id !== undefined) {
+      updatePayload.sales_territory_id = updateDto.sales_territory_id;
+    }
+    if (updateDto.allowed_geofence !== undefined) {
+      updatePayload.allowed_geofence =
+        updateDto.allowed_geofence !== null
+          ? Number(updateDto.allowed_geofence)
+          : null;
     }
 
     await this.warehousesRepository.update(id, updatePayload);
@@ -591,12 +633,16 @@ export class WarehousesService {
       posAvailabilities,
       locations,
       segments,
+      profitCenters,
+      salesTerritories,
     ] = await Promise.all([
       this.warehousesRepository.find(),
       this.warehouseTypesRepository.find(),
       this.posAvailabilityRepository.find(),
       this.locationsRepository.find(),
       this.segmentsRepository.find(),
+      this.profitcentersRepository.find(),
+      this.salesTerritoriesRepository.find(),
     ]);
 
     const warehouseByIfs = new Map(
@@ -657,6 +703,33 @@ export class WarehousesService {
         posByText.set(clean.replace(/[\s_-]+/g, ""), pa);
       }
       posByText.set(String(pa.id), pa);
+    }
+
+    // Map Profitcenter by code, name, and id
+    const profitCenterByCodeOrName = new Map<string, Profitcenter>();
+    for (const pc of profitCenters) {
+      if (pc.profitcenter_code) {
+        profitCenterByCodeOrName.set(
+          pc.profitcenter_code.trim().toUpperCase(),
+          pc,
+        );
+      }
+      if (pc.profitcenter_name) {
+        profitCenterByCodeOrName.set(
+          pc.profitcenter_name.trim().toUpperCase(),
+          pc,
+        );
+      }
+      profitCenterByCodeOrName.set(String(pc.id), pc);
+    }
+
+    // Map SalesTerritory by description and id
+    const salesTerritoryByDesc = new Map<string, SalesTerritory>();
+    for (const st of salesTerritories) {
+      if (st.description) {
+        salesTerritoryByDesc.set(st.description.trim().toUpperCase(), st);
+      }
+      salesTerritoryByDesc.set(String(st.id), st);
     }
 
     // Map REM Status strictly to the 5 valid values from CustomConstant
@@ -960,6 +1033,84 @@ export class WarehousesService {
         }
       }
 
+      // Validate and resolve Profit Center from text (code, name, id)
+      let resolvedProfitCenterId: number | null = null;
+      const rawProfitCenter = row.profit_center ?? row.profit_center_id;
+      if (
+        rawProfitCenter !== null &&
+        rawProfitCenter !== undefined &&
+        String(rawProfitCenter).trim() !== ""
+      ) {
+        const key = String(rawProfitCenter).trim().toUpperCase();
+        const matched = profitCenterByCodeOrName.get(key);
+        if (!matched) {
+          const allowedPcs = Array.from(
+            new Set(
+              profitCenters.map(
+                (p) => p.profitcenter_code || p.profitcenter_name,
+              ),
+            ),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid PROFIT CENTER: '${rawProfitCenter}'. Allowed values: ${allowedPcs.slice(0, 20).join(", ")}${allowedPcs.length > 20 ? "..." : ""}`,
+          });
+          continue;
+        }
+        resolvedProfitCenterId = matched.id;
+      } else if (existing) {
+        resolvedProfitCenterId = existing.profit_center_id ?? null;
+      }
+
+      // Validate and resolve Sales Territory from text (description, id)
+      let resolvedSalesTerritoryId: number | null = null;
+      const rawSalesTerritory = row.sales_territory ?? row.sales_territory_id;
+      if (
+        rawSalesTerritory !== null &&
+        rawSalesTerritory !== undefined &&
+        String(rawSalesTerritory).trim() !== ""
+      ) {
+        const key = String(rawSalesTerritory).trim().toUpperCase();
+        const matched = salesTerritoryByDesc.get(key);
+        if (!matched) {
+          const allowedSts = Array.from(
+            new Set(salesTerritories.map((s) => s.description)),
+          ).filter(Boolean);
+          errors.push({
+            row: rowNum,
+            error: `Invalid SALES TERRITORY: '${rawSalesTerritory}'. Allowed values: ${allowedSts.slice(0, 20).join(", ")}${allowedSts.length > 20 ? "..." : ""}`,
+          });
+          continue;
+        }
+        resolvedSalesTerritoryId = matched.id;
+      } else if (existing) {
+        resolvedSalesTerritoryId = existing.sales_territory_id ?? null;
+      }
+
+      // Validate and resolve allowed_geofence
+      let resolvedAllowedGeofence: number | null = null;
+      if (
+        row.allowed_geofence !== null &&
+        row.allowed_geofence !== undefined &&
+        String(row.allowed_geofence).trim() !== ""
+      ) {
+        const geofenceNum = Number(row.allowed_geofence);
+        if (isNaN(geofenceNum)) {
+          errors.push({
+            row: rowNum,
+            error: `Invalid ALLOWED GEOFENCE: '${row.allowed_geofence}'. Must be a valid number.`,
+          });
+          continue;
+        }
+        resolvedAllowedGeofence = geofenceNum;
+      } else if (existing) {
+        resolvedAllowedGeofence =
+          existing.allowed_geofence !== null &&
+          existing.allowed_geofence !== undefined
+            ? Number(existing.allowed_geofence)
+            : null;
+      }
+
       try {
         let action: "inserted" | "updated";
         let saved: Warehouse;
@@ -1002,6 +1153,27 @@ export class WarehousesService {
           if (resolvedEndingTime !== null) {
             existing.ending_time = resolvedEndingTime;
           }
+          if (
+            rawProfitCenter !== null &&
+            rawProfitCenter !== undefined &&
+            String(rawProfitCenter).trim() !== ""
+          ) {
+            existing.profit_center_id = resolvedProfitCenterId;
+          }
+          if (
+            rawSalesTerritory !== null &&
+            rawSalesTerritory !== undefined &&
+            String(rawSalesTerritory).trim() !== ""
+          ) {
+            existing.sales_territory_id = resolvedSalesTerritoryId;
+          }
+          if (
+            row.allowed_geofence !== null &&
+            row.allowed_geofence !== undefined &&
+            String(row.allowed_geofence).trim() !== ""
+          ) {
+            existing.allowed_geofence = resolvedAllowedGeofence;
+          }
           existing.updated_by = userId;
 
           saved = await this.warehousesRepository.save(existing);
@@ -1030,6 +1202,9 @@ export class WarehousesService {
             end_operation: (resolvedEndOperation as any) || null,
             starting_time: resolvedStartingTime || null,
             ending_time: resolvedEndingTime || null,
+            profit_center_id: resolvedProfitCenterId,
+            sales_territory_id: resolvedSalesTerritoryId,
+            allowed_geofence: resolvedAllowedGeofence,
             access_key_id: accessKeyId || 1,
             created_by: userId,
             updated_by: userId,
@@ -1062,6 +1237,12 @@ export class WarehousesService {
         const matchedWarehouseType = warehouseTypes.find(
           (t) => t.id === saved.warehouse_type_id,
         );
+        const matchedProfitCenter = profitCenters.find(
+          (p) => p.id === saved.profit_center_id,
+        );
+        const matchedSalesTerritory = salesTerritories.find(
+          (s) => s.id === saved.sales_territory_id,
+        );
 
         success.push({
           id: saved.id,
@@ -1089,6 +1270,17 @@ export class WarehousesService {
           longitude:
             saved.longitude !== null && saved.longitude !== undefined
               ? Number(saved.longitude)
+              : null,
+          profit_center_id: saved.profit_center_id,
+          profit_center_code: matchedProfitCenter?.profitcenter_code || null,
+          profit_center_name: matchedProfitCenter?.profitcenter_name || null,
+          sales_territory_id: saved.sales_territory_id,
+          sales_territory_description:
+            matchedSalesTerritory?.description || null,
+          allowed_geofence:
+            saved.allowed_geofence !== null &&
+            saved.allowed_geofence !== undefined
+              ? Number(saved.allowed_geofence)
               : null,
           status_id: saved.status_id,
           status_name: STATUS_NAMES[saved.status_id] ?? "Active",

@@ -97,6 +97,9 @@ export class Warehouse {
   @Column({ type: "time", nullable: true })
   ending_time: string;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  allowed_geofence: number;
+
   @Column({
     type: "decimal",
     precision: 10,

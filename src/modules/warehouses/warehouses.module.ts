@@ -53,6 +53,8 @@ import { PosAvailability } from "src/entities/PosAvailability";
 import { Status } from "src/entities/Status";
 import { Location } from "src/entities/Location";
 import { Segment } from "src/entities/Segment";
+import { Profitcenter } from "src/entities/Profitcenter";
+import { SalesTerritory } from "src/entities/SalesTerritory";
 import { WarehouseMasterDataService } from "./services/warehouse-masterdata.service";
 import { WarehouseMasterDataScheduler } from "src/schedulers/warehouse-masterdata.scheduler";
 import { WarehousesmasterdataController } from "./controllers/warehouse-masterdata.controller";
@@ -81,6 +83,8 @@ import { WarehousesmasterdataController } from "./controllers/warehouse-masterda
       Status,
       Location,
       Segment,
+      Profitcenter,
+      SalesTerritory,
     ]),
     UsersModule,
     StatusModule,

@@ -170,6 +170,9 @@ export class WarehousesController {
         "POS AVAILABILITY": { format: "uppercase-trim", nullable: true },
         ALLOWANCE: { format: "number-trim", nullable: true },
         "END OPERATION DATE": { format: "trim", nullable: true },
+        "PROFIT CENTER": { format: "uppercase-trim", nullable: true },
+        "SALES TERRITORY": { format: "uppercase-trim", nullable: true },
+        "ALLOWED GEOFENCE": { format: "number-trim", nullable: true },
       },
     };
 
@@ -242,6 +245,50 @@ export class WarehousesController {
       if (!row["END TIME"] && row["ENDING_TIME"]) {
         row["END TIME"] = row["ENDING_TIME"];
       }
+      if (!row["PROFIT CENTER"] && row["PROFIT CENTER CODE"]) {
+        row["PROFIT CENTER"] = row["PROFIT CENTER CODE"];
+      }
+      if (!row["PROFIT CENTER"] && row["PROFIT CENTER NAME"]) {
+        row["PROFIT CENTER"] = row["PROFIT CENTER NAME"];
+      }
+      if (!row["PROFIT CENTER"] && row["PROFIT CENTER ID"]) {
+        row["PROFIT CENTER"] = row["PROFIT CENTER ID"];
+      }
+      if (!row["PROFIT CENTER"] && row["PROFIT_CENTER"]) {
+        row["PROFIT CENTER"] = row["PROFIT_CENTER"];
+      }
+      if (!row["PROFIT CENTER"] && row["PROFIT_CENTER_ID"]) {
+        row["PROFIT CENTER"] = row["PROFIT_CENTER_ID"];
+      }
+      if (!row["PROFIT CENTER"] && row["PROFITCENTER"]) {
+        row["PROFIT CENTER"] = row["PROFITCENTER"];
+      }
+
+      if (!row["SALES TERRITORY"] && row["SALES TERRITORY NAME"]) {
+        row["SALES TERRITORY"] = row["SALES TERRITORY NAME"];
+      }
+      if (!row["SALES TERRITORY"] && row["SALES TERRITORY DESCRIPTION"]) {
+        row["SALES TERRITORY"] = row["SALES TERRITORY DESCRIPTION"];
+      }
+      if (!row["SALES TERRITORY"] && row["SALES TERRITORY ID"]) {
+        row["SALES TERRITORY"] = row["SALES TERRITORY ID"];
+      }
+      if (!row["SALES TERRITORY"] && row["SALES_TERRITORY"]) {
+        row["SALES TERRITORY"] = row["SALES_TERRITORY"];
+      }
+      if (!row["SALES TERRITORY"] && row["SALES_TERRITORY_ID"]) {
+        row["SALES TERRITORY"] = row["SALES_TERRITORY_ID"];
+      }
+      if (!row["SALES TERRITORY"] && row["TERRITORY"]) {
+        row["SALES TERRITORY"] = row["TERRITORY"];
+      }
+
+      if (!row["ALLOWED GEOFENCE"] && row["ALLOWED_GEOFENCE"]) {
+        row["ALLOWED GEOFENCE"] = row["ALLOWED_GEOFENCE"];
+      }
+      if (!row["ALLOWED GEOFENCE"] && row["GEOFENCE"]) {
+        row["ALLOWED GEOFENCE"] = row["GEOFENCE"];
+      }
 
       const formattedRow = validateAndFormatExcelRow(
         row,
@@ -276,6 +323,14 @@ export class WarehousesController {
         end_operation: formattedRow["END OPERATION DATE"] || null,
         starting_time: formattedRow["START TIME"] || null,
         ending_time: formattedRow["END TIME"] || null,
+        profit_center: formattedRow["PROFIT CENTER"] || null,
+        sales_territory: formattedRow["SALES TERRITORY"] || null,
+        allowed_geofence:
+          formattedRow["ALLOWED GEOFENCE"] !== null &&
+          formattedRow["ALLOWED GEOFENCE"] !== undefined &&
+          formattedRow["ALLOWED GEOFENCE"] !== ""
+            ? Number(formattedRow["ALLOWED GEOFENCE"])
+            : null,
         __rowNum__: idx + 2,
       };
     });
