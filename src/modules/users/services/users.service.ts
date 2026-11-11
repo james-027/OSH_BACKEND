@@ -1251,8 +1251,7 @@ export class UsersService {
     if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
     if (profile_pic_url !== undefined)
       userToUpdate.profile_pic_url = profile_pic_url;
-    if (signature_url !== undefined)
-      userToUpdate.signature_url = signature_url;
+    if (signature_url !== undefined) userToUpdate.signature_url = signature_url;
 
     // Hash new password if provided
     if (password) {
@@ -2894,7 +2893,15 @@ export class UsersService {
 
       // Get user permissions with role, system, and system access keys relations
       const userPermissions = await this.userPermissionsRepository.find({
-        where: { user_id, status_id: 1, access_key_id },
+        where: {
+          user_id,
+          status_id: 1,
+          access_key_id,
+          role: {
+            status_id: 1,
+            system: { status_id: 1, system_access_keys: { status_id: 1 } },
+          },
+        },
         relations: ["role", "role.system", "role.system.system_access_keys"],
       });
 
