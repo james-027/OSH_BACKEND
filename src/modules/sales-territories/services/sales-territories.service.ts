@@ -304,6 +304,7 @@ export class SalesTerritoriesService {
           );
         }
         existing.status_id = dto.status_id;
+        existing.status = statusEntity;
       }
 
       if (dto.access_key_id !== undefined) {
@@ -452,15 +453,12 @@ export class SalesTerritoriesService {
       `Toggling status for Sales Territory ID ${id} from ${territory.status_id} to ${newStatusId}`,
     );
 
-    territory.status_id = newStatusId;
-    territory.updated_by = userId;
-
-    await this.salesTerritoryRepository.save(territory);
-
-    const updated = await this.salesTerritoryRepository.findOne({
-      where: { id },
-      relations: ["status", "createdBy", "updatedBy", "accessKey"],
+    await this.salesTerritoryRepository.update(id, {
+      status_id: newStatusId,
+      updated_by: userId,
     });
+
+    const updated = await this.findOne(id, accessKeyId);
 
     await this.userAuditTrailCreateService.create(
       {
@@ -583,6 +581,7 @@ export class SalesTerritoriesService {
             id: existing.id,
             description,
             status_id: statusId,
+            status_name: record.status ? record.status.toString() : "ACTIVE",
             access_key_id: existing.access_key_id,
             action: "updated",
             __rowNum__: rowNum,
@@ -604,6 +603,7 @@ export class SalesTerritoriesService {
             id: saved.id,
             description,
             status_id: statusId,
+            status_name: record.status ? record.status.toString() : "ACTIVE",
             access_key_id: saved.access_key_id,
             action: "inserted",
             __rowNum__: rowNum,
