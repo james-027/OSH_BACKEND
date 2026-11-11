@@ -16,6 +16,7 @@ import { UserLocations } from "./UserLocations";
 import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
 import { SystemAccessKey } from "./SystemAccessKey";
+import { Position } from "./Position";
 
 @Entity()
 export class AccessKey {
@@ -97,4 +98,7 @@ export class AccessKey {
     (systemAccessKey) => systemAccessKey.accessKey
   )
   system_access_keys!: SystemAccessKey[];
+
+  @OneToMany(() => Position, (position) => position.accessKey)
+  positions!: Position[];
 }
