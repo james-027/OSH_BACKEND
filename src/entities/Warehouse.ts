@@ -18,6 +18,8 @@ import { AccessKey } from "./AccessKey";
 import { WarehouseRequirement } from "./WarehouseRequirement";
 import { ReqTransactionHeader } from "./ReqTransactionHeader";
 import { PosAvailability } from "./PosAvailability";
+import { Profitcenter } from "./ProfitCenter";
+import { SalesTerritory } from "./SalesTerritory";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -67,6 +69,12 @@ export class Warehouse {
 
   @Column({ nullable: true })
   pos_availability_id: number;
+
+  @Column({ nullable: true })
+  profit_center_id: number;
+
+  @Column({ nullable: true })
+  sales_territory_id: number;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   allowance: number;
@@ -144,6 +152,14 @@ export class Warehouse {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+  // @ManyToOne(() => Profitcenter, { eager: false })
+  // @JoinColumn({ name: "profit_center_id" })
+  // profitCenter: Profitcenter;
+
+  @ManyToOne(() => SalesTerritory, { eager: false })
+  @JoinColumn({ name: "sales_territory_id" })
+  salesTerritory: SalesTerritory;
 
   @OneToMany(
     () => WarehouseRequirement,
