@@ -20,6 +20,7 @@ import { Theme } from "./Theme";
 import { Status } from "./Status";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 import { UserLoginSession } from "./UserLoginSession";
 
 @Entity({ name: "users" })
@@ -195,6 +196,21 @@ export class User {
 
   @OneToMany(() => UserLocations, (userLocations) => userLocations.updatedBy)
   updatedUserLocations!: UserLocations[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.user)
+  userWarehouses!: UserWarehouses[];
+
+  @OneToMany(
+    () => UserWarehouses,
+    (userWarehouses) => userWarehouses.createdBy,
+  )
+  createdUserWarehouses!: UserWarehouses[];
+
+  @OneToMany(
+    () => UserWarehouses,
+    (userWarehouses) => userWarehouses.updatedBy,
+  )
+  updatedUserWarehouses!: UserWarehouses[];
   @ManyToOne(() => AccessKey, (accessKey) => accessKey.currentUsers, {
     eager: false,
   })

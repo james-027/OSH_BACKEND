@@ -13,6 +13,7 @@ import { Status } from "./Status";
 import { Company } from "./Company";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
 import { SystemAccessKey } from "./SystemAccessKey";
@@ -75,6 +76,13 @@ export class AccessKey {
   // Relationship for access_key_id in UserLocations
   @OneToMany(() => UserLocations, (userLocations) => userLocations.accessKey)
   userLocations!: UserLocations[];
+
+  // Relationship for access_key_id in UserWarehouses
+  @OneToMany(
+    () => UserWarehouses,
+    (userWarehouses) => userWarehouses.accessKey,
+  )
+  userWarehouses!: UserWarehouses[];
 
   // Relationship for access_key_id in RoleActionPreset
   @OneToMany(

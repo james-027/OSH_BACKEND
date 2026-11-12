@@ -12,6 +12,7 @@ import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 import { System } from "./System";
 
 @Entity()
@@ -89,6 +90,10 @@ export class Role {
   // Relationship for role_id in UserLocations
   @OneToMany(() => UserLocations, (userLocations) => userLocations.role)
   userLocations!: UserLocations[];
+
+  // Relationship for role_id in UserWarehouses
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.role)
+  userWarehouses!: UserWarehouses[];
 
   // Foreign key to User entity for updated_by
   @ManyToOne(() => System, (system) => system.roles, {

@@ -14,6 +14,7 @@ import { RoleActionPreset } from "../entities/RoleActionPreset";
 import { RoleLocationPreset } from "../entities/RoleLocationPreset";
 import { UserPermissions } from "../entities/UserPermissions";
 import { UserLocations } from "../entities/UserLocations";
+import { UserWarehouses } from "../entities/UserWarehouses";
 import { UserLoginSession } from "../entities/UserLoginSession";
 import { Region } from "../entities/Region";
 import { AuditForm } from "../entities/AuditForm";
@@ -144,6 +145,7 @@ export const entities = [
   RoleLocationPreset,
   UserPermissions,
   UserLocations,
+  UserWarehouses,
   UserLoginSession,
   Region,
   AuditForm,

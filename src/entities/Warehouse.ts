@@ -20,6 +20,7 @@ import { ReqTransactionHeader } from "./ReqTransactionHeader";
 import { PosAvailability } from "./PosAvailability";
 import { Profitcenter } from "./Profitcenter";
 import { SalesTerritory } from "./SalesTerritory";
+import { UserWarehouses } from "./UserWarehouses";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -175,4 +176,7 @@ export class Warehouse {
     (reqTransactionHeader) => reqTransactionHeader.warehouse,
   )
   reqTransactionHeaders!: ReqTransactionHeader[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.warehouse)
+  userWarehouses!: UserWarehouses[];
 }

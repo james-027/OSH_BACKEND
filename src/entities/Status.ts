@@ -12,6 +12,7 @@ import { Theme } from "./Theme";
 import { User } from "./User";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 
 @Entity()
 export class Status {
@@ -66,4 +67,8 @@ export class Status {
   // Relationship for status_id in UserLocations
   @OneToMany(() => UserLocations, (userLocations) => userLocations.status)
   userLocations!: UserLocations[];
+
+  // Relationship for status_id in UserWarehouses
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.status)
+  userWarehouses!: UserWarehouses[];
 }
