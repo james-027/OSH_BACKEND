@@ -19,6 +19,8 @@ import { Status } from "../../../entities/Status";
 import { Theme } from "../../../entities/Theme";
 import { UserPermissions } from "../../../entities/UserPermissions";
 import { UserLocations } from "../../../entities/UserLocations";
+import { UserWarehouses } from "../../../entities/UserWarehouses";
+import { Warehouse } from "../../../entities/Warehouse";
 import { Module } from "../../../entities/Module";
 import { Action } from "../../../entities/Action";
 import { AccessKey } from "../../../entities/AccessKey";
@@ -60,6 +62,10 @@ export class UsersService {
     private accessKeyRepository: Repository<AccessKey>,
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
+    @InjectRepository(UserWarehouses)
+    private userWarehousesRepository: Repository<UserWarehouses>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>,
     private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private emailService: EmailService,
@@ -593,6 +599,7 @@ export class UsersService {
       user_permission_presets,
       location_ids,
       user_location_presets,
+      user_warehouse_presets,
       created_by,
     } = createUserDto;
 
@@ -719,6 +726,16 @@ export class UsersService {
           location_ids,
           created_by,
           accessKeys.map((ak) => ak.id),
+        );
+      }
+
+      // Create UserWarehouses from presets
+      if (user_warehouse_presets && user_warehouse_presets.length > 0) {
+        await this.createUserWarehousesFromPresets(
+          savedUser.id,
+          accessKeys.map((ak) => ak.id),
+          user_warehouse_presets,
+          created_by,
         );
       }
 
@@ -1005,6 +1022,198 @@ export class UsersService {
     }
   }
 
+  // Helper method to create/update user warehouses from warehouse presets (per role and access key)
+  private async createUserWarehousesFromPresets(
+    userId: number,
+    accessKeyIds: number[],
+    userWarehousePresets: any[],
+    updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userWarehousesRepository.manager;
+
+    // Collect all relevant access key IDs (from presets or user access keys)
+    const presetAccessKeys = userWarehousePresets
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        presetAccessKeys.length > 0
+          ? presetAccessKeys
+          : accessKeyIds && accessKeyIds.length > 0
+            ? accessKeyIds
+            : [1],
+      ),
+    );
+
+    // Determine target roles to update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              userWarehousePresets
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Soft-deactivate existing warehouses for this user within target roles & access keys
+    await manager.update(
+      UserWarehouses,
+      {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+      {
+        status_id: 2, // Deactivated (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // Step 2: Extract unique warehouse IDs across all presets
+    const uniqueWarehouseIds = Array.from(
+      new Set(
+        userWarehousePresets.flatMap((preset) => preset.warehouse_ids || []),
+      ),
+    ).filter((id): id is number => typeof id === "number" && id > 0);
+
+    // If no warehouses are selected, all existing remain deactivated (status_id = 2) -> Approach B inherits all in locations
+    if (uniqueWarehouseIds.length === 0) {
+      return;
+    }
+
+    const foundWarehouses = await manager.find(Warehouse, {
+      where: { id: In(uniqueWarehouseIds) },
+      relations: ["location"],
+    });
+
+    if (foundWarehouses.length !== uniqueWarehouseIds.length) {
+      const foundSet = new Set(foundWarehouses.map((w) => w.id));
+      const missing = uniqueWarehouseIds.find((id) => !foundSet.has(id));
+      throw new BadRequestException(`Warehouse with ID ${missing} not found`);
+    }
+
+    const warehouseMap = new Map<number, Warehouse>();
+    foundWarehouses.forEach((w) => warehouseMap.set(w.id, w));
+
+    // Step 3: Fetch active user locations for this user across target roles & access keys
+    // to strictly enforce: "the stored warehouse_id should always respect the user_locations of a user"
+    const activeLocations = await manager.find(UserLocations, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+        status_id: 1,
+      },
+    });
+
+    const allowedLocMap = new Map<string, Set<number>>();
+    for (const loc of activeLocations) {
+      const key = `${loc.role_id}_${loc.access_key_id}`;
+      if (!allowedLocMap.has(key)) {
+        allowedLocMap.set(key, new Set());
+      }
+      allowedLocMap.get(key)!.add(loc.location_id);
+    }
+
+    // Validate that every assigned warehouse belongs to an active location for that role & access key
+    for (const preset of userWarehousePresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
+
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+      const whIds = preset.warehouse_ids || [];
+
+      if (!Array.isArray(whIds) || whIds.length === 0) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        const key = `${roleId}_${accessKeyId}`;
+        const allowedLocs = allowedLocMap.get(key) || new Set<number>();
+
+        for (const whId of whIds) {
+          const wh = warehouseMap.get(whId);
+          if (!wh) continue;
+          if (!allowedLocs.has(wh.location_id)) {
+            throw new BadRequestException(
+              `Warehouse '${wh.warehouse_name}' (ID: ${wh.id}) belongs to Location ID ${wh.location_id}, which is not assigned to this user under Role ${roleId} and Access Key ${accessKeyId}.`,
+            );
+          }
+        }
+      }
+    }
+
+    // Step 4: Fetch existing UserWarehouses for fast in-memory reconciliation
+    const existingUserWhs = await manager.find(UserWarehouses, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const userWhMap = new Map<string, UserWarehouses>();
+    existingUserWhs.forEach((uw) => {
+      userWhMap.set(`${uw.role_id}_${uw.access_key_id}_${uw.warehouse_id}`, uw);
+    });
+
+    // Step 5: Fast in-memory reconciliation
+    const toSave: UserWarehouses[] = [];
+    const seen = new Set<string>();
+
+    for (const preset of userWarehousePresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
+
+      const whIds = preset.warehouse_ids || [];
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+
+      if (!Array.isArray(whIds)) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        for (const whId of whIds) {
+          const key = `${roleId}_${accessKeyId}_${whId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existing = userWhMap.get(key);
+          if (existing) {
+            existing.status_id = 1;
+            existing.updated_by = updatedBy;
+            existing.modified_at = new Date();
+            toSave.push(existing);
+          } else {
+            const newUW = manager.create(UserWarehouses, {
+              user_id: userId,
+              role_id: roleId,
+              warehouse_id: whId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSave.push(newUW);
+          }
+        }
+      }
+    }
+
+    // Step 6: Batch save in chunks of 250
+    if (toSave.length > 0) {
+      await manager.save(UserWarehouses, toSave, { chunk: 250 });
+    }
+  }
+
   // Helper method to create/update user locations for multiple roles
   private async createUserLocationsForMultipleRoles(
     userId: number,
@@ -1111,6 +1320,8 @@ export class UsersService {
       // UserLocations fields
       location_ids,
       user_location_presets,
+      // UserWarehouses fields
+      user_warehouse_presets,
       // Selective update
       roles_to_update,
       // Audit field
@@ -1261,11 +1472,14 @@ export class UsersService {
 
     userToUpdate.updated_by = updated_by;
 
-    // Determine if permissions and locations should be updated
+    // Determine if permissions, locations, and warehouses should be updated
     // If roles_to_update is provided as an empty array, SKIP updating permissions/locations completely!
     const shouldUpdatePermissions =
       (roles_to_update !== undefined && roles_to_update.length > 0) ||
-      (roles_to_update === undefined && user_permission_presets !== undefined);
+      (roles_to_update === undefined &&
+        (user_permission_presets !== undefined ||
+          user_location_presets !== undefined ||
+          user_warehouse_presets !== undefined));
 
     let permissionsMessage = "";
     let locationsMessage = "";
@@ -1354,6 +1568,21 @@ export class UsersService {
           where: { user_id: id, status_id: 1 },
         });
         locationsMessage = ` Updated/created ${activeLocations} location(s).`;
+      }
+
+      if (
+        shouldUpdatePermissions &&
+        user_warehouse_presets &&
+        user_warehouse_presets.length > 0
+      ) {
+        await this.createUserWarehousesFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          user_warehouse_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
       }
 
       // COMMIT TRANSACTION: All changes succeed atomically
@@ -1877,6 +2106,16 @@ export class UsersService {
         relations: ["location", "status"],
       });
 
+      let whereUserWarehouses: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserWarehouses.access_key_id = user.current_access_key;
+        whereUserWarehouses.role_id = user.role_id;
+      }
+      const userWarehouses = await this.userWarehousesRepository.find({
+        where: whereUserWarehouses,
+        relations: ["warehouse", "warehouse.location", "status"],
+      });
+
       // Extract unique role_ids from user permissions
       const uniqueRoleIds = Array.from(
         new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
@@ -2007,6 +2246,20 @@ export class UsersService {
               user_location_status_id: ul.status_id,
             }));
 
+          // Get warehouses for this role
+          const roleWarehouses = userWarehouses
+            .filter((uw) => uw.role_id === roleId)
+            .map((uw) => ({
+              id: uw.warehouse?.id || null,
+              warehouse_name: uw.warehouse?.warehouse_name || null,
+              warehouse_code: uw.warehouse?.warehouse_code || null,
+              location_id: uw.warehouse?.location_id || null,
+              location_name: uw.warehouse?.location?.location_name || null,
+              access_key_id: uw.access_key_id,
+              status_id: uw.warehouse?.status_id || null,
+              user_warehouse_status_id: uw.status_id,
+            }));
+
           // Add to user_permissions_locations array
           userPermissionsLocations.push({
             role_id: role.id,
@@ -2015,6 +2268,7 @@ export class UsersService {
               (a, b) => a.order_level - b.order_level,
             ),
             locations: roleLocations,
+            warehouses: roleWarehouses,
           });
         }
       } else {

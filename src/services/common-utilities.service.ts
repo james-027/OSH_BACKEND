@@ -4,6 +4,8 @@ import { Repository, DataSource, In } from "typeorm";
 import { UsersService } from "../modules/users/services/users.service";
 import { TransactionSequence } from "../entities/TransactionSequence";
 import { UserLocations } from "../entities/UserLocations";
+import { UserWarehouses } from "../entities/UserWarehouses";
+import { Warehouse } from "../entities/Warehouse";
 
 /**
  * Common Utilities Service
@@ -51,6 +53,95 @@ export class CommonUtilitiesService {
       return userLocations.map((ul) => ul.location_id);
     } catch (error) {
       console.error("Error fetching user location IDs:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's allowed warehouse IDs based on user-role relationship, allowed locations, and access key.
+   * Follows Option B (Inherited/Default All):
+   * - If no explicit user_warehouses records exist: returns all active warehouses within the user's allowed locations.
+   * - If explicit user_warehouses records exist: returns only those assigned warehouses, strictly constrained to allowed locations.
+   * @param userId - The user's ID
+   * @param roleId - The user's role ID
+   * @param accessKeyId - Optional tenant access key ID
+   * @returns Array of allowed warehouse IDs
+   */
+  async getUserAllowedWarehouseIds(
+    userId: number,
+    roleId: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+
+    try {
+      // 1. First, retrieve allowed location IDs for this user, role, and tenant
+      const allowedLocationIds = await this.getUserAllowedLocationIds(
+        userId,
+        roleId,
+        accessKeyId,
+      );
+
+      if (allowedLocationIds.length === 0) {
+        return [];
+      }
+
+      // 2. Check for active explicit warehouse assignments for this user
+      const uwWhere: any = {
+        user_id: userId,
+        role_id: roleId,
+        status_id: 1,
+      };
+      if (accessKeyId) {
+        uwWhere.access_key_id = accessKeyId;
+      }
+
+      const assignedWarehouses = await this.dataSource
+        .getRepository(UserWarehouses)
+        .find({
+          where: uwWhere,
+          select: ["warehouse_id"],
+        });
+
+      // 3. Option B logic:
+      // If no explicit user_warehouses restrictions are set, inherit all active warehouses in allowed locations
+      if (assignedWarehouses.length === 0) {
+        const defaultWhere: any = {
+          location_id: In(allowedLocationIds),
+          status_id: 1,
+        };
+        if (accessKeyId) {
+          defaultWhere.access_key_id = accessKeyId;
+        }
+
+        const allInLocations = await this.dataSource
+          .getRepository(Warehouse)
+          .find({
+            where: defaultWhere,
+            select: ["id"],
+          });
+
+        return allInLocations.map((w) => w.id);
+      }
+
+      // If explicit restrictions exist, return only assigned warehouses that belong to allowed locations
+      const assignedWarehouseIds = assignedWarehouses.map((uw) => uw.warehouse_id);
+      const validAssignedWarehouses = await this.dataSource
+        .getRepository(Warehouse)
+        .find({
+          where: {
+            id: In(assignedWarehouseIds),
+            location_id: In(allowedLocationIds),
+            status_id: 1,
+          },
+          select: ["id"],
+        });
+
+      return validAssignedWarehouses.map((w) => w.id);
+    } catch (error) {
+      console.error("Error fetching user warehouse IDs:", error);
       return [];
     }
   }

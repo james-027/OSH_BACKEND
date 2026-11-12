@@ -35,6 +35,8 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 import { CacheInvalidationModule } from "../cache/cache.module";
+import { UserWarehouses } from "src/entities/UserWarehouses";
+import { Warehouse } from "src/entities/Warehouse";
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       Position,
       EmployeeLocation,
       TransactionSequence,
+      UserWarehouses,
+      Warehouse,
     ]),
     LocationsModule,
     SSEModule,

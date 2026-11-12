@@ -7,6 +7,7 @@ import { Status } from "../../entities/Status";
 import { Theme } from "../../entities/Theme";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { UserLocations } from "../../entities/UserLocations";
+import { UserWarehouses } from "../../entities/UserWarehouses";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 import { AccessKey } from "../../entities/AccessKey";
@@ -16,6 +17,9 @@ import { UserAuditTrailCreateService } from "./services/user-audit-trail-create.
 import { EmailService } from "../../services/email.service";
 import { UserAuditTrail } from "../../entities/UserAuditTrail";
 import { UserLocationsService } from "src/modules/users/services/user-locations.service";
+import { UserLocationsController } from "src/modules/users/controllers/user-locations.controller";
+import { UserWarehousesService } from "src/modules/users/services/user-warehouses.service";
+import { UserWarehousesController } from "src/modules/users/controllers/user-warehouses.controller";
 import { UserAccessKeyService } from "src/modules/users/services/user-access-key.service";
 import { UserLoginSession } from "src/entities/UserLoginSession";
 import { JwtService } from "@nestjs/jwt";
@@ -36,6 +40,7 @@ import { Warehouse } from "../../entities/Warehouse";
       Theme,
       UserPermissions,
       UserLocations,
+      UserWarehouses,
       AppModule,
       Action,
       AccessKey,
@@ -47,13 +52,19 @@ import { Warehouse } from "../../entities/Warehouse";
     SSEModule,
     CacheInvalidationModule,
   ],
-  controllers: [UsersController, UserAccessKeyController],
+  controllers: [
+    UsersController,
+    UserAccessKeyController,
+    UserLocationsController,
+    UserWarehousesController,
+  ],
   providers: [
     UsersService,
     UserAuditTrailCreateService,
     EmailService,
     FrontendUrlUtil,
     UserLocationsService,
+    UserWarehousesService,
     UserAccessKeyService,
     JwtService,
     UserSessionService,
@@ -62,6 +73,7 @@ import { Warehouse } from "../../entities/Warehouse";
   exports: [
     UsersService,
     UserLocationsService,
+    UserWarehousesService,
     UserAccessKeyService,
     UserSessionService,
     UserPermissionsService,

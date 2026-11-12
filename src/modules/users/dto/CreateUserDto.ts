@@ -24,6 +24,13 @@ export interface UserLocationPreset {
   access_key_id?: number;
 }
 
+// Define interface for user warehouse presets
+export interface UserWarehousePreset {
+  role_id: number;
+  warehouse_ids: number[];
+  access_key_id?: number;
+}
+
 export class CreateUserDto {
   @IsNotEmpty({ message: "User name is required" })
   @IsString({ message: "User name must be a string" })
@@ -108,11 +115,21 @@ export class CreateUserDto {
   @IsArray({ message: "User location presets must be an array" })
   user_location_presets?: UserLocationPreset[];
 
+  @IsOptional()
+  @IsArray({ message: "User warehouse presets must be an array" })
+  user_warehouse_presets?: UserWarehousePreset[];
+
   // UserLocations fields
   @IsOptional()
   @IsArray({ message: "Location IDs must be an array" })
   @IsInt({ each: true, message: "Each location ID must be an integer" })
   location_ids?: number[];
+
+  // UserWarehouses fields
+  @IsOptional()
+  @IsArray({ message: "Warehouse IDs must be an array" })
+  @IsInt({ each: true, message: "Each warehouse ID must be an integer" })
+  warehouse_ids?: number[];
 
   @IsOptional()
   @IsArray({ message: "Roles to update must be an array" })
