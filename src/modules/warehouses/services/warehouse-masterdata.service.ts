@@ -1,20 +1,24 @@
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Injectable, InternalServerErrorException, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import axios from "axios";
 import { Repository, DataSource } from "typeorm";
 
 import { Warehouse } from "src/entities/Warehouse";
-import logger from "src/config/logger";
+import { Location } from "src/entities/Location";
 
 @Injectable()
 export class WarehouseMasterDataService {
+    private readonly logger = new Logger(WarehouseMasterDataService.name);
+
     constructor(
         @InjectRepository(Warehouse)
         private readonly warehouseRepository: Repository<Warehouse>,
+        @InjectRepository(Location)
+        private readonly locationRepository: Repository<Location>,
         private readonly dataSource: DataSource,
     ) {}
 
-    async syncWarehouses(): Promise<any> {
+  async syncWarehouses(): Promise<any> {
         try {
             // 1. Fetch data from external API
             const requestBody = {
@@ -54,6 +58,18 @@ export class WarehouseMasterDataService {
                 }
             });
 
+            // 2.1 Fetch existing locations to map `location_name` -> `id`
+            const existingLocations = await this.locationRepository.find({
+                select: ["id", "location_name"],
+            });
+
+            const locationMap = new Map<string, number>();
+            existingLocations.forEach((loc) => {
+                if (loc.location_name) {
+                    locationMap.set(loc.location_name.trim().toUpperCase(), loc.id);
+                }
+            });
+
             // 3. Get existing warehouse codes from DB (normalized to uppercase/trimmed)
             const existingWarehouses = await this.warehouseRepository.find({
                 select: ["warehouse_code"],
@@ -69,6 +85,7 @@ export class WarehouseMasterDataService {
             const warehousesToInsert = [];
             let skippedExistingCount = 0;
             let skippedInvalidGroupCount = 0;
+            let skippedLocationCount = 0;
 
             for (const item of apiWarehouses) {
                 const rawCode = item.warehouse ? String(item.warehouse).trim() : "";
@@ -94,6 +111,18 @@ export class WarehouseMasterDataService {
                     continue;
                 }
 
+                // Resolve location_id from u_region -> locationRepository.location_name
+                const rawRegion = item.u_region ? String(item.u_region).trim() : "";
+                const normalizedRegion = rawRegion.toUpperCase();
+                let locationId = locationMap.get(normalizedRegion);
+
+                // If u_region is not in existing locationRepository.location_name:
+                if (!locationId) {
+                    this.logger.error(`Location not found for region: ${rawRegion}`);
+                    skippedLocationCount++;
+                    continue;
+                }
+
                 // Add to Set immediately so duplicates inside the same API payload aren't added twice
                 existingCodes.add(normalizedCode);
 
@@ -102,13 +131,13 @@ export class WarehouseMasterDataService {
                     warehouse_ifs: item.u_profitcenter ? String(item.u_profitcenter).trim() : "",
                     warehouse_code: rawCode,
                     warehouse_type_id: warehouseTypeId,
-                    location_id: 15,
+                    location_id: locationId,
                     segment_id: 2,
                     address: "", // Empty string to satisfy non-null varchar(255)
                     status_id: 1,
                     created_by: null,
                     updated_by: null,
-                    access_key_id: 1,
+                    access_key_id: 2,
                     rem_status_id: 8,
                     pos_availability_id: null,
                     allowance: 0,
@@ -118,6 +147,7 @@ export class WarehouseMasterDataService {
                     end_operation: null,
                     starting_time: null,
                     ending_time: null,
+                    latitude  : null,
                 });
             }
 
@@ -138,28 +168,29 @@ export class WarehouseMasterDataService {
                 totalInserted: warehousesToInsert.length,
                 skippedExisting: skippedExistingCount,
                 skippedInvalidGroup: skippedInvalidGroupCount,
-                warehouses: apiWarehouses, // Returns the extracted warehouses array
+                skippedLocationCount: skippedLocationCount,
+                // warehouses: apiWarehouses, // Returns the extracted warehouses array
             };
         } catch (error) {
-            logger.error("Error syncing warehouse data:", error);
+            this.logger.error("Error syncing warehouse data:", error);
             throw new InternalServerErrorException("Failed to sync warehouse data.");
         }
     }
 
     async findAll() {
         return this.warehouseRepository
-        .createQueryBuilder("warehouse")
-        .innerJoin("warehouse.warehouseType", "warehouseType")
-        .select([
-            "warehouse.warehouse_name",
-            "warehouse.warehouse_ifs",
-            "warehouse.warehouse_code",
-            "warehouse.warehouse_type_id",
-        ])
-        .where("warehouseType.warehouse_type_abbr IN (:...abbrs)", {
-            abbrs: ["CG", "IBG"],
-        })
-        .orderBy("warehouse.id", "ASC")
-        .getMany();
+            .createQueryBuilder("warehouse")
+            .innerJoin("warehouse.warehouseType", "warehouseType")
+            .select([
+                "warehouse.warehouse_name",
+                "warehouse.warehouse_ifs",
+                "warehouse.warehouse_code",
+                "warehouse.warehouse_type_id",
+            ])
+            .where("warehouseType.warehouse_type_abbr IN (:...abbrs)", {
+                abbrs: ["CG", "IBG"],
+            })
+            .orderBy("warehouse.id", "ASC")
+            .getMany();
     }
 }

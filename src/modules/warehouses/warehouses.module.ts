@@ -21,6 +21,7 @@ import { WarehouseHurdleCategory } from "../../entities/WarehouseHurdleCategory"
 import { WarehouseEmployee } from "../../entities/WarehouseEmployee";
 import { WarehouseDwhLog } from "../../entities/WarehouseDwhLog";
 import { Warehouse } from "../../entities/Warehouse";
+import { Location } from "src/entities/Location";
 import { UserAuditTrailCreateService } from "src/modules/users/services/user-audit-trail-create.service";
 import { User } from "src/entities/User";
 import { Module as AppModule } from "src/entities/Module";
@@ -76,6 +77,7 @@ import { WarehousesmasterdataController } from "./controllers/warehouse-masterda
       Position,
       PosAvailability,
       Status,
+      Location
     ]),
     UsersModule,
     StatusModule,
