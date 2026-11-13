@@ -103,67 +103,94 @@ export class WeighInService {
   }
 
   // Get weigh-ins by search and pagination with user ownership restriction
-  async GetbysearchAndPages(
-    page: number,
-    pageSize: number,
-    search: string,
-    statusId: number | string,
-    userId: number,
-    roleId: number,
-  ) {
-    try {
-      const query = this.weighInRepository.createQueryBuilder("wi");
+ async GetbysearchAndPages(
+  page: number,
+  pageSize: number,
+  search: string,
+  statusId: number | string,
+  userId: number,
+  roleId: number,
+) {
+  try {
+    const currentPage = Math.max(1, Number(page) || 1);
+    const limit = Math.max(1, Number(pageSize) || 7);
+    const offset = (currentPage - 1) * limit;
 
-      query
+    // STEP 1: Query and paginate HEADER records only
+    const headerQuery = this.weighInRepository
+      .createQueryBuilder("wi")
+      .leftJoin("wi.createdBy", "createdBy");
+
+    // Admin can view all records
+    if (Number(roleId) !== 1) {
+      headerQuery.where("wi.created_by = :userId", { userId });
+    }
+
+    // Search filter
+    if (search?.trim()) {
+      headerQuery.andWhere(
+        new Brackets((qb) => {
+          qb.where("wi.control_no LIKE :search")
+            .orWhere("wi.po_number LIKE :search")
+            .orWhere("wi.truck_plate LIKE :search")
+            .orWhere("wi.grower LIKE :search")
+            .orWhere("createdBy.first_name LIKE :search")
+            .orWhere("createdBy.last_name LIKE :search");
+        }),
+        {
+          search: `%${search.trim()}%`,
+        },
+      );
+    }
+
+    // Status filter
+    if (statusId) {
+      headerQuery.andWhere("wi.status_id = :statusId", {
+        statusId: Number(statusId),
+      });
+    }
+
+    // Get distinct header records and total count
+    const [headers, totalCount] = await headerQuery
+      .select(["wi.id"])
+      .orderBy("wi.id", "DESC")
+      .skip(offset)
+      .take(limit)
+      .getManyAndCount();
+
+    const headerIds = headers.map((header) => header.id);
+
+    // STEP 2: Fetch complete headers with their relations
+    let items: WeighIn_header[] = [];
+
+    if (headerIds.length > 0) {
+      items = await this.weighInRepository
+        .createQueryBuilder("wi")
         .leftJoinAndSelect("wi.status", "status")
         .leftJoinAndSelect("wi.createdBy", "createdBy")
-        .leftJoinAndSelect("wi.lines", "lines"); // Included weigh-in lines
-
-      if (roleId !== 1) {
-        query.where("wi.created_by = :userId", { userId });
-      } else {
-        query.where("1 = 1");
-      }
-
-      if (search?.trim()) {
-        query.andWhere(
-          new Brackets((qb) => {
-            qb.where("wi.control_no LIKE :search")
-              .orWhere("wi.po_number LIKE :search")
-              .orWhere("wi.truck_plate LIKE :search")
-              .orWhere("wi.grower LIKE :search")
-              .orWhere("createdBy.first_name LIKE :search")
-              .orWhere("createdBy.last_name LIKE :search");
-          }),
-          {
-            search: `%${search.trim()}%`,
-          },
-        );
-      }
-
-      if (statusId) {
-        query.andWhere("wi.status_id = :statusId", {
-          statusId: Number(statusId),
-        });
-      }
-
-      query.skip((page - 1) * pageSize);
-      query.take(pageSize);
-      // Change 'ASC' to 'DESC' to get the latest transactions first
-      query.orderBy("wi.id", "DESC").addOrderBy("lines.id", "ASC");
-      const [items, totalCount] = await query.getManyAndCount();
-
-      return {
-        items: items.map((item) => this.mapWeighInResponse(item, true)), // Set to true to include lines
-        totalCount,
-        page,
-        pageSize,
-      };
-    } catch (error) {
-      logger.error("Error fetching weigh-ins:", error);
-      throw new Error("Failed to fetch weigh-ins");
+        .leftJoinAndSelect("wi.lines", "lines")
+        .where("wi.id IN (:...headerIds)", { headerIds })
+        .orderBy("wi.id", "DESC")
+        .addOrderBy("lines.id", "ASC")
+        .getMany();
     }
+
+    // STEP 3: Return paginated response
+    return {
+      items: items.map((item) =>
+        this.mapWeighInResponse(item, true),
+      ),
+      totalCount,
+      page: currentPage,
+      pageSize: limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+
+  } catch (error) {
+    logger.error("Error fetching weigh-ins:", error);
+    throw new Error("Failed to fetch weigh-ins");
   }
+}
 
   async findOneHistory(ref_id: number) {
     return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
