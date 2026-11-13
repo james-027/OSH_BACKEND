@@ -278,7 +278,7 @@ export class WeighInService {
         transaction_date: createWeighInDto.transaction_date
           ? new Date(createWeighInDto.transaction_date)
           : new Date(),
-        session_status: createWeighInDto.session_status ?? "ACTIVE",
+        session_status: createWeighInDto.session_status ?? "COMPLETED",
         grower: createWeighInDto.grower,
         farm_location: createWeighInDto.farm_location,
         sold_to: createWeighInDto.sold_to,
