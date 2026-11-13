@@ -305,6 +305,12 @@ export class PayrollComputationService {
       miscellaneous_income: billingValues.miscellaneousIncome,
       total_billing: billingValues.totalBilling,
       salary_rate_effectivity: salaryRateEffectivity,
+      prem_night_bond: billingValues.premiumNightCashBond,
+      prem_night_asf: billingValues.premiumNightAsf,
+      prem_night_vat: billingValues.premiumNightVat,
+      prem_night_tax: billingValues.premiumNightTax,
+      prem_night_miscellaneous: billingValues.premiumNightMiscellaneous,
+      prem_night_total_billing: billingValues.premiumNightTotalBilling,
     };
   }
 
@@ -541,6 +547,13 @@ export class PayrollComputationService {
     cashBond: number;
     miscellaneousIncome: number;
     totalBilling: number;
+    premiumNightCashBond:number;
+    premiumNightVat:number;
+    premiumNightTax:number;
+    premiumNightAsf:number;
+    premiumNightMiscellaneous:number;
+    premiumNightTotalBilling:number;
+    
   } {
     const vendorAsfField = Number(detail.vendor?.asf) || 0;
     const vendorVatField = Number(detail.vendor?.vat) || 0;
@@ -564,6 +577,30 @@ export class PayrollComputationService {
       : 0;
     const totalBilling = roundMoney(netOfTax - cashBond - miscellaneousIncome);
 
+    
+    const premiumNightCashBond = cashBondEnabled ? roundMoney(grossPay * 0.01) : 0;
+    const premiumNightMiscellaneous = cashBondEnabled
+      ? roundMoney(grossPay * 0.025)
+      : 0;
+
+    const premiumNightAsf = roundMoney(grossPay * vendorAsfField);
+    const premiumNightTotalGrossPayAsf = roundMoney(grossPay + premiumNightAsf);
+    const premiumNightVat = roundMoney(premiumNightTotalGrossPayAsf * vendorVatField);
+    const premiumNightTax = roundMoney(premiumNightTotalGrossPayAsf * vendorTaxField,);
+      
+    const premiumNightAdd = roundMoney(
+      premiumNightTotalGrossPayAsf + premiumNightVat,
+    );
+
+    const premiumNightDeduc = roundMoney(
+      premiumNightTax - premiumNightCashBond - premiumNightMiscellaneous,
+    );
+
+    const premiumNightTotalBilling = roundMoney(
+      premiumNightAdd - premiumNightDeduc,
+    );
+
+
     return {
       totalPayroll,
       asf,
@@ -577,6 +614,13 @@ export class PayrollComputationService {
       cashBond,
       miscellaneousIncome,
       totalBilling,
+      premiumNightCashBond,
+      premiumNightMiscellaneous,
+      premiumNightTotalBilling,
+      premiumNightAsf,
+      premiumNightTax,
+      premiumNightVat,
+
     };
   }
 
@@ -645,6 +689,14 @@ export class PayrollComputationService {
     let totalCashBond = 0;
     let totalMiscellaneousIncome = 0;
     let totalBilling = 0;
+    let totalPremiumNightBond = 0;
+    let totalPremiumNightAsf = 0;
+    let totalPremiumNightVat = 0;
+    let totalPremiumNightMiscellaneous = 0;
+    let totalPremiumNightTotalBilling= 0;
+    let totalPremiumNightTax= 0;
+
+
 
     for (const detail of details) {
       totalGrossPay += Number(detail.gross_pay) || 0;
@@ -710,6 +762,14 @@ export class PayrollComputationService {
       totalCashBond += Number(detail.cash_bond) || 0;
       totalMiscellaneousIncome += Number(detail.miscellaneous_income) || 0;
       totalBilling += Number(detail.total_billing) || 0;
+      totalPremiumNightBond += Number(detail.prem_night_bond) || 0;
+      totalPremiumNightAsf += Number(detail.prem_night_asf) || 0;
+      totalPremiumNightMiscellaneous += Number(detail.prem_night_miscellaneous) || 0;
+      totalPremiumNightVat += Number(detail.prem_night_vat) || 0;
+      totalPremiumNightTotalBilling += Number(detail.prem_night_total_billing) || 0;
+      totalPremiumNightTax += Number(detail.prem_night_tax) || 0;
+
+
     }
 
     return {
@@ -771,6 +831,13 @@ export class PayrollComputationService {
       total_cash_bond: roundMoney(totalCashBond),
       total_miscellaneous_income: roundMoney(totalMiscellaneousIncome),
       total_billing: roundMoney(totalBilling),
+      total_premium_night_bond: roundMoney(totalPremiumNightBond),
+      total_premium_night_asf: roundMoney(totalPremiumNightAsf),
+      total_premium_night_vat: roundMoney(totalPremiumNightVat),
+      total_premium_night_miscellaneous: roundMoney(totalPremiumNightMiscellaneous),
+      total_premium_night_billing: roundMoney(totalPremiumNightTotalBilling),
+      total_premium_night_tax: roundMoney(totalPremiumNightTax),
+
     };
   }
 }

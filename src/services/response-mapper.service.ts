@@ -57,6 +57,7 @@ export class ResponseMapperService {
           "module",
           "signatoryHeader",
           "signatoree",
+          "signatoryDetails"
         ].includes(key)
       ) {
         if (
@@ -295,6 +296,7 @@ export class ResponseMapperService {
       response.module_name = entity.signatoryHeader.module?.module_name || null;
       response.module_id = entity.signatoryHeader.module?.id || null;
     }
+
     if (entity.signatoryType && typeof entity.signatoryType === "object") {
       response.signatory_type_name = entity.signatoryType.description || null;
       response.signatory_type_code = entity.signatoryType.code || null;

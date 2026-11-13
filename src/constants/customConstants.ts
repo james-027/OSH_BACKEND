@@ -9,6 +9,7 @@ export const MODULE_IDS = {
   LOCATION_HURDLES: 31,
   STORE_EMPLOYEES: 14,
   STAFFS: 40,
+  BILLING_REPORT: 56
 } as const;
 
 export const NAMING_CONVENTION = {
@@ -182,4 +183,10 @@ export const BILLING_TYPE_ABBRS = {
   [BILLING_TYPE_IDS.PREMIUM]: "PREMIUM",
   [BILLING_TYPE_IDS.NIGHT_DIFF]: "ND",
   [BILLING_TYPE_IDS.ALL]: "ALL",
+} as const;
+
+
+
+export const WORKING_REGULAR_DAYS = {
+  HOURS: 8,
 } as const;

@@ -38,9 +38,6 @@ export class SignatoryDetail {
   updated_by: number;
 
   @Column({ nullable: true })
-  access_key_id: number;
-
-  @Column({ nullable: true })
   signatoree_id: number;
 
   @CreateDateColumn({
@@ -79,14 +76,6 @@ export class SignatoryDetail {
   })
   @JoinColumn({ name: "updated_by" })
   updatedBy: User;
-
-  @ManyToOne(() => AccessKey, {
-    eager: false,
-    onDelete: "RESTRICT",
-    onUpdate: "CASCADE",
-  })
-  @JoinColumn({ name: "access_key_id" })
-  accessKey: AccessKey;
 
   @ManyToOne(() => SignatoryHeader, {
     eager: false,

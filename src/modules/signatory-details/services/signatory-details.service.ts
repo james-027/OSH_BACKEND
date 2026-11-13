@@ -21,9 +21,6 @@ import { STATUS_IDS } from "src/constants/customConstants";
 
 @Injectable()
 export class SignatoryDetailService {
-  findBySignatoryDetails(headerId: number, accessKeyId: any) {
-    throw new Error("Method not implemented.");
-  }
   constructor(
     @InjectRepository(SignatoryDetail)
     private signatoryDetailRepository: Repository<SignatoryDetail>,
@@ -39,12 +36,105 @@ export class SignatoryDetailService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
+  // async findAll(accessKeyId: number): Promise<any[]> {
+  //   try {
+  //     const signatoryDetails = await this.signatoryDetailRepository.find({
+  //       where: {
+  //         signatoryHeader: {
+  //           access_key_id: accessKeyId,
+  //         },
+  //       },
+  //       relations: [
+  //         "status",
+  //         "createdBy",
+  //         "updatedBy",
+  //         "signatoryHeader.module",
+  //         "signatoryType",
+  //         "signatoree",
+  //         "position",
+  //       ],
+  //     });
+  //     return this.responseMapperService.mapEntitiesToResponse(signatoryDetails);
+  //   } catch (error) {
+  //     console.error("Error fetching signatory details:", error);
+  //     throw new Error("Failed to fetch signatory details");
+  //   }
+  // }
+
   async findAll(accessKeyId: number): Promise<any[]> {
+    try {
+      const signatoryHeaders = await this.signatoryHeaderRepository.find({
+        where: {
+          access_key_id: accessKeyId,
+        },
+        relations: [
+          "status",
+          "createdBy",
+          "updatedBy",
+          "module",
+          "signatoryDetails",
+          "signatoryDetails.status",
+          "signatoryDetails.createdBy",
+          "signatoryDetails.updatedBy",
+          "signatoryDetails.signatoryType",
+          "signatoryDetails.signatoree",
+          "signatoryDetails.position",
+        ],
+      });
+
+      return signatoryHeaders.map((entity) => ({
+        id: entity.id,
+        status_id: entity.status_id,
+        created_by: entity.created_by,
+        updated_by: entity.updated_by,
+        access_key_id: entity.access_key_id,
+        module_id: entity.module_id,
+        created_at: entity.created_at,
+        modified_at: entity.modified_at,
+
+        created_user: entity.createdBy?.first_name || null,
+        updated_user: entity.updatedBy?.first_name || null,
+        status_name: entity.status?.status_name || null,
+        module_name: entity.module?.module_name || null,
+
+        signatoryDetails: (entity.signatoryDetails || []).map((detail) => ({
+          id: detail.id,
+          signatory_header_id: detail.signatory_header_id,
+          status_id: detail.status_id,
+          created_by: detail.created_by,
+          updated_by: detail.updated_by,
+          signatory_type_id: detail.signatory_type_id,
+          signatoree_id: detail.signatoree_id,
+          position_id: detail.position_id,
+          created_at: detail.created_at,
+          modified_at: detail.modified_at,
+
+          created_user: detail.createdBy?.first_name || null,
+          updated_user: entity.updatedBy?.first_name || null,
+          status_name: detail.status?.status_name || null,
+
+          signatory_type_name: detail.signatoryType?.description || null,
+          signatory_type_code: detail.signatoryType?.code || null,
+
+          signatoree_name: detail.signatoree
+            ? `${detail.signatoree.first_name || ""} ${detail.signatoree.last_name || ""}`.trim()
+            : null,
+
+          position_name: detail.position?.position_name || null,
+        })),
+      }));
+    } catch (error) {
+      console.error("Error fetching signatory headers:", error);
+      throw new Error("Failed to fetch signatory headers");
+    }
+  }
+
+  async findSignatoryDetails(headerId: number): Promise<any[]> {
     try {
       const signatoryDetails = await this.signatoryDetailRepository.find({
         where: {
           signatoryHeader: {
-            access_key_id: accessKeyId,
+            id: headerId,
           },
         },
         relations: [
@@ -63,7 +153,6 @@ export class SignatoryDetailService {
       throw new Error("Failed to fetch signatory details");
     }
   }
-
   async findSignatoryType(): Promise<any[]> {
     try {
       const signatoryDetails = await this.signatoryTypeRepository.find({
@@ -77,11 +166,13 @@ export class SignatoryDetailService {
     }
   }
 
-  async findByModuleId(moduleId: number, accessKeyId: number): Promise<any[]> {
+  async findBySignatoreeByModule(
+    moduleId: number,
+    accessKeyId: number,
+  ): Promise<any[]> {
     try {
       const signatoryDetails = await this.signatoryDetailRepository.find({
         where: {
-          status_id: STATUS_IDS.ACTIVE,
           signatoryHeader: {
             module_id: moduleId,
             status_id: STATUS_IDS.ACTIVE,
@@ -233,6 +324,7 @@ export class SignatoryDetailService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("signatories", response.id, response);
+        this.sseEventEmitter.emitUpdate("billing_schedule_report", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -491,6 +583,7 @@ export class SignatoryDetailService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("signatories", response.id, response);
+        this.sseEventEmitter.emitUpdate("billing_schedule_report", 0);
       } catch (err) {
         logger.error("SSE update event failed:", err);
       }
@@ -511,36 +604,28 @@ export class SignatoryDetailService {
 
   async toggleStatus(id: number, userId: number): Promise<any> {
     try {
-      const signatoryDetail = await this.signatoryDetailRepository.findOne({
+      const signatory = await this.signatoryHeaderRepository.findOne({
         where: { id },
         relations: ["status", "createdBy", "updatedBy"],
       });
 
-      if (!signatoryDetail) {
-        throw new NotFoundException(`Holiday with ID ${id} not found`);
+      if (!signatory) {
+        throw new NotFoundException(`Signatory with ID ${id} not found`);
       }
 
-      const newStatusId = signatoryDetail.status_id === 1 ? 2 : 1;
+      const newStatusId = signatory.status_id === 1 ? 2 : 1;
       const newStatusName = newStatusId === 1 ? "ACTIVE" : "INACTIVE";
 
-      await this.signatoryDetailRepository.update(id, {
+      await this.signatoryHeaderRepository.update(id, {
         status_id: newStatusId,
       });
 
-      const updateSignatoryDetail =
-        await this.signatoryDetailRepository.findOne({
-          where: { id },
-          relations: [
-            "status",
-            "createdBy",
-            "updatedBy",
-            "signatoryHeader.module",
-            "signatoryType",
-            "position",
-          ],
-        });
+      const updateSignatory = await this.signatoryHeaderRepository.findOne({
+        where: { id },
+        relations: ["status", "createdBy", "updatedBy"],
+      });
 
-      if (!updateSignatoryDetail) {
+      if (!updateSignatory) {
         throw new Error("Failed to retrieve updated Signatory");
       }
 
@@ -549,20 +634,20 @@ export class SignatoryDetailService {
         {
           service: "SignatoryService",
           method: "toggleStatus",
-          raw_data: JSON.stringify(updateSignatoryDetail),
-          description: `Toggled status for Signatory Detail`,
+          raw_data: JSON.stringify(updateSignatory),
+          description: `Toggled status for Signatory`,
           status_id: 1,
         },
         userId,
       );
 
-      const response = this.responseMapperService.mapEntityToResponse(
-        updateSignatoryDetail,
-      );
+      const response =
+        this.responseMapperService.mapEntityToResponse(updateSignatory);
 
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("signatories", response.id, response);
+        this.sseEventEmitter.emitUpdate("billing_schedule_report", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }

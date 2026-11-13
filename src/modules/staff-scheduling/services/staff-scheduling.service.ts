@@ -31,6 +31,7 @@ import {
   DAYS_FACTOR_RATE,
   BILLING_TYPE_IDS,
   BILLING_TYPE_ABBRS,
+  MODULE_IDS
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -56,6 +57,8 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { SssConfigs } from "src/entities/SssConfig";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
 import { CommonUtilitiesService } from "../../../services/common-utilities.service";
+import { SignatoryDetailService } from "../../../modules/signatory-details/services/signatory-details.service";
+
 
 @Injectable()
 export class StaffSchedulingService {
@@ -94,6 +97,7 @@ export class StaffSchedulingService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
+    private readonly signatoryDetailService: SignatoryDetailService,
     private readonly dataSource: DataSource,
     private readonly httpService: HttpService,
   ) {}
@@ -3827,8 +3831,11 @@ export class StaffSchedulingService {
     locationIds?: number[],
     vendorIds?: number[],
     billingTypeId?: number,
-  ): Promise<{ data: any[]; totals: any }> {
+  ): Promise<{ data: any[]; totals: any; signatories:any[] }> {
     try {
+
+    const signatories = await this.signatoryDetailService.findBySignatoreeByModule(MODULE_IDS.BILLING_REPORT,accessKeyId);
+
       const query = this.payrollDetailRepository
         .createQueryBuilder("payrollDetail")
         .leftJoinAndSelect("payrollDetail.payrollHeader", "payrollHeader")
@@ -3944,9 +3951,17 @@ export class StaffSchedulingService {
         total_billing: "0.00",
         total_night_shift: "0.00",
         total_night_shift_amount: "0.00",
+        premium_night_cash_bond: "0.00",
+        premium_night_asf: "0.00",
+        premium_night_vat: "0.00",
+        premium_night_tax: "0.00",
+        premium_night_miscellaneous: "0.00",
+        premium_night_billing: "0.00",
+
+
       };
       if (!payrollDetails.length) {
-        return { data: [], totals: emptyTotals };
+        return { data: [], totals: emptyTotals,signatories };
       }
       /* * Group by staff. * Each staff row contains the accumulated values of all * payroll details belonging to that staff. */ const groupedDetails =
         new Map<number, typeof payrollDetails>();
@@ -4017,6 +4032,12 @@ export class StaffSchedulingService {
             cash_bond: 0,
             miscellaneous_income: 0,
             total_billing: 0,
+            premium_night_cash_bond:0,
+            premium_night_vat:0,
+            premium_night_tax:0,
+            premium_night_miscellaneous:0,
+            premium_night_asf:0,
+            premium_night_billing:0,
             _seenShifts: new Set<string>(),
           });
         }
@@ -4102,6 +4123,14 @@ export class StaffSchedulingService {
         summary.cash_bond += toNumber(detail.cash_bond);
         summary.miscellaneous_income += toNumber(detail.miscellaneous_income);
         summary.total_billing += toNumber(detail.total_billing);
+        summary.premium_night_cash_bond += toNumber(detail.prem_night_bond);
+        summary.premium_night_vat += toNumber(detail.prem_night_vat);
+        summary.premium_night_asf += toNumber(detail.prem_night_asf);
+        summary.premium_night_tax += toNumber(detail.prem_night_tax);
+        summary.premium_night_miscellaneous += toNumber(detail.prem_night_miscellaneous);
+        summary.premium_night_billing += toNumber(detail.prem_night_total_billing);
+
+
       }
       /* * Build one row per staff. */ const data = Array.from(
         groupedDetails.entries(),
@@ -4230,6 +4259,13 @@ export class StaffSchedulingService {
           tax: toFixed(staffSummary.tax),
           net_of_tax: toFixed(staffSummary.net_of_tax),
           cash_bond: toFixed(staffSummary.cash_bond),
+          premium_night_cash_bond: toFixed(staffSummary.premium_night_cash_bond),
+          premium_night_asf: toFixed(staffSummary.premium_night_asf),
+          premium_night_miscellaneous: toFixed(staffSummary.premium_night_miscellaneous),
+          premium_night_vat: toFixed(staffSummary.premium_night_vat),
+          premium_night_tax: toFixed(staffSummary.premium_night_tax),
+          premium_night_billing: toFixed(staffSummary.premium_night_billing),
+
           miscellaneous_income: toFixed(staffSummary.miscellaneous_income),
           total_billing: toFixed(staffSummary.total_billing),
           regular_hours: detail.regular_hours,
@@ -4354,6 +4390,14 @@ export class StaffSchedulingService {
                   detail.payrollHeader.total_net_of_tax,
                 ),
                 total_cash_bond: toFixed(detail.payrollHeader.total_cash_bond),
+                total_premium_night_cash_bond: toFixed(detail.payrollHeader.total_premium_night_bond),
+                total_premium_night_asf: toFixed(detail.payrollHeader.total_premium_night_asf),
+                total_premium_night_vat: toFixed(detail.payrollHeader.total_premium_night_vat),
+                total_premium_night_tax: toFixed(detail.payrollHeader.total_premium_night_tax),
+                total_premium_night_miscellaneous: toFixed(detail.payrollHeader.total_premium_night_miscellaneous),
+                total_premium_night_billing: toFixed(detail.payrollHeader.total_premium_night_billing),
+
+
                 total_miscellaneous_income: toFixed(
                   detail.payrollHeader.total_miscellaneous_income,
                 ),
@@ -4418,6 +4462,12 @@ export class StaffSchedulingService {
         tax: toFixed(grandTotalsAcc.tax),
         net_of_tax: toFixed(grandTotalsAcc.net_of_tax),
         cash_bond: toFixed(grandTotalsAcc.cash_bond),
+        premium_night_cash_bond: toFixed(grandTotalsAcc.premium_night_cash_bond),
+        premium_night_asf: toFixed(grandTotalsAcc.premium_night_asf),
+        premium_night_vat: toFixed(grandTotalsAcc.premium_night_vat),
+        premium_night_miscellaneous: toFixed(grandTotalsAcc.premium_night_miscellaneous),
+        premium_night_tax: toFixed(grandTotalsAcc.premium_night_tax),
+        premium_night_billing: toFixed(grandTotalsAcc.premium_night_billing),
         miscellaneous_income: toFixed(grandTotalsAcc.miscellaneous_income),
         total_billing: toFixed(grandTotalsAcc.total_billing),
         gross_employees_expense: toFixed(
@@ -4431,7 +4481,7 @@ export class StaffSchedulingService {
         grandTotalsAcc.vat
       ),
       };
-      return { data, totals };
+      return { data, totals,signatories };
     } catch (error) {
       console.error("Failed to fetch staff payroll report:", error);
       throw new Error(

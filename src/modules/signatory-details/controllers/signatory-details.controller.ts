@@ -20,7 +20,7 @@ import { SignatoryDetailService } from "../services/signatory-details.service";
 import { CreateSignatoryHeaderDto } from "../dto/CreateSignatoryDto";
 import { UpdateSignatoryHeaderDto } from "../dto/UpdateSignatoryDto";
 
-@Controller("signatory-details")
+@Controller("signatory")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SignatoryDetailController {
   constructor(
@@ -41,14 +41,24 @@ export class SignatoryDetailController {
     return this.signatoryDetailService.findSignatoryType();
   }
 
-  @Get("module/:moduleId")
+  @Get("signature-module/:moduleId")
   @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
   async findByModuleId(
     @Param("moduleId", ParseIntPipe) moduleId: number,
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
-    return this.signatoryDetailService.findByModuleId(moduleId, accessKeyId);
+    return this.signatoryDetailService.findBySignatoreeByModule(moduleId, accessKeyId);
+  }
+
+  @Get("signature-details/:headerId")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
+  async findByScheduleDetails(
+    @Param("headerId", ParseIntPipe) headerId: number,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    return this.signatoryDetailService.findSignatoryDetails(headerId);
   }
 
   @Post()
