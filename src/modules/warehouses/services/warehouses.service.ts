@@ -78,6 +78,7 @@ export class WarehousesService {
       warehouse_ifs: w.warehouse_ifs,
       warehouse_code: w.warehouse_code,
       warehouse_type_id: w.warehouse_type_id,
+      access_key_id: w.access_key_id,
       location_id: w.location_id,
       segment_id: w.segment_id,
       brand_id: w.segment_id,

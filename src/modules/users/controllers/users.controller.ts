@@ -372,6 +372,13 @@ export class UsersController {
     return { message: "Test email sent." };
   }
 
+  /**
+   * Upload users via Excel file (.xlsx, .xls)
+   * Supported columns:
+   *  - Required: Username, Employee No., First Name, Last Name, Email, Password, Access Keys, Role(s)
+   *  - Optional: Middle Name, User Upline ID, Theme ID, User Reset, Send Email Notif,
+   *              Location(s), Warehouse(s), Vendor(s), Overwrite Roles & Locations
+   */
   @Post("upload-excel")
   @UseInterceptors(
     FileInterceptor("file", {

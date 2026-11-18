@@ -32,6 +32,8 @@ import { SSEModule } from "../sse/sse.module";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 import { CacheInvalidationModule } from "../cache/cache.module";
 import { Warehouse } from "../../entities/Warehouse";
+import { RoleWarehousePreset } from "../../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../../entities/RoleVendorPreset";
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { Warehouse } from "../../entities/Warehouse";
       UserLoginSession,
       Warehouse,
       Vendor,
+      RoleWarehousePreset,
+      RoleVendorPreset,
     ]),
     SSEModule,
     CacheInvalidationModule,

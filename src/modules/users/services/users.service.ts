@@ -23,6 +23,8 @@ import { UserWarehouses } from "../../../entities/UserWarehouses";
 import { UserVendors } from "../../../entities/UserVendor";
 import { Warehouse } from "../../../entities/Warehouse";
 import { Vendor } from "../../../entities/Vendor";
+import { RoleWarehousePreset } from "../../../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../../../entities/RoleVendorPreset";
 import { Module } from "../../../entities/Module";
 import { Action } from "../../../entities/Action";
 import { AccessKey } from "../../../entities/AccessKey";
@@ -2820,6 +2822,10 @@ export class UsersService {
         "User Reset": { format: "none", nullable: true },
         "Send Email Notif": { format: "none", nullable: true },
         "Location(s)": { format: "none", nullable: true },
+        "Warehouse(s)": { format: "none", nullable: true },
+        Warehouses: { format: "none", nullable: true },
+        "Vendor(s)": { format: "none", nullable: true },
+        Vendors: { format: "none", nullable: true },
         "Overwrite Roles & Locations": { format: "none", nullable: true },
       },
     };
@@ -3017,6 +3023,268 @@ export class UsersService {
           }
         }
 
+        // Map role_id and access_key_id to allowed location_ids from userLocationPresets
+        const allowedLocationsByRoleAndAk = new Map<string, Set<number>>();
+        for (const lp of userLocationPresets) {
+          const key = `${lp.role_id}_${lp.access_key_id}`;
+          if (!allowedLocationsByRoleAndAk.has(key)) {
+            allowedLocationsByRoleAndAk.set(key, new Set());
+          }
+          for (const locId of lp.location_ids || []) {
+            allowedLocationsByRoleAndAk.get(key)!.add(locId);
+          }
+        }
+
+        // Check if Warehouse(s) column has values and build user_warehouse_presets per role & access key
+        let userWarehousePresets: any[] = [];
+        const rawWarehouseInput =
+          formattedRow["Warehouse(s)"] ?? formattedRow["Warehouses"];
+
+        if (
+          rawWarehouseInput &&
+          String(rawWarehouseInput).trim() !== ""
+        ) {
+          try {
+            const warehouseIdentifiers = String(rawWarehouseInput)
+              .split(",")
+              .map((item: string) => item.trim())
+              .filter(Boolean);
+
+            if (warehouseIdentifiers.length > 0) {
+              const whereConditions: any[] = [];
+              for (const ident of warehouseIdentifiers) {
+                whereConditions.push({ warehouse_name: ident });
+                whereConditions.push({ warehouse_name: ident.toUpperCase() });
+                whereConditions.push({ warehouse_code: ident });
+                whereConditions.push({ warehouse_code: ident.toUpperCase() });
+                whereConditions.push({ warehouse_ifs: ident });
+                whereConditions.push({ warehouse_ifs: ident.toUpperCase() });
+                if (!isNaN(Number(ident)) && Number(ident) > 0) {
+                  whereConditions.push({ id: Number(ident) });
+                }
+              }
+
+              const warehouses = await this.warehouseRepository.find({
+                where: whereConditions,
+                relations: ["location"],
+              });
+
+              const foundNames = new Set(
+                warehouses.map((w) => (w.warehouse_name || "").toLowerCase()),
+              );
+              const foundCodes = new Set(
+                warehouses.map((w) => (w.warehouse_code || "").toLowerCase()),
+              );
+              const foundIfs = new Set(
+                warehouses.map((w) => (w.warehouse_ifs || "").toLowerCase()),
+              );
+              const foundIds = new Set(warehouses.map((w) => String(w.id)));
+
+              const notFound = warehouseIdentifiers.filter(
+                (ident) =>
+                  !foundNames.has(ident.toLowerCase()) &&
+                  !foundCodes.has(ident.toLowerCase()) &&
+                  !foundIfs.has(ident.toLowerCase()) &&
+                  !foundIds.has(ident),
+              );
+
+              if (notFound.length > 0) {
+                throw new Error(
+                  `Warehouse(s) not found: ${notFound.join(", ")}`,
+                );
+              }
+
+              for (const role of roles) {
+                for (const ak of accessKeys) {
+                  const akWarehouses = warehouses.filter(
+                    (w) => !w.access_key_id || w.access_key_id === ak.id,
+                  );
+
+                  const whIds = Array.from(
+                    new Set(akWarehouses.map((w) => w.id)),
+                  );
+                  if (whIds.length > 0) {
+                    userWarehousePresets.push({
+                      role_id: role.id,
+                      access_key_id: ak.id,
+                      warehouse_ids: whIds,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (whError) {
+            throw whError;
+          }
+        }
+
+        // If no user_warehouse_presets built yet, fallback to RoleWarehousePreset respecting allowed locations
+        if (userWarehousePresets.length === 0) {
+          for (const role of roles) {
+            const roleWarehousePresets = await this.usersRepository.manager
+              .getRepository(RoleWarehousePreset)
+              .find({
+                where: { role_id: role.id, status_id: 1 },
+                relations: ["warehouse"],
+              });
+
+            for (const ak of accessKeys) {
+              let akWhs = roleWarehousePresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akWhs.length === 0) {
+                akWhs = roleWarehousePresets;
+              }
+
+              const allowedLocs = allowedLocationsByRoleAndAk.get(
+                `${role.id}_${ak.id}`,
+              );
+
+              const roleWhIds = Array.from(
+                new Set(
+                  akWhs
+                    .filter((preset) => {
+                      if (!allowedLocs || allowedLocs.size === 0) return true;
+                      return (
+                        preset.warehouse &&
+                        allowedLocs.has(preset.warehouse.location_id)
+                      );
+                    })
+                    .map((preset) => preset.warehouse_id),
+                ),
+              );
+
+              if (roleWhIds.length > 0) {
+                userWarehousePresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  warehouse_ids: roleWhIds,
+                });
+              }
+            }
+          }
+        }
+
+        // Check if Vendor(s) column has values and build user_vendor_presets per role & access key
+        let userVendorPresets: any[] = [];
+        const rawVendorInput =
+          formattedRow["Vendor(s)"] ?? formattedRow["Vendors"];
+
+        if (
+          rawVendorInput &&
+          String(rawVendorInput).trim() !== ""
+        ) {
+          try {
+            const vendorIdentifiers = String(rawVendorInput)
+              .split(",")
+              .map((item: string) => item.trim())
+              .filter(Boolean);
+
+            if (vendorIdentifiers.length > 0) {
+              const whereConditions: any[] = [];
+              for (const ident of vendorIdentifiers) {
+                whereConditions.push({ service_provider_name: ident });
+                whereConditions.push({
+                  service_provider_name: ident.toUpperCase(),
+                });
+                whereConditions.push({ vendor_code: ident });
+                whereConditions.push({ vendor_code: ident.toUpperCase() });
+                whereConditions.push({ service_provider_code: ident });
+                whereConditions.push({
+                  service_provider_code: ident.toUpperCase(),
+                });
+                if (!isNaN(Number(ident)) && Number(ident) > 0) {
+                  whereConditions.push({ id: Number(ident) });
+                }
+              }
+
+              const vendors = await this.vendorRepository.find({
+                where: whereConditions,
+              });
+
+              const foundNames = new Set(
+                vendors.map((v) =>
+                  (v.service_provider_name || "").toLowerCase(),
+                ),
+              );
+              const foundCodes = new Set(
+                vendors.map((v) => (v.vendor_code || "").toLowerCase()),
+              );
+              const foundSpCodes = new Set(
+                vendors.map((v) =>
+                  (v.service_provider_code || "").toLowerCase(),
+                ),
+              );
+              const foundIds = new Set(vendors.map((v) => String(v.id)));
+
+              const notFound = vendorIdentifiers.filter(
+                (ident) =>
+                  !foundNames.has(ident.toLowerCase()) &&
+                  !foundCodes.has(ident.toLowerCase()) &&
+                  !foundSpCodes.has(ident.toLowerCase()) &&
+                  !foundIds.has(ident),
+              );
+
+              if (notFound.length > 0) {
+                throw new Error(
+                  `Vendor(s) not found: ${notFound.join(", ")}`,
+                );
+              }
+
+              for (const role of roles) {
+                for (const ak of accessKeys) {
+                  const akVendors = vendors.filter(
+                    (v) => !v.access_key_id || v.access_key_id === ak.id,
+                  );
+
+                  const vIds = Array.from(new Set(akVendors.map((v) => v.id)));
+                  if (vIds.length > 0) {
+                    userVendorPresets.push({
+                      role_id: role.id,
+                      access_key_id: ak.id,
+                      vendor_ids: vIds,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (vError) {
+            throw vError;
+          }
+        }
+
+        // If no user_vendor_presets built yet, fallback to RoleVendorPreset (independent of locations)
+        if (userVendorPresets.length === 0) {
+          for (const role of roles) {
+            const roleVendorPresets = await this.usersRepository.manager
+              .getRepository(RoleVendorPreset)
+              .find({
+                where: { role_id: role.id, status_id: 1 },
+              });
+
+            for (const ak of accessKeys) {
+              let akVnds = roleVendorPresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akVnds.length === 0) {
+                akVnds = roleVendorPresets;
+              }
+
+              const roleVendorIds = Array.from(
+                new Set(akVnds.map((preset) => preset.vendor_id)),
+              );
+
+              if (roleVendorIds.length > 0) {
+                userVendorPresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  vendor_ids: roleVendorIds,
+                });
+              }
+            }
+          }
+        }
+
         // 4. Check if user already exists (by user_name or email)
         let existingUser = await this.usersRepository.findOne({
           where: [
@@ -3069,7 +3337,7 @@ export class UsersService {
 
           if (isOverwrite) {
             // OVERWRITE MODE (1):
-            // Soft-deactivate previous roles and locations that are not present in this Excel row
+            // Soft-deactivate previous roles, locations, warehouses, and vendors that are not present in this Excel row
             const rolesToDeactivate = existingRoleIds.filter(
               (rId) => !allRoleIds.includes(rId),
             );
@@ -3084,6 +3352,44 @@ export class UsersService {
               );
               await this.userLocationsRepository.update(
                 { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userWarehousesRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userVendorsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
+            if (userWarehousePresets.length === 0) {
+              await this.userWarehousesRepository.update(
+                { user_id: existingUser.id, role_id: In(allRoleIds) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
+            if (userVendorPresets.length === 0) {
+              await this.userVendorsRepository.update(
+                { user_id: existingUser.id, role_id: In(allRoleIds) },
                 {
                   status_id: 2,
                   updated_by: created_by,
@@ -3112,6 +3418,8 @@ export class UsersService {
               access_key_id: newAccessKeyIds,
               user_permission_presets: allRoleActionPresets,
               user_location_presets: userLocationPresets,
+              user_warehouse_presets: userWarehousePresets,
+              user_vendor_presets: userVendorPresets,
               roles_to_update: allRoleIds,
             };
             await this.update(existingUser.id, updateUserDto);
@@ -3147,6 +3455,8 @@ export class UsersService {
               access_key_id: mergedAccessKeyIds,
               user_permission_presets: allRoleActionPresets,
               user_location_presets: userLocationPresets,
+              user_warehouse_presets: userWarehousePresets,
+              user_vendor_presets: userVendorPresets,
               roles_to_update: allRoleIds, // Only update the uploaded roles; other roles remain untouched and active!
             };
             await this.update(existingUser.id, updateUserDto);
@@ -3234,6 +3544,26 @@ export class UsersService {
               savedUser.id,
               accessKeys.map((k) => k.id),
               userLocationPresets,
+              created_by,
+            );
+          }
+
+          // Create user_warehouses from presets
+          if (userWarehousePresets.length > 0) {
+            await this.createUserWarehousesFromPresets(
+              savedUser.id,
+              accessKeys.map((k) => k.id),
+              userWarehousePresets,
+              created_by,
+            );
+          }
+
+          // Create user_vendors from presets
+          if (userVendorPresets.length > 0) {
+            await this.createUserVendorsFromPresets(
+              savedUser.id,
+              accessKeys.map((k) => k.id),
+              userVendorPresets,
               created_by,
             );
           }
