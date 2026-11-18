@@ -1364,7 +1364,8 @@ export class RoleActionPresetsService {
     });
 
     // Step 5: Fast in-memory reconciliation
-    const toSave: RoleWarehousePreset[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: RoleWarehousePreset[] = [];
     const seen = new Set<string>();
     const createdByUser = await this.userRepository.findOneBy({ id: updatedBy });
 
@@ -1376,10 +1377,11 @@ export class RoleActionPresetsService {
 
         const existing = presetMap.get(key);
         if (existing) {
+          existing.status = status;
           existing.status_id = status.id;
           existing.updated_by = updatedBy;
           existing.modified_at = new Date();
-          toSave.push(existing);
+          toUpdateIds.push(existing.id);
         } else {
           const newPreset = new RoleWarehousePreset();
           newPreset.role = role;
@@ -1391,18 +1393,36 @@ export class RoleActionPresetsService {
           newPreset.status_id = status.id;
           newPreset.createdBy = createdByUser!;
           newPreset.created_by = updatedBy;
-          toSave.push(newPreset);
+          toInsert.push(newPreset);
         }
       }
     }
 
-    if (toSave.length > 0) {
-      return await queryRunner.manager.save(RoleWarehousePreset, toSave, {
+    if (toUpdateIds.length > 0) {
+      await queryRunner.manager.update(
+        RoleWarehousePreset,
+        { id: In(toUpdateIds) },
+        {
+          status_id: status.id,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+
+    if (toInsert.length > 0) {
+      await queryRunner.manager.save(RoleWarehousePreset, toInsert, {
         chunk: 250,
       });
     }
 
-    return [];
+    return await queryRunner.manager.find(RoleWarehousePreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+        status_id: status.id,
+      },
+    });
   }
 
   // Helper method to update role vendor presets (mark-inactive-then-upsert pattern)
@@ -1462,7 +1482,8 @@ export class RoleActionPresetsService {
     });
 
     // Step 4: Fast in-memory reconciliation
-    const toSave: RoleVendorPreset[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: RoleVendorPreset[] = [];
     const seen = new Set<string>();
     const createdByUser = await this.userRepository.findOneBy({ id: updatedBy });
 
@@ -1474,10 +1495,11 @@ export class RoleActionPresetsService {
 
         const existing = presetMap.get(key);
         if (existing) {
+          existing.status = status;
           existing.status_id = status.id;
           existing.updated_by = updatedBy;
           existing.modified_at = new Date();
-          toSave.push(existing);
+          toUpdateIds.push(existing.id);
         } else {
           const newPreset = new RoleVendorPreset();
           newPreset.role = role;
@@ -1489,18 +1511,36 @@ export class RoleActionPresetsService {
           newPreset.status_id = status.id;
           newPreset.createdBy = createdByUser!;
           newPreset.created_by = updatedBy;
-          toSave.push(newPreset);
+          toInsert.push(newPreset);
         }
       }
     }
 
-    if (toSave.length > 0) {
-      return await queryRunner.manager.save(RoleVendorPreset, toSave, {
+    if (toUpdateIds.length > 0) {
+      await queryRunner.manager.update(
+        RoleVendorPreset,
+        { id: In(toUpdateIds) },
+        {
+          status_id: status.id,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+
+    if (toInsert.length > 0) {
+      await queryRunner.manager.save(RoleVendorPreset, toInsert, {
         chunk: 250,
       });
     }
 
-    return [];
+    return await queryRunner.manager.find(RoleVendorPreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+        status_id: status.id,
+      },
+    });
   }
 
   // Helper method to update role action presets (mark-inactive-then-upsert pattern)
@@ -1758,10 +1798,14 @@ export class RoleActionPresetsService {
               );
               savedLocationPresets.push(...locs);
             }
-            if (shouldUpdateRoleWarehouses && config.warehouse_ids) {
+            const effectiveWarehouseIds =
+              config.warehouse_ids !== undefined
+                ? config.warehouse_ids
+                : warehouse_ids;
+            if (shouldUpdateRoleWarehouses && effectiveWarehouseIds !== undefined) {
               const whs = await this.updateRoleWarehousePresetsFromPresets(
                 role_id,
-                config.warehouse_ids,
+                effectiveWarehouseIds,
                 status,
                 userId,
                 queryRunner,
@@ -1769,10 +1813,14 @@ export class RoleActionPresetsService {
               );
               savedWarehousePresets.push(...whs);
             }
-            if (shouldUpdateRoleVendors && config.vendor_ids) {
+            const effectiveVendorIds =
+              config.vendor_ids !== undefined
+                ? config.vendor_ids
+                : vendor_ids;
+            if (shouldUpdateRoleVendors && effectiveVendorIds !== undefined) {
               const vnds = await this.updateRoleVendorPresetsFromPresets(
                 role_id,
-                config.vendor_ids,
+                effectiveVendorIds,
                 status,
                 userId,
                 queryRunner,
@@ -1806,7 +1854,7 @@ export class RoleActionPresetsService {
               );
           }
 
-          if (shouldUpdateRoleWarehouses && warehouse_ids && warehouse_ids.length > 0) {
+          if (shouldUpdateRoleWarehouses && warehouse_ids !== undefined) {
             // Update warehouse presets using helper (mark-inactive-then-upsert)
             savedWarehousePresets =
               await this.updateRoleWarehousePresetsFromPresets(
@@ -1819,7 +1867,7 @@ export class RoleActionPresetsService {
               );
           }
 
-          if (shouldUpdateRoleVendors && vendor_ids && vendor_ids.length > 0) {
+          if (shouldUpdateRoleVendors && vendor_ids !== undefined) {
             // Update vendor presets using helper (mark-inactive-then-upsert)
             savedVendorPresets =
               await this.updateRoleVendorPresetsFromPresets(
@@ -2006,11 +2054,15 @@ export class RoleActionPresetsService {
                   warehouse_ids?: number[];
                   presets?: any[];
                 };
-                if (config.warehouse_ids && userKeys.includes(keyId)) {
+                const configWarehouseIds =
+                  config.warehouse_ids !== undefined
+                    ? config.warehouse_ids
+                    : warehouse_ids;
+                if (configWarehouseIds && userKeys.includes(keyId)) {
                   await this.updateUserWarehouses(
                     user_ids,
                     role_id,
-                    config.warehouse_ids,
+                    configWarehouseIds,
                     [keyId],
                     userId,
                   );
@@ -2021,7 +2073,7 @@ export class RoleActionPresetsService {
                 userKeys.includes(k),
               );
 
-              if (eligibleKeys.length > 0 && warehouse_ids && warehouse_ids.length > 0) {
+              if (eligibleKeys.length > 0 && warehouse_ids !== undefined) {
                 await this.updateUserWarehouses(
                   user_ids,
                   role_id,
@@ -2048,11 +2100,15 @@ export class RoleActionPresetsService {
                   vendor_ids?: number[];
                   presets?: any[];
                 };
-                if (config.vendor_ids && userKeys.includes(keyId)) {
+                const configVendorIds =
+                  config.vendor_ids !== undefined
+                    ? config.vendor_ids
+                    : vendor_ids;
+                if (configVendorIds && userKeys.includes(keyId)) {
                   await this.updateUserVendors(
                     user_ids,
                     role_id,
-                    config.vendor_ids,
+                    configVendorIds,
                     [keyId],
                     userId,
                   );
@@ -2063,7 +2119,7 @@ export class RoleActionPresetsService {
                 userKeys.includes(k),
               );
 
-              if (eligibleKeys.length > 0 && vendor_ids && vendor_ids.length > 0) {
+              if (eligibleKeys.length > 0 && vendor_ids !== undefined) {
                 await this.updateUserVendors(
                   user_ids,
                   role_id,
@@ -2321,10 +2377,14 @@ export class RoleActionPresetsService {
               );
               savedLocationPresets.push(...locs);
             }
-            if (shouldUpdateRoleWarehouses && config.warehouse_ids) {
+            const effectiveWarehouseIds =
+              config.warehouse_ids !== undefined
+                ? config.warehouse_ids
+                : warehouse_ids;
+            if (shouldUpdateRoleWarehouses && effectiveWarehouseIds !== undefined) {
               const whs = await this.updateRoleWarehousePresetsFromPresets(
                 role_id,
-                config.warehouse_ids,
+                effectiveWarehouseIds,
                 status,
                 userId,
                 queryRunner,
@@ -2332,10 +2392,14 @@ export class RoleActionPresetsService {
               );
               savedWarehousePresets.push(...whs);
             }
-            if (shouldUpdateRoleVendors && config.vendor_ids) {
+            const effectiveVendorIds =
+              config.vendor_ids !== undefined
+                ? config.vendor_ids
+                : vendor_ids;
+            if (shouldUpdateRoleVendors && effectiveVendorIds !== undefined) {
               const vnds = await this.updateRoleVendorPresetsFromPresets(
                 role_id,
-                config.vendor_ids,
+                effectiveVendorIds,
                 status,
                 userId,
                 queryRunner,
@@ -2369,7 +2433,7 @@ export class RoleActionPresetsService {
               );
           }
 
-          if (shouldUpdateRoleWarehouses && warehouse_ids && warehouse_ids.length > 0) {
+          if (shouldUpdateRoleWarehouses && warehouse_ids !== undefined) {
             // Update warehouse presets using helper (mark-inactive-then-upsert)
             savedWarehousePresets =
               await this.updateRoleWarehousePresetsFromPresets(
@@ -2382,7 +2446,7 @@ export class RoleActionPresetsService {
               );
           }
 
-          if (shouldUpdateRoleVendors && vendor_ids && vendor_ids.length > 0) {
+          if (shouldUpdateRoleVendors && vendor_ids !== undefined) {
             // Update vendor presets using helper (mark-inactive-then-upsert)
             savedVendorPresets =
               await this.updateRoleVendorPresetsFromPresets(
@@ -2561,11 +2625,15 @@ export class RoleActionPresetsService {
                   warehouse_ids?: number[];
                   presets?: any[];
                 };
-                if (config.warehouse_ids && userKeys.includes(keyId)) {
+                const configWarehouseIds =
+                  config.warehouse_ids !== undefined
+                    ? config.warehouse_ids
+                    : warehouse_ids;
+                if (configWarehouseIds && userKeys.includes(keyId)) {
                   await this.updateUserWarehouses(
                     user_ids,
                     role_id,
-                    config.warehouse_ids,
+                    configWarehouseIds,
                     [keyId],
                     userId,
                   );
@@ -2576,7 +2644,7 @@ export class RoleActionPresetsService {
                 userKeys.includes(k),
               );
 
-              if (eligibleKeys.length > 0 && warehouse_ids && warehouse_ids.length > 0) {
+              if (eligibleKeys.length > 0 && warehouse_ids !== undefined) {
                 await this.updateUserWarehouses(
                   user_ids,
                   role_id,
@@ -2603,11 +2671,15 @@ export class RoleActionPresetsService {
                   vendor_ids?: number[];
                   presets?: any[];
                 };
-                if (config.vendor_ids && userKeys.includes(keyId)) {
+                const configVendorIds =
+                  config.vendor_ids !== undefined
+                    ? config.vendor_ids
+                    : vendor_ids;
+                if (configVendorIds && userKeys.includes(keyId)) {
                   await this.updateUserVendors(
                     user_ids,
                     role_id,
-                    config.vendor_ids,
+                    configVendorIds,
                     [keyId],
                     userId,
                   );
@@ -2618,7 +2690,7 @@ export class RoleActionPresetsService {
                 userKeys.includes(k),
               );
 
-              if (eligibleKeys.length > 0 && vendor_ids && vendor_ids.length > 0) {
+              if (eligibleKeys.length > 0 && vendor_ids !== undefined) {
                 await this.updateUserVendors(
                   user_ids,
                   role_id,
@@ -2993,7 +3065,8 @@ export class RoleActionPresetsService {
     });
 
     // 3. Fast in-memory reconciliation
-    const toSave: UserWarehouses[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: UserWarehouses[] = [];
     const seen = new Set<string>();
 
     for (const userId of userIds) {
@@ -3008,7 +3081,7 @@ export class RoleActionPresetsService {
             existingWh.status_id = 1;
             existingWh.updated_by = updatedBy;
             existingWh.modified_at = new Date();
-            toSave.push(existingWh);
+            toUpdateIds.push(existingWh.id);
           } else {
             const newWh = this.userWarehousesRepository.create({
               user_id: userId,
@@ -3018,15 +3091,25 @@ export class RoleActionPresetsService {
               status_id: 1,
               created_by: updatedBy,
             });
-            toSave.push(newWh);
+            toInsert.push(newWh);
           }
         }
       }
     }
 
-    // 4. Batch save in chunks of 500 for optimal database performance
-    if (toSave.length > 0) {
-      await this.userWarehousesRepository.save(toSave, { chunk: 500 });
+    // 4. Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await this.userWarehousesRepository.update(
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await this.userWarehousesRepository.save(toInsert, { chunk: 500 });
     }
   }
 
@@ -3072,7 +3155,8 @@ export class RoleActionPresetsService {
     });
 
     // 3. Fast in-memory reconciliation
-    const toSave: UserVendors[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: UserVendors[] = [];
     const seen = new Set<string>();
 
     for (const userId of userIds) {
@@ -3087,7 +3171,7 @@ export class RoleActionPresetsService {
             existingVendor.status_id = 1;
             existingVendor.updated_by = updatedBy;
             existingVendor.modified_at = new Date();
-            toSave.push(existingVendor);
+            toUpdateIds.push(existingVendor.id);
           } else {
             const newVendor = this.userVendorsRepository.create({
               user_id: userId,
@@ -3097,15 +3181,25 @@ export class RoleActionPresetsService {
               status_id: 1,
               created_by: updatedBy,
             });
-            toSave.push(newVendor);
+            toInsert.push(newVendor);
           }
         }
       }
     }
 
-    // 4. Batch save in chunks of 500 for optimal database performance
-    if (toSave.length > 0) {
-      await this.userVendorsRepository.save(toSave, { chunk: 500 });
+    // 4. Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await this.userVendorsRepository.update(
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await this.userVendorsRepository.save(toInsert, { chunk: 500 });
     }
   }
 }

@@ -58,7 +58,7 @@ export class RoleWarehousePreset {
 
   // Foreign key to Status entity
   @ManyToOne(() => Status, (status) => status.roleWarehousePresets, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "status_id" })

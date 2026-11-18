@@ -60,7 +60,7 @@ export class RoleVendorPreset {
 
   // Foreign key to Status entity
   @ManyToOne(() => Status, (status) => status.roleVendorPresets, {
-    eager: true,
+    eager: false,
     nullable: false,
   })
   @JoinColumn({ name: "status_id" })

@@ -1187,7 +1187,8 @@ export class UsersService {
     });
 
     // Step 5: Fast in-memory reconciliation
-    const toSave: UserWarehouses[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: UserWarehouses[] = [];
     const seen = new Set<string>();
 
     for (const preset of userWarehousePresets) {
@@ -1212,7 +1213,7 @@ export class UsersService {
             existing.status_id = 1;
             existing.updated_by = updatedBy;
             existing.modified_at = new Date();
-            toSave.push(existing);
+            toUpdateIds.push(existing.id);
           } else {
             const newUW = manager.create(UserWarehouses, {
               user_id: userId,
@@ -1222,15 +1223,26 @@ export class UsersService {
               status_id: 1,
               created_by: updatedBy,
             });
-            toSave.push(newUW);
+            toInsert.push(newUW);
           }
         }
       }
     }
 
-    // Step 6: Batch save in chunks of 250
-    if (toSave.length > 0) {
-      await manager.save(UserWarehouses, toSave, { chunk: 250 });
+    // Step 6: Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await manager.update(
+        UserWarehouses,
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await manager.save(UserWarehouses, toInsert, { chunk: 250 });
     }
   }
 
@@ -1327,7 +1339,8 @@ export class UsersService {
     });
 
     // Step 4: Fast in-memory reconciliation
-    const toSave: UserVendors[] = [];
+    const toUpdateIds: number[] = [];
+    const toInsert: UserVendors[] = [];
     const seen = new Set<string>();
 
     for (const preset of userVendorPresets) {
@@ -1352,7 +1365,7 @@ export class UsersService {
             existing.status_id = 1;
             existing.updated_by = updatedBy;
             existing.modified_at = new Date();
-            toSave.push(existing);
+            toUpdateIds.push(existing.id);
           } else {
             const newUV = manager.create(UserVendors, {
               user_id: userId,
@@ -1362,15 +1375,26 @@ export class UsersService {
               status_id: 1,
               created_by: updatedBy,
             });
-            toSave.push(newUV);
+            toInsert.push(newUV);
           }
         }
       }
     }
 
-    // Step 5: Batch save in chunks of 250
-    if (toSave.length > 0) {
-      await manager.save(UserVendors, toSave, { chunk: 250 });
+    // Step 5: Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await manager.update(
+        UserVendors,
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await manager.save(UserVendors, toInsert, { chunk: 250 });
     }
   }
 
