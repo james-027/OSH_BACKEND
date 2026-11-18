@@ -51,7 +51,6 @@ import { Vendor } from "src/entities/Vendor";
 import { Position } from "src/entities/Position";
 import { PosAvailability } from "src/entities/PosAvailability";
 import { Status } from "src/entities/Status";
-import { Location } from "src/entities/Location";
 import { Segment } from "src/entities/Segment";
 import { Profitcenter } from "src/entities/Profitcenter";
 import { SalesTerritory } from "src/entities/SalesTerritory";

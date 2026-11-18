@@ -105,6 +105,9 @@ export class WarehousesService {
       warehouse_type_name: w.warehouseType
         ? w.warehouseType.warehouse_type_name
         : null,
+      warehouse_type_abbr: w.warehouseType
+        ? w.warehouseType.warehouse_type_abbr
+        : null,
       location_name: w.location ? w.location.location_name : null,
       segment_name: w.segment ? w.segment.segment_name : null,
       status_name: w.status ? w.status.status_name : null,
