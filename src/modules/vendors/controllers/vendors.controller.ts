@@ -29,6 +29,13 @@ export class VendorsController {
     return this.vendorsService.findAll(accessKeyId);
   }
 
+  @Get("/all")
+  @RequirePermissions({ module: "VENDORS", action: "VIEW" })
+  async findAllVendorsNoRestriction(@Request() req) {
+    const accessKeyId = req.user.current_access_key;
+    return this.vendorsService.findAll();
+  }
+
   @Get(":id")
   @RequirePermissions({ module: "VENDORS", action: "VIEW" })
   async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
@@ -40,7 +47,7 @@ export class VendorsController {
   async create(@Body() createVendorDto: CreateVendorDto, @Request() req) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
-    return this.vendorsService.create(createVendorDto, userId,accessKeyId);
+    return this.vendorsService.create(createVendorDto, userId, accessKeyId);
   }
 
   @Put(":id")

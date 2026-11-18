@@ -67,6 +67,19 @@ export class WarehousesController {
     );
   }
 
+  @Get("/all")
+  @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
+  @RequirePermissions({
+    module: ["TAKE OUT STORES", "BPLUS STORES"],
+    action: "VIEW",
+  })
+  async findAllWarehousesNoRestriction(@Request() req) {
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+
+    return this.warehousesService.findAll(undefined, undefined, userId, roleId);
+  }
+
   @Get("/stores/:warehouse_type_id")
   @RequirePermissions({
     module: ["TAKE OUT STORES", "BPLUS STORES"],
