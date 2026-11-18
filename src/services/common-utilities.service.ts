@@ -6,6 +6,8 @@ import { TransactionSequence } from "../entities/TransactionSequence";
 import { UserLocations } from "../entities/UserLocations";
 import { UserWarehouses } from "../entities/UserWarehouses";
 import { Warehouse } from "../entities/Warehouse";
+import { UserVendors } from "../entities/UserVendor";
+import { Vendor } from "../entities/Vendor";
 
 /**
  * Common Utilities Service
@@ -142,6 +144,83 @@ export class CommonUtilitiesService {
       return validAssignedWarehouses.map((w) => w.id);
     } catch (error) {
       console.error("Error fetching user warehouse IDs:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's allowed vendor IDs based on user-role relationship and access key.
+   * Follows Option B (Inherited/Default All):
+   * - If no explicit user_vendors records exist: returns all active vendors (filtered by access_key_id if provided).
+   * - If explicit user_vendors records exist: returns only those assigned vendor IDs.
+   * Note: Vendor entity has no location_id, so it does not filter by user locations.
+   * @param userId - The user's ID
+   * @param roleId - The user's role ID
+   * @param accessKeyId - Optional tenant access key ID
+   * @returns Array of allowed vendor IDs
+   */
+  async getUserAllowedVendorIds(
+    userId: number,
+    roleId: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+
+    try {
+      // 1. Check for active explicit vendor assignments for this user
+      const uvWhere: any = {
+        user_id: userId,
+        role_id: roleId,
+        status_id: 1,
+      };
+      if (accessKeyId) {
+        uvWhere.access_key_id = accessKeyId;
+      }
+
+      const assignedVendors = await this.dataSource
+        .getRepository(UserVendors)
+        .find({
+          where: uvWhere,
+          select: ["vendor_id"],
+        });
+
+      // 2. Option B logic:
+      // If no explicit user_vendors restrictions are set, inherit all active vendors
+      if (assignedVendors.length === 0) {
+        const defaultWhere: any = {
+          status_id: 1,
+        };
+        if (accessKeyId) {
+          defaultWhere.access_key_id = accessKeyId;
+        }
+
+        const allVendors = await this.dataSource
+          .getRepository(Vendor)
+          .find({
+            where: defaultWhere,
+            select: ["id"],
+          });
+
+        return allVendors.map((v) => v.id);
+      }
+
+      // If explicit restrictions exist, return assigned active vendors
+      const assignedVendorIds = assignedVendors.map((uv) => uv.vendor_id);
+      const validAssignedVendors = await this.dataSource
+        .getRepository(Vendor)
+        .find({
+          where: {
+            id: In(assignedVendorIds),
+            status_id: 1,
+          },
+          select: ["id"],
+        });
+
+      return validAssignedVendors.map((v) => v.id);
+    } catch (error) {
+      console.error("Error fetching user vendor IDs:", error);
       return [];
     }
   }

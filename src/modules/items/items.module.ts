@@ -37,6 +37,8 @@ import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 import { CacheInvalidationModule } from "../cache/cache.module";
 import { UserWarehouses } from "src/entities/UserWarehouses";
 import { Warehouse } from "src/entities/Warehouse";
+import { UserVendors } from "src/entities/UserVendor";
+import { Vendor } from "src/entities/Vendor";
 
 @Module({
   imports: [
@@ -61,6 +63,8 @@ import { Warehouse } from "src/entities/Warehouse";
       TransactionSequence,
       UserWarehouses,
       Warehouse,
+      UserVendors,
+      Vendor,
     ]),
     LocationsModule,
     SSEModule,

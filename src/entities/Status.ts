@@ -14,6 +14,8 @@ import { User } from "./User";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
 import { UserWarehouses } from "./UserWarehouses";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity()
 export class Status {
@@ -49,6 +51,10 @@ export class Status {
   @OneToMany(() => RoleWarehousePreset, (preset) => preset.status)
   roleWarehousePresets!: RoleWarehousePreset[];
 
+  // Relationship for status_id in RoleVendorPreset
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.status)
+  roleVendorPresets!: RoleVendorPreset[];
+
   // Relationship for status_id in Company
   @OneToMany(() => Company, (company) => company.status)
   companies!: Company[];
@@ -76,4 +82,7 @@ export class Status {
   // Relationship for status_id in UserWarehouses
   @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.status)
   userWarehouses!: UserWarehouses[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.status)
+  userVendors!: UserVendors[];
 }

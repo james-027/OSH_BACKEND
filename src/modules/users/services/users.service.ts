@@ -20,7 +20,9 @@ import { Theme } from "../../../entities/Theme";
 import { UserPermissions } from "../../../entities/UserPermissions";
 import { UserLocations } from "../../../entities/UserLocations";
 import { UserWarehouses } from "../../../entities/UserWarehouses";
+import { UserVendors } from "../../../entities/UserVendor";
 import { Warehouse } from "../../../entities/Warehouse";
+import { Vendor } from "../../../entities/Vendor";
 import { Module } from "../../../entities/Module";
 import { Action } from "../../../entities/Action";
 import { AccessKey } from "../../../entities/AccessKey";
@@ -66,6 +68,10 @@ export class UsersService {
     private userWarehousesRepository: Repository<UserWarehouses>,
     @InjectRepository(Warehouse)
     private warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(UserVendors)
+    private userVendorsRepository: Repository<UserVendors>,
+    @InjectRepository(Vendor)
+    private vendorRepository: Repository<Vendor>,
     private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private emailService: EmailService,
@@ -600,6 +606,8 @@ export class UsersService {
       location_ids,
       user_location_presets,
       user_warehouse_presets,
+      user_vendor_presets,
+      vendor_ids,
       created_by,
     } = createUserDto;
 
@@ -735,6 +743,16 @@ export class UsersService {
           savedUser.id,
           accessKeys.map((ak) => ak.id),
           user_warehouse_presets,
+          created_by,
+        );
+      }
+
+      // Create UserVendors from presets
+      if (user_vendor_presets && user_vendor_presets.length > 0) {
+        await this.createUserVendorsFromPresets(
+          savedUser.id,
+          accessKeys.map((ak) => ak.id),
+          user_vendor_presets,
           created_by,
         );
       }
@@ -1214,6 +1232,146 @@ export class UsersService {
     }
   }
 
+  // Helper method to create/update user vendors from vendor presets (per role and access key)
+  private async createUserVendorsFromPresets(
+    userId: number,
+    accessKeyIds: number[],
+    userVendorPresets: any[],
+    updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userVendorsRepository.manager;
+
+    // Collect all relevant access key IDs (from presets or user access keys)
+    const presetAccessKeys = userVendorPresets
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        presetAccessKeys.length > 0
+          ? presetAccessKeys
+          : accessKeyIds && accessKeyIds.length > 0
+            ? accessKeyIds
+            : [1],
+      ),
+    );
+
+    // Determine target roles to update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              userVendorPresets
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Soft-deactivate existing vendors for this user within target roles & access keys
+    await manager.update(
+      UserVendors,
+      {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+      {
+        status_id: 2, // Deactivated (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // Step 2: Extract unique vendor IDs across all presets
+    const uniqueVendorIds = Array.from(
+      new Set(
+        userVendorPresets.flatMap((preset) => preset.vendor_ids || []),
+      ),
+    ).filter((id): id is number => typeof id === "number" && id > 0);
+
+    // If no vendors are selected, all existing remain deactivated (status_id = 2) -> Approach B inherits all vendors
+    if (uniqueVendorIds.length === 0) {
+      return;
+    }
+
+    const foundVendors = await manager.find(Vendor, {
+      where: { id: In(uniqueVendorIds) },
+    });
+
+    if (foundVendors.length !== uniqueVendorIds.length) {
+      const foundSet = new Set(foundVendors.map((v) => v.id));
+      const missing = uniqueVendorIds.find((id) => !foundSet.has(id));
+      throw new BadRequestException(`Vendor with ID ${missing} not found`);
+    }
+
+    // Step 3: Fetch existing UserVendors for fast in-memory reconciliation
+    const existingUserVendors = await manager.find(UserVendors, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const userVendorMap = new Map<string, UserVendors>();
+    existingUserVendors.forEach((uv) => {
+      userVendorMap.set(`${uv.role_id}_${uv.access_key_id}_${uv.vendor_id}`, uv);
+    });
+
+    // Step 4: Fast in-memory reconciliation
+    const toSave: UserVendors[] = [];
+    const seen = new Set<string>();
+
+    for (const preset of userVendorPresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
+
+      const vendorIds = preset.vendor_ids || [];
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+
+      if (!Array.isArray(vendorIds)) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        for (const vId of vendorIds) {
+          const key = `${roleId}_${accessKeyId}_${vId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existing = userVendorMap.get(key);
+          if (existing) {
+            existing.status_id = 1;
+            existing.updated_by = updatedBy;
+            existing.modified_at = new Date();
+            toSave.push(existing);
+          } else {
+            const newUV = manager.create(UserVendors, {
+              user_id: userId,
+              role_id: roleId,
+              vendor_id: vId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSave.push(newUV);
+          }
+        }
+      }
+    }
+
+    // Step 5: Batch save in chunks of 250
+    if (toSave.length > 0) {
+      await manager.save(UserVendors, toSave, { chunk: 250 });
+    }
+  }
+
   // Helper method to create/update user locations for multiple roles
   private async createUserLocationsForMultipleRoles(
     userId: number,
@@ -1322,6 +1480,9 @@ export class UsersService {
       user_location_presets,
       // UserWarehouses fields
       user_warehouse_presets,
+      // UserVendors fields
+      user_vendor_presets,
+      vendor_ids,
       // Selective update
       roles_to_update,
       // Audit field
@@ -1479,7 +1640,8 @@ export class UsersService {
       (roles_to_update === undefined &&
         (user_permission_presets !== undefined ||
           user_location_presets !== undefined ||
-          user_warehouse_presets !== undefined));
+          user_warehouse_presets !== undefined ||
+          user_vendor_presets !== undefined));
 
     let permissionsMessage = "";
     let locationsMessage = "";
@@ -1579,6 +1741,21 @@ export class UsersService {
           id,
           effectiveAccessKeyIds,
           user_warehouse_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
+      }
+
+      if (
+        shouldUpdatePermissions &&
+        user_vendor_presets &&
+        user_vendor_presets.length > 0
+      ) {
+        await this.createUserVendorsFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          user_vendor_presets,
           updated_by,
           roles_to_update,
           queryRunner,
@@ -2116,6 +2293,16 @@ export class UsersService {
         relations: ["warehouse", "warehouse.location", "status"],
       });
 
+      let whereUserVendors: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserVendors.access_key_id = user.current_access_key;
+        whereUserVendors.role_id = user.role_id;
+      }
+      const userVendors = await this.userVendorsRepository.find({
+        where: whereUserVendors,
+        relations: ["vendor", "status"],
+      });
+
       // Extract unique role_ids from user permissions
       const uniqueRoleIds = Array.from(
         new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
@@ -2260,6 +2447,19 @@ export class UsersService {
               user_warehouse_status_id: uw.status_id,
             }));
 
+          // Get vendors for this role
+          const roleVendors = userVendors
+            .filter((uv) => uv.role_id === roleId)
+            .map((uv) => ({
+              id: uv.vendor?.id || null,
+              service_provider_name: uv.vendor?.service_provider_name || null,
+              service_provider_code: uv.vendor?.service_provider_code || null,
+              vendor_code: uv.vendor?.vendor_code || null,
+              access_key_id: uv.access_key_id,
+              status_id: uv.vendor?.status_id || null,
+              user_vendor_status_id: uv.status_id,
+            }));
+
           // Add to user_permissions_locations array
           userPermissionsLocations.push({
             role_id: role.id,
@@ -2269,6 +2469,7 @@ export class UsersService {
             ),
             locations: roleLocations,
             warehouses: roleWarehouses,
+            vendors: roleVendors,
           });
         }
       } else {
@@ -2396,6 +2597,29 @@ export class UsersService {
             access_key_id: ul.access_key_id,
             status_id: ul.location?.status_id || null,
             user_location_status_id: ul.status_id,
+          })),
+        }),
+        ...(!includeUserRoles && {
+          warehouses: userWarehouses.map((uw) => ({
+            id: uw.warehouse?.id || null,
+            warehouse_name: uw.warehouse?.warehouse_name || null,
+            warehouse_code: uw.warehouse?.warehouse_code || null,
+            location_id: uw.warehouse?.location_id || null,
+            location_name: uw.warehouse?.location?.location_name || null,
+            access_key_id: uw.access_key_id,
+            status_id: uw.warehouse?.status_id || null,
+            user_warehouse_status_id: uw.status_id,
+          })),
+        }),
+        ...(!includeUserRoles && {
+          vendors: userVendors.map((uv) => ({
+            id: uv.vendor?.id || null,
+            service_provider_name: uv.vendor?.service_provider_name || null,
+            service_provider_code: uv.vendor?.service_provider_code || null,
+            vendor_code: uv.vendor?.vendor_code || null,
+            access_key_id: uv.access_key_id,
+            status_id: uv.vendor?.status_id || null,
+            user_vendor_status_id: uv.status_id,
           })),
         }),
         user_upline: user.userUpline

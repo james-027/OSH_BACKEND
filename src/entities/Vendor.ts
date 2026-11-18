@@ -7,11 +7,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Unique,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
 import { Category } from "./Category";
 import { AccessKey } from "./AccessKey";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity("vendors")
 @Unique("UQ_service_provider_code", ["service_provider_code"])
@@ -24,7 +27,7 @@ export class Vendor {
 
   @Column({ length: 255 })
   service_provider_code: string;
-  
+
   @Column({ length: 255 })
   vendor_code: string;
 
@@ -103,4 +106,13 @@ export class Vendor {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.vendor)
+  userVendors!: UserVendors[];
+
+  @OneToMany(
+    () => RoleVendorPreset,
+    (roleVendorPreset) => roleVendorPreset.vendor,
+  )
+  roleVendorPresets!: RoleVendorPreset[];
 }

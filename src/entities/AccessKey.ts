@@ -20,6 +20,8 @@ import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { SystemAccessKey } from "./SystemAccessKey";
 import { Position } from "./Position";
 import { SalesTerritory } from "./SalesTerritory";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity()
 export class AccessKey {
@@ -79,10 +81,7 @@ export class AccessKey {
   userLocations!: UserLocations[];
 
   // Relationship for access_key_id in UserWarehouses
-  @OneToMany(
-    () => UserWarehouses,
-    (userWarehouses) => userWarehouses.accessKey,
-  )
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.accessKey)
   userWarehouses!: UserWarehouses[];
 
   // Relationship for access_key_id in RoleActionPreset
@@ -106,6 +105,13 @@ export class AccessKey {
   )
   roleWarehousePresets!: RoleWarehousePreset[];
 
+  // Relationship for access_key_id in RoleVendorPreset
+  @OneToMany(
+    () => RoleVendorPreset,
+    (roleVendorPreset) => roleVendorPreset.accessKey,
+  )
+  roleVendorPresets!: RoleVendorPreset[];
+
   // Relationship for users who have this as their current access key
   @OneToMany(() => User, (user) => user.currentAccessKey)
   currentUsers!: User[];
@@ -121,4 +127,7 @@ export class AccessKey {
 
   @OneToMany(() => SalesTerritory, (salesTerritory) => salesTerritory.accessKey)
   salesTerritories!: SalesTerritory[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.accessKey)
+  userVendors!: UserVendors[];
 }

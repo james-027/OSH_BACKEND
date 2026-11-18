@@ -8,6 +8,8 @@ import { Theme } from "../../entities/Theme";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { UserLocations } from "../../entities/UserLocations";
 import { UserWarehouses } from "../../entities/UserWarehouses";
+import { UserVendors } from "../../entities/UserVendor";
+import { Vendor } from "../../entities/Vendor";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 import { AccessKey } from "../../entities/AccessKey";
@@ -41,6 +43,7 @@ import { Warehouse } from "../../entities/Warehouse";
       UserPermissions,
       UserLocations,
       UserWarehouses,
+      UserVendors,
       AppModule,
       Action,
       AccessKey,
@@ -48,6 +51,7 @@ import { Warehouse } from "../../entities/Warehouse";
       UserAuditTrail,
       UserLoginSession,
       Warehouse,
+      Vendor,
     ]),
     SSEModule,
     CacheInvalidationModule,

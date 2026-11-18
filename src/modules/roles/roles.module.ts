@@ -17,10 +17,13 @@ import { RoleLocationPresetsService } from "src/modules/roles/services/role-loca
 import { RoleActionPresetsService } from "src/modules/roles/services/role-action-presets.service";
 import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
 import { RoleWarehousePreset } from "src/entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "src/entities/RoleVendorPreset";
 import { RoleActionPreset } from "src/entities/RoleActionPreset";
 import { UserLocations } from "src/entities/UserLocations";
 import { UserWarehouses } from "src/entities/UserWarehouses";
+import { UserVendors } from "src/entities/UserVendor";
 import { Warehouse } from "src/entities/Warehouse";
+import { Vendor } from "src/entities/Vendor";
 import { AccessKey } from "src/entities/AccessKey";
 import {
   RoleActionPresetsController,
@@ -43,10 +46,13 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       UserPermissions,
       RoleLocationPreset,
       RoleWarehousePreset,
+      RoleVendorPreset,
       RoleActionPreset,
       UserLocations,
       UserWarehouses,
+      UserVendors,
       Warehouse,
+      Vendor,
       AccessKey,
     ]),
     UsersModule,

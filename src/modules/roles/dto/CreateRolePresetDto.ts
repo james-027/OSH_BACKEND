@@ -48,6 +48,11 @@ export class CreateRolePresetDto {
   @IsInt({ each: true })
   warehouse_ids?: number[];
 
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  vendor_ids?: number[];
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -70,6 +75,7 @@ export class CreateRolePresetDto {
     {
       location_ids?: number[];
       warehouse_ids?: number[];
+      vendor_ids?: number[];
       presets?: PresetDto[];
     }
   >;
@@ -106,4 +112,12 @@ export class CreateRolePresetDto {
   @IsOptional()
   @IsBoolean()
   apply_warehouses_to_users_only?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  apply_vendors_to_users?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  apply_vendors_to_users_only?: boolean;
 }

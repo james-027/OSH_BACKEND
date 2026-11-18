@@ -23,6 +23,8 @@ import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
 import { UserWarehouses } from "./UserWarehouses";
 import { UserLoginSession } from "./UserLoginSession";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity({ name: "users" })
 export class User {
@@ -163,6 +165,12 @@ export class User {
   @OneToMany(() => RoleWarehousePreset, (preset) => preset.updatedBy)
   updatedRoleWarehousePresets!: RoleWarehousePreset[];
 
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.createdBy)
+  createdRoleVendorPresets!: RoleVendorPreset[];
+
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.updatedBy)
+  updatedRoleVendorPresets!: RoleVendorPreset[];
+
   @OneToMany(() => Company, (company) => company.createdBy)
   createdCompanies!: Company[];
 
@@ -186,13 +194,13 @@ export class User {
 
   @OneToMany(
     () => UserPermissions,
-    (userPermissions) => userPermissions.createdBy
+    (userPermissions) => userPermissions.createdBy,
   )
   createdUserPermissions!: UserPermissions[];
 
   @OneToMany(
     () => UserPermissions,
-    (userPermissions) => userPermissions.updatedBy
+    (userPermissions) => userPermissions.updatedBy,
   )
   updatedUserPermissions!: UserPermissions[];
 
@@ -207,17 +215,18 @@ export class User {
   @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.user)
   userWarehouses!: UserWarehouses[];
 
-  @OneToMany(
-    () => UserWarehouses,
-    (userWarehouses) => userWarehouses.createdBy,
-  )
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.createdBy)
   createdUserWarehouses!: UserWarehouses[];
 
-  @OneToMany(
-    () => UserWarehouses,
-    (userWarehouses) => userWarehouses.updatedBy,
-  )
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.updatedBy)
   updatedUserWarehouses!: UserWarehouses[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.createdBy)
+  createdUserVendors!: UserVendors[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.updatedBy)
+  updatedUserVendors!: UserVendors[];
+
   @ManyToOne(() => AccessKey, (accessKey) => accessKey.currentUsers, {
     eager: false,
   })
@@ -226,4 +235,7 @@ export class User {
 
   @OneToMany(() => UserLoginSession, (session) => session.user)
   loginSessions!: UserLoginSession[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.user)
+  userVendors!: UserVendors[];
 }

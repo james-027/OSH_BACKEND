@@ -15,6 +15,8 @@ import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
 import { UserWarehouses } from "./UserWarehouses";
 import { System } from "./System";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity()
 export class Role {
@@ -84,6 +86,10 @@ export class Role {
   @OneToMany(() => RoleWarehousePreset, (preset) => preset.role)
   roleWarehousePresets!: RoleWarehousePreset[];
 
+  // Relationship for role_id in RoleVendorPreset
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.role)
+  roleVendorPresets!: RoleVendorPreset[];
+
   // Relationship for role_id in User
   @OneToMany(() => User, (user) => user.role)
   users!: User[];
@@ -108,4 +114,7 @@ export class Role {
   })
   @JoinColumn({ name: "system_id" })
   system?: System;
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.role)
+  userVendors!: UserVendors[];
 }
