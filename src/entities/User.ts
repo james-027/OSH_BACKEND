@@ -14,6 +14,7 @@ import { RoleActionPreset } from "./RoleActionPreset";
 import { LocationType } from "./LocationType";
 import { Location } from "./Location";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { Company } from "./Company";
 import { AccessKey } from "./AccessKey";
 import { Theme } from "./Theme";
@@ -155,6 +156,12 @@ export class User {
 
   @OneToMany(() => RoleLocationPreset, (preset) => preset.updatedBy)
   updatedRoleLocationPresets!: RoleLocationPreset[];
+
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.createdBy)
+  createdRoleWarehousePresets!: RoleWarehousePreset[];
+
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.updatedBy)
+  updatedRoleWarehousePresets!: RoleWarehousePreset[];
 
   @OneToMany(() => Company, (company) => company.createdBy)
   createdCompanies!: Company[];

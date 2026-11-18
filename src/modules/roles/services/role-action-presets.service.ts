@@ -13,9 +13,12 @@ import { Action } from "../../../entities/Action";
 import { Status } from "../../../entities/Status";
 import { User } from "../../../entities/User";
 import { RoleLocationPreset } from "../../../entities/RoleLocationPreset";
+import { RoleWarehousePreset } from "../../../entities/RoleWarehousePreset";
 import { Location } from "../../../entities/Location";
+import { Warehouse } from "../../../entities/Warehouse";
 import { UserPermissions } from "../../../entities/UserPermissions";
 import { UserLocations } from "../../../entities/UserLocations";
+import { UserWarehouses } from "../../../entities/UserWarehouses";
 import { AccessKey } from "../../../entities/AccessKey";
 import { CreateRolePresetDto } from "../dto/CreateRolePresetDto";
 import { UpdateRolePresetDto } from "../dto/UpdateRolePresetDto";
@@ -46,12 +49,18 @@ export class RoleActionPresetsService {
     private userRepository: Repository<User>,
     @InjectRepository(RoleLocationPreset)
     private roleLocationPresetRepository: Repository<RoleLocationPreset>,
+    @InjectRepository(RoleWarehousePreset)
+    private roleWarehousePresetRepository: Repository<RoleWarehousePreset>,
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>,
     @InjectRepository(UserPermissions)
     private userPermissionsRepository: Repository<UserPermissions>,
     @InjectRepository(UserLocations)
     private userLocationsRepository: Repository<UserLocations>,
+    @InjectRepository(UserWarehouses)
+    private userWarehousesRepository: Repository<UserWarehouses>,
     @InjectRepository(AccessKey)
     private accessKeyRepository: Repository<AccessKey>,
     private dataSource: DataSource,
@@ -756,6 +765,12 @@ export class RoleActionPresetsService {
         relations: ["location", "role"],
       });
 
+      // Get role warehouse presets
+      const roleWarehousePresets = await this.roleWarehousePresetRepository.find({
+        where: { role_id, status_id: 1 },
+        relations: ["warehouse", "role"],
+      });
+
       // Get role action presets
       const roleActionPresets = await this.roleActionPresetRepository.find({
         where: actionWhere,
@@ -763,7 +778,7 @@ export class RoleActionPresetsService {
       });
 
       // Check if role exists
-      if (!role && roleLocationPresets.length === 0 && roleActionPresets.length === 0) {
+      if (!role && roleLocationPresets.length === 0 && roleActionPresets.length === 0 && roleWarehousePresets.length === 0) {
         throw new NotFoundException(`Role with ID ${role_id} not found.`);
       }
 
@@ -772,6 +787,7 @@ export class RoleActionPresetsService {
         number,
         {
           location_ids: number[];
+          warehouse_ids: number[];
           presets: Array<{
             role_id: number;
             module_ids: number;
@@ -787,6 +803,7 @@ export class RoleActionPresetsService {
         new Set([
           ...roleActionPresets.map((ap) => ap.access_key_id),
           ...roleLocationPresets.map((lp) => lp.access_key_id),
+          ...roleWarehousePresets.map((wp) => wp.access_key_id),
         ]),
       );
 
@@ -797,6 +814,10 @@ export class RoleActionPresetsService {
         const akLocations = roleLocationPresets
           .filter((lp) => lp.access_key_id === akId)
           .map((lp) => lp.location_id)
+          .sort((a, b) => a - b);
+        const akWarehouses = roleWarehousePresets
+          .filter((wp) => wp.access_key_id === akId)
+          .map((wp) => wp.warehouse_id)
           .sort((a, b) => a - b);
 
         const akModuleMap = new Map<
@@ -827,18 +848,19 @@ export class RoleActionPresetsService {
 
         byAccessKey[akId] = {
           location_ids: akLocations,
+          warehouse_ids: akWarehouses,
           presets: akPresets.sort((a, b) => a.order_level - b.order_level),
         };
       }
 
-      // Default top-level presets and locations (for backward compatibility)
+      // Default top-level presets, locations, and warehouses (for backward compatibility)
       const defaultAkId =
         accessKeyId && byAccessKey[accessKeyId]
           ? accessKeyId
           : allAccessKeyIds[0] || accessKeyId || 1;
       const defaultData =
         byAccessKey[defaultAkId] ||
-        byAccessKey[allAccessKeyIds[0]] || { location_ids: [], presets: [] };
+        byAccessKey[allAccessKeyIds[0]] || { location_ids: [], warehouse_ids: [], presets: [] };
 
       // Build response
       const response_data = {
@@ -849,6 +871,7 @@ export class RoleActionPresetsService {
           roleLocationPresets[0]?.role?.role_name ||
           null,
         location_ids: defaultData.location_ids,
+        warehouse_ids: defaultData.warehouse_ids || [],
         presets: defaultData.presets,
         by_access_key: byAccessKey,
         access_key_ids: allAccessKeyIds,
@@ -901,12 +924,23 @@ export class RoleActionPresetsService {
         relations: ["role", "location", "status", "createdBy", "updatedBy"],
       });
 
+      // Get role warehouse presets for this role
+      const roleWarehousePresets = await this.roleWarehousePresetRepository.find({
+        where: { role_id: role.id },
+        relations: ["role", "warehouse", "status", "createdBy", "updatedBy"],
+      });
+
       // Only include roles that have presets
-      if (roleActionPresets.length > 0 || roleLocationPresets.length > 0) {
+      if (
+        roleActionPresets.length > 0 ||
+        roleLocationPresets.length > 0 ||
+        roleWarehousePresets.length > 0
+      ) {
         const nestedRole = this.createNestedStructure(
           role,
           roleActionPresets,
           roleLocationPresets,
+          roleWarehousePresets,
         );
         results.push(nestedRole);
       }
@@ -1000,6 +1034,7 @@ export class RoleActionPresetsService {
     role: Role,
     roleActionPresets: RoleActionPreset[],
     roleLocationPresets: RoleLocationPreset[],
+    roleWarehousePresets: RoleWarehousePreset[] = [],
   ): Promise<any> {
     // Group modules and their actions
     const moduleMap = new Map<number, any>();
@@ -1059,6 +1094,13 @@ export class RoleActionPresetsService {
         id: preset.location?.id || null,
         location_name: preset.location?.location_name || null,
         status_id: preset.location?.status_id || null,
+      })),
+      warehouses: roleWarehousePresets.map((preset) => ({
+        id: preset.warehouse?.id || null,
+        warehouse_name: preset.warehouse?.warehouse_name || null,
+        warehouse_code: preset.warehouse?.warehouse_code || null,
+        location_id: preset.warehouse?.location_id || null,
+        status_id: preset.warehouse?.status_id || null,
       })),
       status: {
         id: role.status?.id || null,
@@ -1182,6 +1224,135 @@ export class RoleActionPresetsService {
     }
 
     return savedLocationPresets;
+  }
+
+  // Helper method to update role warehouse presets with batch/in-memory optimization
+  private async updateRoleWarehousePresetsFromPresets(
+    roleId: number,
+    warehouseIds: number[],
+    status: Status,
+    updatedBy: number,
+    queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
+  ): Promise<RoleWarehousePreset[]> {
+    const role = await this.roleRepository.findOneBy({ id: roleId });
+    if (!role) {
+      throw new BadRequestException(`Role with ID ${roleId} not found.`);
+    }
+
+    // Step 1: Mark all existing warehouse presets for this role within target access keys as inactive
+    await queryRunner.manager.update(
+      RoleWarehousePreset,
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!warehouseIds || warehouseIds.length === 0) {
+      return [];
+    }
+
+    // Step 2: Validate all warehouses exist
+    const warehouses = await this.warehouseRepository.findBy({
+      id: In(warehouseIds),
+    });
+    if (warehouses.length !== warehouseIds.length) {
+      const foundWarehouseIds = new Set(warehouses.map((w) => w.id));
+      const missingWarehouseIds = warehouseIds.filter(
+        (id: number) => !foundWarehouseIds.has(id),
+      );
+      throw new BadRequestException(
+        `Warehouse IDs not found: ${missingWarehouseIds.join(", ")}`,
+      );
+    }
+
+    // Step 3: Location Respect Validation
+    // Fetch active location presets for this role and access keys from queryRunner
+    const activeLocationPresets = await queryRunner.manager.find(
+      RoleLocationPreset,
+      {
+        where: {
+          role_id: roleId,
+          access_key_id: In(targetAccessKeyIds),
+          status_id: 1,
+        },
+      },
+    );
+    const allowedLocationIds = new Set(
+      activeLocationPresets.map((lp: RoleLocationPreset) => lp.location_id),
+    );
+
+    // If active location presets exist, verify that all warehouses belong to allowed locations
+    if (allowedLocationIds.size > 0) {
+      const invalidWarehouses = warehouses.filter(
+        (w) => !allowedLocationIds.has(w.location_id),
+      );
+      if (invalidWarehouses.length > 0) {
+        const invalidNames = invalidWarehouses
+          .map((w) => `'${w.warehouse_name}' (ID: ${w.id})`)
+          .join(", ");
+        throw new BadRequestException(
+          `The following warehouses do not belong to the role's assigned locations: ${invalidNames}`,
+        );
+      }
+    }
+
+    // Step 4: Fetch existing warehouse presets in 1 query
+    const existingPresets = await queryRunner.manager.find(RoleWarehousePreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const presetMap = new Map<string, RoleWarehousePreset>();
+    existingPresets.forEach((p: RoleWarehousePreset) => {
+      presetMap.set(`${p.access_key_id}_${p.warehouse_id}`, p);
+    });
+
+    // Step 5: Fast in-memory reconciliation
+    const toSave: RoleWarehousePreset[] = [];
+    const seen = new Set<string>();
+    const createdByUser = await this.userRepository.findOneBy({ id: updatedBy });
+
+    for (const accessKeyId of targetAccessKeyIds) {
+      for (const warehouseId of warehouseIds) {
+        const key = `${accessKeyId}_${warehouseId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const existing = presetMap.get(key);
+        if (existing) {
+          existing.status_id = status.id;
+          existing.updated_by = updatedBy;
+          existing.modified_at = new Date();
+          toSave.push(existing);
+        } else {
+          const newPreset = new RoleWarehousePreset();
+          newPreset.role = role;
+          newPreset.role_id = roleId;
+          newPreset.warehouse = warehouses.find((w) => w.id === warehouseId)!;
+          newPreset.warehouse_id = warehouseId;
+          newPreset.access_key_id = accessKeyId;
+          newPreset.status = status;
+          newPreset.status_id = status.id;
+          newPreset.createdBy = createdByUser!;
+          newPreset.created_by = updatedBy;
+          toSave.push(newPreset);
+        }
+      }
+    }
+
+    if (toSave.length > 0) {
+      return await queryRunner.manager.save(RoleWarehousePreset, toSave, {
+        chunk: 250,
+      });
+    }
+
+    return [];
   }
 
   // Helper method to update role action presets (mark-inactive-then-upsert pattern)
@@ -1345,13 +1516,16 @@ export class RoleActionPresetsService {
     const {
       role_id,
       location_ids,
+      warehouse_ids = [],
       presets,
       status_id,
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_warehouses_to_users = false,
       apply_permissions_to_users_only = false,
       apply_locations_to_users_only = false,
+      apply_warehouses_to_users_only = false,
     } = createRolePresetDto;
 
     try {
@@ -1399,9 +1573,11 @@ export class RoleActionPresetsService {
             : targetAccessKeyIds;
 
         let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedWarehousePresets: RoleWarehousePreset[] = [];
         let savedActionPresets: RoleActionPreset[] = [];
 
         const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleWarehouses = !apply_warehouses_to_users_only;
         const shouldUpdateRoleActions = !apply_permissions_to_users_only;
 
         if (
@@ -1414,6 +1590,7 @@ export class RoleActionPresetsService {
             const keyId = Number(keyIdStr);
             const config = configObj as {
               location_ids?: number[];
+              warehouse_ids?: number[];
               presets?: any[];
             };
             if (shouldUpdateRoleLocations && config.location_ids) {
@@ -1426,6 +1603,17 @@ export class RoleActionPresetsService {
                 [keyId],
               );
               savedLocationPresets.push(...locs);
+            }
+            if (shouldUpdateRoleWarehouses && config.warehouse_ids) {
+              const whs = await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                config.warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedWarehousePresets.push(...whs);
             }
             if (shouldUpdateRoleActions && config.presets) {
               const acts = await this.updateRoleActionPresetsFromPresets(
@@ -1453,6 +1641,19 @@ export class RoleActionPresetsService {
               );
           }
 
+          if (shouldUpdateRoleWarehouses && warehouse_ids && warehouse_ids.length > 0) {
+            // Update warehouse presets using helper (mark-inactive-then-upsert)
+            savedWarehousePresets =
+              await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
           if (shouldUpdateRoleActions) {
             // Update action presets using helper (mark-inactive-then-upsert)
             savedActionPresets =
@@ -1467,14 +1668,16 @@ export class RoleActionPresetsService {
           }
         }
 
-        // Handle user permissions and locations updates if requested
+        // Handle user permissions, locations, and warehouses updates if requested
         const shouldCascadePermissions =
           apply_permissions_to_users || apply_permissions_to_users_only;
         const shouldCascadeLocations =
           apply_locations_to_users || apply_locations_to_users_only;
+        const shouldCascadeWarehouses =
+          apply_warehouses_to_users || apply_warehouses_to_users_only;
 
-        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
-          const [userPermKeys, userLocKeys] = await Promise.all([
+        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations || shouldCascadeWarehouses)) {
+          const [userPermKeys, userLocKeys, userWhKeys] = await Promise.all([
             this.userPermissionsRepository
               .createQueryBuilder("up")
               .select("DISTINCT up.access_key_id", "access_key_id")
@@ -1485,12 +1688,18 @@ export class RoleActionPresetsService {
               .select("DISTINCT ul.access_key_id", "access_key_id")
               .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
               .getRawMany(),
+            this.userWarehousesRepository
+              .createQueryBuilder("uw")
+              .select("DISTINCT uw.access_key_id", "access_key_id")
+              .where("uw.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
           ]);
 
           let userKeys = Array.from(
             new Set([
               ...userPermKeys.map((k) => k.access_key_id),
               ...userLocKeys.map((k) => k.access_key_id),
+              ...userWhKeys.map((k) => k.access_key_id),
             ]),
           );
 
@@ -1587,6 +1796,47 @@ export class RoleActionPresetsService {
               this.sseEventEmitter.emitUpdateSignal("locations", 0);
             } catch (err) {
               console.warn("SSE event failed for update:", err);
+            }
+          }
+
+          if (shouldCascadeWarehouses) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.warehouse_ids && userKeys.includes(keyId)) {
+                  await this.updateUserWarehouses(
+                    user_ids,
+                    role_id,
+                    config.warehouse_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && warehouse_ids && warehouse_ids.length > 0) {
+                await this.updateUserWarehouses(
+                  user_ids,
+                  role_id,
+                  warehouse_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
         }
@@ -1707,13 +1957,16 @@ export class RoleActionPresetsService {
   ): Promise<any> {
     const {
       location_ids,
+      warehouse_ids = [],
       presets,
       status_id,
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_warehouses_to_users = false,
       apply_permissions_to_users_only = false,
       apply_locations_to_users_only = false,
+      apply_warehouses_to_users_only = false,
     } = updateRolePresetDto;
 
     // console.log("UpdateRolePresetDto:", updateRolePresetDto);
@@ -1763,9 +2016,11 @@ export class RoleActionPresetsService {
             : targetAccessKeyIds;
 
         let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedWarehousePresets: RoleWarehousePreset[] = [];
         let savedActionPresets: RoleActionPreset[] = [];
 
         const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleWarehouses = !apply_warehouses_to_users_only;
         const shouldUpdateRoleActions = !apply_permissions_to_users_only;
 
         if (
@@ -1778,6 +2033,7 @@ export class RoleActionPresetsService {
             const keyId = Number(keyIdStr);
             const config = configObj as {
               location_ids?: number[];
+              warehouse_ids?: number[];
               presets?: any[];
             };
             if (shouldUpdateRoleLocations && config.location_ids) {
@@ -1790,6 +2046,17 @@ export class RoleActionPresetsService {
                 [keyId],
               );
               savedLocationPresets.push(...locs);
+            }
+            if (shouldUpdateRoleWarehouses && config.warehouse_ids) {
+              const whs = await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                config.warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedWarehousePresets.push(...whs);
             }
             if (shouldUpdateRoleActions && config.presets) {
               const acts = await this.updateRoleActionPresetsFromPresets(
@@ -1817,6 +2084,19 @@ export class RoleActionPresetsService {
               );
           }
 
+          if (shouldUpdateRoleWarehouses && warehouse_ids && warehouse_ids.length > 0) {
+            // Update warehouse presets using helper (mark-inactive-then-upsert)
+            savedWarehousePresets =
+              await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
           if (shouldUpdateRoleActions) {
             // Update action presets using helper (mark-inactive-then-upsert)
             savedActionPresets =
@@ -1831,14 +2111,16 @@ export class RoleActionPresetsService {
           }
         }
 
-        // Handle user permissions and locations updates if requested
+        // Handle user permissions, locations, and warehouses updates if requested
         const shouldCascadePermissions =
           apply_permissions_to_users || apply_permissions_to_users_only;
         const shouldCascadeLocations =
           apply_locations_to_users || apply_locations_to_users_only;
+        const shouldCascadeWarehouses =
+          apply_warehouses_to_users || apply_warehouses_to_users_only;
 
-        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations)) {
-          const [userPermKeys, userLocKeys] = await Promise.all([
+        if (user_ids.length > 0 && (shouldCascadePermissions || shouldCascadeLocations || shouldCascadeWarehouses)) {
+          const [userPermKeys, userLocKeys, userWhKeys] = await Promise.all([
             this.userPermissionsRepository
               .createQueryBuilder("up")
               .select("DISTINCT up.access_key_id", "access_key_id")
@@ -1849,12 +2131,18 @@ export class RoleActionPresetsService {
               .select("DISTINCT ul.access_key_id", "access_key_id")
               .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
               .getRawMany(),
+            this.userWarehousesRepository
+              .createQueryBuilder("uw")
+              .select("DISTINCT uw.access_key_id", "access_key_id")
+              .where("uw.user_id IN (:...userIds)", { userIds: user_ids })
+              .getRawMany(),
           ]);
 
           let userKeys = Array.from(
             new Set([
               ...userPermKeys.map((k) => k.access_key_id),
               ...userLocKeys.map((k) => k.access_key_id),
+              ...userWhKeys.map((k) => k.access_key_id),
             ]),
           );
 
@@ -1939,6 +2227,47 @@ export class RoleActionPresetsService {
                   user_ids,
                   role_id,
                   location_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
+          }
+
+          if (shouldCascadeWarehouses) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.warehouse_ids && userKeys.includes(keyId)) {
+                  await this.updateUserWarehouses(
+                    user_ids,
+                    role_id,
+                    config.warehouse_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && warehouse_ids && warehouse_ids.length > 0) {
+                await this.updateUserWarehouses(
+                  user_ids,
+                  role_id,
+                  warehouse_ids,
                   eligibleKeys,
                   userId,
                 );
@@ -2246,6 +2575,85 @@ export class RoleActionPresetsService {
     // 4. Batch save in chunks of 500 for optimal database performance
     if (toSave.length > 0) {
       await this.userLocationsRepository.save(toSave, { chunk: 500 });
+    }
+  }
+
+  // Helper method to update user warehouses for multiple users with batch optimization
+  private async updateUserWarehouses(
+    userIds: number[],
+    roleId: number,
+    warehouseIds: number[],
+    accessKeyIds: number[],
+    updatedBy: number,
+  ): Promise<void> {
+    if (!userIds.length || !warehouseIds.length || !accessKeyIds.length) return;
+
+    // 1. Mark existing warehouses for all target users, role, and access keys as inactive in 1 fast query
+    await this.userWarehousesRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // 2. Fetch existing warehouses for this cohort in 1 query
+    const existing = await this.userWarehousesRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const whMap = new Map<string, UserWarehouses>();
+    existing.forEach((w) => {
+      whMap.set(
+        `${w.user_id}_${w.role_id}_${w.access_key_id}_${w.warehouse_id}`,
+        w,
+      );
+    });
+
+    // 3. Fast in-memory reconciliation
+    const toSave: UserWarehouses[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
+      for (const accessKeyId of accessKeyIds) {
+        for (const warehouseId of warehouseIds) {
+          const key = `${userId}_${roleId}_${accessKeyId}_${warehouseId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existingWh = whMap.get(key);
+          if (existingWh) {
+            existingWh.status_id = 1;
+            existingWh.updated_by = updatedBy;
+            existingWh.modified_at = new Date();
+            toSave.push(existingWh);
+          } else {
+            const newWh = this.userWarehousesRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              warehouse_id: warehouseId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSave.push(newWh);
+          }
+        }
+      }
+    }
+
+    // 4. Batch save in chunks of 500 for optimal database performance
+    if (toSave.length > 0) {
+      await this.userWarehousesRepository.save(toSave, { chunk: 500 });
     }
   }
 }

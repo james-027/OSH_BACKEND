@@ -6,6 +6,7 @@ import { RoleActionPreset } from "./RoleActionPreset";
 import { LocationType } from "./LocationType";
 import { Location } from "./Location";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { Company } from "./Company";
 import { AccessKey } from "./AccessKey";
 import { Theme } from "./Theme";
@@ -43,6 +44,10 @@ export class Status {
   // Relationship for status_id in RoleLocationPreset
   @OneToMany(() => RoleLocationPreset, (preset) => preset.status)
   roleLocationPresets!: RoleLocationPreset[];
+
+  // Relationship for status_id in RoleWarehousePreset
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.status)
+  roleWarehousePresets!: RoleWarehousePreset[];
 
   // Relationship for status_id in Company
   @OneToMany(() => Company, (company) => company.status)

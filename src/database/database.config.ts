@@ -12,6 +12,7 @@ import { LocationType } from "../entities/LocationType";
 import { Company } from "../entities/Company";
 import { RoleActionPreset } from "../entities/RoleActionPreset";
 import { RoleLocationPreset } from "../entities/RoleLocationPreset";
+import { RoleWarehousePreset } from "../entities/RoleWarehousePreset";
 import { UserPermissions } from "../entities/UserPermissions";
 import { UserLocations } from "../entities/UserLocations";
 import { UserWarehouses } from "../entities/UserWarehouses";
@@ -143,6 +144,7 @@ export const entities = [
   Company,
   RoleActionPreset,
   RoleLocationPreset,
+  RoleWarehousePreset,
   UserPermissions,
   UserLocations,
   UserWarehouses,

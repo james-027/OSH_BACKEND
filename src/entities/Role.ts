@@ -10,6 +10,7 @@ import { User } from "./User";
 import { Status } from "./Status";
 import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
 import { UserWarehouses } from "./UserWarehouses";
@@ -78,6 +79,10 @@ export class Role {
   // Relationship for role_id in RoleLocationPreset
   @OneToMany(() => RoleLocationPreset, (preset) => preset.role)
   roleLocationPresets!: RoleLocationPreset[];
+
+  // Relationship for role_id in RoleWarehousePreset
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.role)
+  roleWarehousePresets!: RoleWarehousePreset[];
 
   // Relationship for role_id in User
   @OneToMany(() => User, (user) => user.role)

@@ -21,6 +21,7 @@ import { PosAvailability } from "./PosAvailability";
 import { Profitcenter } from "./Profitcenter";
 import { SalesTerritory } from "./SalesTerritory";
 import { UserWarehouses } from "./UserWarehouses";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -179,4 +180,10 @@ export class Warehouse {
 
   @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.warehouse)
   userWarehouses!: UserWarehouses[];
+
+  @OneToMany(
+    () => RoleWarehousePreset,
+    (roleWarehousePreset) => roleWarehousePreset.warehouse,
+  )
+  roleWarehousePresets!: RoleWarehousePreset[];
 }

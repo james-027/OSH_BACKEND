@@ -16,8 +16,11 @@ import { UsersModule } from "../users/users.module";
 import { RoleLocationPresetsService } from "src/modules/roles/services/role-location-presets.service";
 import { RoleActionPresetsService } from "src/modules/roles/services/role-action-presets.service";
 import { RoleLocationPreset } from "src/entities/RoleLocationPreset";
+import { RoleWarehousePreset } from "src/entities/RoleWarehousePreset";
 import { RoleActionPreset } from "src/entities/RoleActionPreset";
 import { UserLocations } from "src/entities/UserLocations";
+import { UserWarehouses } from "src/entities/UserWarehouses";
+import { Warehouse } from "src/entities/Warehouse";
 import { AccessKey } from "src/entities/AccessKey";
 import {
   RoleActionPresetsController,
@@ -39,8 +42,11 @@ import { CacheInvalidationModule } from "../cache/cache.module";
       UserAuditTrail,
       UserPermissions,
       RoleLocationPreset,
+      RoleWarehousePreset,
       RoleActionPreset,
       UserLocations,
+      UserWarehouses,
+      Warehouse,
       AccessKey,
     ]),
     UsersModule,

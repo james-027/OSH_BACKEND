@@ -16,6 +16,7 @@ import { UserLocations } from "./UserLocations";
 import { UserWarehouses } from "./UserWarehouses";
 import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { SystemAccessKey } from "./SystemAccessKey";
 import { Position } from "./Position";
 import { SalesTerritory } from "./SalesTerritory";
@@ -97,6 +98,13 @@ export class AccessKey {
     (roleLocationPreset) => roleLocationPreset.accessKey,
   )
   roleLocationPresets!: RoleLocationPreset[];
+
+  // Relationship for access_key_id in RoleWarehousePreset
+  @OneToMany(
+    () => RoleWarehousePreset,
+    (roleWarehousePreset) => roleWarehousePreset.accessKey,
+  )
+  roleWarehousePresets!: RoleWarehousePreset[];
 
   // Relationship for users who have this as their current access key
   @OneToMany(() => User, (user) => user.currentAccessKey)
