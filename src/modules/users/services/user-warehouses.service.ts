@@ -264,6 +264,10 @@ export class UserWarehousesService {
       status_id = 1,
     } = dto;
 
+    if (!warehouse_ids || warehouse_ids.length === 0) {
+      return false;
+    }
+
     // 1. Validate basic references
     const user = await this.userRepository.findOne({ where: { id: user_id } });
     if (!user) {

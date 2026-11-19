@@ -19,11 +19,10 @@ export class CreateUserWarehousesDto {
   @IsNumber()
   access_key_id!: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsArray()
-  @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  warehouse_ids!: number[];
+  warehouse_ids?: number[];
 
   @IsOptional()
   @IsNumber()
