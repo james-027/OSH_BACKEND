@@ -35,7 +35,11 @@ import {
 import * as fs from "fs";
 import * as bcrypt from "bcrypt";
 import { CacheCustom } from "src/decorators/cache.decorator";
-import { CACHE_KEYS, CACHE_TTL } from "src/config/cache.config";
+import {
+  CACHE_KEYS,
+  CACHE_TTL,
+  buildUsersWithRestrictionKey,
+} from "src/config/cache.config";
 
 @Controller("users")
 @UseGuards(JwtAuthGuard)
@@ -48,6 +52,14 @@ export class UsersController {
   @RequirePermissions({ module: "USERS", action: "DATA ACCESS" })
   async findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get("with-restriction")
+  @UseGuards(PermissionsGuard)
+  @CacheCustom(buildUsersWithRestrictionKey, CACHE_TTL.COUNTS)
+  @RequirePermissions({ module: "USERS", action: "DATA ACCESS" })
+  async findAllWithRestriction(@Request() req: any) {
+    return this.usersService.findAll(true, req?.user);
   }
 
   @Get("nested")
@@ -80,7 +92,12 @@ export class UsersController {
 
   @Post("by-roles-and-locations")
   async findUsersByRolesAndLocations(
-    @Body() body: { role_ids: number[]; location_ids?: number[]; status_id?: number },
+    @Body()
+    body: {
+      role_ids: number[];
+      location_ids?: number[];
+      status_id?: number;
+    },
   ) {
     return this.usersService.findUsersByRolesAndLocations(body);
   }
@@ -205,10 +222,7 @@ export class UsersController {
   }
 
   @Delete(":id/signature")
-  async removeSignature(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req,
-  ) {
+  async removeSignature(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const user = await this.usersService.findUserById(id);
     if (!user) {
       throw new BadRequestException("User not found.");

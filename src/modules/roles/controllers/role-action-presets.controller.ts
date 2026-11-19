@@ -104,7 +104,7 @@ export class RolePresetsController {
 
   @Throttle({ default: { limit: 2000, ttl: 60000 } })
   @Get("nested/:id")
-  @RequirePermissions({ module: "ROLE PRESETS", action: "VIEW" })
+  @RequirePermissions({ module: "ROLE PRESETS", action: "DATA ACCESS" })
   async nestedByRole(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const accessKeyId = req.query?.access_key_id
       ? parseInt(req.query.access_key_id, 10)

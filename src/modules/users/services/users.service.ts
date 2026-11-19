@@ -86,7 +86,10 @@ export class UsersService {
     return error instanceof Error ? error.message : String(error);
   }
 
-  async findAll(): Promise<any[]> {
+  async findAll(
+    withRestriction: boolean = false,
+    currentUser?: any,
+  ): Promise<any[]> {
     try {
       const users = await this.usersRepository.find({
         relations: [
@@ -103,8 +106,86 @@ export class UsersService {
         users.map((user) => this.createFlattenedResponse(user)),
       );
 
-      logger.info("Successfully retrieved all users.");
-      return flattenedUsers;
+      // If restriction is not requested or no currentUser is supplied, return full payload
+      if (!withRestriction || !currentUser) {
+        logger.info("Successfully retrieved all users.");
+        return flattenedUsers;
+      }
+
+      const currentUserId = Number(
+        typeof currentUser === "object" ? currentUser?.id : currentUser,
+      );
+
+      const loggedInUserRecord = flattenedUsers.find(
+        (u) => Number(u.id) === currentUserId,
+      );
+
+      // Super admin check (role_level === 1 has full access across all users)
+      const isSuperAdmin =
+        currentUser?.role?.role_level === 1 ||
+        loggedInUserRecord?.role_level === 1;
+
+      if (isSuperAdmin) {
+        logger.info(
+          `Successfully retrieved all users for super admin user ID ${currentUserId}.`,
+        );
+        return flattenedUsers;
+      }
+
+      // Resolve logged-in user's role IDs
+      const loggedInRoleIds: number[] = Array.isArray(
+        loggedInUserRecord?.role_ids,
+      )
+        ? loggedInUserRecord.role_ids
+        : Array.isArray(loggedInUserRecord?.roles)
+          ? loggedInUserRecord.roles.map((r: any) => Number(r.role_id ?? r.id))
+          : loggedInUserRecord?.role_id
+            ? [Number(loggedInUserRecord.role_id)]
+            : currentUser?.role_id
+              ? [Number(currentUser.role_id)]
+              : [];
+
+      const loggedUserRoleIdSet = new Set<number>(
+        loggedInRoleIds.map((id) => Number(id)).filter((id) => !isNaN(id)),
+      );
+
+      // Row-level filter: Strict role subset check or self record
+      const restrictedUsers = flattenedUsers.filter((user) => {
+        const rowUserId = Number(user.id);
+        const isSelf =
+          !isNaN(currentUserId) &&
+          !isNaN(rowUserId) &&
+          rowUserId === currentUserId;
+
+        if (isSelf) return true;
+
+        const targetRoleIds: number[] =
+          Array.isArray(user.role_ids) && user.role_ids.length > 0
+            ? user.role_ids
+                .map((id: any) => Number(id))
+                .filter((id: any) => !isNaN(id))
+            : Array.isArray(user.roles) && user.roles.length > 0
+              ? user.roles
+                  .map((r: any) => Number(r.role_id ?? r.id))
+                  .filter((id: any) => !isNaN(id))
+              : user.role_id
+                ? [Number(user.role_id)]
+                : [];
+
+        if (loggedUserRoleIdSet.size > 0) {
+          if (targetRoleIds.length === 0) {
+            return true;
+          }
+          return targetRoleIds.every((id) => loggedUserRoleIdSet.has(id));
+        }
+
+        return false;
+      });
+
+      logger.info(
+        `Successfully retrieved ${restrictedUsers.length} restricted users for user ID ${currentUserId}.`,
+      );
+      return restrictedUsers;
     } catch (error) {
       logger.error("Error retrieving users:", error);
       throw new Error("Failed to retrieve users.");
@@ -1055,19 +1136,21 @@ export class UsersService {
       ? queryRunner.manager
       : this.userWarehousesRepository.manager;
 
-    // Collect all relevant access key IDs (from presets or user access keys)
-    const presetAccessKeys = userWarehousePresets
+    // Collect all relevant access key IDs (from presets and user access keys)
+    const presetAccessKeys = (userWarehousePresets || [])
       .map((p) => p.access_key_id)
       .filter((id): id is number => typeof id === "number" && id > 0);
     const targetAccessKeyIds = Array.from(
       new Set(
-        presetAccessKeys.length > 0
-          ? presetAccessKeys
-          : accessKeyIds && accessKeyIds.length > 0
-            ? accessKeyIds
-            : [1],
+        [
+          ...(accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : []),
+          ...presetAccessKeys,
+        ].filter((id): id is number => typeof id === "number" && id > 0),
       ),
     );
+    if (targetAccessKeyIds.length === 0) {
+      targetAccessKeyIds.push(1);
+    }
 
     // Determine target roles to update
     const targetRoleIds =
@@ -1075,7 +1158,7 @@ export class UsersService {
         ? rolesToUpdate
         : Array.from(
             new Set(
-              userWarehousePresets
+              (userWarehousePresets || [])
                 .map((p) => p.role_id)
                 .filter((r): r is number => typeof r === "number" && r > 0),
             ),
@@ -1101,7 +1184,9 @@ export class UsersService {
     // Step 2: Extract unique warehouse IDs across all presets
     const uniqueWarehouseIds = Array.from(
       new Set(
-        userWarehousePresets.flatMap((preset) => preset.warehouse_ids || []),
+        (userWarehousePresets || []).flatMap(
+          (preset) => preset.warehouse_ids || [],
+        ),
       ),
     ).filter((id): id is number => typeof id === "number" && id > 0);
 
@@ -1259,19 +1344,21 @@ export class UsersService {
       ? queryRunner.manager
       : this.userVendorsRepository.manager;
 
-    // Collect all relevant access key IDs (from presets or user access keys)
-    const presetAccessKeys = userVendorPresets
+    // Collect all relevant access key IDs (from presets and user access keys)
+    const presetAccessKeys = (userVendorPresets || [])
       .map((p) => p.access_key_id)
       .filter((id): id is number => typeof id === "number" && id > 0);
     const targetAccessKeyIds = Array.from(
       new Set(
-        presetAccessKeys.length > 0
-          ? presetAccessKeys
-          : accessKeyIds && accessKeyIds.length > 0
-            ? accessKeyIds
-            : [1],
+        [
+          ...(accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : []),
+          ...presetAccessKeys,
+        ].filter((id): id is number => typeof id === "number" && id > 0),
       ),
     );
+    if (targetAccessKeyIds.length === 0) {
+      targetAccessKeyIds.push(1);
+    }
 
     // Determine target roles to update
     const targetRoleIds =
@@ -1279,7 +1366,7 @@ export class UsersService {
         ? rolesToUpdate
         : Array.from(
             new Set(
-              userVendorPresets
+              (userVendorPresets || [])
                 .map((p) => p.role_id)
                 .filter((r): r is number => typeof r === "number" && r > 0),
             ),
@@ -1305,7 +1392,7 @@ export class UsersService {
     // Step 2: Extract unique vendor IDs across all presets
     const uniqueVendorIds = Array.from(
       new Set(
-        userVendorPresets.flatMap((preset) => preset.vendor_ids || []),
+        (userVendorPresets || []).flatMap((preset) => preset.vendor_ids || []),
       ),
     ).filter((id): id is number => typeof id === "number" && id > 0);
 
@@ -1335,7 +1422,10 @@ export class UsersService {
 
     const userVendorMap = new Map<string, UserVendors>();
     existingUserVendors.forEach((uv) => {
-      userVendorMap.set(`${uv.role_id}_${uv.access_key_id}_${uv.vendor_id}`, uv);
+      userVendorMap.set(
+        `${uv.role_id}_${uv.access_key_id}_${uv.vendor_id}`,
+        uv,
+      );
     });
 
     // Step 4: Fast in-memory reconciliation
@@ -1506,6 +1596,7 @@ export class UsersService {
       user_location_presets,
       // UserWarehouses fields
       user_warehouse_presets,
+      warehouse_ids,
       // UserVendors fields
       user_vendor_presets,
       vendor_ids,
@@ -1667,7 +1758,10 @@ export class UsersService {
         (user_permission_presets !== undefined ||
           user_location_presets !== undefined ||
           user_warehouse_presets !== undefined ||
-          user_vendor_presets !== undefined));
+          user_vendor_presets !== undefined ||
+          warehouse_ids !== undefined ||
+          vendor_ids !== undefined ||
+          location_ids !== undefined));
 
     let permissionsMessage = "";
     let locationsMessage = "";
@@ -1681,6 +1775,77 @@ export class UsersService {
       // 1. Save user inside transaction
       const savedUser = await queryRunner.manager.save(User, userToUpdate);
       savedUserId = savedUser.id;
+
+      // 1.5 Handle role removal: Soft-deactivate permissions, locations, warehouses, vendors for removed roles
+      if (role_ids !== undefined) {
+        const newRoleIds = new Set(
+          role_ids && role_ids.length > 0
+            ? role_ids
+            : role_id
+              ? [role_id]
+              : userToUpdate.role_id
+                ? [userToUpdate.role_id]
+                : [],
+        );
+
+        const [activePerms, activeLocs, activeWhs, activeVnds] =
+          await Promise.all([
+            queryRunner.manager.find(UserPermissions, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserLocations, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserWarehouses, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserVendors, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+          ]);
+
+        const currentActiveRoleIds = Array.from(
+          new Set(
+            [
+              ...activePerms.map((p) => p.role_id),
+              ...activeLocs.map((l) => l.role_id),
+              ...activeWhs.map((w) => w.role_id),
+              ...activeVnds.map((v) => v.role_id),
+            ].filter(Boolean),
+          ),
+        );
+
+        const removedRoleIds = currentActiveRoleIds.filter(
+          (rid) => !newRoleIds.has(rid),
+        );
+
+        if (removedRoleIds.length > 0) {
+          await queryRunner.manager.update(
+            UserPermissions,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserLocations,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserWarehouses,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserVendors,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+        }
+      }
 
       // 2. Update permissions if requested
       if (
@@ -1758,11 +1923,8 @@ export class UsersService {
         locationsMessage = ` Updated/created ${activeLocations} location(s).`;
       }
 
-      if (
-        shouldUpdatePermissions &&
-        user_warehouse_presets &&
-        user_warehouse_presets.length > 0
-      ) {
+      // 4. Update warehouses if requested
+      if (shouldUpdatePermissions && user_warehouse_presets !== undefined) {
         await this.createUserWarehousesFromPresets(
           id,
           effectiveAccessKeyIds,
@@ -1771,19 +1933,58 @@ export class UsersService {
           roles_to_update,
           queryRunner,
         );
+      } else if (shouldUpdatePermissions && warehouse_ids !== undefined) {
+        const allRoleIds =
+          roles_to_update && roles_to_update.length > 0
+            ? roles_to_update
+            : role_ids && role_ids.length > 0
+              ? role_ids
+              : [role_id || userToUpdate.role_id];
+
+        const generatedPresets = allRoleIds.map((rid) => ({
+          role_id: rid,
+          warehouse_ids: warehouse_ids,
+        }));
+
+        await this.createUserWarehousesFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          generatedPresets,
+          updated_by,
+          allRoleIds,
+          queryRunner,
+        );
       }
 
-      if (
-        shouldUpdatePermissions &&
-        user_vendor_presets &&
-        user_vendor_presets.length > 0
-      ) {
+      // 5. Update vendors if requested
+      if (shouldUpdatePermissions && user_vendor_presets !== undefined) {
         await this.createUserVendorsFromPresets(
           id,
           effectiveAccessKeyIds,
           user_vendor_presets,
           updated_by,
           roles_to_update,
+          queryRunner,
+        );
+      } else if (shouldUpdatePermissions && vendor_ids !== undefined) {
+        const allRoleIds =
+          roles_to_update && roles_to_update.length > 0
+            ? roles_to_update
+            : role_ids && role_ids.length > 0
+              ? role_ids
+              : [role_id || userToUpdate.role_id];
+
+        const generatedPresets = allRoleIds.map((rid) => ({
+          role_id: rid,
+          vendor_ids: vendor_ids,
+        }));
+
+        await this.createUserVendorsFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          generatedPresets,
+          updated_by,
+          allRoleIds,
           queryRunner,
         );
       }
@@ -2126,6 +2327,7 @@ export class UsersService {
       where: { user_id: user.id, status_id: 1 },
       relations: [
         "module",
+        "role",
         "action",
         "accessKey",
         "status",
@@ -2167,19 +2369,39 @@ export class UsersService {
       ),
     );
 
-    // Extract unique role_ids from user permissions
+    // Extract unique role_ids from user permissions (and primary role_id)
     const uniqueRoleIds = Array.from(
-      new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
+      new Set(
+        [user.role_id, ...userPermissions.map((up) => up.role_id)].filter(
+          (id): id is number => typeof id === "number" && id > 0,
+        ),
+      ),
     );
 
-    // Get role names for all unique role_ids
+    // Get roles and role names for all unique role_ids in 1 query
+    const foundRoles =
+      uniqueRoleIds.length > 0
+        ? await this.roleRepository.find({
+            where: { id: In(uniqueRoleIds), status_id: 1 },
+          })
+        : [];
+
+    const roleMap = new Map<number, Role>();
+    foundRoles.forEach((r) => roleMap.set(r.id, r));
+
     const roleNames: string[] = [];
+    const roles: any[] = [];
     for (const roleId of uniqueRoleIds) {
-      const role = await this.roleRepository.findOne({
-        where: { id: roleId },
-      });
+      const role = roleMap.get(roleId);
       if (role) {
         roleNames.push(role.role_name);
+        roles.push({
+          id: role.id,
+          role_id: role.id,
+          role_name: role.role_name,
+          role_level: role.role_level,
+          system_id: role.system_id,
+        });
       }
     }
 
@@ -2194,6 +2416,7 @@ export class UsersService {
         `${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim(),
       role_id: user.role_id,
       role_ids: uniqueRoleIds,
+      roles,
       emp_number: user.emp_number,
       email: user.email,
       user_reset: user.user_reset,
@@ -3064,10 +3287,7 @@ export class UsersService {
         const rawWarehouseInput =
           formattedRow["Warehouse(s)"] ?? formattedRow["Warehouses"];
 
-        if (
-          rawWarehouseInput &&
-          String(rawWarehouseInput).trim() !== ""
-        ) {
+        if (rawWarehouseInput && String(rawWarehouseInput).trim() !== "") {
           try {
             const warehouseIdentifiers = String(rawWarehouseInput)
               .split(",")
@@ -3194,10 +3414,7 @@ export class UsersService {
         const rawVendorInput =
           formattedRow["Vendor(s)"] ?? formattedRow["Vendors"];
 
-        if (
-          rawVendorInput &&
-          String(rawVendorInput).trim() !== ""
-        ) {
+        if (rawVendorInput && String(rawVendorInput).trim() !== "") {
           try {
             const vendorIdentifiers = String(rawVendorInput)
               .split(",")
@@ -3250,9 +3467,7 @@ export class UsersService {
               );
 
               if (notFound.length > 0) {
-                throw new Error(
-                  `Vendor(s) not found: ${notFound.join(", ")}`,
-                );
+                throw new Error(`Vendor(s) not found: ${notFound.join(", ")}`);
               }
 
               for (const role of roles) {

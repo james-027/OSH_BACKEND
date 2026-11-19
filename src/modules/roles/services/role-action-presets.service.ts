@@ -2058,7 +2058,7 @@ export class RoleActionPresetsService {
                   config.warehouse_ids !== undefined
                     ? config.warehouse_ids
                     : warehouse_ids;
-                if (configWarehouseIds && userKeys.includes(keyId)) {
+                if (configWarehouseIds !== undefined && userKeys.includes(keyId)) {
                   await this.updateUserWarehouses(
                     user_ids,
                     role_id,
@@ -2104,7 +2104,7 @@ export class RoleActionPresetsService {
                   config.vendor_ids !== undefined
                     ? config.vendor_ids
                     : vendor_ids;
-                if (configVendorIds && userKeys.includes(keyId)) {
+                if (configVendorIds !== undefined && userKeys.includes(keyId)) {
                   await this.updateUserVendors(
                     user_ids,
                     role_id,
@@ -2629,7 +2629,7 @@ export class RoleActionPresetsService {
                   config.warehouse_ids !== undefined
                     ? config.warehouse_ids
                     : warehouse_ids;
-                if (configWarehouseIds && userKeys.includes(keyId)) {
+                if (configWarehouseIds !== undefined && userKeys.includes(keyId)) {
                   await this.updateUserWarehouses(
                     user_ids,
                     role_id,
@@ -2675,7 +2675,7 @@ export class RoleActionPresetsService {
                   config.vendor_ids !== undefined
                     ? config.vendor_ids
                     : vendor_ids;
-                if (configVendorIds && userKeys.includes(keyId)) {
+                if (configVendorIds !== undefined && userKeys.includes(keyId)) {
                   await this.updateUserVendors(
                     user_ids,
                     role_id,
@@ -2952,7 +2952,7 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    if (!userIds.length || !locationIds.length || !accessKeyIds.length) return;
+    if (!userIds.length || !accessKeyIds.length) return;
 
     // 1. Mark existing locations for all target users, role, and access keys as inactive in 1 fast query
     await this.userLocationsRepository.update(
@@ -2967,6 +2967,8 @@ export class RoleActionPresetsService {
         modified_at: new Date(),
       },
     );
+
+    if (!locationIds || !locationIds.length) return;
 
     // 2. Fetch existing locations for this cohort in 1 query
     const existing = await this.userLocationsRepository.find({
@@ -3031,7 +3033,7 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    if (!userIds.length || !warehouseIds.length || !accessKeyIds.length) return;
+    if (!userIds.length || !accessKeyIds.length) return;
 
     // 1. Mark existing warehouses for all target users, role, and access keys as inactive in 1 fast query
     await this.userWarehousesRepository.update(
@@ -3046,6 +3048,8 @@ export class RoleActionPresetsService {
         modified_at: new Date(),
       },
     );
+
+    if (!warehouseIds || !warehouseIds.length) return;
 
     // 2. Fetch existing warehouses for this cohort in 1 query
     const existing = await this.userWarehousesRepository.find({
@@ -3121,7 +3125,7 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    if (!userIds.length || !vendorIds.length || !accessKeyIds.length) return;
+    if (!userIds.length || !accessKeyIds.length) return;
 
     // 1. Mark existing vendors for all target users, role, and access keys as inactive in 1 fast query
     await this.userVendorsRepository.update(
@@ -3136,6 +3140,8 @@ export class RoleActionPresetsService {
         modified_at: new Date(),
       },
     );
+
+    if (!vendorIds || !vendorIds.length) return;
 
     // 2. Fetch existing vendors for this cohort in 1 query
     const existing = await this.userVendorsRepository.find({

@@ -109,6 +109,10 @@ export class CacheInvalidationService {
   async invalidateFindAll(serviceName: string): Promise<void> {
     const key = CACHE_KEYS.FIND_ALL(serviceName);
     await this.invalidateKey(key);
+    await this.invalidatePatterns([
+      `${serviceName}:*`,
+      `${serviceName}-restricted:*`,
+    ]);
   }
 
   /**
