@@ -120,20 +120,20 @@ export class UsersService {
         (u) => Number(u.id) === currentUserId,
       );
 
-      // Resolve logged-in user's role IDs (strict subset check applies to all users including system admins)
-      let loggedInRoleIds: number[] = Array.isArray(
-        loggedInUserRecord?.role_ids,
-      )
-        ? loggedInUserRecord.role_ids
-        : Array.isArray(loggedInUserRecord?.roles)
-          ? loggedInUserRecord.roles.map((r: any) => Number(r.role_id ?? r.id))
-          : loggedInUserRecord?.role_id
-            ? [Number(loggedInUserRecord.role_id)]
-            : currentUser?.role_id
-              ? [Number(currentUser.role_id)]
-              : [];
+      // Resolve logged-in user's roles
+      let loggedInRoles: Array<{
+        id: number;
+        role_id: number;
+        role_name: string;
+        role_level: number;
+        system_id: number;
+      }> =
+        Array.isArray(loggedInUserRecord?.roles) &&
+        loggedInUserRecord.roles.length > 0
+          ? loggedInUserRecord.roles
+          : [];
 
-      if (loggedInRoleIds.length === 0 && currentUserId) {
+      if (loggedInRoles.length === 0 && currentUserId) {
         const userPermissions = await this.userPermissionsRepository.find({
           where: { user_id: currentUserId, status_id: 1 },
         });
@@ -143,16 +143,54 @@ export class UsersService {
         const primaryRoleId = currentUser?.role_id
           ? [Number(currentUser.role_id)]
           : [];
-        loggedInRoleIds = Array.from(
+        const uniqueRoleIds = Array.from(
           new Set([...primaryRoleId, ...permRoleIds]),
         );
+        if (uniqueRoleIds.length > 0) {
+          const foundRoles = await this.roleRepository.find({
+            where: { id: In(uniqueRoleIds), status_id: 1 },
+          });
+          loggedInRoles = foundRoles.map((r) => ({
+            id: r.id,
+            role_id: r.id,
+            role_name: r.role_name,
+            role_level: r.role_level,
+            system_id: r.system_id,
+          }));
+        }
       }
 
-      const loggedUserRoleIdSet = new Set<number>(
-        loggedInRoleIds.map((id) => Number(id)).filter((id) => !isNaN(id)),
+      // Global Super Admin bypass: ONLY applies to role_level === 1 with system_id === 1 (MAIN parent hub)
+      const isGlobalMainSystemAdmin = loggedInRoles.some(
+        (r) => Number(r.role_level) === 1 && Number(r.system_id) === 1,
       );
 
-      // Row-level filter: Strict role subset check or self record
+      if (isGlobalMainSystemAdmin) {
+        logger.info(
+          `Successfully retrieved all users for global main super admin user ID ${currentUserId}.`,
+        );
+        return flattenedUsers;
+      }
+
+      // Condition A: System Scope Check
+      // hasMainSystemAccess: User has at least one role in MAIN parent hub (system_id === 1)
+      const hasMainSystemAccess = loggedInRoles.some(
+        (r) => Number(r.system_id) === 1,
+      );
+      const allowedSystemIds = new Set<number>(
+        loggedInRoles
+          .map((r) => Number(r.system_id))
+          .filter((id) => !isNaN(id) && id > 0),
+      );
+
+      // Condition B: Role Level Priority Check (lower numeric value = higher privilege priority, e.g. 1 = highest)
+      const loggedLevels = loggedInRoles
+        .map((r) => Number(r.role_level))
+        .filter((lvl) => !isNaN(lvl) && lvl > 0);
+      const loggedHighestPriority =
+        loggedLevels.length > 0 ? Math.min(...loggedLevels) : 999;
+
+      // Row-level filter: Hub-and-Spoke System Scope + Role Level Priority
       const restrictedUsers = flattenedUsers.filter((user) => {
         const rowUserId = Number(user.id);
         const isSelf =
@@ -160,29 +198,37 @@ export class UsersService {
           !isNaN(rowUserId) &&
           rowUserId === currentUserId;
 
+        // Current user can always see themselves
         if (isSelf) return true;
 
-        const targetRoleIds: number[] =
-          Array.isArray(user.role_ids) && user.role_ids.length > 0
-            ? user.role_ids
-                .map((id: any) => Number(id))
-                .filter((id: any) => !isNaN(id))
-            : Array.isArray(user.roles) && user.roles.length > 0
-              ? user.roles
-                  .map((r: any) => Number(r.role_id ?? r.id))
-                  .filter((id: any) => !isNaN(id))
-              : user.role_id
-                ? [Number(user.role_id)]
-                : [];
+        const targetRoles: Array<{ role_level?: number; system_id?: number }> =
+          Array.isArray(user.roles) ? user.roles : [];
 
-        if (loggedUserRoleIdSet.size > 0) {
-          if (targetRoleIds.length === 0) {
-            return true;
-          }
-          return targetRoleIds.every((id) => loggedUserRoleIdSet.has(id));
+        // Condition A: System Scope Check
+        // If hasMainSystemAccess === true, bypass system_id restriction (MAIN hub views all systems).
+        // Otherwise, target user must have at least one role in the viewer's allowed systems.
+        const isSystemScopeValid =
+          hasMainSystemAccess ||
+          (targetRoles.length > 0 &&
+            targetRoles.some((r) => allowedSystemIds.has(Number(r.system_id))));
+
+        if (!isSystemScopeValid) {
+          return false;
         }
 
-        return false;
+        // Condition B: Role Level Priority Check
+        // Compute target user's highest priority role_level (minimum numeric value)
+        const targetLevels = targetRoles
+          .map((r) => Number(r.role_level))
+          .filter((lvl) => !isNaN(lvl) && lvl > 0);
+
+        // If target has no roles, treat as lowest priority (Infinity);
+        // visible only if system scope is satisfied (e.g. viewer is MAIN system)
+        const targetHighestPriority =
+          targetLevels.length > 0 ? Math.min(...targetLevels) : Infinity;
+
+        // Target's highest privilege level must be equal to or lower priority (>= numeric value)
+        return targetHighestPriority >= loggedHighestPriority;
       });
 
       logger.info(
@@ -2381,6 +2427,15 @@ export class UsersService {
       ),
     );
 
+    // Extract unique system_ids from user permissions (and primary system_id)
+    const uniqueSystemIds = Array.from(
+      new Set(
+        [...userPermissions.map((up) => up.role.system_id)].filter(
+          (id): id is number => typeof id === "number" && id > 0,
+        ),
+      ),
+    );
+
     // Get roles and role names for all unique role_ids in 1 query
     const foundRoles =
       uniqueRoleIds.length > 0
@@ -2419,6 +2474,7 @@ export class UsersService {
         `${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim(),
       role_id: user.role_id,
       role_ids: uniqueRoleIds,
+      system_ids: uniqueSystemIds,
       roles,
       emp_number: user.emp_number,
       email: user.email,
@@ -2437,6 +2493,9 @@ export class UsersService {
       role_name: user.role?.role_name || null,
       role_names: roleNames,
       role_level: user.role?.role_level || null,
+      system_id: user.role?.system_id || null,
+      min_role_level:
+        roles.length > 0 ? Math.min(...roles.map((r) => r.role_level)) : null,
       user_upline_name: user.userUpline
         ? `${user.userUpline.first_name} ${user.userUpline.last_name}`
         : null,
