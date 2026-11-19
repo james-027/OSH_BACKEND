@@ -43,6 +43,8 @@ export class SystemsService {
     try {
       const systems = await this.systemRepository.find({
         relations: [
+          "parent",
+          "children",
           "status",
           "createdBy",
           "updatedBy",
@@ -66,7 +68,15 @@ export class SystemsService {
     try {
       const system = await this.systemRepository.findOne({
         where: { id },
-        relations: ["status", "createdBy", "updatedBy", "system_access_keys"],
+        relations: [
+          "parent",
+          "children",
+          "status",
+          "createdBy",
+          "updatedBy",
+          "system_access_keys",
+          "system_access_keys.accessKey",
+        ],
       });
 
       if (!system) {
@@ -87,6 +97,7 @@ export class SystemsService {
     const {
       system_name,
       system_abbr,
+      parent_id,
       access_key_ids,
       status_id = 1,
     } = createSystemDto;
@@ -103,6 +114,23 @@ export class SystemsService {
 
       if (existingSystem) {
         throw new BadRequestException("System with this name already exists");
+      }
+
+      // Validate parent system if provided
+      const normalizedParentId =
+        parent_id !== undefined && parent_id !== null && parent_id !== 0
+          ? Number(parent_id)
+          : null;
+
+      if (normalizedParentId !== null) {
+        const parentSystem = await this.systemRepository.findOne({
+          where: { id: normalizedParentId },
+        });
+        if (!parentSystem) {
+          throw new BadRequestException(
+            `Parent system with ID ${normalizedParentId} not found`,
+          );
+        }
       }
 
       // Validate user
@@ -133,6 +161,7 @@ export class SystemsService {
       const newSystem = new System();
       newSystem.system_name = system_name.toUpperCase();
       newSystem.system_abbr = system_abbr.toUpperCase();
+      newSystem.parent_id = normalizedParentId;
       newSystem.status_id = status_id;
       newSystem.created_by = userId;
       newSystem.updated_by = userId;
@@ -154,6 +183,8 @@ export class SystemsService {
       const systemWithRelations = await this.systemRepository.findOne({
         where: { id: savedSystem.id },
         relations: [
+          "parent",
+          "children",
           "status",
           "createdBy",
           "updatedBy",
@@ -183,6 +214,7 @@ export class SystemsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitCreate("systems", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("users", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -209,7 +241,7 @@ export class SystemsService {
     updateSystemDto: UpdateSystemDto,
     userId: number,
   ): Promise<any> {
-    const { system_name, system_abbr, access_key_ids, status_id } =
+    const { system_name, system_abbr, parent_id, access_key_ids, status_id } =
       updateSystemDto;
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -245,6 +277,28 @@ export class SystemsService {
 
       if (system_abbr) {
         system.system_abbr = system_abbr.toUpperCase();
+      }
+
+      // Validate and update parent_id if provided
+      if (parent_id !== undefined) {
+        const normalizedParentId =
+          parent_id !== null && parent_id !== 0 ? Number(parent_id) : null;
+
+        if (normalizedParentId !== null) {
+          if (normalizedParentId === id) {
+            throw new BadRequestException("A system cannot be its own parent");
+          }
+
+          const parentSystem = await this.systemRepository.findOne({
+            where: { id: normalizedParentId },
+          });
+          if (!parentSystem) {
+            throw new BadRequestException(
+              `Parent system with ID ${normalizedParentId} not found`,
+            );
+          }
+        }
+        system.parent_id = normalizedParentId;
       }
 
       if (status_id !== undefined) {
@@ -296,6 +350,8 @@ export class SystemsService {
       const systemWithRelations = await this.systemRepository.findOne({
         where: { id: savedSystem.id },
         relations: [
+          "parent",
+          "children",
           "status",
           "createdBy",
           "updatedBy",
@@ -325,6 +381,7 @@ export class SystemsService {
       // SSE Events
       try {
         this.sseEventEmitter.emitUpdate("systems", response.id, response);
+        this.sseEventEmitter.emitUpdateSignal("users", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -445,6 +502,8 @@ export class SystemsService {
       const systemWithRelations = await this.systemRepository.findOne({
         where: { id },
         relations: [
+          "parent",
+          "children",
           "status",
           "createdBy",
           "updatedBy",
@@ -523,12 +582,33 @@ export class SystemsService {
       .map((sak) => sak.access_key_id);
     const accessKeyNames = (system.system_access_keys || [])
       .filter((sak) => sak.status_id === 1 || sak.status_id === 2)
-      .map((sak) => sak.accessKey.access_key_name);
+      .map((sak) => sak.accessKey?.access_key_name)
+      .filter(Boolean);
 
     return {
       id: system.id,
       system_name: system.system_name,
       system_abbr: system.system_abbr,
+      parent_id: system.parent_id !== undefined ? system.parent_id : null,
+      parent: system.parent
+        ? {
+            id: system.parent.id,
+            system_name: system.parent.system_name,
+            system_abbr: system.parent.system_abbr,
+            parent_id: system.parent.parent_id ?? null,
+            status_id: system.parent.status_id,
+          }
+        : null,
+      children: Array.isArray(system.children)
+        ? system.children.map((c) => ({
+            id: c.id,
+            system_name: c.system_name,
+            system_abbr: c.system_abbr,
+            parent_id: c.parent_id ?? null,
+            status_id: c.status_id,
+          }))
+        : [],
+      parent_name: system.parent?.system_name || null,
       access_key_ids: accessKeyIds,
       access_key_names: accessKeyNames,
       status_id: system.status_id,
