@@ -120,20 +120,8 @@ export class UsersService {
         (u) => Number(u.id) === currentUserId,
       );
 
-      // Super admin check (role_level === 1 has full access across all users)
-      const isSuperAdmin =
-        currentUser?.role?.role_level === 1 ||
-        loggedInUserRecord?.role_level === 1;
-
-      if (isSuperAdmin) {
-        logger.info(
-          `Successfully retrieved all users for super admin user ID ${currentUserId}.`,
-        );
-        return flattenedUsers;
-      }
-
-      // Resolve logged-in user's role IDs
-      const loggedInRoleIds: number[] = Array.isArray(
+      // Resolve logged-in user's role IDs (strict subset check applies to all users including system admins)
+      let loggedInRoleIds: number[] = Array.isArray(
         loggedInUserRecord?.role_ids,
       )
         ? loggedInUserRecord.role_ids
@@ -144,6 +132,21 @@ export class UsersService {
             : currentUser?.role_id
               ? [Number(currentUser.role_id)]
               : [];
+
+      if (loggedInRoleIds.length === 0 && currentUserId) {
+        const userPermissions = await this.userPermissionsRepository.find({
+          where: { user_id: currentUserId, status_id: 1 },
+        });
+        const permRoleIds = userPermissions
+          .map((up) => up.role_id)
+          .filter((id): id is number => typeof id === "number" && id > 0);
+        const primaryRoleId = currentUser?.role_id
+          ? [Number(currentUser.role_id)]
+          : [];
+        loggedInRoleIds = Array.from(
+          new Set([...primaryRoleId, ...permRoleIds]),
+        );
+      }
 
       const loggedUserRoleIdSet = new Set<number>(
         loggedInRoleIds.map((id) => Number(id)).filter((id) => !isNaN(id)),

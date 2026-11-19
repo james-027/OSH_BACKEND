@@ -341,7 +341,7 @@ export function buildUsersWithRestrictionKey(
   params: any,
   user: any,
 ): string {
-  const base = CACHE_KEYS.FIND_ALL("users-restricted");
+  const base = CACHE_KEYS.FIND_ALL("users-restricted:v2");
   const userId = user?.id || "all";
   const roleId = user?.role_id || "all";
   return `${base}:${userId}:${roleId}`;
