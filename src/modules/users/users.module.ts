@@ -34,6 +34,7 @@ import { CacheInvalidationModule } from "../cache/cache.module";
 import { Warehouse } from "../../entities/Warehouse";
 import { RoleWarehousePreset } from "../../entities/RoleWarehousePreset";
 import { RoleVendorPreset } from "../../entities/RoleVendorPreset";
+import { System } from "../../entities/System";
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { RoleVendorPreset } from "../../entities/RoleVendorPreset";
       Vendor,
       RoleWarehousePreset,
       RoleVendorPreset,
+      System,
     ]),
     SSEModule,
     CacheInvalidationModule,

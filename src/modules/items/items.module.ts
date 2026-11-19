@@ -39,6 +39,7 @@ import { UserWarehouses } from "src/entities/UserWarehouses";
 import { Warehouse } from "src/entities/Warehouse";
 import { UserVendors } from "src/entities/UserVendor";
 import { Vendor } from "src/entities/Vendor";
+import { System } from "src/entities/System";
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { Vendor } from "src/entities/Vendor";
       Warehouse,
       UserVendors,
       Vendor,
+      System,
     ]),
     LocationsModule,
     SSEModule,

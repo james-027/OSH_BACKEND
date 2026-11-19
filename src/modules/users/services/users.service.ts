@@ -25,6 +25,7 @@ import { Warehouse } from "../../../entities/Warehouse";
 import { Vendor } from "../../../entities/Vendor";
 import { RoleWarehousePreset } from "../../../entities/RoleWarehousePreset";
 import { RoleVendorPreset } from "../../../entities/RoleVendorPreset";
+import { System } from "../../../entities/System";
 import { Module } from "../../../entities/Module";
 import { Action } from "../../../entities/Action";
 import { AccessKey } from "../../../entities/AccessKey";
@@ -74,6 +75,8 @@ export class UsersService {
     private userVendorsRepository: Repository<UserVendors>,
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
+    @InjectRepository(System)
+    private systemRepository: Repository<System>,
     private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private emailService: EmailService,
@@ -84,6 +87,34 @@ export class UsersService {
 
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  /**
+   * Helper to recursively/iteratively collect all descendant system IDs for given root system IDs
+   */
+  private getDescendantSystemIds(
+    rootSystemIds: number[],
+    allSystems: System[],
+  ): Set<number> {
+    const allowed = new Set<number>(rootSystemIds);
+    let addedNew = true;
+
+    while (addedNew) {
+      addedNew = false;
+      for (const sys of allSystems) {
+        const sysId = Number(sys.id);
+        const parentId =
+          sys.parent_id !== null && sys.parent_id !== undefined
+            ? Number(sys.parent_id)
+            : null;
+        if (parentId !== null && allowed.has(parentId) && !allowed.has(sysId)) {
+          allowed.add(sysId);
+          addedNew = true;
+        }
+      }
+    }
+
+    return allowed;
   }
 
   async findAll(
@@ -160,28 +191,51 @@ export class UsersService {
         }
       }
 
-      // Global Super Admin bypass: ONLY applies to role_level === 1 with system_id === 1 (MAIN parent hub)
-      const isGlobalMainSystemAdmin = loggedInRoles.some(
-        (r) => Number(r.role_level) === 1 && Number(r.system_id) === 1,
+      // 1. Fetch all active systems to resolve dynamic parent-child hierarchy
+      const allSystems = await this.systemRepository.find({
+        where: { status_id: 1 },
+      });
+
+      // A Root System is dynamically identified as having no parent (parent_id === null or undefined)
+      const rootSystemIdSet = new Set<number>(
+        allSystems
+          .filter((s) => s.parent_id === null || s.parent_id === undefined)
+          .map((s) => Number(s.id)),
       );
 
-      if (isGlobalMainSystemAdmin) {
+      // Check if logged-in user belongs to any Root System
+      const isRootViewer = loggedInRoles.some((r) =>
+        rootSystemIdSet.has(Number(r.system_id)),
+      );
+
+      // Global System Admin bypass: ONLY applies to role_level === 1 in a Root System (parent_id === null)
+      const isGlobalRootSystemAdmin = loggedInRoles.some(
+        (r) =>
+          Number(r.role_level) === 1 &&
+          rootSystemIdSet.has(Number(r.system_id)),
+      );
+
+      if (isGlobalRootSystemAdmin) {
         logger.info(
-          `Successfully retrieved all users for global main super admin user ID ${currentUserId}.`,
+          `Successfully retrieved all users for global root super admin user ID ${currentUserId}.`,
         );
         return flattenedUsers;
       }
 
-      // Condition A: System Scope Check
-      // hasMainSystemAccess: User has at least one role in MAIN parent hub (system_id === 1)
-      const hasMainSystemAccess = loggedInRoles.some(
-        (r) => Number(r.system_id) === 1,
+      // Dynamic System Scope resolution
+      const viewerSystemIds = Array.from(
+        new Set(
+          loggedInRoles
+            .map((r) => Number(r.system_id))
+            .filter((id) => !isNaN(id) && id > 0),
+        ),
       );
-      const allowedSystemIds = new Set<number>(
-        loggedInRoles
-          .map((r) => Number(r.system_id))
-          .filter((id) => !isNaN(id) && id > 0),
-      );
+
+      // If viewer belongs to a Root System, allowed scope covers all active systems.
+      // Otherwise, allowed scope covers the viewer's system(s) plus all their descendants.
+      const allowedSystemScopeIds = isRootViewer
+        ? new Set(allSystems.map((s) => Number(s.id)))
+        : this.getDescendantSystemIds(viewerSystemIds, allSystems);
 
       // Condition B: Role Level Priority Check (lower numeric value = higher privilege priority, e.g. 1 = highest)
       const loggedLevels = loggedInRoles
@@ -190,7 +244,7 @@ export class UsersService {
       const loggedHighestPriority =
         loggedLevels.length > 0 ? Math.min(...loggedLevels) : 999;
 
-      // Row-level filter: Hub-and-Spoke System Scope + Role Level Priority
+      // Row-level filter: Dynamic Hierarchical System Scope + Role Level Priority
       const restrictedUsers = flattenedUsers.filter((user) => {
         const rowUserId = Number(user.id);
         const isSelf =
@@ -204,13 +258,15 @@ export class UsersService {
         const targetRoles: Array<{ role_level?: number; system_id?: number }> =
           Array.isArray(user.roles) ? user.roles : [];
 
-        // Condition A: System Scope Check
-        // If hasMainSystemAccess === true, bypass system_id restriction (MAIN hub views all systems).
-        // Otherwise, target user must have at least one role in the viewer's allowed systems.
+        // Condition A: Dynamic System Scope Check
+        // Target user must have at least one role belonging to the viewer's allowed system scope.
+        // Users without roles are visible only to root system viewers.
         const isSystemScopeValid =
-          hasMainSystemAccess ||
-          (targetRoles.length > 0 &&
-            targetRoles.some((r) => allowedSystemIds.has(Number(r.system_id))));
+          targetRoles.length > 0
+            ? targetRoles.some((r) =>
+                allowedSystemScopeIds.has(Number(r.system_id)),
+              )
+            : isRootViewer;
 
         if (!isSystemScopeValid) {
           return false;
@@ -223,7 +279,7 @@ export class UsersService {
           .filter((lvl) => !isNaN(lvl) && lvl > 0);
 
         // If target has no roles, treat as lowest priority (Infinity);
-        // visible only if system scope is satisfied (e.g. viewer is MAIN system)
+        // visible only if system scope is satisfied (e.g. viewer is root system)
         const targetHighestPriority =
           targetLevels.length > 0 ? Math.min(...targetLevels) : Infinity;
 
