@@ -14,6 +14,7 @@ import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.help
 import logger from "src/config/logger";
 import { WarehouseBudgetHour } from "src/entities/WarehouseBudgetHour";
 import { Vendor } from "src/entities/Vendor";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 // dayjs.extend(utc);
@@ -34,6 +35,7 @@ export class WarehouseBudgetHoursService {
     private auditTrailService: UserAuditTrailCreateService,
     private warehousesService: WarehousesService,
     private usersService: UsersService,
+    private commonUtilitiesService: CommonUtilitiesService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
@@ -123,14 +125,27 @@ export class WarehouseBudgetHoursService {
     roleId?: number,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
+    let allowedVendorIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+        await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
     }
     const query = this.warehouseBudgetHoursRepository
       .createQueryBuilder("wbh")
@@ -148,12 +163,23 @@ export class WarehouseBudgetHoursService {
         allowedLocationIds,
       });
     }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("wbh.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
+      });
+    }
+    if (allowedVendorIds && allowedVendorIds.length > 0) {
+      query.andWhere("wbh.vendor_id IN (:...allowedVendorIds)", {
+        allowedVendorIds,
+      });
+    }
     const budgetHours = await query.getMany();
     return budgetHours.map((budgetHour) => ({
       id: budgetHour.id,
       warehouse_id: budgetHour.warehouse_id,
       warehouse_ifs: budgetHour.warehouse?.warehouse_ifs,
       warehouse_name: budgetHour.warehouse?.warehouse_name,
+      warehouse_type_id: budgetHour.warehouse?.warehouse_type_id,
       location_id: budgetHour.warehouse
         ? budgetHour.warehouse.location_id
         : null,
@@ -496,6 +522,8 @@ export class WarehouseBudgetHoursService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    allowedWarehouseIds?: number[],
+    allowedVendorIds?: number[],
   ) {
     const warehouses = await this.warehousesService.findAll();
     const vendors = await this.vendorsRepository.find();
@@ -538,6 +566,30 @@ export class WarehouseBudgetHoursService {
         errors.push({
           row: row.__rowNum__,
           error: `You do not have permission to upload rates for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+      // Warehouse permission check
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload budget hours for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed stores.`,
+        });
+        continue;
+      }
+      // Vendor permission check
+      if (
+        allowedVendorIds &&
+        allowedVendorIds.length > 0 &&
+        !allowedVendorIds.includes(vendor.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload budget hours for SERVICE PROVIDER CODE ${row.service_provider_code}, based on your allowed vendor.`,
         });
         continue;
       }

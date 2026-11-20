@@ -35,7 +35,11 @@ import {
 import * as fs from "fs";
 import * as bcrypt from "bcrypt";
 import { CacheCustom } from "src/decorators/cache.decorator";
-import { CACHE_KEYS, CACHE_TTL } from "src/config/cache.config";
+import {
+  CACHE_KEYS,
+  CACHE_TTL,
+  buildUsersWithRestrictionKey,
+} from "src/config/cache.config";
 
 @Controller("users")
 @UseGuards(JwtAuthGuard)
@@ -48,6 +52,14 @@ export class UsersController {
   @RequirePermissions({ module: "USERS", action: "DATA ACCESS" })
   async findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get("with-restriction")
+  @UseGuards(PermissionsGuard)
+  @CacheCustom(buildUsersWithRestrictionKey, CACHE_TTL.COUNTS)
+  @RequirePermissions({ module: "USERS", action: "DATA ACCESS" })
+  async findAllWithRestriction(@Request() req: any) {
+    return this.usersService.findAll(true, req?.user);
   }
 
   @Get("nested")
@@ -76,6 +88,18 @@ export class UsersController {
       role_id: role_id,
       status_id: 1,
     });
+  }
+
+  @Post("by-roles-and-locations")
+  async findUsersByRolesAndLocations(
+    @Body()
+    body: {
+      role_ids: number[];
+      location_ids?: number[];
+      status_id?: number;
+    },
+  ) {
+    return this.usersService.findUsersByRolesAndLocations(body);
   }
 
   @Get("view-email-template")
@@ -168,6 +192,59 @@ export class UsersController {
       updated_by: req.user.id,
     });
     return { profile_pic_url: url };
+  }
+
+  @Post(":id/signature")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: "./uploads/signatures",
+        filename: generateTimestampFilename,
+      }),
+      fileFilter: imageFileFilter,
+      limits: { fileSize: FILE_SIZE_LIMITS.IMAGE_5MB },
+    }),
+  )
+  async uploadSignature(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: FileType,
+    @Request() req,
+  ) {
+    if (!file)
+      throw new BadRequestException("No file uploaded or invalid file type.");
+    // Save the file path as a URL
+    const url = `/uploads/signatures/${file.filename}`;
+    await this.usersService.update(id, {
+      signature_url: url,
+      updated_by: req.user.id,
+    });
+    return { signature_url: url };
+  }
+
+  @Delete(":id/signature")
+  async removeSignature(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    const user = await this.usersService.findUserById(id);
+    if (!user) {
+      throw new BadRequestException("User not found.");
+    }
+
+    if (user.signature_url) {
+      const filePath = `.${user.signature_url}`;
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // File deletion non-fatal
+        }
+      }
+    }
+
+    await this.usersService.update(id, {
+      signature_url: null,
+      updated_by: req.user.id,
+    });
+
+    return { message: "Signature removed successfully.", signature_url: null };
   }
 
   @Throttle({ default: { limit: 100, ttl: 60000 } })
@@ -309,6 +386,13 @@ export class UsersController {
     return { message: "Test email sent." };
   }
 
+  /**
+   * Upload users via Excel file (.xlsx, .xls)
+   * Supported columns:
+   *  - Required: Username, Employee No., First Name, Last Name, Email, Password, Access Keys, Role(s)
+   *  - Optional: Middle Name, User Upline ID, Theme ID, User Reset, Send Email Notif,
+   *              Location(s), Warehouse(s), Vendor(s), Overwrite Roles & Locations
+   */
   @Post("upload-excel")
   @UseInterceptors(
     FileInterceptor("file", {
@@ -357,8 +441,15 @@ export class UsersController {
   @Get("/user-locations-by-location/:location_id")
   async getUserLocationsByLocation(
     @Param("location_id", ParseIntPipe) location_id: number,
+    @Request() req,
   ) {
-    return this.usersService.getUserLocationsByLocation(location_id);
+    const accessKeyId = req.query?.access_key_id
+      ? parseInt(req.query.access_key_id, 10)
+      : req.user?.current_access_key;
+    return this.usersService.getUserLocationsByLocation(
+      location_id,
+      accessKeyId,
+    );
   }
 
   @Get(":user_id/:access_key_id/permissions-roles-systems")

@@ -24,15 +24,25 @@ export class PositionsService {
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
-  async findAll(): Promise<any[]> {
+  async findAll(accessKeyId?: number): Promise<any[]> {
+    const where: any = {};
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
+    }
+
     const positions = await this.positionsRepository.find({
-      relations: ["status", "createdBy", "updatedBy"],
+      where,
+      relations: ["status", "createdBy", "updatedBy", "accessKey"],
     });
     return positions.map((position) => ({
       id: position.id,
       position_name: position.position_name,
       position_abbr: position.position_abbr,
       status_id: position.status_id,
+      access_key_id: position.access_key_id,
+      access_key_name: position.accessKey
+        ? position.accessKey.access_key_name
+        : null,
       created_at: position.created_at,
       created_by: position.created_by,
       updated_by: position.updated_by,
@@ -47,10 +57,15 @@ export class PositionsService {
     }));
   }
 
-  async findOne(id: number): Promise<any> {
+  async findOne(id: number, accessKeyId?: number): Promise<any> {
+    const where: any = { id };
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
+    }
+
     const position = await this.positionsRepository.findOne({
-      where: { id },
-      relations: ["status", "createdBy", "updatedBy"],
+      where,
+      relations: ["status", "createdBy", "updatedBy", "accessKey"],
     });
     if (!position)
       throw new NotFoundException(`Position with ID ${id} not found`);
@@ -59,6 +74,10 @@ export class PositionsService {
       position_name: position.position_name,
       position_abbr: position.position_abbr,
       status_id: position.status_id,
+      access_key_id: position.access_key_id,
+      access_key_name: position.accessKey
+        ? position.accessKey.access_key_name
+        : null,
       created_at: position.created_at,
       created_by: position.created_by,
       updated_by: position.updated_by,
@@ -76,12 +95,25 @@ export class PositionsService {
   async create(
     createPositionDto: CreatePositionDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
+    const effectiveAccessKeyId =
+      createPositionDto.access_key_id || accessKeyId;
+
+    const existingWhere: any = {
+      position_name: createPositionDto.position_name,
+    };
+    if (effectiveAccessKeyId !== undefined) {
+      existingWhere.access_key_id = effectiveAccessKeyId;
+    }
+
     const existing = await this.positionsRepository.findOne({
-      where: { position_name: createPositionDto.position_name },
+      where: existingWhere,
     });
     if (existing)
-      throw new BadRequestException("Position with this name already exists");
+      throw new BadRequestException(
+        "Position with this name already exists for this access key",
+      );
     const createdByUser = await this.usersService.findUserById(userId);
     if (!createdByUser) {
       throw new BadRequestException("Authenticated user not found");
@@ -90,6 +122,7 @@ export class PositionsService {
       position_name: createPositionDto.position_name,
       position_abbr: createPositionDto.position_abbr,
       status_id: createPositionDto.status_id || 1,
+      access_key_id: effectiveAccessKeyId,
       created_by: userId,
       updated_by: userId,
     });
@@ -111,23 +144,41 @@ export class PositionsService {
     } catch (err) {
       logger.error("SSE event failed:", err);
     }
-    return this.findOne(savedPosition.id);
+    return this.findOne(savedPosition.id, effectiveAccessKeyId);
   }
 
   async update(
     id: number,
     updatePositionDto: UpdatePositionDto,
     userId: number,
+    accessKeyId?: number,
   ): Promise<any> {
-    const position = await this.positionsRepository.findOne({ where: { id } });
+    const position = await this.positionsRepository.findOne({
+      where:
+        accessKeyId !== undefined ? { id, access_key_id: accessKeyId } : { id },
+    });
     if (!position)
       throw new NotFoundException(`Position with ID ${id} not found`);
+
+    const effectiveAccessKeyId =
+      updatePositionDto.access_key_id !== undefined
+        ? updatePositionDto.access_key_id
+        : position.access_key_id;
+
     if (updatePositionDto.position_name) {
+      const existingWhere: any = {
+        position_name: updatePositionDto.position_name,
+      };
+      if (effectiveAccessKeyId !== undefined) {
+        existingWhere.access_key_id = effectiveAccessKeyId;
+      }
       const existing = await this.positionsRepository.findOne({
-        where: { position_name: updatePositionDto.position_name },
+        where: existingWhere,
       });
       if (existing && existing.id !== id)
-        throw new BadRequestException("Position with this name already exists");
+        throw new BadRequestException(
+          "Position with this name already exists for this access key",
+        );
     }
     const updatedByUser = await this.usersService.findUserById(userId);
     if (!updatedByUser) {
@@ -138,7 +189,7 @@ export class PositionsService {
       updated_by: userId,
     });
     // Audit trail
-    const updatedPosition = await this.findOne(id);
+    const updatedPosition = await this.findOne(id, effectiveAccessKeyId);
     await this.userAuditTrailCreateService.create(
       {
         service: "PositionsService",
@@ -158,15 +209,27 @@ export class PositionsService {
     return updatedPosition;
   }
 
-  async remove(id: number): Promise<void> {
-    const position = await this.positionsRepository.findOne({ where: { id } });
+  async remove(id: number, accessKeyId?: number): Promise<void> {
+    const where: any = { id };
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
+    }
+    const position = await this.positionsRepository.findOne({ where });
     if (!position)
       throw new NotFoundException(`Position with ID ${id} not found`);
     await this.positionsRepository.remove(position);
   }
 
-  async toggleStatus(id: number, userId: number): Promise<any> {
-    const position = await this.positionsRepository.findOne({ where: { id } });
+  async toggleStatus(
+    id: number,
+    userId: number,
+    accessKeyId?: number,
+  ): Promise<any> {
+    const where: any = { id };
+    if (accessKeyId !== undefined) {
+      where.access_key_id = accessKeyId;
+    }
+    const position = await this.positionsRepository.findOne({ where });
     if (!position) {
       throw new NotFoundException(`Position with ID ${id} not found`);
     }
@@ -181,7 +244,7 @@ export class PositionsService {
       updated_by: userId,
     });
     // Audit trail
-    const toggledPosition = await this.findOne(id);
+    const toggledPosition = await this.findOne(id, accessKeyId);
     await this.userAuditTrailCreateService.create(
       {
         service: "PositionsService",

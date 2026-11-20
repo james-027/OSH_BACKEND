@@ -7,6 +7,9 @@ import { Status } from "../../entities/Status";
 import { Theme } from "../../entities/Theme";
 import { UserPermissions } from "../../entities/UserPermissions";
 import { UserLocations } from "../../entities/UserLocations";
+import { UserWarehouses } from "../../entities/UserWarehouses";
+import { UserVendors } from "../../entities/UserVendor";
+import { Vendor } from "../../entities/Vendor";
 import { Module as AppModule } from "../../entities/Module";
 import { Action } from "../../entities/Action";
 import { AccessKey } from "../../entities/AccessKey";
@@ -16,6 +19,9 @@ import { UserAuditTrailCreateService } from "./services/user-audit-trail-create.
 import { EmailService } from "../../services/email.service";
 import { UserAuditTrail } from "../../entities/UserAuditTrail";
 import { UserLocationsService } from "src/modules/users/services/user-locations.service";
+import { UserLocationsController } from "src/modules/users/controllers/user-locations.controller";
+import { UserWarehousesService } from "src/modules/users/services/user-warehouses.service";
+import { UserWarehousesController } from "src/modules/users/controllers/user-warehouses.controller";
 import { UserAccessKeyService } from "src/modules/users/services/user-access-key.service";
 import { UserLoginSession } from "src/entities/UserLoginSession";
 import { JwtService } from "@nestjs/jwt";
@@ -26,6 +32,10 @@ import { SSEModule } from "../sse/sse.module";
 import { FrontendUrlUtil } from "src/utils/frontend-url.util";
 import { CacheInvalidationModule } from "../cache/cache.module";
 import { Warehouse } from "../../entities/Warehouse";
+import { RoleWarehousePreset } from "../../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../../entities/RoleVendorPreset";
+import { System } from "../../entities/System";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -36,6 +46,8 @@ import { Warehouse } from "../../entities/Warehouse";
       Theme,
       UserPermissions,
       UserLocations,
+      UserWarehouses,
+      UserVendors,
       AppModule,
       Action,
       AccessKey,
@@ -43,29 +55,42 @@ import { Warehouse } from "../../entities/Warehouse";
       UserAuditTrail,
       UserLoginSession,
       Warehouse,
+      Vendor,
+      RoleWarehousePreset,
+      RoleVendorPreset,
+      System,
     ]),
     SSEModule,
     CacheInvalidationModule,
   ],
-  controllers: [UsersController, UserAccessKeyController],
+  controllers: [
+    UsersController,
+    UserAccessKeyController,
+    UserLocationsController,
+    UserWarehousesController,
+  ],
   providers: [
     UsersService,
     UserAuditTrailCreateService,
     EmailService,
     FrontendUrlUtil,
     UserLocationsService,
+    UserWarehousesService,
     UserAccessKeyService,
     JwtService,
     UserSessionService,
     UserPermissionsService,
+    CommonUtilitiesService,
   ],
   exports: [
     UsersService,
     UserLocationsService,
+    UserWarehousesService,
     UserAccessKeyService,
     UserSessionService,
     UserPermissionsService,
     UserAuditTrailCreateService,
+    CommonUtilitiesService,
   ],
 })
 export class UsersModule { }

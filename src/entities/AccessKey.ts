@@ -12,7 +12,16 @@ import { User } from "./User";
 import { Status } from "./Status";
 import { Company } from "./Company";
 import { UserPermissions } from "./UserPermissions";
+import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
+import { RoleActionPreset } from "./RoleActionPreset";
+import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { SystemAccessKey } from "./SystemAccessKey";
+import { Position } from "./Position";
+import { SalesTerritory } from "./SalesTerritory";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity()
 export class AccessKey {
@@ -59,12 +68,49 @@ export class AccessKey {
   @ManyToOne(() => User, (user) => user.updatedAccessKeys)
   @JoinColumn({ name: "updated_by" })
   updatedBy!: User | null;
+
   // Relationship for access_key_id in UserPermissions
   @OneToMany(
     () => UserPermissions,
-    (userPermissions) => userPermissions.accessKey
+    (userPermissions) => userPermissions.accessKey,
   )
   userPermissions!: UserPermissions[];
+
+  // Relationship for access_key_id in UserLocations
+  @OneToMany(() => UserLocations, (userLocations) => userLocations.accessKey)
+  userLocations!: UserLocations[];
+
+  // Relationship for access_key_id in UserWarehouses
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.accessKey)
+  userWarehouses!: UserWarehouses[];
+
+  // Relationship for access_key_id in RoleActionPreset
+  @OneToMany(
+    () => RoleActionPreset,
+    (roleActionPreset) => roleActionPreset.accessKey,
+  )
+  roleActionPresets!: RoleActionPreset[];
+
+  // Relationship for access_key_id in RoleLocationPreset
+  @OneToMany(
+    () => RoleLocationPreset,
+    (roleLocationPreset) => roleLocationPreset.accessKey,
+  )
+  roleLocationPresets!: RoleLocationPreset[];
+
+  // Relationship for access_key_id in RoleWarehousePreset
+  @OneToMany(
+    () => RoleWarehousePreset,
+    (roleWarehousePreset) => roleWarehousePreset.accessKey,
+  )
+  roleWarehousePresets!: RoleWarehousePreset[];
+
+  // Relationship for access_key_id in RoleVendorPreset
+  @OneToMany(
+    () => RoleVendorPreset,
+    (roleVendorPreset) => roleVendorPreset.accessKey,
+  )
+  roleVendorPresets!: RoleVendorPreset[];
 
   // Relationship for users who have this as their current access key
   @OneToMany(() => User, (user) => user.currentAccessKey)
@@ -72,7 +118,16 @@ export class AccessKey {
 
   @OneToMany(
     () => SystemAccessKey,
-    (systemAccessKey) => systemAccessKey.accessKey
+    (systemAccessKey) => systemAccessKey.accessKey,
   )
   system_access_keys!: SystemAccessKey[];
+
+  @OneToMany(() => Position, (position) => position.accessKey)
+  positions!: Position[];
+
+  @OneToMany(() => SalesTerritory, (salesTerritory) => salesTerritory.accessKey)
+  salesTerritories!: SalesTerritory[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.accessKey)
+  userVendors!: UserVendors[];
 }

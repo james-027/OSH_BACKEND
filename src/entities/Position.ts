@@ -13,12 +13,12 @@ import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 
 @Entity("positions")
-@Unique(["position_name"])
+@Unique("UQ_position_name_access_key", ["position_name", "access_key_id"])
 export class Position {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ length: 255, unique: true })
+  @Column({ length: 255 })
   position_name: string;
 
   @Column({ length: 50 })
@@ -26,6 +26,9 @@ export class Position {
 
   @Column({ default: 1 })
   status_id: number;
+
+  @Column({ nullable: true })
+  access_key_id: number;
 
   @CreateDateColumn({ type: "timestamp" })
   created_at: Date;
@@ -38,9 +41,6 @@ export class Position {
 
   @Column({ nullable: true })
   updated_by: number;
-
-  @Column({ nullable: true })
-  access_key_id: number;
 
   @Column({ type: "boolean", default: false })
   is_hidden: boolean;

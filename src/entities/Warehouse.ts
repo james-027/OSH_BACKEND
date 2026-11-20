@@ -20,6 +20,8 @@ import { ReqTransactionHeader } from "./ReqTransactionHeader";
 import { PosAvailability } from "./PosAvailability";
 import { Profitcenter } from "./Profitcenter";
 import { SalesTerritory } from "./SalesTerritory";
+import { UserWarehouses } from "./UserWarehouses";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 
 @Entity("warehouses")
 @Unique("UQ_warehouse_name_ifs_code", [
@@ -97,6 +99,9 @@ export class Warehouse {
   @Column({ type: "time", nullable: true })
   ending_time: string;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  allowed_geofence: number;
+
   @Column({
     type: "decimal",
     precision: 10,
@@ -172,4 +177,13 @@ export class Warehouse {
     (reqTransactionHeader) => reqTransactionHeader.warehouse,
   )
   reqTransactionHeaders!: ReqTransactionHeader[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.warehouse)
+  userWarehouses!: UserWarehouses[];
+
+  @OneToMany(
+    () => RoleWarehousePreset,
+    (roleWarehousePreset) => roleWarehousePreset.warehouse,
+  )
+  roleWarehousePresets!: RoleWarehousePreset[];
 }

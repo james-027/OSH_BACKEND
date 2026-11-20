@@ -25,21 +25,25 @@ export class PositionsController {
 
   @Get()
   @RequirePermissions({ module: "POSITIONS", action: "DATA ACCESS" })
-  async findAll() {
-    return this.positionsService.findAll();
+  async findAll(@Request() req) {
+    const accessKeyId = req.user?.current_access_key;
+    return this.positionsService.findAll(accessKeyId);
   }
 
   @Get(":id")
   @RequirePermissions({ module: "POSITIONS", action: "DATA ACCESS" })
-  async findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.positionsService.findOne(id);
+  async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    const accessKeyId = req.user?.current_access_key;
+    return this.positionsService.findOne(id, accessKeyId);
   }
 
   @Post()
   @RequirePermissions({ module: "POSITIONS", action: "ADD" })
   async create(@Body() createPositionDto: CreatePositionDto, @Request() req) {
     const userId = req.user.id;
-    return this.positionsService.create(createPositionDto, userId);
+    const accessKeyId =
+      createPositionDto.access_key_id || req.user?.current_access_key;
+    return this.positionsService.create(createPositionDto, userId, accessKeyId);
   }
 
   @Put(":id")
@@ -50,23 +54,32 @@ export class PositionsController {
     @Request() req,
   ) {
     const userId = req.user.id;
-    return this.positionsService.update(id, updatePositionDto, userId);
+    const accessKeyId =
+      updatePositionDto.access_key_id || req.user?.current_access_key;
+    return this.positionsService.update(
+      id,
+      updatePositionDto,
+      userId,
+      accessKeyId,
+    );
   }
 
   @Delete(":id")
   @RequirePermissions({ module: "POSITIONS", action: "CANCEL" })
-  async remove(@Param("id", ParseIntPipe) id: number) {
-    return this.positionsService.remove(id);
+  async remove(@Param("id", ParseIntPipe) id: number, @Request() req) {
+    const accessKeyId = req.user?.current_access_key;
+    return this.positionsService.remove(id, accessKeyId);
   }
 
   @Patch(":id/toggle-status-activate")
   @RequirePermissions({ module: "POSITIONS", action: "EDIT" })
   async activateStatus(@Param("id", ParseIntPipe) id: number, @Request() req) {
     const userId = req.user.id;
-    const position = await this.positionsService.findOne(id);
+    const accessKeyId = req.user?.current_access_key;
+    const position = await this.positionsService.findOne(id, accessKeyId);
     if (position.status_id === 1) return position;
-    await this.positionsService.toggleStatus(id, userId);
-    return this.positionsService.findOne(id);
+    await this.positionsService.toggleStatus(id, userId, accessKeyId);
+    return this.positionsService.findOne(id, accessKeyId);
   }
 
   @Patch(":id/toggle-status-deactivate")
@@ -76,9 +89,10 @@ export class PositionsController {
     @Request() req,
   ) {
     const userId = req.user.id;
-    const position = await this.positionsService.findOne(id);
+    const accessKeyId = req.user?.current_access_key;
+    const position = await this.positionsService.findOne(id, accessKeyId);
     if (position.status_id === 2) return position;
-    await this.positionsService.toggleStatus(id, userId);
-    return this.positionsService.findOne(id);
+    await this.positionsService.toggleStatus(id, userId, accessKeyId);
+    return this.positionsService.findOne(id, accessKeyId);
   }
 }

@@ -10,6 +10,8 @@ import { UsersService } from "../../users/services/users.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "src/config/logger";
 
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
+
 @Injectable()
 export class WarehouseRatesService {
   constructor(
@@ -18,6 +20,7 @@ export class WarehouseRatesService {
     private auditTrailService: UserAuditTrailCreateService,
     private warehousesService: WarehousesService,
     private usersService: UsersService,
+    private commonUtilitiesService: CommonUtilitiesService,
     private sseEventEmitter: SSEEventEmitterHelper,
   ) {}
 
@@ -27,14 +30,20 @@ export class WarehouseRatesService {
     roleId?: number,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     const query = this.warehouseRatesRepository
       .createQueryBuilder("wr")
@@ -49,6 +58,11 @@ export class WarehouseRatesService {
     if (allowedLocationIds && allowedLocationIds.length > 0) {
       query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
+      });
+    }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("wr.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
       });
     }
     const rates = await query.getMany();
@@ -258,6 +272,7 @@ export class WarehouseRatesService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    allowedWarehouseIds?: number[],
   ) {
     const warehouses = await this.warehousesService.findAll();
     let inserted_count = 0;
@@ -286,6 +301,18 @@ export class WarehouseRatesService {
         errors.push({
           row: row.__rowNum__,
           error: `You do not have permission to upload rates for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+      // Warehouse permission check
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload rates for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed stores.`,
         });
         continue;
       }

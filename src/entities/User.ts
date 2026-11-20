@@ -14,13 +14,17 @@ import { RoleActionPreset } from "./RoleActionPreset";
 import { LocationType } from "./LocationType";
 import { Location } from "./Location";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { Company } from "./Company";
 import { AccessKey } from "./AccessKey";
 import { Theme } from "./Theme";
 import { Status } from "./Status";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 import { UserLoginSession } from "./UserLoginSession";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity({ name: "users" })
 export class User {
@@ -67,6 +71,9 @@ export class User {
 
   @Column({ type: "varchar", nullable: true })
   profile_pic_url!: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  signature_url!: string | null;
 
   @CreateDateColumn()
   created_at!: Date;
@@ -152,6 +159,18 @@ export class User {
   @OneToMany(() => RoleLocationPreset, (preset) => preset.updatedBy)
   updatedRoleLocationPresets!: RoleLocationPreset[];
 
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.createdBy)
+  createdRoleWarehousePresets!: RoleWarehousePreset[];
+
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.updatedBy)
+  updatedRoleWarehousePresets!: RoleWarehousePreset[];
+
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.createdBy)
+  createdRoleVendorPresets!: RoleVendorPreset[];
+
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.updatedBy)
+  updatedRoleVendorPresets!: RoleVendorPreset[];
+
   @OneToMany(() => Company, (company) => company.createdBy)
   createdCompanies!: Company[];
 
@@ -175,13 +194,13 @@ export class User {
 
   @OneToMany(
     () => UserPermissions,
-    (userPermissions) => userPermissions.createdBy
+    (userPermissions) => userPermissions.createdBy,
   )
   createdUserPermissions!: UserPermissions[];
 
   @OneToMany(
     () => UserPermissions,
-    (userPermissions) => userPermissions.updatedBy
+    (userPermissions) => userPermissions.updatedBy,
   )
   updatedUserPermissions!: UserPermissions[];
 
@@ -192,6 +211,22 @@ export class User {
 
   @OneToMany(() => UserLocations, (userLocations) => userLocations.updatedBy)
   updatedUserLocations!: UserLocations[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.user)
+  userWarehouses!: UserWarehouses[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.createdBy)
+  createdUserWarehouses!: UserWarehouses[];
+
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.updatedBy)
+  updatedUserWarehouses!: UserWarehouses[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.createdBy)
+  createdUserVendors!: UserVendors[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.updatedBy)
+  updatedUserVendors!: UserVendors[];
+
   @ManyToOne(() => AccessKey, (accessKey) => accessKey.currentUsers, {
     eager: false,
   })
@@ -200,4 +235,7 @@ export class User {
 
   @OneToMany(() => UserLoginSession, (session) => session.user)
   loginSessions!: UserLoginSession[];
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.user)
+  userVendors!: UserVendors[];
 }

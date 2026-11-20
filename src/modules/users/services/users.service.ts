@@ -5,7 +5,13 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, MoreThanOrEqual, In } from "typeorm";
+import {
+  Repository,
+  MoreThanOrEqual,
+  In,
+  DataSource,
+  QueryRunner,
+} from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "../../../entities/User";
 import { Role } from "../../../entities/Role";
@@ -13,6 +19,13 @@ import { Status } from "../../../entities/Status";
 import { Theme } from "../../../entities/Theme";
 import { UserPermissions } from "../../../entities/UserPermissions";
 import { UserLocations } from "../../../entities/UserLocations";
+import { UserWarehouses } from "../../../entities/UserWarehouses";
+import { UserVendors } from "../../../entities/UserVendor";
+import { Warehouse } from "../../../entities/Warehouse";
+import { Vendor } from "../../../entities/Vendor";
+import { RoleWarehousePreset } from "../../../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../../../entities/RoleVendorPreset";
+import { System } from "../../../entities/System";
 import { Module } from "../../../entities/Module";
 import { Action } from "../../../entities/Action";
 import { AccessKey } from "../../../entities/AccessKey";
@@ -30,6 +43,7 @@ import {
   validateAndFormatExcelRow,
   ExcelValidationConfig,
 } from "../../../utils/excel-validation";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Injectable()
 export class UsersService {
@@ -54,18 +68,61 @@ export class UsersService {
     private accessKeyRepository: Repository<AccessKey>,
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
+    @InjectRepository(UserWarehouses)
+    private userWarehousesRepository: Repository<UserWarehouses>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(UserVendors)
+    private userVendorsRepository: Repository<UserVendors>,
+    @InjectRepository(Vendor)
+    private vendorRepository: Repository<Vendor>,
+    @InjectRepository(System)
+    private systemRepository: Repository<System>,
+    private dataSource: DataSource,
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private emailService: EmailService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private frontendUrlUtil: FrontendUrlUtil,
     private cacheInvalidationService: CacheInvalidationService,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   private getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
   }
 
-  async findAll(): Promise<any[]> {
+  /**
+   * Helper to recursively/iteratively collect all descendant system IDs for given root system IDs
+   */
+  private getDescendantSystemIds(
+    rootSystemIds: number[],
+    allSystems: System[],
+  ): Set<number> {
+    const allowed = new Set<number>(rootSystemIds);
+    let addedNew = true;
+
+    while (addedNew) {
+      addedNew = false;
+      for (const sys of allSystems) {
+        const sysId = Number(sys.id);
+        const parentId =
+          sys.parent_id !== null && sys.parent_id !== undefined
+            ? Number(sys.parent_id)
+            : null;
+        if (parentId !== null && allowed.has(parentId) && !allowed.has(sysId)) {
+          allowed.add(sysId);
+          addedNew = true;
+        }
+      }
+    }
+
+    return allowed;
+  }
+
+  async findAll(
+    withRestriction: boolean = false,
+    currentUser?: any,
+  ): Promise<any[]> {
     try {
       const users = await this.usersRepository.find({
         relations: [
@@ -82,8 +139,434 @@ export class UsersService {
         users.map((user) => this.createFlattenedResponse(user)),
       );
 
-      logger.info("Successfully retrieved all users.");
-      return flattenedUsers;
+      // If restriction is not requested or no currentUser is supplied, return full payload
+      if (!withRestriction || !currentUser) {
+        logger.info("Successfully retrieved all users.");
+        return flattenedUsers;
+      }
+
+      const currentUserId = Number(
+        typeof currentUser === "object" ? currentUser?.id : currentUser,
+      );
+
+      const loggedInUserRecord = flattenedUsers.find(
+        (u) => Number(u.id) === currentUserId,
+      );
+
+      // Resolve logged-in user's roles
+      let loggedInRoles: Array<{
+        id: number;
+        role_id: number;
+        role_name: string;
+        role_level: number;
+        system_id: number;
+      }> =
+        Array.isArray(loggedInUserRecord?.roles) &&
+        loggedInUserRecord.roles.length > 0
+          ? loggedInUserRecord.roles
+          : [];
+
+      if (loggedInRoles.length === 0 && currentUserId) {
+        const userPermissions = await this.userPermissionsRepository.find({
+          where: { user_id: currentUserId, status_id: 1 },
+        });
+        const permRoleIds = userPermissions
+          .map((up) => up.role_id)
+          .filter((id): id is number => typeof id === "number" && id > 0);
+        const primaryRoleId = currentUser?.role_id
+          ? [Number(currentUser.role_id)]
+          : [];
+        const uniqueRoleIds = Array.from(
+          new Set([...primaryRoleId, ...permRoleIds]),
+        );
+        if (uniqueRoleIds.length > 0) {
+          const foundRoles = await this.roleRepository.find({
+            where: { id: In(uniqueRoleIds), status_id: 1 },
+          });
+          loggedInRoles = foundRoles.map((r) => ({
+            id: r.id,
+            role_id: r.id,
+            role_name: r.role_name,
+            role_level: r.role_level,
+            system_id: r.system_id,
+          }));
+        }
+      }
+
+      // 1. Fetch all active systems to resolve dynamic parent-child hierarchy
+      const allSystems = await this.systemRepository.find({
+        where: { status_id: 1 },
+      });
+
+      // A Root System is dynamically identified as having no parent (parent_id === null or undefined)
+      const rootSystemIdSet = new Set<number>(
+        allSystems
+          .filter((s) => s.parent_id === null || s.parent_id === undefined)
+          .map((s) => Number(s.id)),
+      );
+
+      // Check if logged-in user belongs to any Root System
+      const isRootViewer = loggedInRoles.some((r) =>
+        rootSystemIdSet.has(Number(r.system_id)),
+      );
+
+      // Global System Admin bypass: ONLY applies to role_level === 1 in a Root System (parent_id === null)
+      const isGlobalRootSystemAdmin = loggedInRoles.some(
+        (r) =>
+          Number(r.role_level) === 1 &&
+          rootSystemIdSet.has(Number(r.system_id)),
+      );
+
+      if (isGlobalRootSystemAdmin) {
+        logger.info(
+          `Successfully retrieved all users for global root super admin user ID ${currentUserId}.`,
+        );
+        return flattenedUsers;
+      }
+
+      // Dynamic System Scope resolution
+      const viewerSystemIds = Array.from(
+        new Set(
+          loggedInRoles
+            .map((r) => Number(r.system_id))
+            .filter((id) => !isNaN(id) && id > 0),
+        ),
+      );
+
+      // If viewer belongs to a Root System, allowed scope covers all active systems.
+      // Otherwise, allowed scope covers the viewer's system(s) plus all their descendants.
+      const allowedSystemScopeIds = isRootViewer
+        ? new Set(allSystems.map((s) => Number(s.id)))
+        : this.getDescendantSystemIds(viewerSystemIds, allSystems);
+
+      // Condition B: Role Level Priority Check (lower numeric value = higher privilege priority, e.g. 1 = highest)
+      const loggedLevels = loggedInRoles
+        .map((r) => Number(r.role_level))
+        .filter((lvl) => !isNaN(lvl) && lvl > 0);
+      const loggedHighestPriority =
+        loggedLevels.length > 0 ? Math.min(...loggedLevels) : 999;
+
+      // ==========================================
+      // USER RESTRICTION CONFIGURATION SWITCHES
+      // ==========================================
+      // 1. Viewer Scope:
+      //    'CURRENT_SESSION' = Allowed IDs based on viewer's active role & current_access_key
+      //    'CONSOLIDATED'    = Allowed IDs aggregated across all roles of the viewer
+      const VIEWER_SCOPE_MODE = "CURRENT_SESSION" as
+        | "CURRENT_SESSION"
+        | "CONSOLIDATED";
+
+      // 2. Target Scope:
+      //    'CONSOLIDATED'    = Compare against all locations/warehouses/vendors across all roles of the target user
+      //    'CURRENT_SESSION' = Compare only against presets under target user's primary role_id / current_access_key
+      const TARGET_SCOPE_MODE = "CONSOLIDATED" as
+        | "CONSOLIDATED"
+        | "CURRENT_SESSION";
+
+      // 3. Independent Matching Modes:
+      //    'AT_LEAST_ONE'    = Target shares at least one ID with viewer's allowed IDs (overlap/intersection)
+      //    'ALL'             = All of target's assigned IDs must be within viewer's allowed IDs (subset)
+      const LOCATION_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+      const WAREHOUSE_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+      const VENDOR_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+
+      // Resolve viewer's allowed IDs
+      let allowedLocationIds: number[] = [];
+      let allowedWarehouseIds: number[] = [];
+      let allowedVendorIds: number[] = [];
+
+      if (VIEWER_SCOPE_MODE === "CURRENT_SESSION") {
+        const currentUserRoleId = Number(currentUser?.role_id);
+        const currentUserAccessKeyId =
+          currentUser?.current_access_key !== undefined &&
+          currentUser?.current_access_key !== null
+            ? Number(currentUser.current_access_key)
+            : undefined;
+
+        [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedLocationIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedWarehouseIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedVendorIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+          ]);
+      } else {
+        const [viewerLocs, viewerWhs, viewerVends] = await Promise.all([
+          this.userLocationsRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["location_id"],
+          }),
+          this.userWarehousesRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["warehouse_id"],
+          }),
+          this.userVendorsRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["vendor_id"],
+          }),
+        ]);
+        allowedLocationIds = Array.from(
+          new Set(
+            viewerLocs
+              .map((l) => Number(l.location_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+        allowedWarehouseIds = Array.from(
+          new Set(
+            viewerWhs
+              .map((w) => Number(w.warehouse_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+        allowedVendorIds = Array.from(
+          new Set(
+            viewerVends
+              .map((v) => Number(v.vendor_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+      }
+
+      const hasLocationRestriction = allowedLocationIds.length > 0;
+      const hasWarehouseRestriction = allowedWarehouseIds.length > 0;
+      const hasVendorRestriction = allowedVendorIds.length > 0;
+
+      // Single batch fetch for target users' active presets (only for active restriction dimensions)
+      const candidateUserIds = flattenedUsers
+        .map((u) => Number(u.id))
+        .filter((id) => !isNaN(id) && id > 0);
+
+      const [allLocations, allWarehouses, allVendors] = await Promise.all([
+        hasLocationRestriction && candidateUserIds.length > 0
+          ? this.userLocationsRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "location_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+        hasWarehouseRestriction && candidateUserIds.length > 0
+          ? this.userWarehousesRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "warehouse_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+        hasVendorRestriction && candidateUserIds.length > 0
+          ? this.userVendorsRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "vendor_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+      ]);
+
+      // Build target user lookup maps based on TARGET_SCOPE_MODE
+      const userLocationMap = new Map<number, Set<number>>();
+      const userWarehouseMap = new Map<number, Set<number>>();
+      const userVendorMap = new Map<number, Set<number>>();
+
+      const targetUserMetaMap = new Map<
+        number,
+        { role_id?: number; current_access_key?: number }
+      >();
+      for (const u of flattenedUsers) {
+        targetUserMetaMap.set(Number(u.id), {
+          role_id: u.role_id ? Number(u.role_id) : undefined,
+          current_access_key:
+            u.current_access_key !== undefined && u.current_access_key !== null
+              ? Number(u.current_access_key)
+              : undefined,
+        });
+      }
+
+      if (hasLocationRestriction) {
+        for (const ul of allLocations) {
+          const uid = Number(ul.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(ul.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(ul.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userLocationMap.has(uid)) {
+            userLocationMap.set(uid, new Set());
+          }
+          userLocationMap.get(uid)!.add(Number(ul.location_id));
+        }
+      }
+
+      if (hasWarehouseRestriction) {
+        for (const uw of allWarehouses) {
+          const uid = Number(uw.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(uw.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(uw.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userWarehouseMap.has(uid)) {
+            userWarehouseMap.set(uid, new Set());
+          }
+          userWarehouseMap.get(uid)!.add(Number(uw.warehouse_id));
+        }
+      }
+
+      if (hasVendorRestriction) {
+        for (const uv of allVendors) {
+          const uid = Number(uv.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(uv.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(uv.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userVendorMap.has(uid)) {
+            userVendorMap.set(uid, new Set());
+          }
+          userVendorMap.get(uid)!.add(Number(uv.vendor_id));
+        }
+      }
+
+      // Reusable restriction matcher helper
+      const checkMatch = (
+        targetIds: number[],
+        allowedIds: number[],
+        mode: "AT_LEAST_ONE" | "ALL",
+      ): boolean => {
+        if (targetIds.length === 0) return false;
+        return mode === "ALL"
+          ? targetIds.every((id) => allowedIds.includes(id))
+          : targetIds.some((id) => allowedIds.includes(id));
+      };
+
+      // Row-level filter: Dynamic Hierarchical System Scope + Role Level Priority + Presets Restriction
+      const restrictedUsers = flattenedUsers.filter((user) => {
+        const rowUserId = Number(user.id);
+        const isSelf =
+          !isNaN(currentUserId) &&
+          !isNaN(rowUserId) &&
+          rowUserId === currentUserId;
+
+        // Current user can always see themselves
+        if (isSelf) return true;
+
+        const targetRoles: Array<{ role_level?: number; system_id?: number }> =
+          Array.isArray(user.roles) ? user.roles : [];
+
+        // Condition A: Dynamic System Scope Check
+        // Target user must have at least one role belonging to the viewer's allowed system scope.
+        // Users without roles are visible only to root system viewers.
+        const isSystemScopeValid =
+          targetRoles.length > 0
+            ? targetRoles.some((r) =>
+                allowedSystemScopeIds.has(Number(r.system_id)),
+              )
+            : isRootViewer;
+
+        if (!isSystemScopeValid) {
+          return false;
+        }
+
+        // Condition B: Role Level Priority Check
+        // Compute target user's highest priority role_level (minimum numeric value)
+        const targetLevels = targetRoles
+          .map((r) => Number(r.role_level))
+          .filter((lvl) => !isNaN(lvl) && lvl > 0);
+
+        // If target has no roles, treat as lowest priority (Infinity);
+        // visible only if system scope is satisfied (e.g. viewer is root system)
+        const targetHighestPriority =
+          targetLevels.length > 0 ? Math.min(...targetLevels) : Infinity;
+
+        // Target's highest privilege level must be equal to or lower priority (>= numeric value)
+        if (targetHighestPriority < loggedHighestPriority) {
+          return false;
+        }
+
+        // Condition C: Location Restriction Check
+        if (hasLocationRestriction) {
+          const targetLocIds = Array.from(userLocationMap.get(rowUserId) || []);
+          if (
+            !checkMatch(
+              targetLocIds,
+              allowedLocationIds,
+              LOCATION_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        // Condition D: Warehouse Restriction Check
+        if (hasWarehouseRestriction) {
+          const targetWhIds = Array.from(userWarehouseMap.get(rowUserId) || []);
+          if (
+            !checkMatch(
+              targetWhIds,
+              allowedWarehouseIds,
+              WAREHOUSE_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        // Condition E: Vendor Restriction Check
+        if (hasVendorRestriction) {
+          const targetVendorIds = Array.from(
+            userVendorMap.get(rowUserId) || [],
+          );
+          if (
+            !checkMatch(
+              targetVendorIds,
+              allowedVendorIds,
+              VENDOR_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      logger.info(
+        `Successfully retrieved ${restrictedUsers.length} restricted users for user ID ${currentUserId}.`,
+      );
+      return restrictedUsers;
     } catch (error) {
       logger.error("Error retrieving users:", error);
       throw new Error("Failed to retrieve users.");
@@ -285,6 +768,77 @@ export class UsersService {
         throw error;
       }
       throw new Error("Failed to retrieve users basic info.");
+    }
+  }
+
+  async findUsersByRolesAndLocations(body: {
+    role_ids: number[];
+    location_ids?: number[];
+    status_id?: number;
+  }): Promise<any[]> {
+    try {
+      const { role_ids = [], location_ids = [], status_id = 1 } = body;
+
+      if (!Array.isArray(role_ids) || role_ids.length === 0) {
+        return [];
+      }
+
+      let query = this.userPermissionsRepository
+        .createQueryBuilder("up")
+        .leftJoin("up.user", "user")
+        .leftJoin("up.role", "role")
+        .select("user.id", "id")
+        .addSelect("user.first_name", "first_name")
+        .addSelect("user.middle_name", "middle_name")
+        .addSelect("user.last_name", "last_name")
+        .addSelect("user.user_name", "user_name")
+        .addSelect("user.emp_number", "emp_number")
+        .addSelect(
+          "GROUP_CONCAT(DISTINCT role.role_name SEPARATOR ', ')",
+          "role_name",
+        )
+        .where("up.role_id IN (:...role_ids)", { role_ids })
+        .andWhere("up.status_id = :status_id", { status_id })
+        .andWhere("user.status_id = 1");
+
+      // If location_ids filter is provided and not empty
+      if (Array.isArray(location_ids) && location_ids.length > 0) {
+        query = query.andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select("ul.user_id")
+            .from("user_locations", "ul")
+            .where("ul.location_id IN (:...location_ids)", { location_ids })
+            .andWhere("ul.role_id IN (:...role_ids)", { role_ids })
+            .andWhere("ul.status_id = :status_id", { status_id })
+            .getQuery();
+          return `up.user_id IN ${subQuery}`;
+        });
+      }
+
+      query = query
+        .groupBy("user.id")
+        .addGroupBy("user.first_name")
+        .addGroupBy("user.middle_name")
+        .addGroupBy("user.last_name")
+        .addGroupBy("user.user_name")
+        .addGroupBy("user.emp_number")
+        .orderBy("user.last_name", "ASC")
+        .addOrderBy("user.first_name", "ASC");
+
+      const rawResults = await query.getRawMany();
+
+      return rawResults.map((row) => ({
+        id: row.id,
+        user_name: row.user_name,
+        emp_number: row.emp_number,
+        full_name:
+          `${row.last_name}, ${row.first_name}${row.middle_name ? ` ${row.middle_name}` : ""}`.trim(),
+        role_name: row.role_name || "",
+      }));
+    } catch (error) {
+      logger.error("Error retrieving users by roles and locations:", error);
+      throw error;
     }
   }
 
@@ -510,10 +1064,14 @@ export class UsersService {
       status_id,
       theme_id,
       profile_pic_url,
+      signature_url,
       access_key_id,
       user_permission_presets,
       location_ids,
       user_location_presets,
+      user_warehouse_presets,
+      user_vendor_presets,
+      vendor_ids,
       created_by,
     } = createUserDto;
 
@@ -601,6 +1159,7 @@ export class UsersService {
       user.theme_id = theme_id;
       user.profile_pic_url =
         profile_pic_url || "/uploads/profile_pics/default_profile.jpg";
+      user.signature_url = signature_url || null;
       user.created_by = created_by;
 
       // Set current_access_key to the first access key if provided
@@ -628,6 +1187,7 @@ export class UsersService {
       if (user_location_presets && user_location_presets.length > 0) {
         await this.createUserLocationsFromPresets(
           savedUser.id,
+          accessKeys.map((ak) => ak.id),
           user_location_presets,
           created_by,
         );
@@ -636,6 +1196,27 @@ export class UsersService {
           savedUser.id,
           allRoleIds,
           location_ids,
+          created_by,
+          accessKeys.map((ak) => ak.id),
+        );
+      }
+
+      // Create UserWarehouses from presets
+      if (user_warehouse_presets && user_warehouse_presets.length > 0) {
+        await this.createUserWarehousesFromPresets(
+          savedUser.id,
+          accessKeys.map((ak) => ak.id),
+          user_warehouse_presets,
+          created_by,
+        );
+      }
+
+      // Create UserVendors from presets
+      if (user_vendor_presets && user_vendor_presets.length > 0) {
+        await this.createUserVendorsFromPresets(
+          savedUser.id,
+          accessKeys.map((ak) => ak.id),
+          user_vendor_presets,
           created_by,
         );
       }
@@ -691,10 +1272,31 @@ export class UsersService {
     accessKeyIds: number[],
     userPermissionPresets: any[],
     updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
   ): Promise<void> {
-    // Step 1: Mark all existing permissions for this user as inactive (status_id = 2)
-    await this.userPermissionsRepository.update(
-      { user_id: userId },
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userPermissionsRepository.manager;
+
+    // Determine which roles are targeted for update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              userPermissionPresets
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Mark ONLY existing permissions for the targeted roles as inactive (status_id = 2)
+    await manager.update(
+      UserPermissions,
+      { user_id: userId, role_id: In(targetRoleIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -702,67 +1304,119 @@ export class UsersService {
       },
     );
 
-    // Step 2: Upsert permissions from presets
-    for (const accessKeyId of accessKeyIds) {
-      for (const preset of userPermissionPresets) {
-        const roleId = preset.role_id;
-        const moduleId = preset.module_ids;
-        const actionIds = preset.action_ids;
+    // Step 2: Fetch all existing permissions for these targeted roles in 1 fast query
+    const existingPerms = await manager.find(UserPermissions, {
+      where: { user_id: userId, role_id: In(targetRoleIds) },
+    });
 
-        if (!Array.isArray(actionIds)) {
-          logger.warn(
-            `action_ids must be an array for module ${moduleId}, skipping`,
-          );
-          continue;
-        }
+    const permMap = new Map<string, UserPermissions>();
+    existingPerms.forEach((p) => {
+      permMap.set(
+        `${p.role_id}_${p.access_key_id}_${p.module_id}_${p.action_id}`,
+        p,
+      );
+    });
 
+    // Step 3: Fast in-memory reconciliation
+    const toSave: UserPermissions[] = [];
+    const seen = new Set<string>();
+
+    for (const preset of userPermissionPresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue; // Skip untouched roles!
+
+      const moduleId = preset.module_ids;
+      const actionIds = preset.action_ids;
+      if (!Array.isArray(actionIds)) continue;
+
+      // Use preset's specific access_key_id if present; fallback to accessKeyIds
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : accessKeyIds;
+
+      for (const akId of keysForPreset) {
         for (const actionId of actionIds) {
-          // Check if this combination already exists
-          const existingPermission =
-            await this.userPermissionsRepository.findOne({
-              where: {
-                user_id: userId,
-                role_id: roleId,
-                module_id: moduleId,
-                action_id: actionId,
-                access_key_id: accessKeyId,
-              },
-            });
+          const key = `${roleId}_${akId}_${moduleId}_${actionId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
-          if (existingPermission) {
-            // Update existing permission back to active status
-            existingPermission.status_id = 1; // active
-            existingPermission.updated_by = updatedBy;
-            existingPermission.modified_at = new Date();
-            await this.userPermissionsRepository.save(existingPermission);
+          const existing = permMap.get(key);
+          if (existing) {
+            existing.status_id = 1;
+            existing.updated_by = updatedBy;
+            existing.modified_at = new Date();
+            toSave.push(existing);
           } else {
-            // Create new permission with active status
-            const userPermission = this.userPermissionsRepository.create({
+            const newPerm = manager.create(UserPermissions, {
               user_id: userId,
               role_id: roleId,
               module_id: moduleId,
               action_id: actionId,
-              access_key_id: accessKeyId,
-              status_id: 1, // active
+              access_key_id: akId,
+              status_id: 1,
               created_by: updatedBy,
             });
-
-            await this.userPermissionsRepository.save(userPermission);
+            toSave.push(newPerm);
           }
         }
       }
     }
+
+    // Step 4: Batch save in chunks of 250 for optimal execution speed
+    if (toSave.length > 0) {
+      await manager.save(UserPermissions, toSave, { chunk: 250 });
+    }
   }
 
-  // Helper method to create/update user locations from location presets (per role)
+  // Helper method to create/update user locations from location presets (per role and access key)
   private async createUserLocationsFromPresets(
     userId: number,
+    accessKeyIds: number[],
     userLocationPresets: any[],
     updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
   ): Promise<void> {
-    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
-    await this.userLocationsRepository.update(
-      { user_id: userId },
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userLocationsRepository.manager;
+
+    // Collect all relevant access key IDs (from presets or user access keys)
+    const presetAccessKeys = userLocationPresets
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        presetAccessKeys.length > 0
+          ? presetAccessKeys
+          : accessKeyIds && accessKeyIds.length > 0
+            ? accessKeyIds
+            : [1],
+      ),
+    );
+
+    // Determine target roles to update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              userLocationPresets
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Mark existing locations for this user ONLY within target roles & access keys as inactive
+    await manager.update(
+      UserLocations,
+      {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -770,68 +1424,448 @@ export class UsersService {
       },
     );
 
-    // Step 2: Validate unique location IDs across all presets and verify they exist
+    // Step 2: Validate unique location IDs across all presets in 1 query
     const uniqueLocationIds = Array.from(
       new Set(
         userLocationPresets.flatMap((preset) => preset.location_ids || []),
       ),
-    );
+    ).filter((id): id is number => typeof id === "number" && id > 0);
 
     if (uniqueLocationIds.length > 0) {
-      // Validate all unique locations exist
-      for (const locationId of uniqueLocationIds) {
-        const location = await this.locationRepository.findOne({
-          where: { id: locationId },
-        });
-        if (!location) {
-          throw new BadRequestException(
-            `Location with ID ${locationId} not found`,
-          );
+      const foundLocations = await this.locationRepository.findBy({
+        id: In(uniqueLocationIds),
+      });
+      if (foundLocations.length !== uniqueLocationIds.length) {
+        const foundSet = new Set(foundLocations.map((l) => l.id));
+        const missing = uniqueLocationIds.find((id) => !foundSet.has(id));
+        throw new BadRequestException(`Location with ID ${missing} not found`);
+      }
+    }
+
+    // Step 3: Fetch existing locations for target roles & keys in one query
+    const existingLocs = await manager.find(UserLocations, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const locMap = new Map<string, UserLocations>();
+    existingLocs.forEach((el) => {
+      locMap.set(`${el.role_id}_${el.access_key_id}_${el.location_id}`, el);
+    });
+
+    // Step 4: Fast in-memory reconciliation
+    const toSaveLocs: UserLocations[] = [];
+    const seenLocs = new Set<string>();
+
+    for (const preset of userLocationPresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue; // Skip untouched roles!
+
+      const locationIds = preset.location_ids || [];
+      const keysForThisPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+
+      if (!Array.isArray(locationIds)) continue;
+
+      for (const accessKeyId of keysForThisPreset) {
+        for (const locationId of locationIds) {
+          const key = `${roleId}_${accessKeyId}_${locationId}`;
+          if (seenLocs.has(key)) continue;
+          seenLocs.add(key);
+
+          const existingLocation = locMap.get(key);
+          if (existingLocation) {
+            existingLocation.status_id = 1;
+            existingLocation.updated_by = updatedBy;
+            existingLocation.modified_at = new Date();
+            toSaveLocs.push(existingLocation);
+          } else {
+            const userLocation = manager.create(UserLocations, {
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSaveLocs.push(userLocation);
+          }
         }
       }
     }
 
-    // Step 3: Upsert locations from presets
-    for (const preset of userLocationPresets) {
-      const roleId = preset.role_id;
-      const locationIds = preset.location_ids || [];
+    // Step 5: Batch save in chunks of 250
+    if (toSaveLocs.length > 0) {
+      await manager.save(UserLocations, toSaveLocs, { chunk: 250 });
+    }
+  }
 
-      if (!Array.isArray(locationIds)) {
-        logger.warn(
-          `location_ids must be an array for role ${roleId}, skipping`,
-        );
-        continue;
+  // Helper method to create/update user warehouses from warehouse presets (per role and access key)
+  private async createUserWarehousesFromPresets(
+    userId: number,
+    accessKeyIds: number[],
+    userWarehousePresets: any[],
+    updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userWarehousesRepository.manager;
+
+    // Collect all relevant access key IDs (from presets and user access keys)
+    const presetAccessKeys = (userWarehousePresets || [])
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        [
+          ...(accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : []),
+          ...presetAccessKeys,
+        ].filter((id): id is number => typeof id === "number" && id > 0),
+      ),
+    );
+    if (targetAccessKeyIds.length === 0) {
+      targetAccessKeyIds.push(1);
+    }
+
+    // Determine target roles to update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              (userWarehousePresets || [])
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Soft-deactivate existing warehouses for this user within target roles & access keys
+    await manager.update(
+      UserWarehouses,
+      {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+      {
+        status_id: 2, // Deactivated (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // Step 2: Extract unique warehouse IDs across all presets
+    const uniqueWarehouseIds = Array.from(
+      new Set(
+        (userWarehousePresets || []).flatMap(
+          (preset) => preset.warehouse_ids || [],
+        ),
+      ),
+    ).filter((id): id is number => typeof id === "number" && id > 0);
+
+    // If no warehouses are selected, all existing remain deactivated (status_id = 2) -> Approach B inherits all in locations
+    if (uniqueWarehouseIds.length === 0) {
+      return;
+    }
+
+    const foundWarehouses = await manager.find(Warehouse, {
+      where: { id: In(uniqueWarehouseIds) },
+      relations: ["location"],
+    });
+
+    if (foundWarehouses.length !== uniqueWarehouseIds.length) {
+      const foundSet = new Set(foundWarehouses.map((w) => w.id));
+      const missing = uniqueWarehouseIds.find((id) => !foundSet.has(id));
+      throw new BadRequestException(`Warehouse with ID ${missing} not found`);
+    }
+
+    const warehouseMap = new Map<number, Warehouse>();
+    foundWarehouses.forEach((w) => warehouseMap.set(w.id, w));
+
+    // Step 3: Fetch active user locations for this user across target roles & access keys
+    // to strictly enforce: "the stored warehouse_id should always respect the user_locations of a user"
+    const activeLocations = await manager.find(UserLocations, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+        status_id: 1,
+      },
+    });
+
+    const allowedLocMap = new Map<string, Set<number>>();
+    for (const loc of activeLocations) {
+      const key = `${loc.role_id}_${loc.access_key_id}`;
+      if (!allowedLocMap.has(key)) {
+        allowedLocMap.set(key, new Set());
       }
+      allowedLocMap.get(key)!.add(loc.location_id);
+    }
 
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
+    // Validate that every assigned warehouse belongs to an active location for that role & access key
+    for (const preset of userWarehousePresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
 
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
-          });
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+      const whIds = preset.warehouse_ids || [];
 
-          await this.userLocationsRepository.save(userLocation);
+      if (!Array.isArray(whIds) || whIds.length === 0) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        const key = `${roleId}_${accessKeyId}`;
+        const allowedLocs = allowedLocMap.get(key) || new Set<number>();
+
+        for (const whId of whIds) {
+          const wh = warehouseMap.get(whId);
+          if (!wh) continue;
+          if (!allowedLocs.has(wh.location_id)) {
+            throw new BadRequestException(
+              `Warehouse '${wh.warehouse_name}' (ID: ${wh.id}) belongs to Location ID ${wh.location_id}, which is not assigned to this user under Role ${roleId} and Access Key ${accessKeyId}.`,
+            );
+          }
         }
       }
+    }
+
+    // Step 4: Fetch existing UserWarehouses for fast in-memory reconciliation
+    const existingUserWhs = await manager.find(UserWarehouses, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const userWhMap = new Map<string, UserWarehouses>();
+    existingUserWhs.forEach((uw) => {
+      userWhMap.set(`${uw.role_id}_${uw.access_key_id}_${uw.warehouse_id}`, uw);
+    });
+
+    // Step 5: Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: UserWarehouses[] = [];
+    const seen = new Set<string>();
+
+    for (const preset of userWarehousePresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
+
+      const whIds = preset.warehouse_ids || [];
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+
+      if (!Array.isArray(whIds)) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        for (const whId of whIds) {
+          const key = `${roleId}_${accessKeyId}_${whId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existing = userWhMap.get(key);
+          if (existing) {
+            existing.status_id = 1;
+            existing.updated_by = updatedBy;
+            existing.modified_at = new Date();
+            toUpdateIds.push(existing.id);
+          } else {
+            const newUW = manager.create(UserWarehouses, {
+              user_id: userId,
+              role_id: roleId,
+              warehouse_id: whId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toInsert.push(newUW);
+          }
+        }
+      }
+    }
+
+    // Step 6: Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await manager.update(
+        UserWarehouses,
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await manager.save(UserWarehouses, toInsert, { chunk: 250 });
+    }
+  }
+
+  // Helper method to create/update user vendors from vendor presets (per role and access key)
+  private async createUserVendorsFromPresets(
+    userId: number,
+    accessKeyIds: number[],
+    userVendorPresets: any[],
+    updatedBy: number,
+    rolesToUpdate?: number[],
+    queryRunner?: QueryRunner,
+  ): Promise<void> {
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userVendorsRepository.manager;
+
+    // Collect all relevant access key IDs (from presets and user access keys)
+    const presetAccessKeys = (userVendorPresets || [])
+      .map((p) => p.access_key_id)
+      .filter((id): id is number => typeof id === "number" && id > 0);
+    const targetAccessKeyIds = Array.from(
+      new Set(
+        [
+          ...(accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : []),
+          ...presetAccessKeys,
+        ].filter((id): id is number => typeof id === "number" && id > 0),
+      ),
+    );
+    if (targetAccessKeyIds.length === 0) {
+      targetAccessKeyIds.push(1);
+    }
+
+    // Determine target roles to update
+    const targetRoleIds =
+      rolesToUpdate && rolesToUpdate.length > 0
+        ? rolesToUpdate
+        : Array.from(
+            new Set(
+              (userVendorPresets || [])
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+
+    if (targetRoleIds.length === 0) return;
+
+    // Step 1: Soft-deactivate existing vendors for this user within target roles & access keys
+    await manager.update(
+      UserVendors,
+      {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+      {
+        status_id: 2, // Deactivated (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // Step 2: Extract unique vendor IDs across all presets
+    const uniqueVendorIds = Array.from(
+      new Set(
+        (userVendorPresets || []).flatMap((preset) => preset.vendor_ids || []),
+      ),
+    ).filter((id): id is number => typeof id === "number" && id > 0);
+
+    // If no vendors are selected, all existing remain deactivated (status_id = 2) -> Approach B inherits all vendors
+    if (uniqueVendorIds.length === 0) {
+      return;
+    }
+
+    const foundVendors = await manager.find(Vendor, {
+      where: { id: In(uniqueVendorIds) },
+    });
+
+    if (foundVendors.length !== uniqueVendorIds.length) {
+      const foundSet = new Set(foundVendors.map((v) => v.id));
+      const missing = uniqueVendorIds.find((id) => !foundSet.has(id));
+      throw new BadRequestException(`Vendor with ID ${missing} not found`);
+    }
+
+    // Step 3: Fetch existing UserVendors for fast in-memory reconciliation
+    const existingUserVendors = await manager.find(UserVendors, {
+      where: {
+        user_id: userId,
+        role_id: In(targetRoleIds),
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const userVendorMap = new Map<string, UserVendors>();
+    existingUserVendors.forEach((uv) => {
+      userVendorMap.set(
+        `${uv.role_id}_${uv.access_key_id}_${uv.vendor_id}`,
+        uv,
+      );
+    });
+
+    // Step 4: Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: UserVendors[] = [];
+    const seen = new Set<string>();
+
+    for (const preset of userVendorPresets) {
+      const roleId = preset.role_id;
+      if (!targetRoleIds.includes(roleId)) continue;
+
+      const vendorIds = preset.vendor_ids || [];
+      const keysForPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
+
+      if (!Array.isArray(vendorIds)) continue;
+
+      for (const accessKeyId of keysForPreset) {
+        for (const vId of vendorIds) {
+          const key = `${roleId}_${accessKeyId}_${vId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existing = userVendorMap.get(key);
+          if (existing) {
+            existing.status_id = 1;
+            existing.updated_by = updatedBy;
+            existing.modified_at = new Date();
+            toUpdateIds.push(existing.id);
+          } else {
+            const newUV = manager.create(UserVendors, {
+              user_id: userId,
+              role_id: roleId,
+              vendor_id: vId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toInsert.push(newUV);
+          }
+        }
+      }
+    }
+
+    // Step 5: Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await manager.update(
+        UserVendors,
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await manager.save(UserVendors, toInsert, { chunk: 250 });
     }
   }
 
@@ -841,10 +1875,20 @@ export class UsersService {
     roleIds: number[],
     locationIds: number[],
     updatedBy: number,
+    accessKeyIds: number[] = [1],
+    queryRunner?: QueryRunner,
   ): Promise<void> {
-    // Step 1: Mark all existing locations for this user as inactive (status_id = 2)
-    await this.userLocationsRepository.update(
-      { user_id: userId },
+    const manager = queryRunner
+      ? queryRunner.manager
+      : this.userLocationsRepository.manager;
+
+    const targetKeys =
+      accessKeyIds && accessKeyIds.length > 0 ? accessKeyIds : [1];
+
+    // Step 1: Mark all existing locations within target access keys as inactive
+    await manager.update(
+      UserLocations,
+      { user_id: userId, access_key_id: In(targetKeys) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -852,37 +1896,53 @@ export class UsersService {
       },
     );
 
-    // Step 2: Upsert locations from presets
-    for (const roleId of roleIds) {
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
+    // Step 2: Fetch existing locations in 1 query
+    const existingLocations = await manager.find(UserLocations, {
+      where: {
+        user_id: userId,
+        role_id: In(roleIds),
+        access_key_id: In(targetKeys),
+      },
+    });
 
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
-          });
+    const locMap = new Map<string, UserLocations>();
+    existingLocations.forEach((el) => {
+      locMap.set(`${el.role_id}_${el.access_key_id}_${el.location_id}`, el);
+    });
 
-          await this.userLocationsRepository.save(userLocation);
+    const toSave: UserLocations[] = [];
+    const seen = new Set<string>();
+
+    for (const accessKeyId of targetKeys) {
+      for (const roleId of roleIds) {
+        for (const locationId of locationIds) {
+          const key = `${roleId}_${accessKeyId}_${locationId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existingLocation = locMap.get(key);
+          if (existingLocation) {
+            existingLocation.status_id = 1;
+            existingLocation.updated_by = updatedBy;
+            existingLocation.modified_at = new Date();
+            toSave.push(existingLocation);
+          } else {
+            const userLocation = manager.create(UserLocations, {
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSave.push(userLocation);
+          }
         }
       }
+    }
+
+    if (toSave.length > 0) {
+      await manager.save(UserLocations, toSave, { chunk: 250 });
     }
   }
 
@@ -908,154 +1968,428 @@ export class UsersService {
       status_id,
       theme_id,
       profile_pic_url,
+      signature_url,
       // UserPermissions fields
       access_key_id,
       user_permission_presets,
       // UserLocations fields
       location_ids,
       user_location_presets,
+      // UserWarehouses fields
+      user_warehouse_presets,
+      warehouse_ids,
+      // UserVendors fields
+      user_vendor_presets,
+      vendor_ids,
+      // Selective update
+      roles_to_update,
       // Audit field
       updated_by,
     } = updateUserDto;
 
-    try {
-      const userToUpdate = await this.usersRepository.findOne({
-        where: { id },
-        relations: [
-          "role",
-          "userUpline",
-          "status",
-          "theme",
-          "createdBy",
-          "updatedBy",
-        ],
-      });
+    const userToUpdate = await this.usersRepository.findOne({
+      where: { id },
+      relations: [
+        "role",
+        "userUpline",
+        "status",
+        "theme",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
 
-      if (!userToUpdate) {
-        throw new NotFoundException("User not found for update.");
-      }
+    if (!userToUpdate) {
+      throw new NotFoundException("User not found for update.");
+    }
 
-      // Validate permissions data if provided
-      if (access_key_id && user_permission_presets) {
-        // Validate access keys exist
-        for (const accessKeyId of access_key_id) {
-          const accessKey = await this.accessKeyRepository.findOne({
-            where: { id: accessKeyId },
-          });
-          if (!accessKey) {
-            throw new BadRequestException(
-              `Access key with ID ${accessKeyId} not found`,
-            );
-          }
-        }
-
-        // Validate all modules and actions exist
-        for (const preset of user_permission_presets) {
-          const module = await this.moduleRepository.findOne({
-            where: { id: preset.module_ids },
-          });
-          if (!module) {
-            throw new BadRequestException(
-              `Module with ID ${preset.module_ids} not found`,
-            );
-          }
-          for (const actionId of preset.action_ids) {
-            const action = await this.actionRepository.findOne({
-              where: { id: actionId },
-            });
-            if (!action) {
-              throw new BadRequestException(
-                `Action with ID ${actionId} not found`,
-              );
-            }
-          }
-        }
+    // Fast validation for permissions data if provided
+    if (
+      access_key_id &&
+      user_permission_presets &&
+      user_permission_presets.length > 0
+    ) {
+      const akIds = Array.from(new Set(access_key_id));
+      const foundAks = await this.accessKeyRepository.findBy({ id: In(akIds) });
+      if (foundAks.length !== akIds.length) {
+        const foundSet = new Set(foundAks.map((k) => k.id));
+        const missing = akIds.find((k) => !foundSet.has(k));
+        throw new BadRequestException(
+          `Access key with ID ${missing} not found`,
+        );
       }
 
-      // Validate locations data if provided
-      if (location_ids) {
-        for (const locationId of location_ids) {
-          const location = await this.locationRepository.findOne({
-            where: { id: locationId },
-          });
-          if (!location) {
-            throw new BadRequestException(
-              `Location with ID ${locationId} not found`,
-            );
-          }
-        }
-      }
-
-      // Update fields if provided
-      if (user_name !== undefined) {
-        if (user_name !== userToUpdate.user_name) {
-          const existingUser = await this.usersRepository.findOne({
-            where: { user_name },
-          });
-          if (existingUser && existingUser.id !== id) {
-            throw new BadRequestException(
-              "User with this username already exists.",
-            );
-          }
-        }
-        userToUpdate.user_name = user_name;
-      }
-
-      if (email !== undefined) {
-        if (email && email !== userToUpdate.email) {
-          const existingEmail = await this.usersRepository.findOne({
-            where: { email },
-          });
-          if (existingEmail && existingEmail.id !== id) {
-            throw new BadRequestException(
-              "User with this email already exists.",
-            );
-          }
-        }
-        userToUpdate.email = email;
-      }
-
-      // Update other fields
-      if (first_name !== undefined && first_name) {
-        userToUpdate.first_name = String(first_name).toUpperCase();
-      }
-      if (middle_name !== undefined && middle_name) {
-        userToUpdate.middle_name = String(middle_name).toUpperCase();
-      } else if (middle_name === null || middle_name === "") {
-        userToUpdate.middle_name = null; // Allow clearing middle name
-      }
-      if (last_name !== undefined && last_name) {
-        userToUpdate.last_name = String(last_name).toUpperCase();
-      }
-      if (role_id !== undefined) {
-        userToUpdate.role_id = role_id;
-        // Also update the relation to ensure TypeORM persists the change
-        userToUpdate.role = await this.roleRepository.findOne({
-          where: { id: role_id },
+      const allModuleIds = Array.from(
+        new Set(
+          user_permission_presets.map((p) => p.module_ids).filter(Boolean),
+        ),
+      );
+      if (allModuleIds.length > 0) {
+        const foundModules = await this.moduleRepository.findBy({
+          id: In(allModuleIds),
         });
-      }
-      if (emp_number !== undefined) userToUpdate.emp_number = emp_number;
-      if (user_reset !== undefined) userToUpdate.user_reset = user_reset;
-      if (user_upline_id !== undefined)
-        userToUpdate.user_upline_id = user_upline_id;
-      if (email_switch !== undefined) userToUpdate.email_switch = email_switch;
-      if (status_id !== undefined) userToUpdate.status_id = status_id;
-      if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
-      if (profile_pic_url !== undefined)
-        userToUpdate.profile_pic_url = profile_pic_url;
-
-      // Hash new password if provided
-      if (password) {
-        const saltRounds = 10;
-        userToUpdate.password = await bcrypt.hash(password, saltRounds);
+        if (foundModules.length !== allModuleIds.length) {
+          const foundSet = new Set(foundModules.map((m) => m.id));
+          const missing = allModuleIds.find((mid) => !foundSet.has(mid));
+          throw new BadRequestException(`Module with ID ${missing} not found`);
+        }
       }
 
-      userToUpdate.updated_by = updated_by;
+      const allActionIds = Array.from(
+        new Set(
+          user_permission_presets
+            .flatMap((p) => p.action_ids || [])
+            .filter(Boolean),
+        ),
+      );
+      if (allActionIds.length > 0) {
+        const foundActions = await this.actionRepository.findBy({
+          id: In(allActionIds),
+        });
+        if (foundActions.length !== allActionIds.length) {
+          const foundSet = new Set(foundActions.map((a) => a.id));
+          const missing = allActionIds.find((aid) => !foundSet.has(aid));
+          throw new BadRequestException(`Action with ID ${missing} not found`);
+        }
+      }
+    }
 
-      // Save user before updating permissions/locations so role_id is up-to-date
-      const savedUser = await this.usersRepository.save(userToUpdate);
+    // Fast validation for locations data if provided
+    if (location_ids && location_ids.length > 0) {
+      const uniqueLocIds = Array.from(new Set(location_ids));
+      const foundLocs = await this.locationRepository.findBy({
+        id: In(uniqueLocIds),
+      });
+      if (foundLocs.length !== uniqueLocIds.length) {
+        const foundSet = new Set(foundLocs.map((l) => l.id));
+        const missing = uniqueLocIds.find((lid) => !foundSet.has(lid));
+        throw new BadRequestException(`Location with ID ${missing} not found`);
+      }
+    }
 
-      // Audit trail
+    // Update fields if provided
+    if (user_name !== undefined) {
+      if (user_name !== userToUpdate.user_name) {
+        const existingUser = await this.usersRepository.findOne({
+          where: { user_name },
+        });
+        if (existingUser && existingUser.id !== id) {
+          throw new BadRequestException(
+            "User with this username already exists.",
+          );
+        }
+      }
+      userToUpdate.user_name = user_name;
+    }
+
+    if (email !== undefined) {
+      if (email && email !== userToUpdate.email) {
+        const existingEmail = await this.usersRepository.findOne({
+          where: { email },
+        });
+        if (existingEmail && existingEmail.id !== id) {
+          throw new BadRequestException("User with this email already exists.");
+        }
+      }
+      userToUpdate.email = email;
+    }
+
+    // Update other fields
+    if (first_name !== undefined && first_name) {
+      userToUpdate.first_name = String(first_name).toUpperCase();
+    }
+    if (middle_name !== undefined && middle_name) {
+      userToUpdate.middle_name = String(middle_name).toUpperCase();
+    } else if (middle_name === null || middle_name === "") {
+      userToUpdate.middle_name = null; // Allow clearing middle name
+    }
+    if (last_name !== undefined && last_name) {
+      userToUpdate.last_name = String(last_name).toUpperCase();
+    }
+    if (role_id !== undefined) {
+      userToUpdate.role_id = role_id;
+      userToUpdate.role = await this.roleRepository.findOne({
+        where: { id: role_id },
+      });
+    }
+    if (emp_number !== undefined) userToUpdate.emp_number = emp_number;
+    if (user_reset !== undefined) userToUpdate.user_reset = user_reset;
+    if (user_upline_id !== undefined)
+      userToUpdate.user_upline_id = user_upline_id;
+    if (email_switch !== undefined) userToUpdate.email_switch = email_switch;
+    if (status_id !== undefined) userToUpdate.status_id = status_id;
+    if (theme_id !== undefined) userToUpdate.theme_id = theme_id;
+    if (profile_pic_url !== undefined)
+      userToUpdate.profile_pic_url = profile_pic_url;
+    if (signature_url !== undefined) userToUpdate.signature_url = signature_url;
+
+    // Hash new password if provided
+    if (password) {
+      const saltRounds = 10;
+      userToUpdate.password = await bcrypt.hash(password, saltRounds);
+    }
+
+    userToUpdate.updated_by = updated_by;
+
+    // Determine if permissions, locations, and warehouses should be updated
+    // If roles_to_update is provided as an empty array, SKIP updating permissions/locations completely!
+    const shouldUpdatePermissions =
+      (roles_to_update !== undefined && roles_to_update.length > 0) ||
+      (roles_to_update === undefined &&
+        (user_permission_presets !== undefined ||
+          user_location_presets !== undefined ||
+          user_warehouse_presets !== undefined ||
+          user_vendor_presets !== undefined ||
+          warehouse_ids !== undefined ||
+          vendor_ids !== undefined ||
+          location_ids !== undefined));
+
+    let permissionsMessage = "";
+    let locationsMessage = "";
+    let savedUserId = id;
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Save user inside transaction
+      const savedUser = await queryRunner.manager.save(User, userToUpdate);
+      savedUserId = savedUser.id;
+
+      // 1.5 Handle role removal: Soft-deactivate permissions, locations, warehouses, vendors for removed roles
+      if (role_ids !== undefined) {
+        const newRoleIds = new Set(
+          role_ids && role_ids.length > 0
+            ? role_ids
+            : role_id
+              ? [role_id]
+              : userToUpdate.role_id
+                ? [userToUpdate.role_id]
+                : [],
+        );
+
+        const [activePerms, activeLocs, activeWhs, activeVnds] =
+          await Promise.all([
+            queryRunner.manager.find(UserPermissions, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserLocations, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserWarehouses, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+            queryRunner.manager.find(UserVendors, {
+              where: { user_id: id, status_id: 1 },
+              select: ["role_id"],
+            }),
+          ]);
+
+        const currentActiveRoleIds = Array.from(
+          new Set(
+            [
+              ...activePerms.map((p) => p.role_id),
+              ...activeLocs.map((l) => l.role_id),
+              ...activeWhs.map((w) => w.role_id),
+              ...activeVnds.map((v) => v.role_id),
+            ].filter(Boolean),
+          ),
+        );
+
+        const removedRoleIds = currentActiveRoleIds.filter(
+          (rid) => !newRoleIds.has(rid),
+        );
+
+        if (removedRoleIds.length > 0) {
+          await queryRunner.manager.update(
+            UserPermissions,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserLocations,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserWarehouses,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+          await queryRunner.manager.update(
+            UserVendors,
+            { user_id: id, role_id: In(removedRoleIds) },
+            { status_id: 2, updated_by: updated_by, modified_at: new Date() },
+          );
+        }
+      }
+
+      // 2. Update permissions if requested
+      if (
+        shouldUpdatePermissions &&
+        access_key_id &&
+        user_permission_presets &&
+        user_permission_presets.length > 0
+      ) {
+        await this.createUserPermissionsFromPresets(
+          id,
+          access_key_id,
+          user_permission_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
+
+        const activePermissions = await queryRunner.manager.count(
+          UserPermissions,
+          {
+            where: { user_id: id, status_id: 1 },
+          },
+        );
+        permissionsMessage = ` Updated/created ${activePermissions} permission(s).`;
+      }
+
+      // 3. Update locations if requested
+      const effectiveAccessKeyIds =
+        access_key_id && access_key_id.length > 0
+          ? access_key_id
+          : userToUpdate.userPermissions?.map((up) => up.access_key_id) || [];
+
+      if (
+        shouldUpdatePermissions &&
+        user_location_presets &&
+        user_location_presets.length > 0
+      ) {
+        await this.createUserLocationsFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          user_location_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
+
+        const activeLocations = await queryRunner.manager.count(UserLocations, {
+          where: { user_id: id, status_id: 1 },
+        });
+        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
+      } else if (
+        shouldUpdatePermissions &&
+        location_ids &&
+        location_ids.length > 0
+      ) {
+        const allRoleIds =
+          roles_to_update && roles_to_update.length > 0
+            ? roles_to_update
+            : role_ids && role_ids.length > 0
+              ? role_ids
+              : [role_id || userToUpdate.role_id];
+
+        await this.createUserLocationsForMultipleRoles(
+          id,
+          allRoleIds,
+          location_ids,
+          updated_by,
+          effectiveAccessKeyIds,
+          queryRunner,
+        );
+
+        const activeLocations = await queryRunner.manager.count(UserLocations, {
+          where: { user_id: id, status_id: 1 },
+        });
+        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
+      }
+
+      // 4. Update warehouses if requested
+      if (shouldUpdatePermissions && user_warehouse_presets !== undefined) {
+        await this.createUserWarehousesFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          user_warehouse_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
+      } else if (shouldUpdatePermissions && warehouse_ids !== undefined) {
+        const allRoleIds =
+          roles_to_update && roles_to_update.length > 0
+            ? roles_to_update
+            : role_ids && role_ids.length > 0
+              ? role_ids
+              : [role_id || userToUpdate.role_id];
+
+        const generatedPresets = allRoleIds.map((rid) => ({
+          role_id: rid,
+          warehouse_ids: warehouse_ids,
+        }));
+
+        await this.createUserWarehousesFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          generatedPresets,
+          updated_by,
+          allRoleIds,
+          queryRunner,
+        );
+      }
+
+      // 5. Update vendors if requested
+      if (shouldUpdatePermissions && user_vendor_presets !== undefined) {
+        await this.createUserVendorsFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          user_vendor_presets,
+          updated_by,
+          roles_to_update,
+          queryRunner,
+        );
+      } else if (shouldUpdatePermissions && vendor_ids !== undefined) {
+        const allRoleIds =
+          roles_to_update && roles_to_update.length > 0
+            ? roles_to_update
+            : role_ids && role_ids.length > 0
+              ? role_ids
+              : [role_id || userToUpdate.role_id];
+
+        const generatedPresets = allRoleIds.map((rid) => ({
+          role_id: rid,
+          vendor_ids: vendor_ids,
+        }));
+
+        await this.createUserVendorsFromPresets(
+          id,
+          effectiveAccessKeyIds,
+          generatedPresets,
+          updated_by,
+          allRoleIds,
+          queryRunner,
+        );
+      }
+
+      // COMMIT TRANSACTION: All changes succeed atomically
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      logger.error(`Error updating user with ID ${id}:`, error);
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new Error(
+        `Failed to update user with ID ${id}: ${this.getErrorMessage(error)}`,
+      );
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Perform audit trail AFTER transaction commit to avoid deadlock/lock wait timeout
+    try {
       await this.userAuditTrailCreateService.create(
         {
           service: "UsersService",
@@ -1066,110 +2400,48 @@ export class UsersService {
         },
         updateUserDto.updated_by,
       );
-
-      // Handle UserPermissions updates if provided
-      let permissionsMessage = "";
-      if (
-        access_key_id &&
-        user_permission_presets &&
-        user_permission_presets.length > 0
-      ) {
-        await this.createUserPermissionsFromPresets(
-          id,
-          access_key_id,
-          user_permission_presets,
-          updated_by,
-        );
-
-        // Count active permissions for message
-        const activePermissions = await this.userPermissionsRepository.count({
-          where: { user_id: id, status_id: 1 },
-        });
-        permissionsMessage = ` Updated/created ${activePermissions} permission(s).`;
-      }
-
-      // Handle UserLocations updates if provided
-      let locationsMessage = "";
-      if (user_location_presets && user_location_presets.length > 0) {
-        await this.createUserLocationsFromPresets(
-          id,
-          user_location_presets,
-          updated_by,
-        );
-
-        // Count active locations for message
-        const activeLocations = await this.userLocationsRepository.count({
-          where: { user_id: id, status_id: 1 },
-        });
-        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
-      } else if (location_ids && location_ids.length > 0) {
-        // Fallback to location_ids if presets not provided
-        // Determine which role IDs to use for location assignments
-        const allRoleIds =
-          role_ids && role_ids.length > 0
-            ? role_ids
-            : [role_id || userToUpdate.role_id];
-
-        await this.createUserLocationsForMultipleRoles(
-          id,
-          allRoleIds,
-          location_ids,
-          updated_by,
-        );
-
-        // Count active locations for message
-        const activeLocations = await this.userLocationsRepository.count({
-          where: { user_id: id, status_id: 1 },
-        });
-        locationsMessage = ` Updated/created ${activeLocations} location(s).`;
-      }
-
-      // Fetch updated user with relations
-      const updatedUser = await this.usersRepository.findOne({
-        where: { id: savedUser.id },
-        relations: [
-          "role",
-          "userUpline",
-          "status",
-          "theme",
-          "createdBy",
-          "updatedBy",
-        ],
-      });
-
-      const responseMessage = `Successfully updated user with ID ${id}.${permissionsMessage}${locationsMessage}`;
-
-      // SSE Events
-      try {
-        // Option 2: WITHOUT data (for Approach 2 - SSE + React Query on frontend)
-        this.sseEventEmitter.emitUpdateSignal("users", savedUser.id);
-        this.sseEventEmitter.emitUpdateSignal("users", 0);
-        this.sseEventEmitter.emitUpdateSignal("locations", 0);
-        await this.cacheInvalidationService.invalidateFindAll("users");
-        await this.cacheInvalidationService.invalidateWarehouseEmployees();
-        await this.cacheInvalidationService.invalidateWarehouseHurdles();
-        await this.cacheInvalidationService.invalidateReqTransactions();
-        await this.cacheInvalidationService.invalidateWarehouseRequirements();
-        await this.cacheInvalidationService.invalidateWarehouses();
-      } catch (err) {
-        logger.warn("SSE event failed for update:", err);
-      }
-
-      logger.info(`User updated successfully with ID: ${id}`);
-      return {
-        message: responseMessage,
-        user: await this.createFlattenedResponse(updatedUser!),
-      };
-    } catch (error) {
-      logger.error(`Error updating user with ID ${id}:`, error);
-      if (
-        error instanceof NotFoundException ||
-        error instanceof BadRequestException
-      ) {
-        throw error;
-      }
-      throw new Error(`Failed to update user with ID ${id}.`);
+    } catch (auditError) {
+      logger.warn(
+        `Audit trail creation skipped or failed for user ID ${id}:`,
+        auditError,
+      );
     }
+
+    // Fetch updated user with relations
+    const updatedUser = await this.usersRepository.findOne({
+      where: { id: savedUserId },
+      relations: [
+        "role",
+        "userUpline",
+        "status",
+        "theme",
+        "createdBy",
+        "updatedBy",
+      ],
+    });
+
+    const responseMessage = `Successfully updated user with ID ${id}.${permissionsMessage}${locationsMessage}`;
+
+    // SSE Events
+    try {
+      this.sseEventEmitter.emitUpdateSignal("users", savedUserId);
+      this.sseEventEmitter.emitUpdateSignal("users", 0);
+      this.sseEventEmitter.emitUpdateSignal("locations", 0);
+      await this.cacheInvalidationService.invalidateFindAll("users");
+      await this.cacheInvalidationService.invalidateWarehouseEmployees();
+      await this.cacheInvalidationService.invalidateWarehouseHurdles();
+      await this.cacheInvalidationService.invalidateReqTransactions();
+      await this.cacheInvalidationService.invalidateWarehouseRequirements();
+      await this.cacheInvalidationService.invalidateWarehouses();
+    } catch (err) {
+      logger.warn("SSE event failed for update:", err);
+    }
+
+    logger.info(`User updated successfully with ID: ${id}`);
+    return {
+      message: responseMessage,
+      user: await this.createFlattenedResponse(updatedUser!),
+    };
   }
 
   async remove(id: number): Promise<any> {
@@ -1436,6 +2708,7 @@ export class UsersService {
       where: { user_id: user.id, status_id: 1 },
       relations: [
         "module",
+        "role",
         "action",
         "accessKey",
         "status",
@@ -1477,19 +2750,48 @@ export class UsersService {
       ),
     );
 
-    // Extract unique role_ids from user permissions
+    // Extract unique role_ids from user permissions (and primary role_id)
     const uniqueRoleIds = Array.from(
-      new Set(userPermissions.map((up) => up.role_id).filter(Boolean)),
+      new Set(
+        [user.role_id, ...userPermissions.map((up) => up.role_id)].filter(
+          (id): id is number => typeof id === "number" && id > 0,
+        ),
+      ),
     );
 
-    // Get role names for all unique role_ids
+    // Extract unique system_ids from user permissions (and primary system_id)
+    const uniqueSystemIds = Array.from(
+      new Set(
+        [...userPermissions.map((up) => up.role.system_id)].filter(
+          (id): id is number => typeof id === "number" && id > 0,
+        ),
+      ),
+    );
+
+    // Get roles and role names for all unique role_ids in 1 query
+    const foundRoles =
+      uniqueRoleIds.length > 0
+        ? await this.roleRepository.find({
+            where: { id: In(uniqueRoleIds), status_id: 1 },
+          })
+        : [];
+
+    const roleMap = new Map<number, Role>();
+    foundRoles.forEach((r) => roleMap.set(r.id, r));
+
     const roleNames: string[] = [];
+    const roles: any[] = [];
     for (const roleId of uniqueRoleIds) {
-      const role = await this.roleRepository.findOne({
-        where: { id: roleId },
-      });
+      const role = roleMap.get(roleId);
       if (role) {
         roleNames.push(role.role_name);
+        roles.push({
+          id: role.id,
+          role_id: role.id,
+          role_name: role.role_name,
+          role_level: role.role_level,
+          system_id: role.system_id,
+        });
       }
     }
 
@@ -1504,6 +2806,8 @@ export class UsersService {
         `${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim(),
       role_id: user.role_id,
       role_ids: uniqueRoleIds,
+      system_ids: uniqueSystemIds,
+      roles,
       emp_number: user.emp_number,
       email: user.email,
       user_reset: user.user_reset,
@@ -1512,6 +2816,7 @@ export class UsersService {
       status_id: user.status_id,
       theme_id: user.theme_id,
       profile_pic_url: user.profile_pic_url,
+      signature_url: user.signature_url,
       created_at: user.created_at,
       created_by: user.created_by,
       updated_by: user.updated_by,
@@ -1520,6 +2825,9 @@ export class UsersService {
       role_name: user.role?.role_name || null,
       role_names: roleNames,
       role_level: user.role?.role_level || null,
+      system_id: user.role?.system_id || null,
+      min_role_level:
+        roles.length > 0 ? Math.min(...roles.map((r) => r.role_level)) : null,
       user_upline_name: user.userUpline
         ? `${user.userUpline.first_name} ${user.userUpline.last_name}`
         : null,
@@ -1607,10 +2915,35 @@ export class UsersService {
         ],
       });
 
+      let whereUserLocations: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserLocations.access_key_id = user.current_access_key;
+        whereUserLocations.role_id = user.role_id;
+      }
       // Get user locations for this user (all locations regardless of role for now)
       const userLocations = await this.userLocationsRepository.find({
-        where: { user_id: user.id, status_id: 1 },
+        where: whereUserLocations,
         relations: ["location", "status"],
+      });
+
+      let whereUserWarehouses: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserWarehouses.access_key_id = user.current_access_key;
+        whereUserWarehouses.role_id = user.role_id;
+      }
+      const userWarehouses = await this.userWarehousesRepository.find({
+        where: whereUserWarehouses,
+        relations: ["warehouse", "warehouse.location", "status"],
+      });
+
+      let whereUserVendors: any = { user_id: user.id, status_id: 1 };
+      if (perAccessKey) {
+        whereUserVendors.access_key_id = user.current_access_key;
+        whereUserVendors.role_id = user.role_id;
+      }
+      const userVendors = await this.userVendorsRepository.find({
+        where: whereUserVendors,
+        relations: ["vendor", "status"],
       });
 
       // Extract unique role_ids from user permissions
@@ -1712,16 +3045,21 @@ export class UsersService {
 
               const module = roleModuleMap.get(moduleId);
 
-              // Add action to the module's actions array (if not already present)
+              // Add action to the module's actions array (if not already present for this access_key)
               if (
                 permission.action &&
-                !module.actions.find((a: any) => a.id === permission.action.id)
+                !module.actions.find(
+                  (a: any) =>
+                    a.id === permission.action.id &&
+                    a.access_key_id === permission.access_key_id,
+                )
               ) {
                 module.actions.push({
                   id: permission.action.id,
                   action_name: permission.action.action_name,
                   status_id: permission.action.status_id,
                   permission_status_id: permission.status_id,
+                  access_key_id: permission.access_key_id,
                 });
               }
             }
@@ -1733,8 +3071,36 @@ export class UsersService {
             .map((ul) => ({
               id: ul.location?.id || null,
               location_name: ul.location?.location_name || null,
+              access_key_id: ul.access_key_id,
               status_id: ul.location?.status_id || null,
               user_location_status_id: ul.status_id,
+            }));
+
+          // Get warehouses for this role
+          const roleWarehouses = userWarehouses
+            .filter((uw) => uw.role_id === roleId)
+            .map((uw) => ({
+              id: uw.warehouse?.id || null,
+              warehouse_name: uw.warehouse?.warehouse_name || null,
+              warehouse_code: uw.warehouse?.warehouse_code || null,
+              location_id: uw.warehouse?.location_id || null,
+              location_name: uw.warehouse?.location?.location_name || null,
+              access_key_id: uw.access_key_id,
+              status_id: uw.warehouse?.status_id || null,
+              user_warehouse_status_id: uw.status_id,
+            }));
+
+          // Get vendors for this role
+          const roleVendors = userVendors
+            .filter((uv) => uv.role_id === roleId)
+            .map((uv) => ({
+              id: uv.vendor?.id || null,
+              service_provider_name: uv.vendor?.service_provider_name || null,
+              service_provider_code: uv.vendor?.service_provider_code || null,
+              vendor_code: uv.vendor?.vendor_code || null,
+              access_key_id: uv.access_key_id,
+              status_id: uv.vendor?.status_id || null,
+              user_vendor_status_id: uv.status_id,
             }));
 
           // Add to user_permissions_locations array
@@ -1745,6 +3111,8 @@ export class UsersService {
               (a, b) => a.order_level - b.order_level,
             ),
             locations: roleLocations,
+            warehouses: roleWarehouses,
+            vendors: roleVendors,
           });
         }
       } else {
@@ -1785,16 +3153,21 @@ export class UsersService {
 
             const module = moduleMap.get(moduleId);
 
-            // Add action to the module's actions array (if not already present)
+            // Add action to the module's actions array (if not already present for this access_key)
             if (
               permission.action &&
-              !module.actions.find((a: any) => a.id === permission.action.id)
+              !module.actions.find(
+                (a: any) =>
+                  a.id === permission.action.id &&
+                  a.access_key_id === permission.access_key_id,
+              )
             ) {
               module.actions.push({
                 id: permission.action.id,
                 action_name: permission.action.action_name,
                 status_id: permission.action.status_id,
                 permission_status_id: permission.status_id,
+                access_key_id: permission.access_key_id,
               });
             }
           }
@@ -1826,6 +3199,7 @@ export class UsersService {
           user_upline_id: user.user_upline_id,
           email_switch: user.email_switch,
           profile_pic_url: user.profile_pic_url,
+          signature_url: user.signature_url,
           current_access_key: user.current_access_key,
           current_access_key_name: currentAccessKeyName,
           created_at: user.created_at,
@@ -1863,8 +3237,32 @@ export class UsersService {
           locations: userLocations.map((ul) => ({
             id: ul.location?.id || null,
             location_name: ul.location?.location_name || null,
+            access_key_id: ul.access_key_id,
             status_id: ul.location?.status_id || null,
             user_location_status_id: ul.status_id,
+          })),
+        }),
+        ...(!includeUserRoles && {
+          warehouses: userWarehouses.map((uw) => ({
+            id: uw.warehouse?.id || null,
+            warehouse_name: uw.warehouse?.warehouse_name || null,
+            warehouse_code: uw.warehouse?.warehouse_code || null,
+            location_id: uw.warehouse?.location_id || null,
+            location_name: uw.warehouse?.location?.location_name || null,
+            access_key_id: uw.access_key_id,
+            status_id: uw.warehouse?.status_id || null,
+            user_warehouse_status_id: uw.status_id,
+          })),
+        }),
+        ...(!includeUserRoles && {
+          vendors: userVendors.map((uv) => ({
+            id: uv.vendor?.id || null,
+            service_provider_name: uv.vendor?.service_provider_name || null,
+            service_provider_code: uv.vendor?.service_provider_code || null,
+            vendor_code: uv.vendor?.vendor_code || null,
+            access_key_id: uv.access_key_id,
+            status_id: uv.vendor?.status_id || null,
+            user_vendor_status_id: uv.status_id,
           })),
         }),
         user_upline: user.userUpline
@@ -2031,6 +3429,21 @@ export class UsersService {
     role_level: number,
     request?: any,
   ): Promise<any> {
+    const [
+      uploaderAllowedLocationIds,
+      uploaderAllowedWarehouseIds,
+      uploaderAllowedVendorIds,
+    ] = await Promise.all([
+      this.commonUtilitiesService.getUserAllowedLocationIds(
+        created_by,
+        role_id,
+      ),
+      this.commonUtilitiesService.getUserAllowedWarehouseIds(
+        created_by,
+        role_id,
+      ),
+      this.commonUtilitiesService.getUserAllowedVendorIds(created_by, role_id),
+    ]);
     const XLSX = require("xlsx");
     const fs = require("fs");
     const workbook = XLSX.read(fs.readFileSync(filePath), { type: "buffer" });
@@ -2065,6 +3478,18 @@ export class UsersService {
         "User Reset": { format: "none", nullable: true },
         "Send Email Notif": { format: "none", nullable: true },
         "Location(s)": { format: "none", nullable: true },
+        "Warehouse(s)": { format: "none", nullable: true },
+        Warehouses: { format: "none", nullable: true },
+        "Vendor(s)": { format: "none", nullable: true },
+        Vendors: { format: "none", nullable: true },
+        "Overwrite Roles & Locations": { format: "none", nullable: true },
+        "Overwrite Roles, Locations, Warehouses & Vendors": {
+          format: "none",
+          nullable: true,
+        },
+        "Overwrite Presets": { format: "none", nullable: true },
+        "Overwrite Mode": { format: "none", nullable: true },
+        Overwrite: { format: "none", nullable: true },
       },
     };
 
@@ -2126,31 +3551,68 @@ export class UsersService {
           roles.push(role);
           allRoleIds.push(role.id);
 
-          // 3. Lookup role_action_preset for each role
+          // 3. Lookup role_action_preset for each role and generate per-access-key presets
           const roleActionPresets = await this.usersRepository.manager
             .getRepository("RoleActionPreset")
             .find({ where: { role_id: role.id, status_id: 1 } });
 
-          // Build permission presets for this role
-          roleActionPresets.forEach((preset) => {
-            allRoleActionPresets.push({
-              role_id: preset.role_id,
-              module_ids: preset.module_id,
-              action_ids: [preset.action_id],
+          // Multi-tenant: generate presets for EACH target access key
+          for (const ak of accessKeys) {
+            let akPresets = roleActionPresets.filter(
+              (p) => p.access_key_id === ak.id,
+            );
+            // Fallback to role presets without specific access key if none matched
+            if (akPresets.length === 0) {
+              akPresets = roleActionPresets;
+            }
+
+            const moduleMap = new Map<number, number[]>();
+            akPresets.forEach((preset) => {
+              if (!moduleMap.has(preset.module_id)) {
+                moduleMap.set(preset.module_id, []);
+              }
+              moduleMap.get(preset.module_id)!.push(preset.action_id);
             });
-          });
+
+            moduleMap.forEach((actions, moduleId) => {
+              allRoleActionPresets.push({
+                role_id: role.id,
+                access_key_id: ak.id,
+                module_ids: moduleId,
+                action_ids: actions,
+              });
+            });
+          }
         }
 
         // Use first role as default role_id
         const primaryRole = roles[0];
 
-        // Check if Location(s) column has values and build user_location_presets
-        let userLocationPresets: any[] = [];
+        // Parse Overwrite mode: 1/true/yes = overwrite, 0/false/empty = Smart Append (default)
+        const rawOverwrite =
+          formattedRow["Overwrite Roles & Locations"] ??
+          formattedRow["Overwrite Roles, Locations, Warehouses & Vendors"] ??
+          formattedRow["Overwrite Presets"] ??
+          formattedRow["Overwrite Mode"] ??
+          formattedRow["Overwrite"];
+        const isOverwrite =
+          rawOverwrite === 1 ||
+          rawOverwrite === "1" ||
+          String(rawOverwrite || "")
+            .trim()
+            .toLowerCase() === "true" ||
+          String(rawOverwrite || "")
+            .trim()
+            .toLowerCase() === "yes";
 
-        if (
+        // Check if Location(s) column has values and build user_location_presets per access key
+        let userLocationPresets: any[] = [];
+        const hasLocationInput = Boolean(
           formattedRow["Location(s)"] &&
-          String(formattedRow["Location(s)"]).trim() !== ""
-        ) {
+            String(formattedRow["Location(s)"]).trim() !== "",
+        );
+
+        if (hasLocationInput) {
           try {
             // Parse comma-separated location names
             const locationNames = String(formattedRow["Location(s)"])
@@ -2165,15 +3627,30 @@ export class UsersService {
 
             // Check if at least one location was found
             if (locations.length > 0) {
-              // At least one location found, use the ones that were found
+              if (uploaderAllowedLocationIds.length > 0) {
+                const unauthorizedLocs = locations.filter(
+                  (loc) => !uploaderAllowedLocationIds.includes(loc.id),
+                );
+                if (unauthorizedLocs.length > 0) {
+                  throw new Error(
+                    `Unauthorized location assignment: You do not have permission to assign location(s): ${unauthorizedLocs
+                      .map((l) => l.location_name)
+                      .join(", ")}`,
+                  );
+                }
+              }
+
               const locationIds = locations.map((loc) => loc.id);
 
-              // Build user_location_presets for each role with the same locations
+              // Build user_location_presets for each role AND each access key
               for (const role of roles) {
-                userLocationPresets.push({
-                  role_id: role.id,
-                  location_ids: locationIds,
-                });
+                for (const ak of accessKeys) {
+                  userLocationPresets.push({
+                    role_id: role.id,
+                    access_key_id: ak.id,
+                    location_ids: locationIds,
+                  });
+                }
               }
 
               // Log any locations that weren't found
@@ -2199,22 +3676,322 @@ export class UsersService {
           }
         }
 
-        // If no user_location_presets built yet, use role location presets for each role
+        // If no user_location_presets built yet, use role location presets for each role & access key
         if (userLocationPresets.length === 0) {
           for (const role of roles) {
             const roleLocationPresets = await this.usersRepository.manager
               .getRepository("RoleLocationPreset")
               .find({ where: { role_id: role.id, status_id: 1 } });
 
-            const roleLocationIds = roleLocationPresets.map(
-              (preset) => preset.location_id,
-            );
+            for (const ak of accessKeys) {
+              let akLocs = roleLocationPresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akLocs.length === 0) {
+                akLocs = roleLocationPresets;
+              }
+              const roleLocationIds = Array.from(
+                new Set(akLocs.map((preset) => preset.location_id)),
+              );
 
-            if (roleLocationIds.length > 0) {
-              userLocationPresets.push({
-                role_id: role.id,
-                location_ids: roleLocationIds,
+              if (roleLocationIds.length > 0) {
+                userLocationPresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  location_ids: roleLocationIds,
+                });
+              }
+            }
+          }
+        }
+
+        // Map role_id and access_key_id to allowed location_ids from userLocationPresets
+        const allowedLocationsByRoleAndAk = new Map<string, Set<number>>();
+        for (const lp of userLocationPresets) {
+          const key = `${lp.role_id}_${lp.access_key_id}`;
+          if (!allowedLocationsByRoleAndAk.has(key)) {
+            allowedLocationsByRoleAndAk.set(key, new Set());
+          }
+          for (const locId of lp.location_ids || []) {
+            allowedLocationsByRoleAndAk.get(key)!.add(locId);
+          }
+        }
+
+        // Check if Warehouse(s) column has values and build user_warehouse_presets per role & access key
+        let userWarehousePresets: any[] = [];
+        const rawWarehouseInput =
+          formattedRow["Warehouse(s)"] ?? formattedRow["Warehouses"];
+        const hasWarehouseInput = Boolean(
+          rawWarehouseInput && String(rawWarehouseInput).trim() !== "",
+        );
+
+        if (hasWarehouseInput) {
+          try {
+            const warehouseIdentifiers = String(rawWarehouseInput)
+              .split(",")
+              .map((item: string) => item.trim())
+              .filter(Boolean);
+
+            if (warehouseIdentifiers.length > 0) {
+              const whereConditions: any[] = [];
+              for (const ident of warehouseIdentifiers) {
+                whereConditions.push({ warehouse_name: ident });
+                whereConditions.push({ warehouse_name: ident.toUpperCase() });
+                whereConditions.push({ warehouse_code: ident });
+                whereConditions.push({ warehouse_code: ident.toUpperCase() });
+                whereConditions.push({ warehouse_ifs: ident });
+                whereConditions.push({ warehouse_ifs: ident.toUpperCase() });
+                if (!isNaN(Number(ident)) && Number(ident) > 0) {
+                  whereConditions.push({ id: Number(ident) });
+                }
+              }
+
+              const warehouses = await this.warehouseRepository.find({
+                where: whereConditions,
+                relations: ["location"],
               });
+
+              const foundNames = new Set(
+                warehouses.map((w) => (w.warehouse_name || "").toLowerCase()),
+              );
+              const foundCodes = new Set(
+                warehouses.map((w) => (w.warehouse_code || "").toLowerCase()),
+              );
+              const foundIfs = new Set(
+                warehouses.map((w) => (w.warehouse_ifs || "").toLowerCase()),
+              );
+              const foundIds = new Set(warehouses.map((w) => String(w.id)));
+
+              const notFound = warehouseIdentifiers.filter(
+                (ident) =>
+                  !foundNames.has(ident.toLowerCase()) &&
+                  !foundCodes.has(ident.toLowerCase()) &&
+                  !foundIfs.has(ident.toLowerCase()) &&
+                  !foundIds.has(ident),
+              );
+
+              if (notFound.length > 0) {
+                throw new Error(
+                  `Warehouse(s) not found: ${notFound.join(", ")}`,
+                );
+              }
+
+              if (uploaderAllowedWarehouseIds.length > 0) {
+                const unauthorizedWh = warehouses.filter(
+                  (w) => !uploaderAllowedWarehouseIds.includes(w.id),
+                );
+                if (unauthorizedWh.length > 0) {
+                  throw new Error(
+                    `Unauthorized warehouse assignment: You do not have permission to assign warehouse(s): ${unauthorizedWh
+                      .map((w) => w.warehouse_name || w.warehouse_code)
+                      .join(", ")}`,
+                  );
+                }
+              }
+
+              for (const role of roles) {
+                for (const ak of accessKeys) {
+                  const akWarehouses = warehouses.filter(
+                    (w) => !w.access_key_id || w.access_key_id === ak.id,
+                  );
+
+                  const whIds = Array.from(
+                    new Set(akWarehouses.map((w) => w.id)),
+                  );
+                  if (whIds.length > 0) {
+                    userWarehousePresets.push({
+                      role_id: role.id,
+                      access_key_id: ak.id,
+                      warehouse_ids: whIds,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (whError) {
+            throw whError;
+          }
+        }
+
+        // If no user_warehouse_presets built yet, fallback to RoleWarehousePreset respecting allowed locations
+        if (userWarehousePresets.length === 0) {
+          for (const role of roles) {
+            const roleWarehousePresets = await this.usersRepository.manager
+              .getRepository(RoleWarehousePreset)
+              .find({
+                where: { role_id: role.id, status_id: 1 },
+                relations: ["warehouse"],
+              });
+
+            for (const ak of accessKeys) {
+              let akWhs = roleWarehousePresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akWhs.length === 0) {
+                akWhs = roleWarehousePresets;
+              }
+
+              const allowedLocs = allowedLocationsByRoleAndAk.get(
+                `${role.id}_${ak.id}`,
+              );
+
+              const roleWhIds = Array.from(
+                new Set(
+                  akWhs
+                    .filter((preset) => {
+                      if (!allowedLocs || allowedLocs.size === 0) return true;
+                      return (
+                        preset.warehouse &&
+                        allowedLocs.has(preset.warehouse.location_id)
+                      );
+                    })
+                    .map((preset) => preset.warehouse_id),
+                ),
+              );
+
+              if (roleWhIds.length > 0) {
+                userWarehousePresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  warehouse_ids: roleWhIds,
+                });
+              }
+            }
+          }
+        }
+
+        // Check if Vendor(s) column has values and build user_vendor_presets per role & access key
+        let userVendorPresets: any[] = [];
+        const rawVendorInput =
+          formattedRow["Vendor(s)"] ?? formattedRow["Vendors"];
+        const hasVendorInput = Boolean(
+          rawVendorInput && String(rawVendorInput).trim() !== "",
+        );
+
+        if (hasVendorInput) {
+          try {
+            const vendorIdentifiers = String(rawVendorInput)
+              .split(",")
+              .map((item: string) => item.trim())
+              .filter(Boolean);
+
+            if (vendorIdentifiers.length > 0) {
+              const whereConditions: any[] = [];
+              for (const ident of vendorIdentifiers) {
+                whereConditions.push({ service_provider_name: ident });
+                whereConditions.push({
+                  service_provider_name: ident.toUpperCase(),
+                });
+                whereConditions.push({ vendor_code: ident });
+                whereConditions.push({ vendor_code: ident.toUpperCase() });
+                whereConditions.push({ service_provider_code: ident });
+                whereConditions.push({
+                  service_provider_code: ident.toUpperCase(),
+                });
+                if (!isNaN(Number(ident)) && Number(ident) > 0) {
+                  whereConditions.push({ id: Number(ident) });
+                }
+              }
+
+              const vendors = await this.vendorRepository.find({
+                where: whereConditions,
+              });
+
+              const foundNames = new Set(
+                vendors.map((v) =>
+                  (v.service_provider_name || "").toLowerCase(),
+                ),
+              );
+              const foundCodes = new Set(
+                vendors.map((v) => (v.vendor_code || "").toLowerCase()),
+              );
+              const foundSpCodes = new Set(
+                vendors.map((v) =>
+                  (v.service_provider_code || "").toLowerCase(),
+                ),
+              );
+              const foundIds = new Set(vendors.map((v) => String(v.id)));
+
+              const notFound = vendorIdentifiers.filter(
+                (ident) =>
+                  !foundNames.has(ident.toLowerCase()) &&
+                  !foundCodes.has(ident.toLowerCase()) &&
+                  !foundSpCodes.has(ident.toLowerCase()) &&
+                  !foundIds.has(ident),
+              );
+
+              if (notFound.length > 0) {
+                throw new Error(`Vendor(s) not found: ${notFound.join(", ")}`);
+              }
+
+              if (uploaderAllowedVendorIds.length > 0) {
+                const unauthorizedVendors = vendors.filter(
+                  (v) => !uploaderAllowedVendorIds.includes(v.id),
+                );
+                if (unauthorizedVendors.length > 0) {
+                  throw new Error(
+                    `Unauthorized vendor assignment: You do not have permission to assign vendor(s): ${unauthorizedVendors
+                      .map(
+                        (v) =>
+                          v.service_provider_name ||
+                          v.vendor_code ||
+                          v.service_provider_code,
+                      )
+                      .join(", ")}`,
+                  );
+                }
+              }
+
+              for (const role of roles) {
+                for (const ak of accessKeys) {
+                  const akVendors = vendors.filter(
+                    (v) => !v.access_key_id || v.access_key_id === ak.id,
+                  );
+
+                  const vIds = Array.from(new Set(akVendors.map((v) => v.id)));
+                  if (vIds.length > 0) {
+                    userVendorPresets.push({
+                      role_id: role.id,
+                      access_key_id: ak.id,
+                      vendor_ids: vIds,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (vError) {
+            throw vError;
+          }
+        }
+
+        // If no user_vendor_presets built yet, fallback to RoleVendorPreset (independent of locations)
+        if (userVendorPresets.length === 0) {
+          for (const role of roles) {
+            const roleVendorPresets = await this.usersRepository.manager
+              .getRepository(RoleVendorPreset)
+              .find({
+                where: { role_id: role.id, status_id: 1 },
+              });
+
+            for (const ak of accessKeys) {
+              let akVnds = roleVendorPresets.filter(
+                (p) => p.access_key_id === ak.id,
+              );
+              if (akVnds.length === 0) {
+                akVnds = roleVendorPresets;
+              }
+
+              const roleVendorIds = Array.from(
+                new Set(akVnds.map((preset) => preset.vendor_id)),
+              );
+
+              if (roleVendorIds.length > 0) {
+                userVendorPresets.push({
+                  role_id: role.id,
+                  access_key_id: ak.id,
+                  vendor_ids: roleVendorIds,
+                });
+              }
             }
           }
         }
@@ -2244,28 +4021,287 @@ export class UsersService {
         }
 
         if (existingUser) {
-          // Update logic
-          const updateUserDto: any = {
-            user_name: formattedRow["Username"],
-            emp_number: formattedRow["Employee No."],
-            first_name: formattedRow["First Name"],
-            last_name: formattedRow["Last Name"],
-            middle_name: formattedRow["Middle Name"],
-            email: formattedRow["Email"],
-            password: formattedRow["Password"],
-            current_access_key: accessKeys[0]?.id,
-            role_id: primaryRole.id, // Use primary (first) role as default
-            role_ids: allRoleIds, // Multiple roles
-            status_id: 1,
-            updated_by: created_by,
-            user_reset: formattedRow["User Reset"] || false,
-            theme_id: formattedRow["Theme ID"] || 1,
-            // Permissions/locations with role_ids from presets
-            access_key_id: accessKeys.map((k) => k.id),
-            user_permission_presets: allRoleActionPresets,
-            user_location_presets: userLocationPresets,
-          };
-          await this.update(existingUser.id, updateUserDto);
+          // Query existing active user permissions to determine currently assigned roles & access keys
+          const existingPermissions = await this.userPermissionsRepository.find(
+            {
+              where: { user_id: existingUser.id, status_id: 1 },
+              select: ["role_id", "access_key_id"],
+            },
+          );
+          const existingRoleIds = Array.from(
+            new Set(
+              existingPermissions
+                .map((p) => p.role_id)
+                .filter((r): r is number => typeof r === "number" && r > 0),
+            ),
+          );
+          const existingAccessKeyIds = Array.from(
+            new Set(
+              existingPermissions
+                .map((p) => p.access_key_id)
+                .filter((k): k is number => typeof k === "number" && k > 0),
+            ),
+          );
+
+          const newAccessKeyIds = accessKeys.map((k) => k.id);
+          let updateUserDto: any;
+
+          if (isOverwrite) {
+            // OVERWRITE MODE (1):
+            // Soft-deactivate previous roles, locations, warehouses, and vendors that are not present in this Excel row
+            const rolesToDeactivate = existingRoleIds.filter(
+              (rId) => !allRoleIds.includes(rId),
+            );
+            if (rolesToDeactivate.length > 0) {
+              await this.userPermissionsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userLocationsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userWarehousesRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              await this.userVendorsRepository.update(
+                { user_id: existingUser.id, role_id: In(rolesToDeactivate) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+            }
+
+            let finalOverwriteWhPresets = userWarehousePresets;
+            if (!hasWarehouseInput) {
+              await this.userWarehousesRepository.update(
+                { user_id: existingUser.id, role_id: In(allRoleIds) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              finalOverwriteWhPresets = [];
+            }
+
+            let finalOverwriteVendorPresets = userVendorPresets;
+            if (!hasVendorInput) {
+              await this.userVendorsRepository.update(
+                { user_id: existingUser.id, role_id: In(allRoleIds) },
+                {
+                  status_id: 2,
+                  updated_by: created_by,
+                  modified_at: new Date(),
+                },
+              );
+              finalOverwriteVendorPresets = [];
+            }
+
+            updateUserDto = {
+              user_name: formattedRow["Username"],
+              emp_number: formattedRow["Employee No."],
+              first_name: formattedRow["First Name"],
+              last_name: formattedRow["Last Name"],
+              middle_name: formattedRow["Middle Name"],
+              email: formattedRow["Email"],
+              ...(formattedRow["Password"]
+                ? { password: formattedRow["Password"] }
+                : {}),
+              current_access_key: accessKeys[0]?.id,
+              role_id: primaryRole.id,
+              role_ids: allRoleIds,
+              status_id: 1,
+              updated_by: created_by,
+              user_reset: formattedRow["User Reset"] || false,
+              theme_id: formattedRow["Theme ID"] || 1,
+              access_key_id: newAccessKeyIds,
+              user_permission_presets: allRoleActionPresets,
+              user_location_presets: userLocationPresets,
+              user_warehouse_presets: finalOverwriteWhPresets,
+              user_vendor_presets: finalOverwriteVendorPresets,
+              roles_to_update: allRoleIds,
+            };
+            await this.update(existingUser.id, updateUserDto);
+          } else {
+            // SMART APPEND / MERGE MODE (Default: 0 / Blank):
+            // 1. Preserve existing active roles & access keys
+            const mergedRoleIds = Array.from(
+              new Set([...existingRoleIds, ...allRoleIds]),
+            );
+            const mergedAccessKeyIds = Array.from(
+              new Set([...existingAccessKeyIds, ...newAccessKeyIds]),
+            );
+
+            // 2. Fetch existing active presets for the target user under the uploaded roles
+            const [existingActiveLocs, existingActiveWhs, existingActiveVnds] =
+              await Promise.all([
+                this.userLocationsRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "location_id"],
+                }),
+                this.userWarehousesRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "warehouse_id"],
+                }),
+                this.userVendorsRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "vendor_id"],
+                }),
+              ]);
+
+            // Group existing active presets by `${role_id}_${access_key_id}`
+            const existingLocMap = new Map<string, number[]>();
+            for (const el of existingActiveLocs) {
+              const k = `${el.role_id}_${el.access_key_id}`;
+              if (!existingLocMap.has(k)) existingLocMap.set(k, []);
+              existingLocMap.get(k)!.push(Number(el.location_id));
+            }
+
+            const existingWhMap = new Map<string, number[]>();
+            for (const ew of existingActiveWhs) {
+              const k = `${ew.role_id}_${ew.access_key_id}`;
+              if (!existingWhMap.has(k)) existingWhMap.set(k, []);
+              existingWhMap.get(k)!.push(Number(ew.warehouse_id));
+            }
+
+            const existingVndMap = new Map<string, number[]>();
+            for (const ev of existingActiveVnds) {
+              const k = `${ev.role_id}_${ev.access_key_id}`;
+              if (!existingVndMap.has(k)) existingVndMap.set(k, []);
+              existingVndMap.get(k)!.push(Number(ev.vendor_id));
+            }
+
+            // Location Smart Append:
+            let finalUserLocationPresets = [...userLocationPresets];
+            if (hasLocationInput) {
+              finalUserLocationPresets = finalUserLocationPresets.map((lp) => {
+                const k = `${lp.role_id}_${lp.access_key_id}`;
+                const prev = existingLocMap.get(k) || [];
+                return {
+                  ...lp,
+                  location_ids: Array.from(
+                    new Set([...prev, ...(lp.location_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveLocs.length > 0) {
+              finalUserLocationPresets = [];
+              existingLocMap.forEach((locIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserLocationPresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  location_ids: Array.from(new Set(locIds)),
+                });
+              });
+            }
+
+            // Warehouse Smart Append:
+            let finalUserWarehousePresets = [...userWarehousePresets];
+            if (hasWarehouseInput) {
+              finalUserWarehousePresets = finalUserWarehousePresets.map((wp) => {
+                const k = `${wp.role_id}_${wp.access_key_id}`;
+                const prev = existingWhMap.get(k) || [];
+                return {
+                  ...wp,
+                  warehouse_ids: Array.from(
+                    new Set([...prev, ...(wp.warehouse_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveWhs.length > 0) {
+              finalUserWarehousePresets = [];
+              existingWhMap.forEach((whIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserWarehousePresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  warehouse_ids: Array.from(new Set(whIds)),
+                });
+              });
+            }
+
+            // Vendor Smart Append:
+            let finalUserVendorPresets = [...userVendorPresets];
+            if (hasVendorInput) {
+              finalUserVendorPresets = finalUserVendorPresets.map((vp) => {
+                const k = `${vp.role_id}_${vp.access_key_id}`;
+                const prev = existingVndMap.get(k) || [];
+                return {
+                  ...vp,
+                  vendor_ids: Array.from(
+                    new Set([...prev, ...(vp.vendor_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveVnds.length > 0) {
+              finalUserVendorPresets = [];
+              existingVndMap.forEach((vIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserVendorPresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  vendor_ids: Array.from(new Set(vIds)),
+                });
+              });
+            }
+
+            updateUserDto = {
+              user_name: formattedRow["Username"],
+              emp_number: formattedRow["Employee No."],
+              first_name: formattedRow["First Name"],
+              last_name: formattedRow["Last Name"],
+              middle_name: formattedRow["Middle Name"],
+              email: formattedRow["Email"],
+              ...(formattedRow["Password"]
+                ? { password: formattedRow["Password"] }
+                : {}),
+              current_access_key:
+                existingUser.current_access_key || accessKeys[0]?.id,
+              role_id: existingUser.role_id || primaryRole.id,
+              role_ids: mergedRoleIds,
+              status_id: 1,
+              updated_by: created_by,
+              user_reset:
+                formattedRow["User Reset"] ?? existingUser.user_reset ?? false,
+              theme_id: formattedRow["Theme ID"] || existingUser.theme_id || 1,
+              access_key_id: mergedAccessKeyIds,
+              user_permission_presets: allRoleActionPresets,
+              user_location_presets: finalUserLocationPresets,
+              user_warehouse_presets: finalUserWarehousePresets,
+              user_vendor_presets: finalUserVendorPresets,
+              roles_to_update: allRoleIds, // Only update the uploaded roles; other roles remain untouched and active!
+            };
+            await this.update(existingUser.id, updateUserDto);
+          }
           // Audit trail for update
           await this.userAuditTrailCreateService.create(
             {
@@ -2347,7 +4383,28 @@ export class UsersService {
           if (userLocationPresets.length > 0) {
             await this.createUserLocationsFromPresets(
               savedUser.id,
+              accessKeys.map((k) => k.id),
               userLocationPresets,
+              created_by,
+            );
+          }
+
+          // Create user_warehouses from presets
+          if (userWarehousePresets.length > 0) {
+            await this.createUserWarehousesFromPresets(
+              savedUser.id,
+              accessKeys.map((k) => k.id),
+              userWarehousePresets,
+              created_by,
+            );
+          }
+
+          // Create user_vendors from presets
+          if (userVendorPresets.length > 0) {
+            await this.createUserVendorsFromPresets(
+              savedUser.id,
+              accessKeys.map((k) => k.id),
+              userVendorPresets,
               created_by,
             );
           }
@@ -2442,10 +4499,17 @@ export class UsersService {
     }
   }
 
-  async getUserLocationsByLocation(location_id: number): Promise<number[]> {
+  async getUserLocationsByLocation(
+    location_id: number,
+    access_key_id?: number,
+  ): Promise<number[]> {
     try {
+      const where: any = { location_id, status_id: 1 };
+      if (access_key_id) {
+        where.access_key_id = access_key_id;
+      }
       const userLocations = await this.userLocationsRepository.find({
-        where: { location_id, status_id: 1 },
+        where,
       });
       const ids = userLocations
         .filter((ul) => ul.user_id !== null)
@@ -2478,7 +4542,15 @@ export class UsersService {
 
       // Get user permissions with role, system, and system access keys relations
       const userPermissions = await this.userPermissionsRepository.find({
-        where: { user_id, status_id: 1, access_key_id },
+        where: {
+          user_id,
+          status_id: 1,
+          access_key_id,
+          role: {
+            status_id: 1,
+            system: { status_id: 1, system_access_keys: { status_id: 1 } },
+          },
+        },
         relations: ["role", "role.system", "role.system.system_access_keys"],
       });
 

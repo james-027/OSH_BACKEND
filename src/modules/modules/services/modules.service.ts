@@ -18,6 +18,7 @@ import { SSEEventEmitterHelper } from "src/modules/sse/services/sse-event-emitte
 import { SSEEmitterService } from "src/modules/sse/services/sse-emitter.service";
 import { UsersService } from "src/modules/users/services/users.service";
 import { CacheInvalidationService } from "../../cache/services/cache-invalidation.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 
 @Injectable()
 export class ModulesService {
@@ -33,6 +34,7 @@ export class ModulesService {
     private usersService: UsersService,
     private sseEmitterService: SSEEmitterService,
     private cacheInvalidationService: CacheInvalidationService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async findAll(): Promise<any[]> {
@@ -257,6 +259,8 @@ export class ModulesService {
         });
         this.sseEventEmitter.emitCreateSignal("modules", createdModule.id);
         await this.cacheInvalidationService.invalidateFindAll("users");
+        this.eventEmitter.emit("module.created", { id: createdModule.id });
+        this.eventEmitter.emit("module.changed", { id: createdModule.id });
       } catch (err) {
         logger.error("SSE event failed:", err);
       }
@@ -428,6 +432,8 @@ export class ModulesService {
         });
         this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
         await this.cacheInvalidationService.invalidateFindAll("users");
+        this.eventEmitter.emit("module.updated", { id: updatedModule.id });
+        this.eventEmitter.emit("module.changed", { id: updatedModule.id });
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }
@@ -458,6 +464,7 @@ export class ModulesService {
       }
 
       await this.moduleRepository.remove(moduleToRemove);
+      this.eventEmitter.emit("module.changed", { id });
 
       logger.info(`Successfully deleted module with ID: ${id}`);
       return { message: "Module successfully deleted." };
@@ -549,6 +556,7 @@ export class ModulesService {
         });
         this.sseEventEmitter.emitUpdateSignal("modules", updatedModule.id);
         await this.cacheInvalidationService.invalidateFindAll("users");
+        this.eventEmitter.emit("module.changed", { id: updatedModule.id });
       } catch (err) {
         logger.error("SSE event failed for update:", err);
       }

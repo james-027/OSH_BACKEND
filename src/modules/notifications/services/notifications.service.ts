@@ -27,7 +27,10 @@ import {
   NotificationQueryDto,
   AdminNotificationAuditDto,
 } from "../dto/NotificationQueryDto";
-import { STATUS_IDS } from "src/constants/customConstants";
+import {
+  STATUS_IDS,
+  NOTIFICATION_EVENT_CATALOG,
+} from "src/constants/customConstants";
 
 export interface TriggerNotificationParams {
   moduleId?: number;
@@ -220,6 +223,7 @@ export class NotificationsService {
             await this.commonUtilitiesService.getUserAllowedLocationIds(
               creator.id,
               creator.role_id,
+              resolvedAccessKeyId ?? undefined,
             );
         }
 
@@ -230,6 +234,8 @@ export class NotificationsService {
               await this.commonUtilitiesService.filterUsersByAllowedLocations(
                 Array.from(candidateRoleUserIds),
                 targetLocIds,
+                undefined,
+                resolvedAccessKeyId ?? undefined,
               );
             matchedUserIds.forEach((uid) => targetUserIds.add(uid));
           } else {
@@ -246,17 +252,38 @@ export class NotificationsService {
         return null;
       }
 
-      // 4. Interpolate title, description and action URL
+      // 4. Interpolate title, description and action URL (supports legacy payload, source, destination, and navigation)
       const payloadData =
         data?.payload && typeof data.payload === "object" ? data.payload : {};
+      const sourceData =
+        data?.source && typeof data.source === "object" ? data.source : {};
+      const destinationData =
+        data?.destination && typeof data.destination === "object"
+          ? data.destination
+          : {};
+
       const templateParams: Record<string, any> = {
         ...payloadData,
+        ...sourceData,
+        ...destinationData,
         ...data,
         ref_id: refId,
         creator_id: creatorId,
         creator_name: creatorName,
         user_name: creatorName,
-        remarks: data?.remarks ?? payloadData.remarks ?? "",
+        remarks:
+          data?.remarks ?? sourceData?.remarks ?? payloadData?.remarks ?? "",
+        reference_no:
+          data?.reference_no ??
+          sourceData?.reference_no ??
+          destinationData?.reference_no ??
+          payloadData?.reference_no ??
+          "",
+        ref_ids:
+          data?.ref_ids ??
+          (Array.isArray(destinationData?.ref_ids)
+            ? destinationData.ref_ids.join(", ")
+            : (destinationData?.ref_ids ?? "")),
       };
 
       // Dynamic matrix templates configured in admin take priority over hardcoded defaults
@@ -346,10 +373,15 @@ export class NotificationsService {
   /**
    * Get paginated notifications for the logged-in user
    */
-  async getMyNotifications(userId: number, query: NotificationQueryDto) {
+  async getMyNotifications(
+    userId: number,
+    query: NotificationQueryDto,
+    accessKeyId: number | null,
+  ) {
     const page = Math.max(1, query.page || 1);
     const limit = Math.max(1, Math.min(100, query.limit || 20));
     const skip = (page - 1) * limit;
+    const accessKeyFilter = query.access_key_id ?? null;
 
     const qb = this.recipientRepository
       .createQueryBuilder("rec")
@@ -364,10 +396,10 @@ export class NotificationsService {
       qb.andWhere("rec.is_read = :isRead", { isRead: false });
     }
 
-    if (query.access_key_id) {
+    if (accessKeyFilter) {
       qb.andWhere(
         "(notif.access_key_id = :accessKeyId OR notif.access_key_id IS NULL)",
-        { accessKeyId: query.access_key_id },
+        { accessKeyId: accessKeyFilter },
       );
     }
 
@@ -381,7 +413,7 @@ export class NotificationsService {
     qb.orderBy("rec.created_at", "DESC").skip(skip).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
-    const unreadCount = await this.getUnreadCount(userId);
+    const unreadCount = await this.getUnreadCount(userId, accessKeyFilter);
 
     return {
       items: items.map((item) => ({
@@ -419,6 +451,7 @@ export class NotificationsService {
         limit,
         totalPages: Math.ceil(total / limit),
         unread_count: unreadCount,
+        access_key_id: accessKeyFilter,
       },
     };
   }
@@ -426,7 +459,10 @@ export class NotificationsService {
   /**
    * Get unread notification count with Redis caching for instant badge render
    */
-  async getUnreadCount(userId: number): Promise<number> {
+  async getUnreadCount(
+    userId: number,
+    accessKeyId: number | null,
+  ): Promise<number> {
     const cacheKey = `notifications:unread:${userId}`;
     const redis = getRedisClient();
 
@@ -447,7 +483,12 @@ export class NotificationsService {
         user_id: userId,
         is_read: false,
         is_dismissed: false,
+        notification: {
+          access_key_id: accessKeyId ?? 0,
+          status_id: STATUS_IDS.ACTIVE,
+        },
       },
+      relations: ["notification"],
     });
 
     if (redis && redis.isOpen) {
@@ -671,6 +712,10 @@ export class NotificationsService {
   // 4. MATRIX CONFIGURATION CRUD (ADMIN SETTINGS)
   // =========================================================================
 
+  getEventCatalog() {
+    return Object.values(NOTIFICATION_EVENT_CATALOG);
+  }
+
   async findAllMatrix() {
     return this.matrixRepository.find({
       relations: [
@@ -879,11 +924,43 @@ export class NotificationsService {
     params: Record<string, any>,
   ): string {
     if (!template) return "";
-    return template.replace(/\{(\w+)\}/g, (_, key) => {
-      return params[key] !== undefined && params[key] !== null
-        ? String(params[key])
-        : `{${key}}`;
-    });
+
+    const resolveValue = (key: string): any => {
+      if (params[key] !== undefined && params[key] !== null) {
+        return params[key];
+      }
+      if (key.includes(".")) {
+        return key
+          .split(".")
+          .reduce(
+            (acc, part) =>
+              acc && acc[part] !== undefined ? acc[part] : undefined,
+            params,
+          );
+      }
+      return undefined;
+    };
+
+    const formatValue = (val: any): string => {
+      if (Array.isArray(val)) {
+        return val.join(", ");
+      }
+      if (typeof val === "object" && val !== null) {
+        return JSON.stringify(val);
+      }
+      return String(val);
+    };
+
+    // Supports {var} and (var), with nested dot notation like {source.reference_no}
+    return template
+      .replace(/\{([\w.-]+)\}/g, (match, key) => {
+        const val = resolveValue(key);
+        return val !== undefined && val !== null ? formatValue(val) : match;
+      })
+      .replace(/\(([\w.-]+)\)/g, (match, key) => {
+        const val = resolveValue(key);
+        return val !== undefined && val !== null ? formatValue(val) : match;
+      });
   }
 
   private async invalidateUnreadCountCache(userIds: number[]): Promise<void> {

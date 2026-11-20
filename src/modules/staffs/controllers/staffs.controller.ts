@@ -147,6 +147,7 @@ export class StaffsController {
       file,
       req.user.id,
       req.user.current_access_key,
+      req.user?.role_id,
     );
   }
 
@@ -192,6 +193,7 @@ export class StaffsController {
       file,
       req.user.id,
       req.user.current_access_key,
+      req.user.role_id,
     );
   }
 
@@ -214,6 +216,7 @@ export class StaffsController {
       file,
       req.user.id,
       req.user.current_access_key,
+      req.user.role_id,
     );
   }
 

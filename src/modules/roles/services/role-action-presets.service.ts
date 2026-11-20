@@ -13,9 +13,15 @@ import { Action } from "../../../entities/Action";
 import { Status } from "../../../entities/Status";
 import { User } from "../../../entities/User";
 import { RoleLocationPreset } from "../../../entities/RoleLocationPreset";
+import { RoleWarehousePreset } from "../../../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../../../entities/RoleVendorPreset";
 import { Location } from "../../../entities/Location";
+import { Warehouse } from "../../../entities/Warehouse";
+import { Vendor } from "../../../entities/Vendor";
 import { UserPermissions } from "../../../entities/UserPermissions";
 import { UserLocations } from "../../../entities/UserLocations";
+import { UserWarehouses } from "../../../entities/UserWarehouses";
+import { UserVendors } from "../../../entities/UserVendor";
 import { AccessKey } from "../../../entities/AccessKey";
 import { CreateRolePresetDto } from "../dto/CreateRolePresetDto";
 import { UpdateRolePresetDto } from "../dto/UpdateRolePresetDto";
@@ -46,12 +52,24 @@ export class RoleActionPresetsService {
     private userRepository: Repository<User>,
     @InjectRepository(RoleLocationPreset)
     private roleLocationPresetRepository: Repository<RoleLocationPreset>,
+    @InjectRepository(RoleWarehousePreset)
+    private roleWarehousePresetRepository: Repository<RoleWarehousePreset>,
+    @InjectRepository(RoleVendorPreset)
+    private roleVendorPresetRepository: Repository<RoleVendorPreset>,
     @InjectRepository(Location)
     private locationRepository: Repository<Location>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(Vendor)
+    private vendorRepository: Repository<Vendor>,
     @InjectRepository(UserPermissions)
     private userPermissionsRepository: Repository<UserPermissions>,
     @InjectRepository(UserLocations)
     private userLocationsRepository: Repository<UserLocations>,
+    @InjectRepository(UserWarehouses)
+    private userWarehousesRepository: Repository<UserWarehouses>,
+    @InjectRepository(UserVendors)
+    private userVendorsRepository: Repository<UserVendors>,
     @InjectRepository(AccessKey)
     private accessKeyRepository: Repository<AccessKey>,
     private dataSource: DataSource,
@@ -737,67 +755,160 @@ export class RoleActionPresetsService {
     }
   }
   // Method to get nested structure for a specific role (similar to Express nestedByRole)
-  async nestedByRole(role_id: number): Promise<any> {
+  async nestedByRole(role_id: number, accessKeyId?: number): Promise<any> {
     if (isNaN(role_id)) {
       throw new BadRequestException("Invalid role ID provided.");
     }
 
     try {
+      // Find role first to ensure role exists and role_name is always available
+      const role = await this.roleRepository.findOneBy({ id: role_id });
+
+      // Always query all active presets across all access keys for this role
+      const locationWhere: any = { role_id, status_id: 1 };
+      const actionWhere: any = { role_id, status_id: 1 };
+
       // Get role location presets
       const roleLocationPresets = await this.roleLocationPresetRepository.find({
+        where: locationWhere,
+        relations: ["location", "role"],
+      });
+
+      // Get role warehouse presets
+      const roleWarehousePresets = await this.roleWarehousePresetRepository.find({
         where: { role_id, status_id: 1 },
-        relations: ["location"],
+        relations: ["warehouse", "role"],
+      });
+
+      // Get role vendor presets
+      const roleVendorPresets = await this.roleVendorPresetRepository.find({
+        where: { role_id, status_id: 1 },
+        relations: ["vendor", "role"],
       });
 
       // Get role action presets
       const roleActionPresets = await this.roleActionPresetRepository.find({
-        where: { role_id, status_id: 1 },
-        relations: ["module", "action"],
+        where: actionWhere,
+        relations: ["module", "action", "role"],
       });
 
       // Check if role exists
-      if (roleLocationPresets.length === 0 && roleActionPresets.length === 0) {
-        const role = await this.roleRepository.findOneBy({ id: role_id });
-        if (!role) {
-          throw new NotFoundException(`Role with ID ${role_id} not found.`);
-        }
+      if (
+        !role &&
+        roleLocationPresets.length === 0 &&
+        roleActionPresets.length === 0 &&
+        roleWarehousePresets.length === 0 &&
+        roleVendorPresets.length === 0
+      ) {
+        throw new NotFoundException(`Role with ID ${role_id} not found.`);
       }
 
-      // Group action presets by module
-      const moduleActionMap = new Map<
+      // Group action presets and location presets by access_key
+      const byAccessKey: Record<
         number,
-        { actions: number[]; module_name: string; order_level: number }
-      >();
-      roleActionPresets.forEach((preset) => {
-        if (!moduleActionMap.has(preset.module_id)) {
-          moduleActionMap.set(preset.module_id, {
-            actions: [],
-            module_name: preset.module?.module_name || "",
-            order_level: preset.module?.order_level || 0,
-          });
+        {
+          location_ids: number[];
+          warehouse_ids: number[];
+          vendor_ids: number[];
+          presets: Array<{
+            role_id: number;
+            module_ids: number;
+            module_name: string;
+            action_ids: number[];
+            order_level: number;
+          }>;
         }
-        moduleActionMap.get(preset.module_id)!.actions.push(preset.action_id);
-      });
+      > = {};
 
-      // Build presets array
-      const presets = Array.from(moduleActionMap.entries()).map(
-        ([module_id, data]) => ({
-          role_id,
-          module_ids: module_id,
-          module_name: data.module_name,
-          action_ids: data.actions.sort(),
-          order_level: data.order_level,
-        }),
+      // Distinct access key IDs
+      const allAccessKeyIds = Array.from(
+        new Set([
+          ...roleActionPresets.map((ap) => ap.access_key_id),
+          ...roleLocationPresets.map((lp) => lp.access_key_id),
+          ...roleWarehousePresets.map((wp) => wp.access_key_id),
+          ...roleVendorPresets.map((vp) => vp.access_key_id),
+        ]),
       );
+
+      for (const akId of allAccessKeyIds) {
+        const akActions = roleActionPresets.filter(
+          (ap) => ap.access_key_id === akId,
+        );
+        const akLocations = roleLocationPresets
+          .filter((lp) => lp.access_key_id === akId)
+          .map((lp) => lp.location_id)
+          .sort((a, b) => a - b);
+        const akWarehouses = roleWarehousePresets
+          .filter((wp) => wp.access_key_id === akId)
+          .map((wp) => wp.warehouse_id)
+          .sort((a, b) => a - b);
+        const akVendors = roleVendorPresets
+          .filter((vp) => vp.access_key_id === akId)
+          .map((vp) => vp.vendor_id)
+          .sort((a, b) => a - b);
+
+        const akModuleMap = new Map<
+          number,
+          { actions: number[]; module_name: string; order_level: number }
+        >();
+
+        akActions.forEach((preset) => {
+          if (!akModuleMap.has(preset.module_id)) {
+            akModuleMap.set(preset.module_id, {
+              actions: [],
+              module_name: preset.module?.module_name || "",
+              order_level: preset.module?.order_level || 0,
+            });
+          }
+          akModuleMap.get(preset.module_id)!.actions.push(preset.action_id);
+        });
+
+        const akPresets = Array.from(akModuleMap.entries()).map(
+          ([module_id, data]) => ({
+            role_id,
+            module_ids: module_id,
+            module_name: data.module_name,
+            action_ids: data.actions.sort((a, b) => a - b),
+            order_level: data.order_level,
+          }),
+        );
+
+        byAccessKey[akId] = {
+          location_ids: akLocations,
+          warehouse_ids: akWarehouses,
+          vendor_ids: akVendors,
+          presets: akPresets.sort((a, b) => a.order_level - b.order_level),
+        };
+      }
+
+      // Default top-level presets, locations, warehouses, and vendors (for backward compatibility)
+      const defaultAkId =
+        accessKeyId && byAccessKey[accessKeyId]
+          ? accessKeyId
+          : allAccessKeyIds[0] || accessKeyId || 1;
+      const defaultData =
+        byAccessKey[defaultAkId] ||
+        byAccessKey[allAccessKeyIds[0]] || {
+          location_ids: [],
+          warehouse_ids: [],
+          vendor_ids: [],
+          presets: [],
+        };
 
       // Build response
       const response_data = {
         role_id,
-        role_name: roleActionPresets[0]?.role?.role_name || null,
-        location_ids: roleLocationPresets
-          .map((preset) => preset.location_id)
-          .sort(),
-        presets: presets.sort((a, b) => a.order_level - b.order_level),
+        role_name:
+          role?.role_name ||
+          roleActionPresets[0]?.role?.role_name ||
+          roleLocationPresets[0]?.role?.role_name ||
+          null,
+        location_ids: defaultData.location_ids,
+        warehouse_ids: defaultData.warehouse_ids || [],
+        vendor_ids: defaultData.vendor_ids || [],
+        presets: defaultData.presets,
+        by_access_key: byAccessKey,
+        access_key_ids: allAccessKeyIds,
       };
 
       return response_data;
@@ -847,12 +958,31 @@ export class RoleActionPresetsService {
         relations: ["role", "location", "status", "createdBy", "updatedBy"],
       });
 
+      // Get role warehouse presets for this role
+      const roleWarehousePresets = await this.roleWarehousePresetRepository.find({
+        where: { role_id: role.id },
+        relations: ["role", "warehouse", "status", "createdBy", "updatedBy"],
+      });
+
+      // Get role vendor presets for this role
+      const roleVendorPresets = await this.roleVendorPresetRepository.find({
+        where: { role_id: role.id },
+        relations: ["role", "vendor", "status", "createdBy", "updatedBy"],
+      });
+
       // Only include roles that have presets
-      if (roleActionPresets.length > 0 || roleLocationPresets.length > 0) {
+      if (
+        roleActionPresets.length > 0 ||
+        roleLocationPresets.length > 0 ||
+        roleWarehousePresets.length > 0 ||
+        roleVendorPresets.length > 0
+      ) {
         const nestedRole = this.createNestedStructure(
           role,
           roleActionPresets,
           roleLocationPresets,
+          roleWarehousePresets,
+          roleVendorPresets,
         );
         results.push(nestedRole);
       }
@@ -946,6 +1076,8 @@ export class RoleActionPresetsService {
     role: Role,
     roleActionPresets: RoleActionPreset[],
     roleLocationPresets: RoleLocationPreset[],
+    roleWarehousePresets: RoleWarehousePreset[] = [],
+    roleVendorPresets: RoleVendorPreset[] = [],
   ): Promise<any> {
     // Group modules and their actions
     const moduleMap = new Map<number, any>();
@@ -1006,6 +1138,20 @@ export class RoleActionPresetsService {
         location_name: preset.location?.location_name || null,
         status_id: preset.location?.status_id || null,
       })),
+      warehouses: roleWarehousePresets.map((preset) => ({
+        id: preset.warehouse?.id || null,
+        warehouse_name: preset.warehouse?.warehouse_name || null,
+        warehouse_code: preset.warehouse?.warehouse_code || null,
+        location_id: preset.warehouse?.location_id || null,
+        status_id: preset.warehouse?.status_id || null,
+      })),
+      vendors: roleVendorPresets.map((preset) => ({
+        id: preset.vendor?.id || null,
+        service_provider_name: preset.vendor?.service_provider_name || null,
+        service_provider_code: preset.vendor?.service_provider_code || null,
+        vendor_code: preset.vendor?.vendor_code || null,
+        status_id: preset.vendor?.status_id || null,
+      })),
       status: {
         id: role.status?.id || null,
         status_name: role.status?.status_name || null,
@@ -1039,6 +1185,7 @@ export class RoleActionPresetsService {
     status: Status,
     updatedBy: number,
     queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
   ): Promise<RoleLocationPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1059,10 +1206,10 @@ export class RoleActionPresetsService {
       );
     }
 
-    // Step 1: Mark all existing location presets for this role as inactive
+    // Step 1: Mark all existing location presets for this role within target access keys as inactive
     await queryRunner.manager.update(
       RoleLocationPreset,
-      { role_id: roleId },
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -1070,56 +1217,330 @@ export class RoleActionPresetsService {
       },
     );
 
-    // Step 2: Upsert location presets
+    // Step 2: Upsert location presets for each target access key
     const savedLocationPresets: RoleLocationPreset[] = [];
-    for (const locationId of locationIds) {
-      const existingPreset = await queryRunner.manager.findOne(
-        RoleLocationPreset,
-        {
-          where: { role_id: roleId, location_id: locationId },
-        },
-      );
-
-      if (existingPreset) {
-        // Update existing preset with the provided status
-        await queryRunner.manager.update(
+    for (const accessKeyId of targetAccessKeyIds) {
+      for (const locationId of locationIds) {
+        const existingPreset = await queryRunner.manager.findOne(
           RoleLocationPreset,
-          { id: existingPreset.id },
           {
-            status_id: status.id,
-            updated_by: updatedBy,
-            modified_at: new Date(),
+            where: {
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+            },
           },
         );
-        // Sync in-memory object with database updates
-        existingPreset.status_id = status.id;
-        existingPreset.updated_by = updatedBy;
-        existingPreset.modified_at = new Date();
-        savedLocationPresets.push(existingPreset);
-      } else {
-        // Create new preset
-        const newLocationPreset = new RoleLocationPreset();
-        newLocationPreset.role = role;
-        newLocationPreset.role_id = roleId;
-        newLocationPreset.location = locations.find(
-          (l) => l.id === locationId,
-        )!;
-        newLocationPreset.location_id = locationId;
-        newLocationPreset.status = status;
-        newLocationPreset.status_id = status.id;
-        newLocationPreset.createdBy = await this.userRepository.findOneBy({
-          id: updatedBy,
-        });
-        newLocationPreset.created_by = updatedBy;
-        const saved = await queryRunner.manager.save(
-          RoleLocationPreset,
-          newLocationPreset,
-        );
-        savedLocationPresets.push(saved);
+
+        if (existingPreset) {
+          // Update existing preset with the provided status
+          await queryRunner.manager.update(
+            RoleLocationPreset,
+            { id: existingPreset.id },
+            {
+              status_id: status.id,
+              updated_by: updatedBy,
+              modified_at: new Date(),
+            },
+          );
+          // Sync in-memory object with database updates
+          existingPreset.status_id = status.id;
+          existingPreset.updated_by = updatedBy;
+          existingPreset.modified_at = new Date();
+          savedLocationPresets.push(existingPreset);
+        } else {
+          // Create new preset
+          const newLocationPreset = new RoleLocationPreset();
+          newLocationPreset.role = role;
+          newLocationPreset.role_id = roleId;
+          newLocationPreset.location = locations.find(
+            (l) => l.id === locationId,
+          )!;
+          newLocationPreset.location_id = locationId;
+          newLocationPreset.access_key_id = accessKeyId;
+          newLocationPreset.status = status;
+          newLocationPreset.status_id = status.id;
+          newLocationPreset.createdBy = await this.userRepository.findOneBy({
+            id: updatedBy,
+          });
+          newLocationPreset.created_by = updatedBy;
+          const saved = await queryRunner.manager.save(
+            RoleLocationPreset,
+            newLocationPreset,
+          );
+          savedLocationPresets.push(saved);
+        }
       }
     }
 
     return savedLocationPresets;
+  }
+
+  // Helper method to update role warehouse presets with batch/in-memory optimization
+  private async updateRoleWarehousePresetsFromPresets(
+    roleId: number,
+    warehouseIds: number[],
+    status: Status,
+    updatedBy: number,
+    queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
+  ): Promise<RoleWarehousePreset[]> {
+    const role = await this.roleRepository.findOneBy({ id: roleId });
+    if (!role) {
+      throw new BadRequestException(`Role with ID ${roleId} not found.`);
+    }
+
+    // Step 1: Mark all existing warehouse presets for this role within target access keys as inactive
+    await queryRunner.manager.update(
+      RoleWarehousePreset,
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!warehouseIds || warehouseIds.length === 0) {
+      return [];
+    }
+
+    // Step 2: Validate all warehouses exist
+    const warehouses = await this.warehouseRepository.findBy({
+      id: In(warehouseIds),
+    });
+    if (warehouses.length !== warehouseIds.length) {
+      const foundWarehouseIds = new Set(warehouses.map((w) => w.id));
+      const missingWarehouseIds = warehouseIds.filter(
+        (id: number) => !foundWarehouseIds.has(id),
+      );
+      throw new BadRequestException(
+        `Warehouse IDs not found: ${missingWarehouseIds.join(", ")}`,
+      );
+    }
+
+    // Step 3: Location Respect Validation
+    // Fetch active location presets for this role and access keys from queryRunner
+    const activeLocationPresets = await queryRunner.manager.find(
+      RoleLocationPreset,
+      {
+        where: {
+          role_id: roleId,
+          access_key_id: In(targetAccessKeyIds),
+          status_id: 1,
+        },
+      },
+    );
+    const allowedLocationIds = new Set(
+      activeLocationPresets.map((lp: RoleLocationPreset) => lp.location_id),
+    );
+
+    // If active location presets exist, verify that all warehouses belong to allowed locations
+    if (allowedLocationIds.size > 0) {
+      const invalidWarehouses = warehouses.filter(
+        (w) => !allowedLocationIds.has(w.location_id),
+      );
+      if (invalidWarehouses.length > 0) {
+        const invalidNames = invalidWarehouses
+          .map((w) => `'${w.warehouse_name}' (ID: ${w.id})`)
+          .join(", ");
+        throw new BadRequestException(
+          `The following warehouses do not belong to the role's assigned locations: ${invalidNames}`,
+        );
+      }
+    }
+
+    // Step 4: Fetch existing warehouse presets in 1 query
+    const existingPresets = await queryRunner.manager.find(RoleWarehousePreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const presetMap = new Map<string, RoleWarehousePreset>();
+    existingPresets.forEach((p: RoleWarehousePreset) => {
+      presetMap.set(`${p.access_key_id}_${p.warehouse_id}`, p);
+    });
+
+    // Step 5: Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: RoleWarehousePreset[] = [];
+    const seen = new Set<string>();
+    const createdByUser = await this.userRepository.findOneBy({ id: updatedBy });
+
+    for (const accessKeyId of targetAccessKeyIds) {
+      for (const warehouseId of warehouseIds) {
+        const key = `${accessKeyId}_${warehouseId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const existing = presetMap.get(key);
+        if (existing) {
+          existing.status = status;
+          existing.status_id = status.id;
+          existing.updated_by = updatedBy;
+          existing.modified_at = new Date();
+          toUpdateIds.push(existing.id);
+        } else {
+          const newPreset = new RoleWarehousePreset();
+          newPreset.role = role;
+          newPreset.role_id = roleId;
+          newPreset.warehouse = warehouses.find((w) => w.id === warehouseId)!;
+          newPreset.warehouse_id = warehouseId;
+          newPreset.access_key_id = accessKeyId;
+          newPreset.status = status;
+          newPreset.status_id = status.id;
+          newPreset.createdBy = createdByUser!;
+          newPreset.created_by = updatedBy;
+          toInsert.push(newPreset);
+        }
+      }
+    }
+
+    if (toUpdateIds.length > 0) {
+      await queryRunner.manager.update(
+        RoleWarehousePreset,
+        { id: In(toUpdateIds) },
+        {
+          status_id: status.id,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+
+    if (toInsert.length > 0) {
+      await queryRunner.manager.save(RoleWarehousePreset, toInsert, {
+        chunk: 250,
+      });
+    }
+
+    return await queryRunner.manager.find(RoleWarehousePreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+        status_id: status.id,
+      },
+    });
+  }
+
+  // Helper method to update role vendor presets (mark-inactive-then-upsert pattern)
+  private async updateRoleVendorPresetsFromPresets(
+    roleId: number,
+    vendorIds: number[],
+    status: Status,
+    updatedBy: number,
+    queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
+  ): Promise<RoleVendorPreset[]> {
+    const role = await this.roleRepository.findOneBy({ id: roleId });
+    if (!role) {
+      throw new BadRequestException(`Role with ID ${roleId} not found.`);
+    }
+
+    // Step 1: Mark all existing vendor presets for this role within target access keys as inactive
+    await queryRunner.manager.update(
+      RoleVendorPreset,
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!vendorIds || vendorIds.length === 0) {
+      return [];
+    }
+
+    // Step 2: Validate all vendors exist
+    const vendors = await this.vendorRepository.findBy({
+      id: In(vendorIds),
+    });
+    if (vendors.length !== vendorIds.length) {
+      const foundVendorIds = new Set(vendors.map((v) => v.id));
+      const missingVendorIds = vendorIds.filter(
+        (id: number) => !foundVendorIds.has(id),
+      );
+      throw new BadRequestException(
+        `Vendor IDs not found: ${missingVendorIds.join(", ")}`,
+      );
+    }
+
+    // Step 3: Fetch existing vendor presets in 1 query
+    const existingPresets = await queryRunner.manager.find(RoleVendorPreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+      },
+    });
+
+    const presetMap = new Map<string, RoleVendorPreset>();
+    existingPresets.forEach((p: RoleVendorPreset) => {
+      presetMap.set(`${p.access_key_id}_${p.vendor_id}`, p);
+    });
+
+    // Step 4: Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: RoleVendorPreset[] = [];
+    const seen = new Set<string>();
+    const createdByUser = await this.userRepository.findOneBy({ id: updatedBy });
+
+    for (const accessKeyId of targetAccessKeyIds) {
+      for (const vendorId of vendorIds) {
+        const key = `${accessKeyId}_${vendorId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const existing = presetMap.get(key);
+        if (existing) {
+          existing.status = status;
+          existing.status_id = status.id;
+          existing.updated_by = updatedBy;
+          existing.modified_at = new Date();
+          toUpdateIds.push(existing.id);
+        } else {
+          const newPreset = new RoleVendorPreset();
+          newPreset.role = role;
+          newPreset.role_id = roleId;
+          newPreset.vendor = vendors.find((v) => v.id === vendorId)!;
+          newPreset.vendor_id = vendorId;
+          newPreset.access_key_id = accessKeyId;
+          newPreset.status = status;
+          newPreset.status_id = status.id;
+          newPreset.createdBy = createdByUser!;
+          newPreset.created_by = updatedBy;
+          toInsert.push(newPreset);
+        }
+      }
+    }
+
+    if (toUpdateIds.length > 0) {
+      await queryRunner.manager.update(
+        RoleVendorPreset,
+        { id: In(toUpdateIds) },
+        {
+          status_id: status.id,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+
+    if (toInsert.length > 0) {
+      await queryRunner.manager.save(RoleVendorPreset, toInsert, {
+        chunk: 250,
+      });
+    }
+
+    return await queryRunner.manager.find(RoleVendorPreset, {
+      where: {
+        role_id: roleId,
+        access_key_id: In(targetAccessKeyIds),
+        status_id: status.id,
+      },
+    });
   }
 
   // Helper method to update role action presets (mark-inactive-then-upsert pattern)
@@ -1129,6 +1550,7 @@ export class RoleActionPresetsService {
     status: Status,
     updatedBy: number,
     queryRunner: any,
+    targetAccessKeyIds: number[] = [1],
   ): Promise<RoleActionPreset[]> {
     const role = await this.roleRepository.findOneBy({ id: roleId });
     if (!role) {
@@ -1178,10 +1600,10 @@ export class RoleActionPresetsService {
       );
     }
 
-    // Step 1: Mark all existing action presets for this role as inactive
+    // Step 1: Mark all existing action presets for this role within target access keys as inactive
     await queryRunner.manager.update(
       RoleActionPreset,
-      { role_id: roleId },
+      { role_id: roleId, access_key_id: In(targetAccessKeyIds) },
       {
         status_id: 2, // inactive
         updated_by: updatedBy,
@@ -1200,6 +1622,9 @@ export class RoleActionPresetsService {
     for (const preset of presets) {
       const moduleId = preset.module_ids;
       const actionIds = preset.action_ids;
+      const keysForThisPreset = preset.access_key_id
+        ? [preset.access_key_id]
+        : targetAccessKeyIds;
 
       if (!Array.isArray(actionIds) || actionIds.length === 0) {
         logger.warn(
@@ -1208,62 +1633,58 @@ export class RoleActionPresetsService {
         continue;
       }
 
-      for (const actionId of actionIds) {
-        // Find existing preset regardless of status (to reactivate if needed)
-        const existingPreset = await queryRunner.manager.findOne(
-          RoleActionPreset,
-          {
-            where: {
-              role_id: roleId,
-              module_id: moduleId,
-              action_id: actionId,
-            },
-          },
-        );
-
-        if (existingPreset) {
-          // Update existing preset with the provided status
-          logger.info(
-            `Updating existing preset: role=${roleId}, module=${moduleId}, action=${actionId}, from status ${existingPreset.status_id} to ${status.id}`,
-          );
-
-          // Use queryRunner to update directly via query (more reliable in transaction)
-          await queryRunner.manager.update(
+      for (const accessKeyId of keysForThisPreset) {
+        for (const actionId of actionIds) {
+          // Find existing preset regardless of status (to reactivate if needed)
+          const existingPreset = await queryRunner.manager.findOne(
             RoleActionPreset,
-            { id: existingPreset.id },
             {
-              status_id: status.id,
-              updated_by: updatedBy,
-              modified_at: new Date(),
+              where: {
+                role_id: roleId,
+                module_id: moduleId,
+                action_id: actionId,
+                access_key_id: accessKeyId,
+              },
             },
           );
 
-          // Sync in-memory object with database updates
-          existingPreset.status_id = status.id;
-          existingPreset.updated_by = updatedBy;
-          existingPreset.modified_at = new Date();
-          savedActionPresets.push(existingPreset);
-        } else {
-          // Create new preset
-          logger.info(
-            `Creating new preset: role=${roleId}, module=${moduleId}, action=${actionId}`,
-          );
-          const newActionPreset = new RoleActionPreset();
-          newActionPreset.role = role;
-          newActionPreset.role_id = roleId;
-          newActionPreset.module = moduleMap.get(moduleId)!;
-          newActionPreset.module_id = moduleId;
-          newActionPreset.action = actionMap.get(actionId)!;
-          newActionPreset.action_id = actionId;
-          newActionPreset.status = status;
-          newActionPreset.status_id = status.id;
-          newActionPreset.createdBy = createdByUser;
-          newActionPreset.created_by = updatedBy;
-          const saved = await queryRunner.manager.save(
-            RoleActionPreset,
-            newActionPreset,
-          );
-          savedActionPresets.push(saved);
+          if (existingPreset) {
+            // Update existing preset with the provided status
+            await queryRunner.manager.update(
+              RoleActionPreset,
+              { id: existingPreset.id },
+              {
+                status_id: status.id,
+                updated_by: updatedBy,
+                modified_at: new Date(),
+              },
+            );
+
+            // Sync in-memory object with database updates
+            existingPreset.status_id = status.id;
+            existingPreset.updated_by = updatedBy;
+            existingPreset.modified_at = new Date();
+            savedActionPresets.push(existingPreset);
+          } else {
+            // Create new preset
+            const newActionPreset = new RoleActionPreset();
+            newActionPreset.role = role;
+            newActionPreset.role_id = roleId;
+            newActionPreset.module = moduleMap.get(moduleId)!;
+            newActionPreset.module_id = moduleId;
+            newActionPreset.action = actionMap.get(actionId)!;
+            newActionPreset.action_id = actionId;
+            newActionPreset.access_key_id = accessKeyId;
+            newActionPreset.status = status;
+            newActionPreset.status_id = status.id;
+            newActionPreset.createdBy = createdByUser;
+            newActionPreset.created_by = updatedBy;
+            const saved = await queryRunner.manager.save(
+              RoleActionPreset,
+              newActionPreset,
+            );
+            savedActionPresets.push(saved);
+          }
         }
       }
     }
@@ -1283,11 +1704,19 @@ export class RoleActionPresetsService {
     const {
       role_id,
       location_ids,
+      warehouse_ids = [],
+      vendor_ids = [],
       presets,
       status_id,
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_warehouses_to_users = false,
+      apply_vendors_to_users = false,
+      apply_permissions_to_users_only = false,
+      apply_locations_to_users_only = false,
+      apply_warehouses_to_users_only = false,
+      apply_vendors_to_users_only = false,
     } = createRolePresetDto;
 
     try {
@@ -1322,56 +1751,285 @@ export class RoleActionPresetsService {
           throw new BadRequestException("Authenticated user not found.");
         }
 
-        // Update location presets using helper (mark-inactive-then-upsert)
-        const savedLocationPresets =
-          await this.updateRoleLocationPresetsFromPresets(
-            role_id,
-            location_ids,
-            status,
-            userId,
-            queryRunner,
-          );
+        const targetAccessKeyIds =
+          createRolePresetDto.access_key_ids &&
+          createRolePresetDto.access_key_ids.length > 0
+            ? createRolePresetDto.access_key_ids
+            : [1];
 
-        // Update action presets using helper (mark-inactive-then-upsert)
-        const savedActionPresets =
-          await this.updateRoleActionPresetsFromPresets(
-            role_id,
-            presets,
-            status,
-            userId,
-            queryRunner,
-          );
+        const cascadeTargetAccessKeyIds =
+          createRolePresetDto.target_access_key_ids &&
+          createRolePresetDto.target_access_key_ids.length > 0
+            ? createRolePresetDto.target_access_key_ids
+            : targetAccessKeyIds;
 
-        // Handle user permissions and locations updates if requested
-        if (user_ids.length > 0) {
-          if (apply_permissions_to_users) {
-            // Get access keys that users already have permissions for
-            const userAccessKeys = await this.userPermissionsRepository
-              .createQueryBuilder("up")
-              .select("DISTINCT up.access_key_id", "access_key_id")
-              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-              .getRawMany();
+        let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedWarehousePresets: RoleWarehousePreset[] = [];
+        let savedVendorPresets: RoleVendorPreset[] = [];
+        let savedActionPresets: RoleActionPreset[] = [];
 
-            const accessKeyIds = userAccessKeys.map((uak) => uak.access_key_id);
+        const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleWarehouses = !apply_warehouses_to_users_only;
+        const shouldUpdateRoleVendors = !apply_vendors_to_users_only;
+        const shouldUpdateRoleActions = !apply_permissions_to_users_only;
 
-            if (accessKeyIds.length > 0) {
-              await this.updateUserPermissions(
-                user_ids,
+        if (
+          createRolePresetDto.tenant_configs &&
+          Object.keys(createRolePresetDto.tenant_configs).length > 0
+        ) {
+          for (const [keyIdStr, configObj] of Object.entries(
+            createRolePresetDto.tenant_configs,
+          )) {
+            const keyId = Number(keyIdStr);
+            const config = configObj as {
+              location_ids?: number[];
+              warehouse_ids?: number[];
+              vendor_ids?: number[];
+              presets?: any[];
+            };
+            if (shouldUpdateRoleLocations && config.location_ids) {
+              const locs = await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                config.location_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedLocationPresets.push(...locs);
+            }
+            const effectiveWarehouseIds =
+              config.warehouse_ids !== undefined
+                ? config.warehouse_ids
+                : warehouse_ids;
+            if (shouldUpdateRoleWarehouses && effectiveWarehouseIds !== undefined) {
+              const whs = await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                effectiveWarehouseIds,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedWarehousePresets.push(...whs);
+            }
+            const effectiveVendorIds =
+              config.vendor_ids !== undefined
+                ? config.vendor_ids
+                : vendor_ids;
+            if (shouldUpdateRoleVendors && effectiveVendorIds !== undefined) {
+              const vnds = await this.updateRoleVendorPresetsFromPresets(
+                role_id,
+                effectiveVendorIds,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedVendorPresets.push(...vnds);
+            }
+            if (shouldUpdateRoleActions && config.presets) {
+              const acts = await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                config.presets,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedActionPresets.push(...acts);
+            }
+          }
+        } else {
+          if (shouldUpdateRoleLocations) {
+            // Update location presets using helper (mark-inactive-then-upsert)
+            savedLocationPresets =
+              await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                location_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleWarehouses && warehouse_ids !== undefined) {
+            // Update warehouse presets using helper (mark-inactive-then-upsert)
+            savedWarehousePresets =
+              await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleVendors && vendor_ids !== undefined) {
+            // Update vendor presets using helper (mark-inactive-then-upsert)
+            savedVendorPresets =
+              await this.updateRoleVendorPresetsFromPresets(
+                role_id,
+                vendor_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleActions) {
+            // Update action presets using helper (mark-inactive-then-upsert)
+            savedActionPresets =
+              await this.updateRoleActionPresetsFromPresets(
                 role_id,
                 presets,
-                accessKeyIds,
+                status,
                 userId,
+                queryRunner,
+                targetAccessKeyIds,
               );
+          }
+        }
+
+        // Handle user permissions, locations, warehouses, and vendors updates if requested
+        const shouldCascadePermissions =
+          apply_permissions_to_users || apply_permissions_to_users_only;
+        const shouldCascadeLocations =
+          apply_locations_to_users || apply_locations_to_users_only;
+        const shouldCascadeWarehouses =
+          apply_warehouses_to_users || apply_warehouses_to_users_only;
+        const shouldCascadeVendors =
+          apply_vendors_to_users || apply_vendors_to_users_only;
+
+        if (
+          user_ids.length > 0 &&
+          (shouldCascadePermissions ||
+            shouldCascadeLocations ||
+            shouldCascadeWarehouses ||
+            shouldCascadeVendors)
+        ) {
+          const [userPermKeys, userLocKeys, userWhKeys, userVndKeys] =
+            await Promise.all([
+              this.userPermissionsRepository
+                .createQueryBuilder("up")
+                .select("DISTINCT up.access_key_id", "access_key_id")
+                .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userLocationsRepository
+                .createQueryBuilder("ul")
+                .select("DISTINCT ul.access_key_id", "access_key_id")
+                .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userWarehousesRepository
+                .createQueryBuilder("uw")
+                .select("DISTINCT uw.access_key_id", "access_key_id")
+                .where("uw.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userVendorsRepository
+                .createQueryBuilder("uv")
+                .select("DISTINCT uv.access_key_id", "access_key_id")
+                .where("uv.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+            ]);
+
+          let userKeys = Array.from(
+            new Set([
+              ...userPermKeys.map((k) => k.access_key_id),
+              ...userLocKeys.map((k) => k.access_key_id),
+              ...userWhKeys.map((k) => k.access_key_id),
+              ...userVndKeys.map((k) => k.access_key_id),
+            ]),
+          );
+
+          if (userKeys.length === 0) {
+            userKeys = cascadeTargetAccessKeyIds;
+          }
+
+          const hasTenantConfigs =
+            createRolePresetDto.tenant_configs &&
+            Object.keys(createRolePresetDto.tenant_configs).length > 0;
+
+          if (shouldCascadePermissions) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.presets && userKeys.includes(keyId)) {
+                  await this.updateUserPermissions(
+                    user_ids,
+                    role_id,
+                    config.presets,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserPermissions(
+                  user_ids,
+                  role_id,
+                  presets,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
 
-          if (apply_locations_to_users) {
-            await this.updateUserLocations(
-              user_ids,
-              role_id,
-              location_ids,
-              userId,
-            );
+          if (shouldCascadeLocations) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.location_ids && userKeys.includes(keyId)) {
+                  await this.updateUserLocations(
+                    user_ids,
+                    role_id,
+                    config.location_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserLocations(
+                  user_ids,
+                  role_id,
+                  location_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
 
             // SSE Events
             try {
@@ -1379,6 +2037,97 @@ export class RoleActionPresetsService {
               this.sseEventEmitter.emitUpdateSignal("locations", 0);
             } catch (err) {
               console.warn("SSE event failed for update:", err);
+            }
+          }
+
+          if (shouldCascadeWarehouses) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  presets?: any[];
+                };
+                const configWarehouseIds =
+                  config.warehouse_ids !== undefined
+                    ? config.warehouse_ids
+                    : warehouse_ids;
+                if (configWarehouseIds !== undefined && userKeys.includes(keyId)) {
+                  await this.updateUserWarehouses(
+                    user_ids,
+                    role_id,
+                    configWarehouseIds,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && warehouse_ids !== undefined) {
+                await this.updateUserWarehouses(
+                  user_ids,
+                  role_id,
+                  warehouse_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
+          }
+
+          if (shouldCascadeVendors) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                createRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  vendor_ids?: number[];
+                  presets?: any[];
+                };
+                const configVendorIds =
+                  config.vendor_ids !== undefined
+                    ? config.vendor_ids
+                    : vendor_ids;
+                if (configVendorIds !== undefined && userKeys.includes(keyId)) {
+                  await this.updateUserVendors(
+                    user_ids,
+                    role_id,
+                    configVendorIds,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && vendor_ids !== undefined) {
+                await this.updateUserVendors(
+                  user_ids,
+                  role_id,
+                  vendor_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
         }
@@ -1442,13 +2191,46 @@ export class RoleActionPresetsService {
             raw_data: JSON.stringify({
               role_id,
               location_ids,
+              warehouse_ids,
+              vendor_ids,
               presets,
               status_id: resolvedStatusId,
               user_ids,
               apply_permissions_to_users,
               apply_locations_to_users,
+              apply_warehouses_to_users,
+              apply_vendors_to_users,
               created_by: userId,
               created_at: new Date(),
+              savedLocationPresets: savedLocationPresets.map((lp) => ({
+                id: lp.id,
+                location_id: lp.location_id,
+                status_id: lp.status_id,
+                created_by: lp.created_by,
+                created_at: lp.created_at,
+              })),
+              savedWarehousePresets: savedWarehousePresets.map((wp) => ({
+                id: wp.id,
+                warehouse_id: wp.warehouse_id,
+                status_id: wp.status_id,
+                created_by: wp.created_by,
+                created_at: wp.created_at,
+              })),
+              savedVendorPresets: savedVendorPresets.map((vp) => ({
+                id: vp.id,
+                vendor_id: vp.vendor_id,
+                status_id: vp.status_id,
+                created_by: vp.created_by,
+                created_at: vp.created_at,
+              })),
+              savedActionPresets: savedActionPresets.map((ap) => ({
+                id: ap.id,
+                module_id: ap.module_id,
+                action_id: ap.action_id,
+                status_id: ap.status_id,
+                created_by: ap.created_by,
+                created_at: ap.created_at,
+              })),
             }),
             description: `Created role action presets for role ${role_id}`,
             status_id: 1,
@@ -1499,11 +2281,19 @@ export class RoleActionPresetsService {
   ): Promise<any> {
     const {
       location_ids,
+      warehouse_ids = [],
+      vendor_ids = [],
       presets,
       status_id,
       user_ids = [],
       apply_permissions_to_users = false,
       apply_locations_to_users = false,
+      apply_warehouses_to_users = false,
+      apply_vendors_to_users = false,
+      apply_permissions_to_users_only = false,
+      apply_locations_to_users_only = false,
+      apply_warehouses_to_users_only = false,
+      apply_vendors_to_users_only = false,
     } = updateRolePresetDto;
 
     // console.log("UpdateRolePresetDto:", updateRolePresetDto);
@@ -1540,56 +2330,376 @@ export class RoleActionPresetsService {
           throw new BadRequestException("Authenticated user not found.");
         }
 
-        // Update location presets using helper (mark-inactive-then-upsert)
-        const savedLocationPresets =
-          await this.updateRoleLocationPresetsFromPresets(
-            role_id,
-            location_ids,
-            status,
-            userId,
-            queryRunner,
-          );
+        const targetAccessKeyIds =
+          updateRolePresetDto.access_key_ids &&
+          updateRolePresetDto.access_key_ids.length > 0
+            ? updateRolePresetDto.access_key_ids
+            : [1];
 
-        // Update action presets using helper (mark-inactive-then-upsert)
-        const savedActionPresets =
-          await this.updateRoleActionPresetsFromPresets(
-            role_id,
-            presets,
-            status,
-            userId,
-            queryRunner,
-          );
+        const cascadeTargetAccessKeyIds =
+          updateRolePresetDto.target_access_key_ids &&
+          updateRolePresetDto.target_access_key_ids.length > 0
+            ? updateRolePresetDto.target_access_key_ids
+            : targetAccessKeyIds;
 
-        // Handle user permissions and locations updates if requested
-        if (user_ids.length > 0) {
-          if (apply_permissions_to_users) {
-            // Get access keys that users already have permissions for
-            const userAccessKeys = await this.userPermissionsRepository
-              .createQueryBuilder("up")
-              .select("DISTINCT up.access_key_id", "access_key_id")
-              .where("up.user_id IN (:...userIds)", { userIds: user_ids })
-              .getRawMany();
+        let savedLocationPresets: RoleLocationPreset[] = [];
+        let savedWarehousePresets: RoleWarehousePreset[] = [];
+        let savedVendorPresets: RoleVendorPreset[] = [];
+        let savedActionPresets: RoleActionPreset[] = [];
 
-            const accessKeyIds = userAccessKeys.map((uak) => uak.access_key_id);
+        const shouldUpdateRoleLocations = !apply_locations_to_users_only;
+        const shouldUpdateRoleWarehouses = !apply_warehouses_to_users_only;
+        const shouldUpdateRoleVendors = !apply_vendors_to_users_only;
+        const shouldUpdateRoleActions = !apply_permissions_to_users_only;
 
-            if (accessKeyIds.length > 0) {
-              await this.updateUserPermissions(
-                user_ids,
+        if (
+          updateRolePresetDto.tenant_configs &&
+          Object.keys(updateRolePresetDto.tenant_configs).length > 0
+        ) {
+          for (const [keyIdStr, configObj] of Object.entries(
+            updateRolePresetDto.tenant_configs,
+          )) {
+            const keyId = Number(keyIdStr);
+            const config = configObj as {
+              location_ids?: number[];
+              warehouse_ids?: number[];
+              vendor_ids?: number[];
+              presets?: any[];
+            };
+            if (shouldUpdateRoleLocations && config.location_ids) {
+              const locs = await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                config.location_ids,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedLocationPresets.push(...locs);
+            }
+            const effectiveWarehouseIds =
+              config.warehouse_ids !== undefined
+                ? config.warehouse_ids
+                : warehouse_ids;
+            if (shouldUpdateRoleWarehouses && effectiveWarehouseIds !== undefined) {
+              const whs = await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                effectiveWarehouseIds,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedWarehousePresets.push(...whs);
+            }
+            const effectiveVendorIds =
+              config.vendor_ids !== undefined
+                ? config.vendor_ids
+                : vendor_ids;
+            if (shouldUpdateRoleVendors && effectiveVendorIds !== undefined) {
+              const vnds = await this.updateRoleVendorPresetsFromPresets(
+                role_id,
+                effectiveVendorIds,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedVendorPresets.push(...vnds);
+            }
+            if (shouldUpdateRoleActions && config.presets) {
+              const acts = await this.updateRoleActionPresetsFromPresets(
+                role_id,
+                config.presets,
+                status,
+                userId,
+                queryRunner,
+                [keyId],
+              );
+              savedActionPresets.push(...acts);
+            }
+          }
+        } else {
+          if (shouldUpdateRoleLocations) {
+            // Update location presets using helper (mark-inactive-then-upsert)
+            savedLocationPresets =
+              await this.updateRoleLocationPresetsFromPresets(
+                role_id,
+                location_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleWarehouses && warehouse_ids !== undefined) {
+            // Update warehouse presets using helper (mark-inactive-then-upsert)
+            savedWarehousePresets =
+              await this.updateRoleWarehousePresetsFromPresets(
+                role_id,
+                warehouse_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleVendors && vendor_ids !== undefined) {
+            // Update vendor presets using helper (mark-inactive-then-upsert)
+            savedVendorPresets =
+              await this.updateRoleVendorPresetsFromPresets(
+                role_id,
+                vendor_ids,
+                status,
+                userId,
+                queryRunner,
+                targetAccessKeyIds,
+              );
+          }
+
+          if (shouldUpdateRoleActions) {
+            // Update action presets using helper (mark-inactive-then-upsert)
+            savedActionPresets =
+              await this.updateRoleActionPresetsFromPresets(
                 role_id,
                 presets,
-                accessKeyIds,
+                status,
                 userId,
+                queryRunner,
+                targetAccessKeyIds,
               );
+          }
+        }
+
+        // Handle user permissions, locations, warehouses, and vendors updates if requested
+        const shouldCascadePermissions =
+          apply_permissions_to_users || apply_permissions_to_users_only;
+        const shouldCascadeLocations =
+          apply_locations_to_users || apply_locations_to_users_only;
+        const shouldCascadeWarehouses =
+          apply_warehouses_to_users || apply_warehouses_to_users_only;
+        const shouldCascadeVendors =
+          apply_vendors_to_users || apply_vendors_to_users_only;
+
+        if (
+          user_ids.length > 0 &&
+          (shouldCascadePermissions ||
+            shouldCascadeLocations ||
+            shouldCascadeWarehouses ||
+            shouldCascadeVendors)
+        ) {
+          const [userPermKeys, userLocKeys, userWhKeys, userVndKeys] =
+            await Promise.all([
+              this.userPermissionsRepository
+                .createQueryBuilder("up")
+                .select("DISTINCT up.access_key_id", "access_key_id")
+                .where("up.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userLocationsRepository
+                .createQueryBuilder("ul")
+                .select("DISTINCT ul.access_key_id", "access_key_id")
+                .where("ul.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userWarehousesRepository
+                .createQueryBuilder("uw")
+                .select("DISTINCT uw.access_key_id", "access_key_id")
+                .where("uw.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+              this.userVendorsRepository
+                .createQueryBuilder("uv")
+                .select("DISTINCT uv.access_key_id", "access_key_id")
+                .where("uv.user_id IN (:...userIds)", { userIds: user_ids })
+                .getRawMany(),
+            ]);
+
+          let userKeys = Array.from(
+            new Set([
+              ...userPermKeys.map((k) => k.access_key_id),
+              ...userLocKeys.map((k) => k.access_key_id),
+              ...userWhKeys.map((k) => k.access_key_id),
+              ...userVndKeys.map((k) => k.access_key_id),
+            ]),
+          );
+
+          if (userKeys.length === 0) {
+            userKeys = cascadeTargetAccessKeyIds;
+          }
+
+          const hasTenantConfigs =
+            updateRolePresetDto.tenant_configs &&
+            Object.keys(updateRolePresetDto.tenant_configs).length > 0;
+
+          if (shouldCascadePermissions) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.presets && userKeys.includes(keyId)) {
+                  await this.updateUserPermissions(
+                    user_ids,
+                    role_id,
+                    config.presets,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserPermissions(
+                  user_ids,
+                  role_id,
+                  presets,
+                  eligibleKeys,
+                  userId,
+                );
+              }
             }
           }
 
-          if (apply_locations_to_users) {
-            await this.updateUserLocations(
-              user_ids,
-              role_id,
-              location_ids,
-              userId,
-            );
+          if (shouldCascadeLocations) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  presets?: any[];
+                };
+                if (config.location_ids && userKeys.includes(keyId)) {
+                  await this.updateUserLocations(
+                    user_ids,
+                    role_id,
+                    config.location_ids,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0) {
+                await this.updateUserLocations(
+                  user_ids,
+                  role_id,
+                  location_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
+          }
+
+          if (shouldCascadeWarehouses) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  presets?: any[];
+                };
+                const configWarehouseIds =
+                  config.warehouse_ids !== undefined
+                    ? config.warehouse_ids
+                    : warehouse_ids;
+                if (configWarehouseIds !== undefined && userKeys.includes(keyId)) {
+                  await this.updateUserWarehouses(
+                    user_ids,
+                    role_id,
+                    configWarehouseIds,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && warehouse_ids !== undefined) {
+                await this.updateUserWarehouses(
+                  user_ids,
+                  role_id,
+                  warehouse_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
+          }
+
+          if (shouldCascadeVendors) {
+            if (hasTenantConfigs) {
+              for (const [keyIdStr, configObj] of Object.entries(
+                updateRolePresetDto.tenant_configs!,
+              )) {
+                const keyId = Number(keyIdStr);
+                if (!cascadeTargetAccessKeyIds.includes(keyId)) {
+                  continue;
+                }
+                const config = configObj as {
+                  location_ids?: number[];
+                  warehouse_ids?: number[];
+                  vendor_ids?: number[];
+                  presets?: any[];
+                };
+                const configVendorIds =
+                  config.vendor_ids !== undefined
+                    ? config.vendor_ids
+                    : vendor_ids;
+                if (configVendorIds !== undefined && userKeys.includes(keyId)) {
+                  await this.updateUserVendors(
+                    user_ids,
+                    role_id,
+                    configVendorIds,
+                    [keyId],
+                    userId,
+                  );
+                }
+              }
+            } else {
+              const eligibleKeys = cascadeTargetAccessKeyIds.filter((k) =>
+                userKeys.includes(k),
+              );
+
+              if (eligibleKeys.length > 0 && vendor_ids !== undefined) {
+                await this.updateUserVendors(
+                  user_ids,
+                  role_id,
+                  vendor_ids,
+                  eligibleKeys,
+                  userId,
+                );
+              }
+            }
           }
         }
 
@@ -1658,11 +2768,15 @@ export class RoleActionPresetsService {
             raw_data: JSON.stringify({
               role_id,
               location_ids,
+              warehouse_ids,
+              vendor_ids,
               presets,
               status_id: resolvedStatusId,
               user_ids,
               apply_permissions_to_users,
               apply_locations_to_users,
+              apply_warehouses_to_users,
+              apply_vendors_to_users,
               updated_by: userId,
               updated_at: new Date(),
               savedLocationPresets: savedLocationPresets.map((lp) => ({
@@ -1671,6 +2785,20 @@ export class RoleActionPresetsService {
                 status_id: lp.status_id,
                 created_by: lp.created_by,
                 created_at: lp.created_at,
+              })),
+              savedWarehousePresets: savedWarehousePresets.map((wp) => ({
+                id: wp.id,
+                warehouse_id: wp.warehouse_id,
+                status_id: wp.status_id,
+                created_by: wp.created_by,
+                created_at: wp.created_at,
+              })),
+              savedVendorPresets: savedVendorPresets.map((vp) => ({
+                id: vp.id,
+                vendor_id: vp.vendor_id,
+                status_id: vp.status_id,
+                created_by: vp.created_by,
+                created_at: vp.created_at,
               })),
               savedActionPresets: savedActionPresets.map((ap) => ({
                 id: ap.id,
@@ -1729,7 +2857,7 @@ export class RoleActionPresetsService {
     }
   }
 
-  // Helper method to update user permissions for multiple users
+  // Helper method to update user permissions for multiple users with batch optimization
   private async updateUserPermissions(
     userIds: number[],
     roleId: number,
@@ -1737,125 +2865,347 @@ export class RoleActionPresetsService {
     accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    for (const userId of userIds) {
-      // Validate user exists
-      const user = await this.userRepository.findOneBy({ id: userId });
-      if (!user) {
-        logger.warn(
-          `Skipping user permissions update for non-existent user ID: ${userId}`,
-        );
-        continue;
-      }
+    if (!userIds.length || !presets.length || !accessKeyIds.length) return;
 
-      // First, mark all existing permissions for this user & role as inactive (status_id = 2)
-      await this.userPermissionsRepository.update(
-        { user_id: userId, role_id: roleId },
-        {
-          status_id: 2, // inactive
-          updated_by: updatedBy,
-          modified_at: new Date(),
-        },
+    // 1. Mark existing permissions for all target users, role, and access keys as inactive in 1 fast query
+    await this.userPermissionsRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2,
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    // 2. Fetch existing permissions for this cohort in 1 query
+    const existing = await this.userPermissionsRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const permMap = new Map<string, UserPermissions>();
+    existing.forEach((p) => {
+      permMap.set(
+        `${p.user_id}_${p.role_id}_${p.access_key_id}_${p.module_id}_${p.action_id}`,
+        p,
       );
+    });
 
-      // Iterate through access keys first
+    // 3. Fast in-memory reconciliation
+    const toSave: UserPermissions[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
       for (const accessKeyId of accessKeyIds) {
-        // Then iterate through permission presets
         for (const preset of presets) {
-          // Then iterate through each action in the preset
-          for (const actionId of preset.action_ids) {
-            // Check if this combination already exists
-            const existingPermission =
-              await this.userPermissionsRepository.findOne({
-                where: {
-                  user_id: userId,
-                  role_id: roleId,
-                  module_id: preset.module_ids,
-                  action_id: actionId,
-                  access_key_id: accessKeyId,
-                },
-              });
+          const moduleId = preset.module_ids;
+          const actionIds = Array.isArray(preset.action_ids)
+            ? preset.action_ids
+            : [];
 
-            if (existingPermission) {
-              // Update existing permission back to active status
-              existingPermission.status_id = 1; // active
-              existingPermission.updated_by = updatedBy;
-              existingPermission.modified_at = new Date();
-              await this.userPermissionsRepository.save(existingPermission);
+          for (const actionId of actionIds) {
+            const key = `${userId}_${roleId}_${accessKeyId}_${moduleId}_${actionId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const existingPerm = permMap.get(key);
+            if (existingPerm) {
+              existingPerm.status_id = 1;
+              existingPerm.updated_by = updatedBy;
+              existingPerm.modified_at = new Date();
+              toSave.push(existingPerm);
             } else {
-              // Create new permission with active status
-              const userPermission = this.userPermissionsRepository.create({
+              const newPerm = this.userPermissionsRepository.create({
                 user_id: userId,
                 role_id: roleId,
-                module_id: preset.module_ids,
+                module_id: moduleId,
                 action_id: actionId,
                 access_key_id: accessKeyId,
-                status_id: 1, // active
+                status_id: 1,
                 created_by: updatedBy,
               });
-              await this.userPermissionsRepository.save(userPermission);
+              toSave.push(newPerm);
             }
           }
         }
       }
     }
+
+    // 4. Batch save in chunks of 500 for optimal database performance
+    if (toSave.length > 0) {
+      await this.userPermissionsRepository.save(toSave, { chunk: 500 });
+    }
   }
 
-  // Helper method to update user locations for multiple users
+  // Helper method to update user locations for multiple users with batch optimization
   private async updateUserLocations(
     userIds: number[],
     roleId: number,
     locationIds: number[],
+    accessKeyIds: number[],
     updatedBy: number,
   ): Promise<void> {
-    for (const userId of userIds) {
-      // Validate user exists
-      const user = await this.userRepository.findOneBy({ id: userId });
-      if (!user) {
-        logger.warn(
-          `Skipping user locations update for non-existent user ID: ${userId}`,
-        );
-        continue;
-      }
+    if (!userIds.length || !accessKeyIds.length) return;
 
-      // First, mark all existing locations for this user & role as inactive (status_id = 2)
-      await this.userLocationsRepository.update(
-        { user_id: userId, role_id: roleId },
+    // 1. Mark existing locations for all target users, role, and access keys as inactive in 1 fast query
+    await this.userLocationsRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2,
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!locationIds || !locationIds.length) return;
+
+    // 2. Fetch existing locations for this cohort in 1 query
+    const existing = await this.userLocationsRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const locMap = new Map<string, UserLocations>();
+    existing.forEach((l) => {
+      locMap.set(
+        `${l.user_id}_${l.role_id}_${l.access_key_id}_${l.location_id}`,
+        l,
+      );
+    });
+
+    // 3. Fast in-memory reconciliation
+    const toSave: UserLocations[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
+      for (const accessKeyId of accessKeyIds) {
+        for (const locationId of locationIds) {
+          const key = `${userId}_${roleId}_${accessKeyId}_${locationId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existingLoc = locMap.get(key);
+          if (existingLoc) {
+            existingLoc.status_id = 1;
+            existingLoc.updated_by = updatedBy;
+            existingLoc.modified_at = new Date();
+            toSave.push(existingLoc);
+          } else {
+            const newLoc = this.userLocationsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              location_id: locationId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toSave.push(newLoc);
+          }
+        }
+      }
+    }
+
+    // 4. Batch save in chunks of 500 for optimal database performance
+    if (toSave.length > 0) {
+      await this.userLocationsRepository.save(toSave, { chunk: 500 });
+    }
+  }
+
+  // Helper method to update user warehouses for multiple users with batch optimization
+  private async updateUserWarehouses(
+    userIds: number[],
+    roleId: number,
+    warehouseIds: number[],
+    accessKeyIds: number[],
+    updatedBy: number,
+  ): Promise<void> {
+    if (!userIds.length || !accessKeyIds.length) return;
+
+    // 1. Mark existing warehouses for all target users, role, and access keys as inactive in 1 fast query
+    await this.userWarehousesRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!warehouseIds || !warehouseIds.length) return;
+
+    // 2. Fetch existing warehouses for this cohort in 1 query
+    const existing = await this.userWarehousesRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const whMap = new Map<string, UserWarehouses>();
+    existing.forEach((w) => {
+      whMap.set(
+        `${w.user_id}_${w.role_id}_${w.access_key_id}_${w.warehouse_id}`,
+        w,
+      );
+    });
+
+    // 3. Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: UserWarehouses[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
+      for (const accessKeyId of accessKeyIds) {
+        for (const warehouseId of warehouseIds) {
+          const key = `${userId}_${roleId}_${accessKeyId}_${warehouseId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existingWh = whMap.get(key);
+          if (existingWh) {
+            existingWh.status_id = 1;
+            existingWh.updated_by = updatedBy;
+            existingWh.modified_at = new Date();
+            toUpdateIds.push(existingWh.id);
+          } else {
+            const newWh = this.userWarehousesRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              warehouse_id: warehouseId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toInsert.push(newWh);
+          }
+        }
+      }
+    }
+
+    // 4. Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await this.userWarehousesRepository.update(
+        { id: In(toUpdateIds) },
         {
-          status_id: 2, // inactive
+          status_id: 1,
           updated_by: updatedBy,
           modified_at: new Date(),
         },
       );
+    }
+    if (toInsert.length > 0) {
+      await this.userWarehousesRepository.save(toInsert, { chunk: 500 });
+    }
+  }
 
-      // Iterate through location IDs
-      for (const locationId of locationIds) {
-        // Check if this combination already exists
-        const existingLocation = await this.userLocationsRepository.findOne({
-          where: {
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-          },
-        });
+  // Helper method to update user vendors for multiple users with batch optimization
+  private async updateUserVendors(
+    userIds: number[],
+    roleId: number,
+    vendorIds: number[],
+    accessKeyIds: number[],
+    updatedBy: number,
+  ): Promise<void> {
+    if (!userIds.length || !accessKeyIds.length) return;
 
-        if (existingLocation) {
-          // Update existing location back to active status
-          existingLocation.status_id = 1; // active
-          existingLocation.updated_by = updatedBy;
-          existingLocation.modified_at = new Date();
-          await this.userLocationsRepository.save(existingLocation);
-        } else {
-          // Create new location with active status
-          const userLocation = this.userLocationsRepository.create({
-            user_id: userId,
-            role_id: roleId,
-            location_id: locationId,
-            status_id: 1, // active
-            created_by: updatedBy,
-          });
-          await this.userLocationsRepository.save(userLocation);
+    // 1. Mark existing vendors for all target users, role, and access keys as inactive in 1 fast query
+    await this.userVendorsRepository.update(
+      {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+      {
+        status_id: 2, // inactive (NO DELETE!)
+        updated_by: updatedBy,
+        modified_at: new Date(),
+      },
+    );
+
+    if (!vendorIds || !vendorIds.length) return;
+
+    // 2. Fetch existing vendors for this cohort in 1 query
+    const existing = await this.userVendorsRepository.find({
+      where: {
+        user_id: In(userIds),
+        role_id: roleId,
+        access_key_id: In(accessKeyIds),
+      },
+    });
+
+    const vendorMap = new Map<string, UserVendors>();
+    existing.forEach((v) => {
+      vendorMap.set(
+        `${v.user_id}_${v.role_id}_${v.access_key_id}_${v.vendor_id}`,
+        v,
+      );
+    });
+
+    // 3. Fast in-memory reconciliation
+    const toUpdateIds: number[] = [];
+    const toInsert: UserVendors[] = [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
+      for (const accessKeyId of accessKeyIds) {
+        for (const vendorId of vendorIds) {
+          const key = `${userId}_${roleId}_${accessKeyId}_${vendorId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const existingVendor = vendorMap.get(key);
+          if (existingVendor) {
+            existingVendor.status_id = 1;
+            existingVendor.updated_by = updatedBy;
+            existingVendor.modified_at = new Date();
+            toUpdateIds.push(existingVendor.id);
+          } else {
+            const newVendor = this.userVendorsRepository.create({
+              user_id: userId,
+              role_id: roleId,
+              vendor_id: vendorId,
+              access_key_id: accessKeyId,
+              status_id: 1,
+              created_by: updatedBy,
+            });
+            toInsert.push(newVendor);
+          }
         }
       }
+    }
+
+    // 4. Batch update existing and insert new
+    if (toUpdateIds.length > 0) {
+      await this.userVendorsRepository.update(
+        { id: In(toUpdateIds) },
+        {
+          status_id: 1,
+          updated_by: updatedBy,
+          modified_at: new Date(),
+        },
+      );
+    }
+    if (toInsert.length > 0) {
+      await this.userVendorsRepository.save(toInsert, { chunk: 500 });
     }
   }
 }

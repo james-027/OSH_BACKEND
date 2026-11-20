@@ -109,6 +109,10 @@ export class CacheInvalidationService {
   async invalidateFindAll(serviceName: string): Promise<void> {
     const key = CACHE_KEYS.FIND_ALL(serviceName);
     await this.invalidateKey(key);
+    await this.invalidatePatterns([
+      `${serviceName}:*`,
+      `${serviceName}-restricted:*`,
+    ]);
   }
 
   /**
@@ -124,6 +128,10 @@ export class CacheInvalidationService {
    * Clear both findAll and findOne for a service
    * @param serviceName - name of the service
    */
+  async invalidateCrewHub(): Promise<void> {
+    await this.invalidatePatterns([CACHE_PATTERNS.CREW_HUB]);
+  }
+
   async invalidateServiceCache(serviceName: string): Promise<void> {
     await Promise.all([
       this.invalidateKey(CACHE_KEYS.FIND_ALL(serviceName)),

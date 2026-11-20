@@ -23,14 +23,12 @@ import { UpdateProfitcenterDto } from "../dto/UpdateProfitcenterDto";
 @Controller("profitcenters")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ProfitcenterController {
-  constructor(
-    private readonly profitcenterService: ProfitcenterService,
-  ) { }
+  constructor(private readonly profitcenterService: ProfitcenterService) {}
 
   @Get()
   @RequirePermissions({
     module: ["PROFIT CENTERS", "DEBIT ADVICE", "FINANCE CONFIRMATION"],
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAll(@Request() req) {
     return this.profitcenterService.findAll();
@@ -41,10 +39,7 @@ export class ProfitcenterController {
     module: "PROFIT CENTERS",
     action: "VIEW",
   })
-  async findOne(
-    @Param("id", ParseIntPipe) id: number,
-    @Request() req,
-  ) {
+  async findOne(@Param("id", ParseIntPipe) id: number, @Request() req) {
     return this.profitcenterService.findOne(id);
   }
 
@@ -59,10 +54,7 @@ export class ProfitcenterController {
   ) {
     const userId = req.user.id;
 
-    return this.profitcenterService.create(
-      createProfitcenterDto,
-      userId,
-    );
+    return this.profitcenterService.create(createProfitcenterDto, userId);
   }
 
   @Put(":id")
@@ -77,11 +69,7 @@ export class ProfitcenterController {
   ) {
     const userId = req.user.id;
 
-    return this.profitcenterService.update(
-      id,
-      updateProfitcenterDto,
-      userId,
-    );
+    return this.profitcenterService.update(id, updateProfitcenterDto, userId);
   }
 
   @Patch(":id/toggle-status-activate")
@@ -95,10 +83,7 @@ export class ProfitcenterController {
   ) {
     const userId = req.user.id;
 
-    return this.profitcenterService.toggleStatus(
-      id,
-      userId,
-    );
+    return this.profitcenterService.toggleStatus(id, userId);
   }
 
   @Patch(":id/toggle-status-deactivate")
@@ -112,9 +97,6 @@ export class ProfitcenterController {
   ) {
     const userId = req.user.id;
 
-    return this.profitcenterService.toggleStatus(
-      id,
-      userId,
-    );
+    return this.profitcenterService.toggleStatus(id, userId);
   }
 }

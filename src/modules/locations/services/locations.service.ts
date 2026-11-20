@@ -38,7 +38,7 @@ export class LocationsService {
   //   });
   // }
 
-  async findAll(userId?: number, roleId?: number): Promise<any[]> {
+  async findAll(userId?: number, roleId?: number, accessKeyId?: number): Promise<any[]> {
     try {
       let allowedLocationIds: number[] | undefined = undefined;
 
@@ -47,10 +47,14 @@ export class LocationsService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
       }
       const where: any = {};
-      if (allowedLocationIds && allowedLocationIds.length > 0) {
+      if (allowedLocationIds !== undefined) {
+        if (allowedLocationIds.length === 0) {
+          return [];
+        }
         where.id = In(allowedLocationIds);
       }
       const locations = await this.locationsRepository.find({

@@ -23,10 +23,19 @@ export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Get()
-  @RequirePermissions({ module: "VENDORS", action: "VIEW" })
+  @RequirePermissions({ module: "VENDORS", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
-    return this.vendorsService.findAll(accessKeyId);
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+    return this.vendorsService.findAll(accessKeyId, userId, roleId);
+  }
+
+  @Get("/all")
+  @RequirePermissions({ module: "VENDORS", action: "DATA ACCESS" })
+  async findAllVendorsNoRestriction(@Request() req) {
+    const accessKeyId = req.user.current_access_key;
+    return this.vendorsService.findAll();
   }
 
   @Get(":id")
@@ -40,7 +49,7 @@ export class VendorsController {
   async create(@Body() createVendorDto: CreateVendorDto, @Request() req) {
     const userId = req.user.id;
     const accessKeyId = req.user.current_access_key;
-    return this.vendorsService.create(createVendorDto, userId,accessKeyId);
+    return this.vendorsService.create(createVendorDto, userId, accessKeyId);
   }
 
   @Put(":id")

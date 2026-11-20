@@ -49,7 +49,10 @@ export class WarehouseBudgetHoursController {
   ) {}
 
   @Get()
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "VIEW",
+  })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
     const userId = req.user.id;
@@ -61,14 +64,23 @@ export class WarehouseBudgetHoursController {
     );
   }
 
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "VIEW",
+  })
   @Get(":id")
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "VIEW" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "VIEW",
+  })
   async findOne(@Param("id", ParseIntPipe) id: number) {
     return this.warehouseBudgetHoursService.findOne(id);
   }
 
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "ADD",
+  })
   @Post()
   async create(
     @Body() createDto: CreateWarehouseBudgetHourDto,
@@ -79,7 +91,10 @@ export class WarehouseBudgetHoursController {
   }
 
   @Put(":id")
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "EDIT" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "EDIT",
+  })
   async update(
     @Param("id", ParseIntPipe) id: number,
     @Body() updateDto: UpdateWarehouseBudgetHourDto,
@@ -90,7 +105,10 @@ export class WarehouseBudgetHoursController {
   }
 
   @Patch(":id/toggle-status-activate")
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "ACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "ACTIVATE",
+  })
   async toggleStatusActivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -99,7 +117,10 @@ export class WarehouseBudgetHoursController {
     return this.warehouseBudgetHoursService.toggleStatus(id, userId);
   }
   @Patch(":id/toggle-status-deactivate")
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "DEACTIVATE" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "DEACTIVATE",
+  })
   async toggleStatusDeactivate(
     @Param("id", ParseIntPipe) id: number,
     @Request() req,
@@ -109,7 +130,10 @@ export class WarehouseBudgetHoursController {
   }
 
   @Post("upload-excel")
-  @RequirePermissions({ module: "STORE BUDGET HOURS", action: "ADD" })
+  @RequirePermissions({
+    module: ["STORE BUDGET HOURS - BPLUS", "STORE BUDGET HOURS"],
+    action: "ADD",
+  })
   @UseInterceptors(
     FileInterceptor("file", {
       storage: diskStorage({
@@ -131,13 +155,27 @@ export class WarehouseBudgetHoursController {
     const json = normalizeKeysArray(rawRows);
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
 
-    // Get allowed location_ids for this user/role
-    const allowedLocationIds =
-      await this.commonUtilitiesService.getUserAllowedLocationIds(
-        userId,
-        roleId,
-      );
+    // Get allowed location_ids, warehouse_ids and vendor_ids for this user/role
+    const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+      await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedVendorIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
 
     const excelValidationConfig: ExcelValidationConfig = {
       requiredFields: {
@@ -191,6 +229,8 @@ export class WarehouseBudgetHoursController {
       records,
       userId,
       allowedLocationIds,
+      allowedWarehouseIds,
+      allowedVendorIds,
     );
   }
 }

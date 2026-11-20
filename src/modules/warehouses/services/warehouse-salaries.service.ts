@@ -48,7 +48,7 @@ export class WarehouseSalariesService {
     private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  private readonly module_name = "STORE SALARIES";
+  private readonly module_name = "STORE SALARIES - BPLUS";
 
   private async resolveVendorId(vendor_id?: number): Promise<number> {
     if (vendor_id === undefined || vendor_id === null) {
@@ -401,14 +401,27 @@ export class WarehouseSalariesService {
     hideHistorical?: boolean,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
+    let allowedVendorIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+        await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
     }
     const query = this.warehouseSalariesRepository
       .createQueryBuilder("ws")
@@ -428,6 +441,18 @@ export class WarehouseSalariesService {
       });
     }
 
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("ws.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
+      });
+    }
+
+    if (allowedVendorIds && allowedVendorIds.length > 0) {
+      query.andWhere("ws.vendor_id IN (:...allowedVendorIds)", {
+        allowedVendorIds,
+      });
+    }
+
     if (statusId && statusId.length > 0) {
       query.andWhere("ws.status_id IN (:...statusId)", { statusId });
     }
@@ -442,6 +467,7 @@ export class WarehouseSalariesService {
       warehouse_id: salary.warehouse_id,
       warehouse_ifs: salary.warehouse?.warehouse_ifs,
       warehouse_name: salary.warehouse?.warehouse_name,
+      warehouse_type_id: salary.warehouse?.warehouse_type_id,
       location_id: salary.warehouse ? salary.warehouse.location_id : null,
       location_name:
         salary.warehouse && salary.warehouse.location
@@ -819,6 +845,8 @@ export class WarehouseSalariesService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    allowedWarehouseIds?: number[],
+    allowedVendorIds?: number[],
   ) {
     const warehouses = await this.warehousesService.findAll();
     const vendors = await this.vendorsRepository.find();
@@ -881,6 +909,30 @@ export class WarehouseSalariesService {
         errors.push({
           row: row.__rowNum__,
           error: `You do not have permission to upload salaries for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+      // Warehouse permission check
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload salaries for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed stores.`,
+        });
+        continue;
+      }
+      // Vendor permission check
+      if (
+        allowedVendorIds &&
+        allowedVendorIds.length > 0 &&
+        !allowedVendorIds.includes(vendor.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload salaries for SERVICE PROVIDER CODE ${row.service_provider_code}, based on your allowed vendor.`,
         });
         continue;
       }

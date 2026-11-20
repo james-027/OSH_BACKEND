@@ -138,6 +138,7 @@ export class SalesTransactionsController {
     }
 
     const userId = req.user?.id;
+    const roleId = req.user?.role_id;
     const accessKeyId = req.user?.current_access_key;
 
     if (!userId || !accessKeyId) {
@@ -149,6 +150,7 @@ export class SalesTransactionsController {
       file.path, // ← Full file path saved by multer
       userId,
       accessKeyId,
+      roleId,
     );
   }
 }

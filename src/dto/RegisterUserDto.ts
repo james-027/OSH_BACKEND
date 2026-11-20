@@ -72,4 +72,8 @@ export class RegisterUserDto {
   @IsOptional()
   @IsString({ message: "Profile picture URL must be a string" })
   profile_pic_url?: string;
+
+  @IsOptional()
+  @IsString({ message: "Signature URL must be a string" })
+  signature_url?: string;
 }

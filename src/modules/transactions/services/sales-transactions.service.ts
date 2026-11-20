@@ -22,6 +22,7 @@ import { Location } from "../../../entities/Location";
 import logger from "src/config/logger";
 import { DwhLog } from "src/entities/dwhLog";
 import { getMonthNumber, parseToFirstDayOfMonth } from "src/utils/date.utils";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Injectable()
 export class SalesTransactionsService {
@@ -35,6 +36,7 @@ export class SalesTransactionsService {
     @InjectRepository(Item)
     private itemRepository: Repository<Item>,
     private userLocationsService: UserLocationsService,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   async findAll(
@@ -43,16 +45,22 @@ export class SalesTransactionsService {
     roleId?: number,
     sales_date?: string,
   ): Promise<any[]> {
-    // Get allowed location IDs for user
+    // Get allowed location and warehouse IDs for user
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.userLocationsService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     // Query builder: join warehouses, filter by access_key_id and allowed locations
     const qb = this.salesTransactionsRepository
@@ -71,6 +79,11 @@ export class SalesTransactionsService {
     if (allowedLocationIds && allowedLocationIds.length > 0) {
       qb.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
+      });
+    }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      qb.andWhere("warehouse.id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
       });
     }
     if (sales_date !== undefined) {
@@ -277,6 +290,7 @@ export class SalesTransactionsService {
     filePath: string,
     userId: number,
     accessKeyId: number,
+    roleId?: number,
   ): Promise<any> {
     const XLSX = require("xlsx");
     const fs = require("fs");
@@ -413,6 +427,24 @@ export class SalesTransactionsService {
         });
       });
 
+      // Allowed locations and warehouses check
+      let allowedLocationIds: number[] = [];
+      let allowedWarehouseIds: number[] = [];
+      if (userId && roleId) {
+        [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+      }
+
       // Step 4: Process rows and build batch for insertion
       const batchSize = 1000;
 
@@ -447,6 +479,17 @@ export class SalesTransactionsService {
           const bcCode = locationInfo.code; // Extract code
           const locationId = locationInfo.id; // Extract id
 
+          if (
+            allowedLocationIds.length > 0 &&
+            !allowedLocationIds.includes(locationId)
+          ) {
+            errors.push({
+              row: rowNum,
+              error: `You are not allowed to upload for location: ${formattedRow["BUSINESS CENTER"]}`,
+            });
+            continue;
+          }
+
           // Lookup warehouse by CODE
           const whsCodeUpperCase = String(formattedRow["CODE"]).toUpperCase();
           if (!warehouseMap.has(whsCodeUpperCase)) {
@@ -457,11 +500,22 @@ export class SalesTransactionsService {
             );
             errors.push({
               row: rowNum,
-              error: `Store not found: ${whsCodeUpperCase} - ${formattedRow["STORE"]}`,
+              error: `You are not allowed to upload for store: ${whsCodeUpperCase} - ${formattedRow["STORE"]}`,
             });
             continue;
           }
           const warehouseId = warehouseMap.get(whsCodeUpperCase); // Extract warehouse_id
+
+          if (
+            allowedWarehouseIds.length > 0 &&
+            !allowedWarehouseIds.includes(warehouseId)
+          ) {
+            errors.push({
+              row: rowNum,
+              error: `You are not allowed to upload for store: ${whsCodeUpperCase} - ${formattedRow["STORE"]}`,
+            });
+            continue;
+          }
 
           // Step 4c: Lookup items by ITEMCODE to get cat01, cat02, etc.
           const itemCodeUpperCase = String(

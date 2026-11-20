@@ -12,6 +12,7 @@ import { PayrollHeader } from "src/entities/PayrollHeader";
 import { CreatePayrollHeaderDto } from "src/modules/staff-payroll/dto/CreatePayrollHeaderDto";
 import { UpdatePayrollHeaderDto } from "src/modules/staff-payroll/dto/UpdatePayrollHeaderDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
+import { NotificationPublisherService } from "src/modules/notifications/services/notification-publisher.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
 import logger from "../../../config/logger";
 import {
@@ -20,6 +21,8 @@ import {
   WORKING_DAY_IDS,
   BILLING_TYPE_IDS,
   BILLING_TYPE_ABBRS,
+  STATUS_NAMES,
+  NOTIFICATION_EVENTS,
 } from "src/constants/customConstants";
 import { BillingType } from "src/entities/BillingType";
 import { StaffWarehouse } from "src/entities/StaffWarehouse";
@@ -138,6 +141,7 @@ export class StaffPayrollService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private actionLogsService: ActionLogsService,
     private payrollComputationService: PayrollComputationService,
+    private readonly notificationPublisher: NotificationPublisherService,
   ) {}
 
   private readonly module_name = "STAFF PAYROLL";
@@ -163,15 +167,29 @@ export class StaffPayrollService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
-          );
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
 
-        where.details = {
-          location_id: In(allowedLocationIds),
-        };
+        const detailsWhere: any = {};
+        if (allowedLocationIds.length > 0) {
+          detailsWhere.location_id = In(allowedLocationIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          detailsWhere.vendor_id = In(allowedVendorIds);
+        }
+        if (Object.keys(detailsWhere).length > 0) {
+          where.details = detailsWhere;
+        }
       }
 
       const payrollHeaders = await this.payrollHeaderRepository.find({
@@ -1154,7 +1172,7 @@ export class StaffPayrollService {
             {
               service: "StaffPayrollService",
               method: "create",
-              raw_data: JSON.stringify(headerWithRelations),
+              raw_data: JSON.stringify(this.sanitizePayrollForAudit(headerWithRelations)),
               description: `Created payroll ${headerWithRelations.id} (${abbrName})`,
               status_id: 1,
             },
@@ -1168,7 +1186,7 @@ export class StaffPayrollService {
               action_id: ACTION_IDS.ADD,
               description: `Add Payroll ${headerWithRelations.id}`,
               raw_data: JSON.stringify({
-                savedPayrollHeader: headerWithRelations,
+                savedPayrollHeader: this.sanitizePayrollForAudit(headerWithRelations),
               }),
               created_by: userId,
             });
@@ -3038,7 +3056,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Posted Payroll Headers: ${sortedPayrollIds.join(", ")}`,
           status_id: 1,
         },
@@ -3058,7 +3076,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.POST,
             description: "Post Payroll",
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3282,7 +3300,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
           status_id: 1,
         },
@@ -3300,7 +3318,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.REVERT,
             description: `Revert Payroll Remarks: ${updatePayrollDto.remarks}`,
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3313,6 +3331,101 @@ export class StaffPayrollService {
         this.sseEventEmitter.emitUpdate("staff_payroll", 0);
       } catch (err) {
         logger.error("SSE event failed:", err);
+      }
+
+      // 5. Dynamic In-App Notifications: Notify Attendance Team (PAYROLL_REVERSAL_GRANT)
+      try {
+        const detailsWithSched = await this.payrollDetailRepository
+          .createQueryBuilder("pd")
+          .innerJoin("pd.scheduleDetail", "sd")
+          .innerJoin("sd.scheduleHeader", "sh")
+          .select([
+            "pd.payroll_header_id AS payroll_header_id",
+            "sh.id AS schedule_header_id",
+            "sh.schedule_date AS schedule_date",
+            "sd.location_id AS location_id",
+          ])
+          .where("pd.payroll_header_id IN (:...payrollIds)", { payrollIds })
+          .getRawMany();
+
+        const cleanedRemarks = updatePayrollDto.remarks?.trim() || "";
+
+        for (const header of updatedPayrollHeaders) {
+          const headerRows = detailsWithSched.filter(
+            (r) => Number(r.payroll_header_id) === header.id,
+          );
+
+          const scheduleIds = Array.from(
+            new Set(
+              headerRows
+                .map((r) => Number(r.schedule_header_id))
+                .filter((id): id is number => id != null && !isNaN(id)),
+            ),
+          );
+
+          const connectedAttendancesMap = new Map<
+            number,
+            { id: number; schedule_date?: string }
+          >();
+          for (const r of headerRows) {
+            const sId = Number(r.schedule_header_id);
+            if (sId && !connectedAttendancesMap.has(sId)) {
+              connectedAttendancesMap.set(sId, {
+                id: sId,
+                schedule_date: r.schedule_date
+                  ? String(r.schedule_date)
+                  : undefined,
+              });
+            }
+          }
+          const connectedAttendancesList = Array.from(
+            connectedAttendancesMap.values(),
+          );
+
+          const locationIds = Array.from(
+            new Set(
+              headerRows
+                .map((r) => Number(r.location_id))
+                .filter(
+                  (id): id is number => id != null && !isNaN(id) && id > 0,
+                ),
+            ),
+          );
+
+          const primaryInvoice = header.payroll_invoice || `#${header.id}`;
+          const payrollInvoicesStr = header.payroll_invoice || `#${header.id}`;
+
+          this.notificationPublisher.publish({
+            eventCode: NOTIFICATION_EVENTS.PAYROLL_REVERSAL_GRANT,
+            creatorId: userId,
+            accessKeyId: header.access_key_id,
+            locationIds,
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              referenceNo: primaryInvoice,
+              status: {
+                from: STATUS_NAMES[STATUS_IDS.POSTED],
+                to: STATUS_NAMES[STATUS_IDS.PENDING],
+              },
+              remarks: cleanedRemarks,
+            },
+            destination: {
+              module: "STAFF ATTENDANCE", // Route auto-resolved to "/staff-attendance" from Module Registry
+              refIds: scheduleIds,
+              referenceNo: primaryInvoice,
+              statusId: STATUS_IDS.VALIDATED,
+            },
+            fallbackTitle: `Payroll Reversal Granted: Payroll ${primaryInvoice}`,
+            fallbackDescription: `Payroll ${primaryInvoice} was reverted to Pending. Connected Attendance ${scheduleIds.map((id) => `#${id}`).join(", ")} reset to Validated. Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: `/staff-attendance?invoice=${primaryInvoice}`,
+          });
+        }
+      } catch (err) {
+        logger.error(
+          "Failed to trigger payroll reversal grant notifications:",
+          err,
+        );
       }
 
       return responses;
@@ -3404,7 +3517,7 @@ export class StaffPayrollService {
         {
           service: "Staff Payroll Service",
           method: "",
-          raw_data: JSON.stringify(updatedPayrollHeaders),
+          raw_data: JSON.stringify(updatedPayrollHeaders.map((p) => this.sanitizePayrollForAudit(p))),
           description: `Cancelled Payroll Remarks: ${updatePayrollDto.remarks}`,
           status_id: 1,
         },
@@ -3422,7 +3535,7 @@ export class StaffPayrollService {
             ref_id: payroll.id,
             action_id: ACTION_IDS.CANCEL,
             description: `Cancel Payroll Remarks: ${updatePayrollDto.remarks}`,
-            raw_data: JSON.stringify(payroll),
+            raw_data: JSON.stringify(this.sanitizePayrollForAudit(payroll)),
             created_by: userId,
           });
         }
@@ -3462,6 +3575,15 @@ export class StaffPayrollService {
     }
   }
 
+  private sanitizePayrollForAudit(payroll: any): any {
+    if (!payroll) return null;
+    const { details, ...headerSummary } = payroll;
+    return {
+      ...headerSummary,
+      detailsCount: Array.isArray(details) ? details.length : undefined,
+    };
+  }
+
   async findOneHistory(ref_id: number) {
     return this.actionLogsService.findPerModuleRefID(this.module_name, ref_id);
   }
@@ -3486,12 +3608,24 @@ export class StaffPayrollService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
-          );
-        where.location_id = In(allowedLocationIds);
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       const payrollDetail = await this.payrollDetailRepository.find({

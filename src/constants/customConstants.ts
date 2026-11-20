@@ -9,7 +9,7 @@ export const MODULE_IDS = {
   LOCATION_HURDLES: 31,
   STORE_EMPLOYEES: 14,
   STAFFS: 40,
-  BILLING_REPORT: 56
+  BILLING_REPORT: 56,
 } as const;
 
 export const NAMING_CONVENTION = {
@@ -52,7 +52,7 @@ export const STATUS_IDS = {
   PERMANENT_CLOSED: 10,
   CANCELLED_DECLINED: 11,
   TEMPORARY_CLOSED: 12,
-  PASSED:19,
+  PASSED: 19,
 } as const;
 
 // ============= POS AVAILABIITY =============
@@ -88,7 +88,6 @@ export const ACCESS_PROCESS = {
   AUTO_ENROLL_SCHEDULE: [ACCESS_KEY_IDS.BOUNTY_PLUS_ACCESS] as number[],
   STAFF_TRAINING: [ACCESS_KEY_IDS.CTGI_ACCESS] as number[],
 };
-
 
 export const STATUS_NAMES = {
   [STATUS_IDS.PENDING]: "Pending",
@@ -185,7 +184,42 @@ export const BILLING_TYPE_ABBRS = {
   [BILLING_TYPE_IDS.ALL]: "ALL",
 } as const;
 
+// ============= NOTIFICATION EVENTS =============
+export const NOTIFICATION_EVENTS = {
+  ATTENDANCE_REVERSAL_REQUEST: "ATTENDANCE_REVERSAL_REQUEST",
+  PAYROLL_REVERSAL_GRANT: "PAYROLL_REVERSAL_GRANT",
+} as const;
 
+export type NotificationEventCode =
+  (typeof NOTIFICATION_EVENTS)[keyof typeof NOTIFICATION_EVENTS];
+
+export const NOTIFICATION_EVENT_CATALOG: Record<
+  NotificationEventCode,
+  {
+    event_code: string;
+    event_name: string;
+    default_module: string;
+    destination_module: string;
+    description: string;
+  }
+> = {
+  [NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST]: {
+    event_code: NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST,
+    event_name: "Attendance Reversal Request",
+    default_module: "STAFF ATTENDANCE",
+    destination_module: "STAFF PAYROLL",
+    description:
+      "Triggered when attendance team requests reversal of attendance already linked to payroll",
+  },
+  [NOTIFICATION_EVENTS.PAYROLL_REVERSAL_GRANT]: {
+    event_code: NOTIFICATION_EVENTS.PAYROLL_REVERSAL_GRANT,
+    event_name: "Payroll Reversal Granted",
+    default_module: "STAFF PAYROLL",
+    destination_module: "STAFF ATTENDANCE",
+    description:
+      "Triggered when payroll team grants reversal and resets connected attendance",
+  },
+};
 
 export const WORKING_REGULAR_DAYS = {
   HOURS: 8,

@@ -44,7 +44,7 @@ export class WarehouseEmployeesService {
     private actionLogsService: ActionLogsService,
   ) {}
 
-  private readonly module_name = "STORE_EMPLOYEES";
+  private readonly module_name = "STORE EMPLOYEES";
 
   private getErrorMessage(error: unknown): string {
     if (error instanceof Error) {
@@ -177,12 +177,20 @@ export class WarehouseEmployeesService {
     modifiedAt?: string,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
-        );
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     const query = this.warehouseEmployeesRepository
       .createQueryBuilder("we")
@@ -209,6 +217,11 @@ export class WarehouseEmployeesService {
       // User exists but has no location access — block all records
       query.andWhere("1=0");
     }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("we.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
+      });
+    }
     // If no userId/roleId (e.g. API key access), skip location filtering entirely
     if (assignmentDate) {
       query.andWhere("we.assignment_date = :assignmentDate", {
@@ -226,6 +239,7 @@ export class WarehouseEmployeesService {
       warehouse_ifs: rec.warehouse ? rec.warehouse.warehouse_ifs : null,
       warehouse_code: rec.warehouse ? rec.warehouse.warehouse_code : null,
       warehouse_name: rec.warehouse ? rec.warehouse.warehouse_name : null,
+      warehouse_type_id: rec.warehouse ? rec.warehouse.warehouse_type_id : null,
       location_id: rec.warehouse ? rec.warehouse.location_id : null,
       location_name:
         rec.warehouse && rec.warehouse.location
@@ -972,12 +986,20 @@ export class WarehouseEmployeesService {
 
       // Step 2: Get allowed location IDs based on user and role
       let allowedLocationIds: number[] | undefined = undefined;
+      let allowedWarehouseIds: number[] | undefined = undefined;
       if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
-          );
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
       }
 
       // Step 3: Determine final location IDs to use
@@ -1037,6 +1059,11 @@ export class WarehouseEmployeesService {
       query = query
         .leftJoinAndSelect("warehouse_employees", "we", joinCondition)
         .where("w.location_id IN (:...finalLocationIds)");
+
+      if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+        query = query.andWhere("w.id IN (:...allowedWarehouseIds)");
+        queryParams.allowedWarehouseIds = allowedWarehouseIds;
+      }
 
       // Add warehouse status filter if provided (accumulate before setParameters)
       if (store_status_ids && store_status_ids.length > 0) {

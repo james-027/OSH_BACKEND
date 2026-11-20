@@ -61,7 +61,10 @@ export class WarehouseHurdlesService {
     roleId?: number,
     hurdleDate?: string,
   ): Promise<any[]> {
-    const allowedLocationIds = await this.getAllowedLocationIds(userId, roleId);
+    const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+      this.getAllowedLocationIds(userId, roleId, accessKeyId),
+      this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+    ]);
     const query = this.warehouseHurdlesRepository
       .createQueryBuilder("wh")
       .innerJoinAndSelect("wh.warehouse", "warehouse")
@@ -83,6 +86,11 @@ export class WarehouseHurdlesService {
     if (allowedLocationIds && allowedLocationIds.length > 0) {
       query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
+      });
+    }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("wh.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
       });
     }
     // Filter by hurdle_date if provided
@@ -505,6 +513,7 @@ export class WarehouseHurdlesService {
   async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -512,6 +521,22 @@ export class WarehouseHurdlesService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
+    );
+  }
+
+  async getAllowedWarehouseIds(
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+    return await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+      userId,
+      roleId,
+      accessKeyId,
     );
   }
 
@@ -520,6 +545,7 @@ export class WarehouseHurdlesService {
     userId: number,
     allowedLocationIds?: number[],
     filename?: string,
+    allowedWarehouseIds?: number[],
   ) {
     let inserted_count = 0;
     let updated_count = 0;
@@ -551,6 +577,18 @@ export class WarehouseHurdlesService {
         errors.push({
           row: i + 2,
           error: `You do not have permission to upload hurdles for STORE IFS ${row.warehouse_ifs} (${warehouse.warehouse_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+      // Warehouse permission check
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: i + 2,
+          error: `You do not have permission to upload hurdles for STORE IFS ${row.warehouse_ifs} (${warehouse.warehouse_name}), based on your allowed stores.`,
         });
         continue;
       }

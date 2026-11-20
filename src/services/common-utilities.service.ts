@@ -1,9 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In } from "typeorm";
-import { UsersService } from "../modules/users/services/users.service";
+import { DataSource } from "typeorm";
 import { TransactionSequence } from "../entities/TransactionSequence";
 import { UserLocations } from "../entities/UserLocations";
+import { UserWarehouses } from "../entities/UserWarehouses";
+import { Warehouse } from "../entities/Warehouse";
+import { UserVendors } from "../entities/UserVendor";
+import { Vendor } from "../entities/Vendor";
 
 /**
  * Common Utilities Service
@@ -12,35 +14,167 @@ import { UserLocations } from "../entities/UserLocations";
 @Injectable()
 export class CommonUtilitiesService {
   constructor(
-    private usersService: UsersService,
-    @InjectRepository(TransactionSequence)
-    private sequenceRepo: Repository<TransactionSequence>,
     private dataSource: DataSource,
   ) {}
 
   /**
-   * Get user's allowed location IDs based on user-role relationship
+   * Get user's allowed location IDs based on user-role relationship and optional access key (tenant)
    * @param userId - The user's ID
    * @param roleId - The user's role ID
+   * @param accessKeyId - Optional tenant access key ID
    * @returns Array of allowed location IDs
    */
   async getUserAllowedLocationIds(
     userId: number,
     roleId: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
     }
     try {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
+      const whereClause: any = {
+        user_id: userId,
+        role_id: roleId,
+        status_id: 1,
+      };
+      if (accessKeyId) {
+        whereClause.access_key_id = accessKeyId;
+      }
+      const userLocations = await this.dataSource
+        .getRepository(UserLocations)
+        .find({
+          where: whereClause,
+          select: ["location_id"],
+        });
       return userLocations.map((ul) => ul.location_id);
     } catch (error) {
       console.error("Error fetching user location IDs:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's explicitly whitelisted warehouse IDs based on user-role relationship,
+   * allowed locations, and access key.
+   *
+   * Follows Strict Whitelisting:
+   * - If no explicit `user_warehouses` records exist: returns `[]` (avoids redundant
+   *   fetching of all warehouses under allowed locations).
+   * - If explicit `user_warehouses` records exist: returns only active assigned
+   *   warehouses constrained to the user's allowed locations.
+   *
+   * @param userId The user's ID
+   * @param roleId The user's role ID
+   * @param accessKeyId Optional tenant access key ID
+   * @returns Array of allowed warehouse IDs
+   */
+  async getUserAllowedWarehouseIds(
+    userId: number,
+    roleId: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+
+    try {
+      // 1. Retrieve allowed location IDs for this user, role, and tenant
+      const allowedLocationIds = await this.getUserAllowedLocationIds(
+        userId,
+        roleId,
+        accessKeyId,
+      );
+
+      if (allowedLocationIds.length === 0) {
+        return [];
+      }
+
+      // 2. Single query: fetch active whitelisted warehouses constrained to allowed locations
+      const qb = this.dataSource
+        .getRepository(UserWarehouses)
+        .createQueryBuilder("uw")
+        .innerJoin(
+          Warehouse,
+          "w",
+          "w.id = uw.warehouse_id AND w.status_id = :activeStatus",
+          { activeStatus: 1 },
+        )
+        .select("DISTINCT uw.warehouse_id", "warehouse_id")
+        .where("uw.user_id = :userId", { userId })
+        .andWhere("uw.role_id = :roleId", { roleId })
+        .andWhere("uw.status_id = :activeStatus", { activeStatus: 1 })
+        .andWhere("w.location_id IN (:...allowedLocationIds)", {
+          allowedLocationIds,
+        });
+
+      if (accessKeyId) {
+        qb.andWhere("uw.access_key_id = :accessKeyId", {
+          accessKeyId,
+        }).andWhere("w.access_key_id = :accessKeyId", { accessKeyId });
+      }
+
+      const rows = await qb.getRawMany<{ warehouse_id: number }>();
+
+      return rows.map((row) => Number(row.warehouse_id));
+    } catch (error) {
+      console.error("Error fetching user warehouse IDs:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's explicitly whitelisted vendor IDs based on user-role relationship
+   * and tenant access key.
+   *
+   * Follows Strict Whitelisting:
+   * - If no explicit `user_vendors` records exist: returns `[]` (avoids fetching
+   *   and filtering against every active vendor in the tenant).
+   * - If explicit `user_vendors` records exist: returns only active assigned
+   *   vendor IDs matching the tenant access key.
+   *
+   * Note: Vendor entity has no `location_id`, so it is scoped by `access_key_id` only.
+   *
+   * @param userId The user's ID
+   * @param roleId The user's role ID
+   * @param accessKeyId Optional tenant access key ID
+   * @returns Array of allowed vendor IDs
+   */
+  async getUserAllowedVendorIds(
+    userId: number,
+    roleId: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+
+    try {
+      const qb = this.dataSource
+        .getRepository(UserVendors)
+        .createQueryBuilder("uv")
+        .innerJoin(
+          Vendor,
+          "v",
+          "v.id = uv.vendor_id AND v.status_id = :activeStatus",
+          { activeStatus: 1 },
+        )
+        .select("DISTINCT uv.vendor_id", "vendor_id")
+        .where("uv.user_id = :userId", { userId })
+        .andWhere("uv.role_id = :roleId", { roleId })
+        .andWhere("uv.status_id = :activeStatus", { activeStatus: 1 });
+
+      if (accessKeyId) {
+        qb.andWhere("uv.access_key_id = :accessKeyId", {
+          accessKeyId,
+        }).andWhere("v.access_key_id = :accessKeyId", { accessKeyId });
+      }
+
+      const rows = await qb.getRawMany<{ vendor_id: number }>();
+
+      return rows.map((row) => Number(row.vendor_id));
+    } catch (error) {
+      console.error("Error fetching user vendor IDs:", error);
       return [];
     }
   }
@@ -84,8 +218,14 @@ export class CommonUtilitiesService {
     userIds: number[],
     targetLocationIds: number[],
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
-    if (!userIds || userIds.length === 0 || !targetLocationIds || targetLocationIds.length === 0) {
+    if (
+      !userIds ||
+      userIds.length === 0 ||
+      !targetLocationIds ||
+      targetLocationIds.length === 0
+    ) {
       return [];
     }
 
@@ -94,11 +234,16 @@ export class CommonUtilitiesService {
       .createQueryBuilder("ul")
       .select("DISTINCT ul.user_id", "userId")
       .where("ul.user_id IN (:...userIds)", { userIds })
-      .andWhere("ul.location_id IN (:...targetLocationIds)", { targetLocationIds })
+      .andWhere("ul.location_id IN (:...targetLocationIds)", {
+        targetLocationIds,
+      })
       .andWhere("ul.status_id = :statusId", { statusId: 1 });
 
     if (roleId) {
       query.andWhere("ul.role_id = :roleId", { roleId });
+    }
+    if (accessKeyId) {
+      query.andWhere("ul.access_key_id = :accessKeyId", { accessKeyId });
     }
 
     const rows = await query.getRawMany();
@@ -112,6 +257,7 @@ export class CommonUtilitiesService {
   async getUsersAllowedLocationIdsBatch(
     userIds: number[],
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<Map<number, number[]>> {
     const result = new Map<number, number[]>();
     if (!userIds || userIds.length === 0) return result;
@@ -126,6 +272,9 @@ export class CommonUtilitiesService {
     if (roleId) {
       query.andWhere("ul.role_id = :roleId", { roleId });
     }
+    if (accessKeyId) {
+      query.andWhere("ul.access_key_id = :accessKeyId", { accessKeyId });
+    }
 
     const rows = await query.getMany();
     for (const row of rows) {
@@ -135,7 +284,6 @@ export class CommonUtilitiesService {
     }
     return result;
   }
-
 
   /**
    * Format date to YYYY-MM-DD string

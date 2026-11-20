@@ -43,7 +43,12 @@ export class NotificationsController {
   @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
   getMyNotifications(@Req() req: any, @Query() query: NotificationQueryDto) {
     const userId = req.user?.id || 0;
-    return this.notificationsService.getMyNotifications(userId, query);
+    const accessKeyId = req.user?.current_access_key || null;
+    return this.notificationsService.getMyNotifications(
+      userId,
+      query,
+      accessKeyId,
+    );
   }
 
   /**
@@ -51,9 +56,18 @@ export class NotificationsController {
    */
   @Get("unread-count")
   @RequirePermissions({ module: "NOTIFICATIONS", action: "DATA ACCESS" })
-  async getUnreadCount(@Req() req: any) {
+  async getUnreadCount(
+    @Req() req: any,
+    @Query("access_key_id") accessKeyIdQuery?: string,
+  ) {
     const userId = req.user?.id || 0;
-    const count = await this.notificationsService.getUnreadCount(userId);
+    const accessKeyId = accessKeyIdQuery
+      ? Number(accessKeyIdQuery)
+      : req.user?.current_access_key || null;
+    const count = await this.notificationsService.getUnreadCount(
+      userId,
+      accessKeyId,
+    );
     return { count };
   }
 
@@ -94,6 +108,12 @@ export class NotificationsController {
   // =========================================================================
   // 3. DYNAMIC NOTIFICATION MATRIX CONFIGURATION (ADMIN SETTINGS)
   // =========================================================================
+
+  @Get("matrix/events/catalog")
+  @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })
+  getEventCatalog() {
+    return this.notificationsService.getEventCatalog();
+  }
 
   @Get("matrix")
   @RequirePermissions({ module: "NOTIFICATIONS", action: "VIEW" })

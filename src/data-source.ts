@@ -37,10 +37,3 @@ if (require.main === module) {
       process.exit(1);
     });
 }
-
-AppDataSource.initialize().then((ds) => {
-  console.log("=== ENTITIES LOADED ===");
-  ds.entityMetadatas.forEach((e) => {
-    console.log(e.name, "->", e.tableName);
-  });
-});

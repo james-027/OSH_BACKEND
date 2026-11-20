@@ -26,14 +26,14 @@ import { UpdateScheduleHeaderDto } from "src/modules/staff-attendance/dto/Update
 import { BulkAttendanceStatusDto } from "../dto/BulkAttendanceStatusDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
-import { EventEmitter2 } from "@nestjs/event-emitter";
-import { NotificationTriggerEvent } from "src/modules/notifications/events/notification-trigger.event";
+import { NotificationPublisherService } from "src/modules/notifications/services/notification-publisher.service";
 import logger from "../../../config/logger";
 import {
   STATUS_IDS,
   ACTION_IDS,
   WORKING_DAY_IDS,
   STATUS_NAMES,
+  NOTIFICATION_EVENTS,
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -77,7 +77,7 @@ export class StaffAttendanceService {
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
     private commonUtilitiesService: CommonUtilitiesService,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notificationPublisher: NotificationPublisherService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -101,6 +101,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
         where.details = {
           location_id: In(allowedLocationIds),
@@ -427,12 +428,33 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-          );
-        where.location_id = In(allowedLocationIds);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          where.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,
@@ -493,12 +515,33 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-          );
-        where.location_id = In(allowedLocationIds);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          where.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       const scheduleDetail = await this.scheduleDetailRepository.find({
@@ -606,6 +649,7 @@ export class StaffAttendanceService {
           await this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
+            accessKeyId,
           );
 
         if (where.location_id) {
@@ -661,34 +705,50 @@ export class StaffAttendanceService {
     roleId?: number,
   ): Promise<any[]> {
     try {
-      // 1. Apply allowed-location permissions.
+      // 1. Apply allowed-location and allowed-vendor permissions.
       let effectiveLocationIds = locationIds;
+      let effectiveVendorIds = vendorIds;
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
-          );
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
 
-        if (!allowedLocationIds.length) {
-          return [];
+        if (allowedLocationIds.length > 0) {
+          effectiveLocationIds = locationIds?.length
+            ? locationIds.filter((id) => allowedLocationIds.includes(id))
+            : allowedLocationIds;
+
+          if (!effectiveLocationIds.length) {
+            return [];
+          }
         }
 
-        effectiveLocationIds = locationIds?.length
-          ? locationIds.filter((id) => allowedLocationIds.includes(id))
-          : allowedLocationIds;
+        if (allowedVendorIds.length > 0) {
+          effectiveVendorIds = vendorIds?.length
+            ? vendorIds.filter((id) => allowedVendorIds.includes(id))
+            : allowedVendorIds;
 
-        if (!effectiveLocationIds.length) {
-          return [];
+          if (!effectiveVendorIds.length) {
+            return [];
+          }
         }
       }
 
       // 2. Get expected store assignments.
       const staffWarehouseWhere: any = {};
 
-      if (vendorIds?.length) {
-        staffWarehouseWhere.vendor_id = In(vendorIds);
+      if (effectiveVendorIds?.length) {
+        staffWarehouseWhere.vendor_id = In(effectiveVendorIds);
       }
 
       if (effectiveLocationIds?.length) {
@@ -2232,45 +2292,33 @@ export class StaffAttendanceService {
             .map((p) => p.id)
             .filter((id): id is number => id != null && !isNaN(id));
 
-          const notificationPayload = {
-            navigation: {
-              route: "/staff-payroll",
-              highlight_ids: payrollIds,
-              primary_id: connectedPayrollsList[0]?.id || null,
-              filter_params: {
-                invoice: primaryInvoice || undefined,
+          this.notificationPublisher.publish({
+            eventCode: NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST,
+            creatorId: userId,
+            accessKeyId: header.access_key_id || accessKeyId,
+            locationIds,
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              status: {
+                from: STATUS_NAMES[STATUS_IDS.COMPUTED],
+                to: STATUS_NAMES[STATUS_IDS.VALIDATED],
+              },
+              remarks: cleanedRemarks,
+            },
+            destination: {
+              module: "STAFF PAYROLL", // Route auto-resolved to "/staff-payroll" from Module Registry
+              refIds: payrollIds,
+              referenceNo: primaryInvoice || undefined,
+              statusId: STATUS_IDS.POSTED,
+              filterParams: {
                 source_schedule_id: header.id,
-                status_id: STATUS_IDS.POSTED,
               },
             },
-            payload: {
-              schedule_header_id: header.id,
-              previous_status: "Computed",
-              target_status: "Validated",
-              remarks: cleanedRemarks,
-              payroll_invoices: payrollInvoicesStr,
-              connected_payrolls: connectedPayrollsList,
-              location_ids: locationIds,
-            },
-            remarks: cleanedRemarks,
-            payroll_invoices: payrollInvoicesStr,
-          };
-
-          this.eventEmitter.emit(
-            "notification.trigger",
-            new NotificationTriggerEvent(
-              this.module_name,
-              "ATTENDANCE_REVERSAL_REQUEST",
-              header.id,
-              userId,
-              header.access_key_id || accessKeyId,
-              notificationPayload,
-              `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
-              actionUrl,
-              locationIds,
-            ),
-          );
+            fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
+            fallbackDescription: `Reversal requested for Schedule #${header.id} (Connected Payroll Invoice: ${payrollInvoicesStr}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: actionUrl,
+          });
         }
 
         // Also notify on normal backward reverts (e.g. Validated -> For Review) if configured
@@ -2291,40 +2339,33 @@ export class StaffAttendanceService {
             ),
           );
 
-          const notificationPayload = {
-            navigation: {
+          this.notificationPublisher.publish({
+            eventCode: NOTIFICATION_EVENTS.ATTENDANCE_REVERSAL_REQUEST,
+            creatorId: userId,
+            accessKeyId: header.access_key_id || accessKeyId,
+            locationIds,
+            source: {
+              module: this.module_name,
+              refId: header.id,
+              status: {
+                from: prevStatusName,
+                to: targetStatusName,
+              },
+              remarks: cleanedRemarks,
+            },
+            destination: {
+              module: this.module_name,
               route: `/staff-attendance?header_id=${header.id}`,
-              highlight_ids: [header.id],
-              primary_id: header.id,
-              filter_params: {
+              refIds: [header.id],
+              statusId: targetStatusId,
+              filterParams: {
                 header_id: header.id,
               },
             },
-            payload: {
-              schedule_header_id: header.id,
-              previous_status: prevStatusName,
-              target_status: targetStatusName,
-              remarks: cleanedRemarks,
-              location_ids: locationIds,
-            },
-            remarks: cleanedRemarks,
-          };
-
-          this.eventEmitter.emit(
-            "notification.trigger",
-            new NotificationTriggerEvent(
-              this.module_name,
-              "ATTENDANCE_REVERSAL_REQUEST",
-              header.id,
-              userId,
-              header.access_key_id || accessKeyId,
-              notificationPayload,
-              `Attendance Reversal Requested - Schedule #${header.id}`,
-              `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
-              `/staff-attendance?header_id=${header.id}`,
-              locationIds,
-            ),
-          );
+            fallbackTitle: `Attendance Reversal Requested - Schedule #${header.id}`,
+            fallbackDescription: `Reversal requested for Schedule #${header.id} (${prevStatusName} -> ${targetStatusName}). Remarks: ${cleanedRemarks || "No remarks provided"}`,
+            fallbackActionUrl: `/staff-attendance?header_id=${header.id}`,
+          });
         }
       } catch (err) {
         logger.error(
@@ -2384,6 +2425,7 @@ export class StaffAttendanceService {
     schedule_date: string,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const workbook = XLSX.readFile(file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -2501,6 +2543,16 @@ export class StaffAttendanceService {
       ]),
     );
 
+    let allowedWarehouseIds: number[] = [];
+    if (userId && roleId) {
+      allowedWarehouseIds =
+        await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
@@ -2513,6 +2565,14 @@ export class StaffAttendanceService {
         errors.push({
           row: i + 3,
           error: `Warehouse '${warehouseName}' not found`,
+        });
+      } else if (
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: i + 3,
+          error: `User not allowed to upload for warehouse '${warehouseName}'`,
         });
       }
     }

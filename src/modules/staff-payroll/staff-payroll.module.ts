@@ -25,6 +25,7 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { StaffSalary } from "src/entities/StaffSalary";
 import { ActionsModule } from "../actions/actions.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { SssConfigs } from "src/entities/SssConfig";
 import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { WarehousesModule } from "../warehouses/warehouses.module";
@@ -57,6 +58,7 @@ import { BillingType } from "src/entities/BillingType";
     SSEModule,
     ActionsModule,
     WarehousesModule,
+    NotificationsModule,
   ],
   controllers: [StaffPayrollController],
   providers: [

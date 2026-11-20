@@ -82,6 +82,12 @@ export const CACHE_KEYS = {
   REQUIREMENTS_ALL: "requirements:all",
   REQUIREMENTS_ONE: "requirements:one",
 
+  // Crew System Hub
+  CREW_HUB_SYSTEMS: "crew-hub:systems",
+  CREW_HUB_MATERIALS: "crew-hub:learning-materials",
+  CREW_HUB_TYPES: "crew-hub:material-types",
+  CREW_HUB_OVERVIEW: "crew-hub:overview",
+
   // General findAll/findOne (by service name)
   FIND_ALL: (service: string) => `${service}:find-all`,
   FIND_ONE: (service: string) => `${service}:find-one`,
@@ -118,6 +124,12 @@ export const CACHE_PATTERNS = {
 
   APPROVAL_STAGES_LIST:
   "approval-stageslist:*",
+
+  // Users
+  USERS: "users:*",
+
+  // Crew System Hub
+  CREW_HUB: "crew-hub:*",
 };
 
 export const CACHE_TTL = {
@@ -324,6 +336,16 @@ export function buildApprovalStagesListKey(
   return `${base}:${userId}:${roleId}:${accessKeyId}`;
 }
 
+export function buildUsersWithRestrictionKey(
+  query: any,
+  params: any,
+  user: any,
+): string {
+  const base = CACHE_KEYS.FIND_ALL("users-restricted:v4");
+  const userId = user?.id || "all";
+  const roleId = user?.role_id || "all";
+  return `${base}:${userId}:${roleId}`;
+}
 
 // Type for cache key builder functions
 export type CacheKeyBuilder = (query: any, params?: any, user?: any) => string;

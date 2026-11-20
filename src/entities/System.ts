@@ -27,6 +27,9 @@ export class System {
   @Column({ default: 1 })
   status_id: number;
 
+  @Column({ type: "int", nullable: true, default: null })
+  parent_id!: number | null;
+
   @Column({ nullable: true })
   created_by: number;
 
@@ -40,6 +43,16 @@ export class System {
   modified_at: Date;
 
   // Relations
+  @ManyToOne(() => System, (system) => system.children, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "parent_id" })
+  parent?: System | null;
+
+  @OneToMany(() => System, (system) => system.parent)
+  children?: System[];
+
   @ManyToOne(() => Status, { eager: false })
   @JoinColumn({ name: "status_id" })
   status: Status;

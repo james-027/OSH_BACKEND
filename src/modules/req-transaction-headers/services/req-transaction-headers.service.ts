@@ -116,6 +116,7 @@ export class ReqTransactionHeadersService {
   private async getAllowedLocationIds(
     userId?: number,
     roleId?: number,
+    accessKeyId?: number,
   ): Promise<number[]> {
     if (!userId || !roleId) {
       return [];
@@ -123,6 +124,7 @@ export class ReqTransactionHeadersService {
     return await this.commonUtilitiesService.getUserAllowedLocationIds(
       userId,
       roleId,
+      accessKeyId,
     );
   }
 
@@ -145,6 +147,7 @@ export class ReqTransactionHeadersService {
       const allowedLocationIds = await this.getAllowedLocationIds(
         userId,
         roleId,
+        accessKeyId,
       );
 
       let query = this.reqTransactionHeadersRepository

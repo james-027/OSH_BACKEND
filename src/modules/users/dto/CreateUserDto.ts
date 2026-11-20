@@ -14,12 +14,28 @@ export interface UserPermissionPreset {
   module_ids: number;
   role_id: number;
   action_ids: number[];
+  access_key_id?: number;
 }
 
 // Define interface for user location presets
 export interface UserLocationPreset {
   role_id: number;
   location_ids: number[];
+  access_key_id?: number;
+}
+
+// Define interface for user warehouse presets
+export interface UserWarehousePreset {
+  role_id: number;
+  warehouse_ids: number[];
+  access_key_id?: number;
+}
+
+// Define interface for user vendor presets
+export interface UserVendorPreset {
+  role_id: number;
+  vendor_ids: number[];
+  access_key_id?: number;
 }
 
 export class CreateUserDto {
@@ -88,6 +104,10 @@ export class CreateUserDto {
   @IsString({ message: "Profile picture URL must be a string" })
   profile_pic_url?: string;
 
+  @IsOptional()
+  @IsString({ message: "Signature URL must be a string" })
+  signature_url?: string;
+
   // UserPermissions fields
   @IsOptional()
   @IsArray({ message: "Access key IDs must be an array" })
@@ -102,11 +122,36 @@ export class CreateUserDto {
   @IsArray({ message: "User location presets must be an array" })
   user_location_presets?: UserLocationPreset[];
 
+  @IsOptional()
+  @IsArray({ message: "User warehouse presets must be an array" })
+  user_warehouse_presets?: UserWarehousePreset[];
+
+  @IsOptional()
+  @IsArray({ message: "User vendor presets must be an array" })
+  user_vendor_presets?: UserVendorPreset[];
+
   // UserLocations fields
   @IsOptional()
   @IsArray({ message: "Location IDs must be an array" })
   @IsInt({ each: true, message: "Each location ID must be an integer" })
   location_ids?: number[];
+
+  // UserWarehouses fields
+  @IsOptional()
+  @IsArray({ message: "Warehouse IDs must be an array" })
+  @IsInt({ each: true, message: "Each warehouse ID must be an integer" })
+  warehouse_ids?: number[];
+
+  // UserVendors fields
+  @IsOptional()
+  @IsArray({ message: "Vendor IDs must be an array" })
+  @IsInt({ each: true, message: "Each vendor ID must be an integer" })
+  vendor_ids?: number[];
+
+  @IsOptional()
+  @IsArray({ message: "Roles to update must be an array" })
+  @IsInt({ each: true, message: "Each role ID must be an integer" })
+  roles_to_update?: number[];
 
   // Additional field for audit
   @IsOptional()

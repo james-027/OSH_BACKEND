@@ -15,6 +15,10 @@ export class UpdateUserLocationsDto {
   @IsNumber()
   role_id?: number;
 
+  @IsOptional()
+  @IsNumber()
+  access_key_id?: number;
+
   // @IsOptional()
   // @IsNumber()
   // location_id?: number;

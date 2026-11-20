@@ -30,10 +30,13 @@ export class BulkChangeWarehouseStatusDto {
         "Status ID must be a valid REM status (8: OPEN, 9: SOON_TO_OPEN, 10: PERMANENT_CLOSED, 11: CANCELLED_DECLINED, 12: TEMPORARY_CLOSED)",
     },
   )
-  status_id!: number;
+  rem_status_id!: number;
 
   @IsOptional()
   @IsString({ message: "Undo/status reason must be a string" })
   undo_reason?: string;
-}
 
+  @IsOptional()
+  @IsString({ message: "Remarks must be a string" })
+  remarks?: string;
+}

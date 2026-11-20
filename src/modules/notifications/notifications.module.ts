@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { NotificationsController } from "./controllers/notifications.controller";
 import { NotificationsService } from "./services/notifications.service";
+import { NotificationPublisherService } from "./services/notification-publisher.service";
 import { NotificationEventListener } from "./listeners/notification-event.listener";
 import { Notification } from "../../entities/Notification";
 import { NotificationRecipient } from "../../entities/NotificationRecipient";
@@ -37,9 +38,10 @@ import { CommonUtilitiesService } from "src/services/common-utilities.service";
   controllers: [NotificationsController],
   providers: [
     NotificationsService,
+    NotificationPublisherService,
     NotificationEventListener,
     CommonUtilitiesService,
   ],
-  exports: [NotificationsService],
+  exports: [NotificationsService, NotificationPublisherService],
 })
 export class NotificationsModule {}

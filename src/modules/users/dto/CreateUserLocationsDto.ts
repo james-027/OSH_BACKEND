@@ -16,6 +16,10 @@ export class CreateUserLocationsDto {
   role_id!: number;
 
   @IsNotEmpty()
+  @IsNumber()
+  access_key_id!: number;
+
+  @IsNotEmpty()
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })

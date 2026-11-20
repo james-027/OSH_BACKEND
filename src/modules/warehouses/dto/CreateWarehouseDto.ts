@@ -97,7 +97,20 @@ export class CreateWarehouseDto {
   longitude?: number;
 
   @IsOptional()
+  @IsInt({ message: "Profit center ID must be an integer" })
+  @Min(1, { message: "Profit center ID must be a positive integer" })
+  profit_center_id?: number;
+
+  @IsOptional()
+  @IsInt({ message: "Sales territory ID must be an integer" })
+  @Min(1, { message: "Sales territory ID must be a positive integer" })
+  sales_territory_id?: number;
+
+  @IsOptional()
+  @IsNumber({}, { message: "Allowed geofence must be a valid number" })
+  allowed_geofence?: number;
+
+  @IsOptional()
   @IsInt()
   access_key_id?: number;
 }
-

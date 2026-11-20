@@ -12,8 +12,12 @@ import { LocationType } from "../entities/LocationType";
 import { Company } from "../entities/Company";
 import { RoleActionPreset } from "../entities/RoleActionPreset";
 import { RoleLocationPreset } from "../entities/RoleLocationPreset";
+import { RoleWarehousePreset } from "../entities/RoleWarehousePreset";
+import { RoleVendorPreset } from "../entities/RoleVendorPreset";
 import { UserPermissions } from "../entities/UserPermissions";
 import { UserLocations } from "../entities/UserLocations";
+import { UserWarehouses } from "../entities/UserWarehouses";
+import { UserVendors } from "../entities/UserVendor";
 import { UserLoginSession } from "../entities/UserLoginSession";
 import { Region } from "../entities/Region";
 import { AuditForm } from "../entities/AuditForm";
@@ -117,6 +121,9 @@ import { WarehouseBudgetHour } from "../entities/WarehouseBudgetHour";
 import { WarehouseSalary } from "../entities/WarehouseSalary";
 import { PayrollLog } from "../entities/PayrollLog";
 import { BillingType } from "../entities/BillingType";
+import { CrewHubSystem } from "../entities/CrewHubSystem";
+import { LearningMaterial } from "../entities/LearningMaterial";
+import { LearningMaterialType } from "../entities/LearningMaterialType";
 import { Customer } from "../entities/Customer";
 import { WeighInLine } from "../entities/WeighInItems";
 import { WeighIn_header } from "../entities/WeighInHeader";
@@ -139,8 +146,12 @@ export const entities = [
   Company,
   RoleActionPreset,
   RoleLocationPreset,
+  RoleWarehousePreset,
+  RoleVendorPreset,
   UserPermissions,
   UserLocations,
+  UserWarehouses,
+  UserVendors,
   UserLoginSession,
   Region,
   AuditForm,
@@ -244,6 +255,9 @@ export const entities = [
   WarehouseSalary,
   PayrollLog,
   BillingType,
+  CrewHubSystem,
+  LearningMaterial,
+  LearningMaterialType,
   Customer,
   WeighInLine,
   WeighIn_header,

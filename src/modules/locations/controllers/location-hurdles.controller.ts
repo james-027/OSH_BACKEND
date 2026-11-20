@@ -196,9 +196,14 @@ export class LocationHurdlesController {
     const json = normalizeKeysArray(jsonRaw);
     const userId = req.user.id;
     const roleId = req.user.role_id;
+    const accessKeyId = req.user?.current_access_key;
     // Get allowed location_ids for this user/role
     const allowedLocationIds =
-      await this.locationHurdlesService.getAllowedLocationIds(userId, roleId);
+      await this.locationHurdlesService.getAllowedLocationIds(
+        userId,
+        roleId,
+        accessKeyId,
+      );
     // Map Excel columns to DTOs
     const records = json.map((row) => {
       let hurdle_date = null;

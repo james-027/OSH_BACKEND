@@ -10,9 +10,13 @@ import { User } from "./User";
 import { Status } from "./Status";
 import { RoleActionPreset } from "./RoleActionPreset";
 import { RoleLocationPreset } from "./RoleLocationPreset";
+import { RoleWarehousePreset } from "./RoleWarehousePreset";
 import { UserPermissions } from "./UserPermissions";
 import { UserLocations } from "./UserLocations";
+import { UserWarehouses } from "./UserWarehouses";
 import { System } from "./System";
+import { UserVendors } from "./UserVendor";
+import { RoleVendorPreset } from "./RoleVendorPreset";
 
 @Entity()
 export class Role {
@@ -78,6 +82,14 @@ export class Role {
   @OneToMany(() => RoleLocationPreset, (preset) => preset.role)
   roleLocationPresets!: RoleLocationPreset[];
 
+  // Relationship for role_id in RoleWarehousePreset
+  @OneToMany(() => RoleWarehousePreset, (preset) => preset.role)
+  roleWarehousePresets!: RoleWarehousePreset[];
+
+  // Relationship for role_id in RoleVendorPreset
+  @OneToMany(() => RoleVendorPreset, (preset) => preset.role)
+  roleVendorPresets!: RoleVendorPreset[];
+
   // Relationship for role_id in User
   @OneToMany(() => User, (user) => user.role)
   users!: User[];
@@ -90,6 +102,10 @@ export class Role {
   @OneToMany(() => UserLocations, (userLocations) => userLocations.role)
   userLocations!: UserLocations[];
 
+  // Relationship for role_id in UserWarehouses
+  @OneToMany(() => UserWarehouses, (userWarehouses) => userWarehouses.role)
+  userWarehouses!: UserWarehouses[];
+
   // Foreign key to User entity for updated_by
   @ManyToOne(() => System, (system) => system.roles, {
     eager: false,
@@ -98,4 +114,7 @@ export class Role {
   })
   @JoinColumn({ name: "system_id" })
   system?: System;
+
+  @OneToMany(() => UserVendors, (userVendors) => userVendors.role)
+  userVendors!: UserVendors[];
 }

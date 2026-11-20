@@ -80,12 +80,42 @@ export class StaffWarehousesService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-          );
-        where.location_id = In(allowedLocationIds);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+          ]);
+        if (allowedLocationIds && allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+
+        if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+          if (warehouseId?.length) {
+            const intersected = warehouseId.filter((wid) =>
+              allowedWarehouseIds.includes(wid),
+            );
+            where.warehouse_id = In(intersected.length > 0 ? intersected : [0]);
+          } else {
+            where.warehouse_id = In(allowedWarehouseIds);
+          }
+        }
+
+        if (allowedVendorIds && allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       where.staff = {
