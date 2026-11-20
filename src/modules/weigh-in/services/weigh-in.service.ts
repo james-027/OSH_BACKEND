@@ -103,7 +103,7 @@ export class WeighInService {
   }
 
   // Get weigh-ins by search and pagination with user ownership restriction
- async GetbysearchAndPages(
+async GetbysearchAndPages(
   page: number,
   pageSize: number,
   search: string,
@@ -116,14 +116,16 @@ export class WeighInService {
     const limit = Math.max(1, Number(pageSize) || 7);
     const offset = (currentPage - 1) * limit;
 
-    // STEP 1: Query and paginate HEADER records only
+    // STEP 1: Build header query with filters
     const headerQuery = this.weighInRepository
       .createQueryBuilder("wi")
       .leftJoin("wi.createdBy", "createdBy");
 
     // Admin can view all records
     if (Number(roleId) !== 1) {
-      headerQuery.where("wi.created_by = :userId", { userId });
+      headerQuery.andWhere("wi.created_by = :userId", {
+        userId,
+      });
     }
 
     // Search filter
@@ -144,38 +146,58 @@ export class WeighInService {
     }
 
     // Status filter
-    if (statusId) {
+    if (statusId !== undefined && statusId !== null && statusId !== "") {
       headerQuery.andWhere("wi.status_id = :statusId", {
         statusId: Number(statusId),
       });
     }
 
-    // Get distinct header records and total count
-    const [headers, totalCount] = await headerQuery
-      .select(["wi.id"])
+    // STEP 2: Get total count independently
+    const totalCount = await headerQuery.clone().getCount();
+
+    // STEP 3: Retrieve paginated IDs as raw data
+    const headerRows = await headerQuery
+      .clone()
+      .select("wi.id", "id")
+      .distinct(true)
       .orderBy("wi.id", "DESC")
-      .skip(offset)
-      .take(limit)
-      .getManyAndCount();
+      .offset(offset)
+      .limit(limit)
+      .getRawMany<{ id: number | string }>();
 
-    const headerIds = headers.map((header) => header.id);
+    const headerIds = headerRows.map((row) => Number(row.id));
 
-    // STEP 2: Fetch complete headers with their relations
-    let items: WeighIn_header[] = [];
+    logger.info("Weigh-in pagination IDs:", {
+      headerIds,
+      totalCount,
+      userId,
+      roleId,
+    });
 
-    if (headerIds.length > 0) {
-      items = await this.weighInRepository
-        .createQueryBuilder("wi")
-        .leftJoinAndSelect("wi.status", "status")
-        .leftJoinAndSelect("wi.createdBy", "createdBy")
-        .leftJoinAndSelect("wi.lines", "lines")
-        .where("wi.id IN (:...headerIds)", { headerIds })
-        .orderBy("wi.id", "DESC")
-        .addOrderBy("lines.id", "ASC")
-        .getMany();
-    }
+    // STEP 4: Fetch complete records using retrieved IDs
+    const items = headerIds.length > 0
+      ? await this.weighInRepository.find({
+          where: {
+            id: In(headerIds),
+          },
+          relations: ["status", "createdBy", "lines"],
+          order: {
+            id: "DESC",
+            lines: {
+              id: "ASC",
+            },
+          },
+        })
+      : [];
 
-    // STEP 3: Return paginated response
+    // STEP 5: Debug returned records
+    logger.info("Weigh-in pagination result:", {
+      requestedIds: headerIds,
+      returnedCount: items.length,
+      returnedIds: items.map((item) => item.id),
+    });
+
+    // STEP 6: Return response
     return {
       items: items.map((item) =>
         this.mapWeighInResponse(item, true),
@@ -191,6 +213,7 @@ export class WeighInService {
     throw new Error("Failed to fetch weigh-ins");
   }
 }
+
 
   async findOneHistory(ref_id: number) {
     return this.ActionLogsService.findPerModuleRefID(this.module_name, ref_id);
@@ -278,7 +301,7 @@ export class WeighInService {
         transaction_date: createWeighInDto.transaction_date
           ? new Date(createWeighInDto.transaction_date)
           : new Date(),
-        session_status: createWeighInDto.session_status ?? "ACTIVE",
+        session_status: createWeighInDto.session_status ?? "COMPLETED",
         grower: createWeighInDto.grower,
         farm_location: createWeighInDto.farm_location,
         sold_to: createWeighInDto.sold_to,
