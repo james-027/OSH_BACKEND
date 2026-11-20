@@ -3483,6 +3483,13 @@ export class UsersService {
         "Vendor(s)": { format: "none", nullable: true },
         Vendors: { format: "none", nullable: true },
         "Overwrite Roles & Locations": { format: "none", nullable: true },
+        "Overwrite Roles, Locations, Warehouses & Vendors": {
+          format: "none",
+          nullable: true,
+        },
+        "Overwrite Presets": { format: "none", nullable: true },
+        "Overwrite Mode": { format: "none", nullable: true },
+        Overwrite: { format: "none", nullable: true },
       },
     };
 
@@ -3582,7 +3589,12 @@ export class UsersService {
         const primaryRole = roles[0];
 
         // Parse Overwrite mode: 1/true/yes = overwrite, 0/false/empty = Smart Append (default)
-        const rawOverwrite = formattedRow["Overwrite Roles & Locations"];
+        const rawOverwrite =
+          formattedRow["Overwrite Roles & Locations"] ??
+          formattedRow["Overwrite Roles, Locations, Warehouses & Vendors"] ??
+          formattedRow["Overwrite Presets"] ??
+          formattedRow["Overwrite Mode"] ??
+          formattedRow["Overwrite"];
         const isOverwrite =
           rawOverwrite === 1 ||
           rawOverwrite === "1" ||
@@ -3595,11 +3607,12 @@ export class UsersService {
 
         // Check if Location(s) column has values and build user_location_presets per access key
         let userLocationPresets: any[] = [];
-
-        if (
+        const hasLocationInput = Boolean(
           formattedRow["Location(s)"] &&
-          String(formattedRow["Location(s)"]).trim() !== ""
-        ) {
+            String(formattedRow["Location(s)"]).trim() !== "",
+        );
+
+        if (hasLocationInput) {
           try {
             // Parse comma-separated location names
             const locationNames = String(formattedRow["Location(s)"])
@@ -3708,8 +3721,11 @@ export class UsersService {
         let userWarehousePresets: any[] = [];
         const rawWarehouseInput =
           formattedRow["Warehouse(s)"] ?? formattedRow["Warehouses"];
+        const hasWarehouseInput = Boolean(
+          rawWarehouseInput && String(rawWarehouseInput).trim() !== "",
+        );
 
-        if (rawWarehouseInput && String(rawWarehouseInput).trim() !== "") {
+        if (hasWarehouseInput) {
           try {
             const warehouseIdentifiers = String(rawWarehouseInput)
               .split(",")
@@ -3848,8 +3864,11 @@ export class UsersService {
         let userVendorPresets: any[] = [];
         const rawVendorInput =
           formattedRow["Vendor(s)"] ?? formattedRow["Vendors"];
+        const hasVendorInput = Boolean(
+          rawVendorInput && String(rawVendorInput).trim() !== "",
+        );
 
-        if (rawVendorInput && String(rawVendorInput).trim() !== "") {
+        if (hasVendorInput) {
           try {
             const vendorIdentifiers = String(rawVendorInput)
               .split(",")
@@ -4068,7 +4087,8 @@ export class UsersService {
               );
             }
 
-            if (userWarehousePresets.length === 0) {
+            let finalOverwriteWhPresets = userWarehousePresets;
+            if (!hasWarehouseInput) {
               await this.userWarehousesRepository.update(
                 { user_id: existingUser.id, role_id: In(allRoleIds) },
                 {
@@ -4077,9 +4097,11 @@ export class UsersService {
                   modified_at: new Date(),
                 },
               );
+              finalOverwriteWhPresets = [];
             }
 
-            if (userVendorPresets.length === 0) {
+            let finalOverwriteVendorPresets = userVendorPresets;
+            if (!hasVendorInput) {
               await this.userVendorsRepository.update(
                 { user_id: existingUser.id, role_id: In(allRoleIds) },
                 {
@@ -4088,6 +4110,7 @@ export class UsersService {
                   modified_at: new Date(),
                 },
               );
+              finalOverwriteVendorPresets = [];
             }
 
             updateUserDto = {
@@ -4110,20 +4133,146 @@ export class UsersService {
               access_key_id: newAccessKeyIds,
               user_permission_presets: allRoleActionPresets,
               user_location_presets: userLocationPresets,
-              user_warehouse_presets: userWarehousePresets,
-              user_vendor_presets: userVendorPresets,
+              user_warehouse_presets: finalOverwriteWhPresets,
+              user_vendor_presets: finalOverwriteVendorPresets,
               roles_to_update: allRoleIds,
             };
             await this.update(existingUser.id, updateUserDto);
           } else {
             // SMART APPEND / MERGE MODE (Default: 0 / Blank):
-            // Preserve existing active roles & access keys; only update the newly uploaded roles!
+            // 1. Preserve existing active roles & access keys
             const mergedRoleIds = Array.from(
               new Set([...existingRoleIds, ...allRoleIds]),
             );
             const mergedAccessKeyIds = Array.from(
               new Set([...existingAccessKeyIds, ...newAccessKeyIds]),
             );
+
+            // 2. Fetch existing active presets for the target user under the uploaded roles
+            const [existingActiveLocs, existingActiveWhs, existingActiveVnds] =
+              await Promise.all([
+                this.userLocationsRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "location_id"],
+                }),
+                this.userWarehousesRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "warehouse_id"],
+                }),
+                this.userVendorsRepository.find({
+                  where: {
+                    user_id: existingUser.id,
+                    role_id: In(allRoleIds),
+                    status_id: 1,
+                  },
+                  select: ["role_id", "access_key_id", "vendor_id"],
+                }),
+              ]);
+
+            // Group existing active presets by `${role_id}_${access_key_id}`
+            const existingLocMap = new Map<string, number[]>();
+            for (const el of existingActiveLocs) {
+              const k = `${el.role_id}_${el.access_key_id}`;
+              if (!existingLocMap.has(k)) existingLocMap.set(k, []);
+              existingLocMap.get(k)!.push(Number(el.location_id));
+            }
+
+            const existingWhMap = new Map<string, number[]>();
+            for (const ew of existingActiveWhs) {
+              const k = `${ew.role_id}_${ew.access_key_id}`;
+              if (!existingWhMap.has(k)) existingWhMap.set(k, []);
+              existingWhMap.get(k)!.push(Number(ew.warehouse_id));
+            }
+
+            const existingVndMap = new Map<string, number[]>();
+            for (const ev of existingActiveVnds) {
+              const k = `${ev.role_id}_${ev.access_key_id}`;
+              if (!existingVndMap.has(k)) existingVndMap.set(k, []);
+              existingVndMap.get(k)!.push(Number(ev.vendor_id));
+            }
+
+            // Location Smart Append:
+            let finalUserLocationPresets = [...userLocationPresets];
+            if (hasLocationInput) {
+              finalUserLocationPresets = finalUserLocationPresets.map((lp) => {
+                const k = `${lp.role_id}_${lp.access_key_id}`;
+                const prev = existingLocMap.get(k) || [];
+                return {
+                  ...lp,
+                  location_ids: Array.from(
+                    new Set([...prev, ...(lp.location_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveLocs.length > 0) {
+              finalUserLocationPresets = [];
+              existingLocMap.forEach((locIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserLocationPresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  location_ids: Array.from(new Set(locIds)),
+                });
+              });
+            }
+
+            // Warehouse Smart Append:
+            let finalUserWarehousePresets = [...userWarehousePresets];
+            if (hasWarehouseInput) {
+              finalUserWarehousePresets = finalUserWarehousePresets.map((wp) => {
+                const k = `${wp.role_id}_${wp.access_key_id}`;
+                const prev = existingWhMap.get(k) || [];
+                return {
+                  ...wp,
+                  warehouse_ids: Array.from(
+                    new Set([...prev, ...(wp.warehouse_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveWhs.length > 0) {
+              finalUserWarehousePresets = [];
+              existingWhMap.forEach((whIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserWarehousePresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  warehouse_ids: Array.from(new Set(whIds)),
+                });
+              });
+            }
+
+            // Vendor Smart Append:
+            let finalUserVendorPresets = [...userVendorPresets];
+            if (hasVendorInput) {
+              finalUserVendorPresets = finalUserVendorPresets.map((vp) => {
+                const k = `${vp.role_id}_${vp.access_key_id}`;
+                const prev = existingVndMap.get(k) || [];
+                return {
+                  ...vp,
+                  vendor_ids: Array.from(
+                    new Set([...prev, ...(vp.vendor_ids || [])]),
+                  ),
+                };
+              });
+            } else if (existingActiveVnds.length > 0) {
+              finalUserVendorPresets = [];
+              existingVndMap.forEach((vIds, key) => {
+                const [rId, aId] = key.split("_").map(Number);
+                finalUserVendorPresets.push({
+                  role_id: rId,
+                  access_key_id: aId,
+                  vendor_ids: Array.from(new Set(vIds)),
+                });
+              });
+            }
 
             updateUserDto = {
               user_name: formattedRow["Username"],
@@ -4146,9 +4295,9 @@ export class UsersService {
               theme_id: formattedRow["Theme ID"] || existingUser.theme_id || 1,
               access_key_id: mergedAccessKeyIds,
               user_permission_presets: allRoleActionPresets,
-              user_location_presets: userLocationPresets,
-              user_warehouse_presets: userWarehousePresets,
-              user_vendor_presets: userVendorPresets,
+              user_location_presets: finalUserLocationPresets,
+              user_warehouse_presets: finalUserWarehousePresets,
+              user_vendor_presets: finalUserVendorPresets,
               roles_to_update: allRoleIds, // Only update the uploaded roles; other roles remain untouched and active!
             };
             await this.update(existingUser.id, updateUserDto);
