@@ -246,7 +246,233 @@ export class UsersService {
       const loggedHighestPriority =
         loggedLevels.length > 0 ? Math.min(...loggedLevels) : 999;
 
-      // Row-level filter: Dynamic Hierarchical System Scope + Role Level Priority
+      // ==========================================
+      // USER RESTRICTION CONFIGURATION SWITCHES
+      // ==========================================
+      // 1. Viewer Scope:
+      //    'CURRENT_SESSION' = Allowed IDs based on viewer's active role & current_access_key
+      //    'CONSOLIDATED'    = Allowed IDs aggregated across all roles of the viewer
+      const VIEWER_SCOPE_MODE = "CURRENT_SESSION" as
+        | "CURRENT_SESSION"
+        | "CONSOLIDATED";
+
+      // 2. Target Scope:
+      //    'CONSOLIDATED'    = Compare against all locations/warehouses/vendors across all roles of the target user
+      //    'CURRENT_SESSION' = Compare only against presets under target user's primary role_id / current_access_key
+      const TARGET_SCOPE_MODE = "CONSOLIDATED" as
+        | "CONSOLIDATED"
+        | "CURRENT_SESSION";
+
+      // 3. Independent Matching Modes:
+      //    'AT_LEAST_ONE'    = Target shares at least one ID with viewer's allowed IDs (overlap/intersection)
+      //    'ALL'             = All of target's assigned IDs must be within viewer's allowed IDs (subset)
+      const LOCATION_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+      const WAREHOUSE_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+      const VENDOR_RESTRICTION_MODE = "ALL" as "AT_LEAST_ONE" | "ALL";
+
+      // Resolve viewer's allowed IDs
+      let allowedLocationIds: number[] = [];
+      let allowedWarehouseIds: number[] = [];
+      let allowedVendorIds: number[] = [];
+
+      if (VIEWER_SCOPE_MODE === "CURRENT_SESSION") {
+        const currentUserRoleId = Number(currentUser?.role_id);
+        const currentUserAccessKeyId =
+          currentUser?.current_access_key !== undefined &&
+          currentUser?.current_access_key !== null
+            ? Number(currentUser.current_access_key)
+            : undefined;
+
+        [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedLocationIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedWarehouseIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+            currentUserRoleId
+              ? this.commonUtilitiesService.getUserAllowedVendorIds(
+                  currentUserId,
+                  currentUserRoleId,
+                  currentUserAccessKeyId,
+                )
+              : Promise.resolve([]),
+          ]);
+      } else {
+        const [viewerLocs, viewerWhs, viewerVends] = await Promise.all([
+          this.userLocationsRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["location_id"],
+          }),
+          this.userWarehousesRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["warehouse_id"],
+          }),
+          this.userVendorsRepository.find({
+            where: { user_id: currentUserId, status_id: 1 },
+            select: ["vendor_id"],
+          }),
+        ]);
+        allowedLocationIds = Array.from(
+          new Set(
+            viewerLocs
+              .map((l) => Number(l.location_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+        allowedWarehouseIds = Array.from(
+          new Set(
+            viewerWhs
+              .map((w) => Number(w.warehouse_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+        allowedVendorIds = Array.from(
+          new Set(
+            viewerVends
+              .map((v) => Number(v.vendor_id))
+              .filter((id) => !isNaN(id) && id > 0),
+          ),
+        );
+      }
+
+      const hasLocationRestriction = allowedLocationIds.length > 0;
+      const hasWarehouseRestriction = allowedWarehouseIds.length > 0;
+      const hasVendorRestriction = allowedVendorIds.length > 0;
+
+      // Single batch fetch for target users' active presets (only for active restriction dimensions)
+      const candidateUserIds = flattenedUsers
+        .map((u) => Number(u.id))
+        .filter((id) => !isNaN(id) && id > 0);
+
+      const [allLocations, allWarehouses, allVendors] = await Promise.all([
+        hasLocationRestriction && candidateUserIds.length > 0
+          ? this.userLocationsRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "location_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+        hasWarehouseRestriction && candidateUserIds.length > 0
+          ? this.userWarehousesRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "warehouse_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+        hasVendorRestriction && candidateUserIds.length > 0
+          ? this.userVendorsRepository.find({
+              where: { user_id: In(candidateUserIds), status_id: 1 },
+              select: ["user_id", "vendor_id", "role_id", "access_key_id"],
+            })
+          : Promise.resolve([]),
+      ]);
+
+      // Build target user lookup maps based on TARGET_SCOPE_MODE
+      const userLocationMap = new Map<number, Set<number>>();
+      const userWarehouseMap = new Map<number, Set<number>>();
+      const userVendorMap = new Map<number, Set<number>>();
+
+      const targetUserMetaMap = new Map<
+        number,
+        { role_id?: number; current_access_key?: number }
+      >();
+      for (const u of flattenedUsers) {
+        targetUserMetaMap.set(Number(u.id), {
+          role_id: u.role_id ? Number(u.role_id) : undefined,
+          current_access_key:
+            u.current_access_key !== undefined && u.current_access_key !== null
+              ? Number(u.current_access_key)
+              : undefined,
+        });
+      }
+
+      if (hasLocationRestriction) {
+        for (const ul of allLocations) {
+          const uid = Number(ul.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(ul.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(ul.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userLocationMap.has(uid)) {
+            userLocationMap.set(uid, new Set());
+          }
+          userLocationMap.get(uid)!.add(Number(ul.location_id));
+        }
+      }
+
+      if (hasWarehouseRestriction) {
+        for (const uw of allWarehouses) {
+          const uid = Number(uw.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(uw.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(uw.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userWarehouseMap.has(uid)) {
+            userWarehouseMap.set(uid, new Set());
+          }
+          userWarehouseMap.get(uid)!.add(Number(uw.warehouse_id));
+        }
+      }
+
+      if (hasVendorRestriction) {
+        for (const uv of allVendors) {
+          const uid = Number(uv.user_id);
+          if (TARGET_SCOPE_MODE === "CURRENT_SESSION") {
+            const meta = targetUserMetaMap.get(uid);
+            if (meta?.role_id && Number(uv.role_id) !== meta.role_id) {
+              continue;
+            }
+            if (
+              meta?.current_access_key &&
+              Number(uv.access_key_id) !== meta.current_access_key
+            ) {
+              continue;
+            }
+          }
+          if (!userVendorMap.has(uid)) {
+            userVendorMap.set(uid, new Set());
+          }
+          userVendorMap.get(uid)!.add(Number(uv.vendor_id));
+        }
+      }
+
+      // Reusable restriction matcher helper
+      const checkMatch = (
+        targetIds: number[],
+        allowedIds: number[],
+        mode: "AT_LEAST_ONE" | "ALL",
+      ): boolean => {
+        if (targetIds.length === 0) return false;
+        return mode === "ALL"
+          ? targetIds.every((id) => allowedIds.includes(id))
+          : targetIds.some((id) => allowedIds.includes(id));
+      };
+
+      // Row-level filter: Dynamic Hierarchical System Scope + Role Level Priority + Presets Restriction
       const restrictedUsers = flattenedUsers.filter((user) => {
         const rowUserId = Number(user.id);
         const isSelf =
@@ -286,7 +512,55 @@ export class UsersService {
           targetLevels.length > 0 ? Math.min(...targetLevels) : Infinity;
 
         // Target's highest privilege level must be equal to or lower priority (>= numeric value)
-        return targetHighestPriority >= loggedHighestPriority;
+        if (targetHighestPriority < loggedHighestPriority) {
+          return false;
+        }
+
+        // Condition C: Location Restriction Check
+        if (hasLocationRestriction) {
+          const targetLocIds = Array.from(userLocationMap.get(rowUserId) || []);
+          if (
+            !checkMatch(
+              targetLocIds,
+              allowedLocationIds,
+              LOCATION_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        // Condition D: Warehouse Restriction Check
+        if (hasWarehouseRestriction) {
+          const targetWhIds = Array.from(userWarehouseMap.get(rowUserId) || []);
+          if (
+            !checkMatch(
+              targetWhIds,
+              allowedWarehouseIds,
+              WAREHOUSE_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        // Condition E: Vendor Restriction Check
+        if (hasVendorRestriction) {
+          const targetVendorIds = Array.from(
+            userVendorMap.get(rowUserId) || [],
+          );
+          if (
+            !checkMatch(
+              targetVendorIds,
+              allowedVendorIds,
+              VENDOR_RESTRICTION_MODE,
+            )
+          ) {
+            return false;
+          }
+        }
+
+        return true;
       });
 
       logger.info(
@@ -3168,10 +3442,7 @@ export class UsersService {
         created_by,
         role_id,
       ),
-      this.commonUtilitiesService.getUserAllowedVendorIds(
-        created_by,
-        role_id,
-      ),
+      this.commonUtilitiesService.getUserAllowedVendorIds(created_by, role_id),
     ]);
     const XLSX = require("xlsx");
     const fs = require("fs");
