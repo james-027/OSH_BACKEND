@@ -159,13 +159,22 @@ export class WarehousesService {
     }
 
     if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
           accessKeyId,
-        );
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
       where.location_id = In(allowedLocationIds);
+      if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+        where.id = In(allowedWarehouseIds);
+      }
     }
 
     const warehouses = await this.warehousesRepository.find({
@@ -194,13 +203,22 @@ export class WarehousesService {
       where.access_key_id = accessKeyId;
     }
     if (userId && roleId) {
-      const allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
           accessKeyId,
-        );
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
       where.location_id = In(allowedLocationIds);
+      if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+        where.id = In(allowedWarehouseIds);
+      }
     }
     const warehouses = await this.warehousesRepository.find({
       where,
@@ -630,6 +648,7 @@ export class WarehousesService {
     allowedLocationIds?: number[],
     accessKeyId?: number,
     filename?: string,
+    allowedWarehouseIds?: number[],
   ): Promise<any> {
     const [
       existingWarehouses,
@@ -814,6 +833,20 @@ export class WarehousesService {
         errors.push({
           row: rowNum,
           error: `You do not have permission for Location '${locName}' (${row.warehouse_ifs || row.warehouse_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+
+      // Warehouse permission check for existing stores
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        existing &&
+        !allowedWarehouseIds.includes(existing.id)
+      ) {
+        errors.push({
+          row: rowNum,
+          error: `You do not have permission to modify Store '${existing.warehouse_name}' (${existing.warehouse_ifs}), based on your allowed stores.`,
         });
         continue;
       }

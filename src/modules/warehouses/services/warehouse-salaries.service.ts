@@ -401,14 +401,20 @@ export class WarehouseSalariesService {
     hideHistorical?: boolean,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      const userLocations = await this.usersService[
-        "userLocationsRepository"
-      ].find({
-        where: { user_id: userId, role_id: roleId, status_id: 1 },
-        select: ["location_id"],
-      });
-      allowedLocationIds = userLocations.map((ul) => ul.location_id);
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     const query = this.warehouseSalariesRepository
       .createQueryBuilder("ws")
@@ -425,6 +431,12 @@ export class WarehouseSalariesService {
     if (allowedLocationIds && allowedLocationIds.length > 0) {
       query.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
+      });
+    }
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("ws.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
       });
     }
 
@@ -820,6 +832,7 @@ export class WarehouseSalariesService {
     records: any[],
     userId: number,
     allowedLocationIds?: number[],
+    allowedWarehouseIds?: number[],
   ) {
     const warehouses = await this.warehousesService.findAll();
     const vendors = await this.vendorsRepository.find();
@@ -882,6 +895,18 @@ export class WarehouseSalariesService {
         errors.push({
           row: row.__rowNum__,
           error: `You do not have permission to upload salaries for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed location.`,
+        });
+        continue;
+      }
+      // Warehouse permission check
+      if (
+        allowedWarehouseIds &&
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload salaries for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed stores.`,
         });
         continue;
       }

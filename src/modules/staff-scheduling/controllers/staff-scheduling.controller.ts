@@ -133,6 +133,7 @@ async uploadExcel(
   }
 
   const userId = req.user.id;
+  const roleId = req.user.role_id;
   const accessKeyId = req.user.current_access_key;
 
   return this.staffSchedulingService.uploadExcel(
@@ -140,6 +141,7 @@ async uploadExcel(
     scheduleDate,
     userId,
     accessKeyId,
+    roleId,
   );
 }
 

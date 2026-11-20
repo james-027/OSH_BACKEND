@@ -216,13 +216,19 @@ export class WarehouseHurdlesController {
     const roleId = req.user.role_id;
     const accessKeyId = req.user?.current_access_key;
 
-    // Get allowed location_ids for this user/role
-    const allowedLocationIds =
-      await this.warehouseHurdlesService.getAllowedLocationIds(
+    // Get allowed location_ids and warehouse_ids for this user/role
+    const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+      this.warehouseHurdlesService.getAllowedLocationIds(
         userId,
         roleId,
         accessKeyId,
-      );
+      ),
+      this.warehouseHurdlesService.getAllowedWarehouseIds(
+        userId,
+        roleId,
+        accessKeyId,
+      ),
+    ]);
     // Map Excel columns to DTOs
     const records = json.map((row) => {
       const hurdle_date = parseToFirstDayOfMonth(row["HURDLE MONTH"]);
@@ -241,6 +247,7 @@ export class WarehouseHurdlesController {
       userId,
       allowedLocationIds,
       file.originalname,
+      allowedWarehouseIds,
     );
   }
 }

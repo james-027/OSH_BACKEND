@@ -253,13 +253,19 @@ export class WarehouseEmployeesController {
     const userId = req.user.id;
     const roleId = req.user.role_id;
     const accessKeyId = req.user?.current_access_key;
-    // Get allowed location_ids for this user/role
-    const allowedLocationIds =
-      await this.commonUtilitiesService.getUserAllowedLocationIds(
+    // Get allowed location_ids and warehouse_ids for this user/role
+    const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+      this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
         roleId,
         accessKeyId,
-      );
+      ),
+      this.commonUtilitiesService.getUserAllowedWarehouseIds(
+        userId,
+        roleId,
+        accessKeyId,
+      ),
+    ]);
 
     // Preload all warehouses, employees (with their locations), and statuses for fast lookup
     const warehouses = await this.warehousesService.findAll();
@@ -389,6 +395,17 @@ export class WarehouseEmployeesController {
         if (!allowedLocationIds.includes(warehouse.location_id)) {
           throw new Error(
             `You do not have permission to upload employees for STORE IFS ${row["STORE IFS"]} (${warehouse.warehouse_name}), location_id ${warehouse.location_id}.`,
+          );
+        }
+
+        // Warehouse permission check
+        if (
+          allowedWarehouseIds &&
+          allowedWarehouseIds.length > 0 &&
+          !allowedWarehouseIds.includes(warehouse.id)
+        ) {
+          throw new Error(
+            `You do not have permission to upload employees for STORE IFS ${row["STORE IFS"]} (${warehouse.warehouse_name}), based on your allowed stores.`,
           );
         }
 

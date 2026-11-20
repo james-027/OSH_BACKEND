@@ -102,6 +102,25 @@ export class WarehouseRequirementsService {
   }
 
   /**
+   * Get allowed warehouse IDs based on user and role
+   * Reusable helper to avoid redundant code across multiple methods
+   */
+  private async getAllowedWarehouseIds(
+    userId?: number,
+    roleId?: number,
+    accessKeyId?: number,
+  ): Promise<number[]> {
+    if (!userId || !roleId) {
+      return [];
+    }
+    return await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+      userId,
+      roleId,
+      accessKeyId,
+    );
+  }
+
+  /**
    * Build date range filter condition for transaction headers
    * Returns trans_date IN array format for use in queries
    */
@@ -941,12 +960,11 @@ export class WarehouseRequirementsService {
     accessKeyId?: number,
   ): Promise<any> {
     try {
-      // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      // Step 1: Get allowed location and warehouse IDs based on user and role
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
 
       // Step 2: Build warehouse query conditions
       const warehouseWhere: any = {
@@ -956,6 +974,8 @@ export class WarehouseRequirementsService {
 
       if (warehouse_id) {
         warehouseWhere.id = warehouse_id;
+      } else if (allowedWarehouseIds.length > 0) {
+        warehouseWhere.id = In(allowedWarehouseIds);
       }
 
       if (accessKeyId !== undefined && accessKeyId !== null) {
@@ -1552,13 +1572,14 @@ export class WarehouseRequirementsService {
   /**
    * Reusable warehouse query builder with common filtering
    * Returns a query builder that can be extended with additional joins/conditions
-   * Handles: warehouse_type_id, rem_status_id, warehouse_id, accessKeyId, allowedLocationIds
+   * Handles: warehouse_type_id, rem_status_id, warehouse_id, accessKeyId, allowedLocationIds, allowedWarehouseIds
    */
   private buildBaseWarehouseQuery(
     warehouse_type_id: number,
     warehouse_id?: number,
     accessKeyId?: number,
     allowedLocationIds?: number[],
+    allowedWarehouseIds?: number[],
   ) {
     const query = this.warehousesRepository
       .createQueryBuilder("warehouse")
@@ -1574,6 +1595,10 @@ export class WarehouseRequirementsService {
 
     if (warehouse_id) {
       query.andWhere("warehouse.id = :warehouse_id", { warehouse_id });
+    } else if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("warehouse.id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
+      });
     }
 
     if (accessKeyId !== undefined && accessKeyId !== null) {
@@ -1610,12 +1635,11 @@ export class WarehouseRequirementsService {
     flatten: boolean = false,
   ): Promise<any> {
     try {
-      // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      // Step 1: Get allowed location and warehouse IDs based on user and role
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
       // const allowedLocationIds = [1];
 
       // Step 2: Build and execute warehouse query
@@ -1624,6 +1648,7 @@ export class WarehouseRequirementsService {
         warehouse_id,
         accessKeyId,
         allowedLocationIds,
+        allowedWarehouseIds,
       );
 
       const warehouses = await warehouseQuery
@@ -1751,12 +1776,11 @@ export class WarehouseRequirementsService {
       | "withoutRequirements" = "all",
   ): Promise<any> {
     try {
-      // Step 1: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      // Step 1: Get allowed location and warehouse IDs based on user and role
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
 
       // Step 2: Get warehouse list (minimal query, no nested relations)
       const warehouseQuery = this.buildBaseWarehouseQuery(
@@ -1764,6 +1788,7 @@ export class WarehouseRequirementsService {
         warehouse_id,
         accessKeyId,
         allowedLocationIds,
+        allowedWarehouseIds,
       );
 
       const warehouses = await warehouseQuery
@@ -1999,12 +2024,11 @@ export class WarehouseRequirementsService {
           .filter((id) => !isNaN(id));
       }
 
-      // Step 3: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      // Step 3: Get allowed location and warehouse IDs based on user and role
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
 
       // Step 4: Determine final location IDs to use
       let finalLocationIds =
@@ -2019,6 +2043,9 @@ export class WarehouseRequirementsService {
         date_to,
         accessKeyId,
         finalLocationIds,
+        { id: "ASC" },
+        ["location"],
+        allowedWarehouseIds,
       );
 
       if (warehouses.length === 0) {
@@ -2303,12 +2330,11 @@ export class WarehouseRequirementsService {
           .filter((id) => !isNaN(id));
       }
 
-      // Step 3: Get allowed location IDs based on user and role
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      // Step 3: Get allowed location and warehouse IDs based on user and role
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
 
       // Step 4: Determine final location IDs to use
       let finalLocationIds =
@@ -2325,6 +2351,7 @@ export class WarehouseRequirementsService {
         finalLocationIds,
         { warehouse_name: "ASC" },
         ["location", "warehouseType", "remStatus"],
+        allowedWarehouseIds,
       );
 
       if (warehouses.length === 0) {
@@ -2732,13 +2759,12 @@ export class WarehouseRequirementsService {
     segment_id?: number[],
   ): Promise<any> {
     try {
-      // Step 1: Get allowed location IDs based on user and role
+      // Step 1: Get allowed location and warehouse IDs based on user and role
       let finalLocationIds: number[] = [];
-      const allowedLocationIds = await this.getAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      );
+      const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.getAllowedLocationIds(userId, roleId, accessKeyId),
+        this.getAllowedWarehouseIds(userId, roleId, accessKeyId),
+      ]);
 
       // Step 2: Parse location_ids if provided (comma-separated)
       let filterLocationIds: number[] = [];
@@ -2767,6 +2793,7 @@ export class WarehouseRequirementsService {
         finalLocationIds,
         { warehouse_name: "ASC" },
         ["location", "warehouseType", "remStatus"],
+        allowedWarehouseIds,
       );
 
       if (warehouses.length === 0) {
@@ -2960,6 +2987,7 @@ export class WarehouseRequirementsService {
     finalLocationIds: number[] = [],
     orderBy: any = { id: "ASC" },
     relations: string[] = ["location"],
+    allowedWarehouseIds: number[] = [],
   ) {
     const warehouseWhere: any = {
       warehouse_type_id,
@@ -2980,6 +3008,10 @@ export class WarehouseRequirementsService {
 
     if (finalLocationIds.length > 0) {
       warehouseWhere.location_id = In(finalLocationIds);
+    }
+
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      warehouseWhere.id = In(allowedWarehouseIds);
     }
 
     // Fetch warehouses with location and type relations

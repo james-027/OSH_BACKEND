@@ -198,6 +198,7 @@ export class StaffAttendanceController {
     }
 
     const userId = req.user.id;
+    const roleId = req.user.role_id;
     const accessKeyId = req.user.current_access_key;
 
     return this.staffAttendanceService.uploadExcel(
@@ -205,6 +206,7 @@ export class StaffAttendanceController {
       scheduleDate,
       userId,
       accessKeyId,
+      roleId,
     );
   }
 

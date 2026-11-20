@@ -43,6 +43,7 @@ import {
   validateAndFormatExcelRow,
   ExcelValidationConfig,
 } from "../../../utils/excel-validation";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Injectable()
 export class UsersService {
@@ -83,6 +84,7 @@ export class UsersService {
     private sseEventEmitter: SSEEventEmitterHelper,
     private frontendUrlUtil: FrontendUrlUtil,
     private cacheInvalidationService: CacheInvalidationService,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
   private getErrorMessage(error: unknown): string {
@@ -3153,6 +3155,17 @@ export class UsersService {
     role_level: number,
     request?: any,
   ): Promise<any> {
+    const [uploaderAllowedLocationIds, uploaderAllowedWarehouseIds] =
+      await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          created_by,
+          role_id,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          created_by,
+          role_id,
+        ),
+      ]);
     const XLSX = require("xlsx");
     const fs = require("fs");
     const workbook = XLSX.read(fs.readFileSync(filePath), { type: "buffer" });
@@ -3323,6 +3336,19 @@ export class UsersService {
 
             // Check if at least one location was found
             if (locations.length > 0) {
+              if (uploaderAllowedLocationIds.length > 0) {
+                const unauthorizedLocs = locations.filter(
+                  (loc) => !uploaderAllowedLocationIds.includes(loc.id),
+                );
+                if (unauthorizedLocs.length > 0) {
+                  throw new Error(
+                    `Unauthorized location assignment: You do not have permission to assign location(s): ${unauthorizedLocs
+                      .map((l) => l.location_name)
+                      .join(", ")}`,
+                  );
+                }
+              }
+
               const locationIds = locations.map((loc) => loc.id);
 
               // Build user_location_presets for each role AND each access key
@@ -3454,6 +3480,19 @@ export class UsersService {
                 throw new Error(
                   `Warehouse(s) not found: ${notFound.join(", ")}`,
                 );
+              }
+
+              if (uploaderAllowedWarehouseIds.length > 0) {
+                const unauthorizedWh = warehouses.filter(
+                  (w) => !uploaderAllowedWarehouseIds.includes(w.id),
+                );
+                if (unauthorizedWh.length > 0) {
+                  throw new Error(
+                    `Unauthorized warehouse assignment: You do not have permission to assign warehouse(s): ${unauthorizedWh
+                      .map((w) => w.warehouse_name || w.warehouse_code)
+                      .join(", ")}`,
+                  );
+                }
               }
 
               for (const role of roles) {

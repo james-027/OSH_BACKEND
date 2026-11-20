@@ -119,15 +119,28 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.details = {
-          location_id: In(allowedLocationIds),
-        };
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        const detailsWhere: any = {};
+        if (allowedLocationIds.length > 0) {
+          detailsWhere.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          detailsWhere.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (Object.keys(detailsWhere).length > 0) {
+          where.details = detailsWhere;
+        }
       }
 
       const scheduleHeaders = await this.scheduleHeaderRepository.find({
@@ -186,13 +199,24 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          where.warehouse_id = In(allowedWarehouseIds);
+        }
       }
 
       if (accessKeyId !== undefined) {
@@ -1967,6 +1991,7 @@ export class StaffSchedulingService {
     schedule_date: string,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const workbook = XLSX.readFile(file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -2084,6 +2109,16 @@ export class StaffSchedulingService {
       ]),
     );
 
+    let allowedWarehouseIds: number[] = [];
+    if (userId && roleId) {
+      allowedWarehouseIds =
+        await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
@@ -2096,6 +2131,14 @@ export class StaffSchedulingService {
         errors.push({
           row: i + 3,
           error: `Warehouse '${warehouseName}' not found`,
+        });
+      } else if (
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: i + 3,
+          error: `User not allowed to upload for warehouse '${warehouseName}'`,
         });
       }
     }

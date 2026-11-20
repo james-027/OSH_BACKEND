@@ -123,13 +123,19 @@ export class WarehouseRatesController {
     const roleId = req.user.role_id;
     const accessKeyId = req.user?.current_access_key;
 
-    // Get allowed location_ids for this user/role
-    const allowedLocationIds =
-      await this.commonUtilitiesService.getUserAllowedLocationIds(
+    // Get allowed location_ids and warehouse_ids for this user/role
+    const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+      this.commonUtilitiesService.getUserAllowedLocationIds(
         userId,
         roleId,
         accessKeyId,
-      );
+      ),
+      this.commonUtilitiesService.getUserAllowedWarehouseIds(
+        userId,
+        roleId,
+        accessKeyId,
+      ),
+    ]);
 
     // Map Excel columns to DTOs
     const records = json.map((row, idx) => {
@@ -165,6 +171,7 @@ export class WarehouseRatesController {
       records,
       userId,
       allowedLocationIds,
+      allowedWarehouseIds,
     );
   }
 }

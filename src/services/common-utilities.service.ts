@@ -1,7 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource, In } from "typeorm";
-import { UsersService } from "../modules/users/services/users.service";
+import { DataSource } from "typeorm";
 import { TransactionSequence } from "../entities/TransactionSequence";
 import { UserLocations } from "../entities/UserLocations";
 import { UserWarehouses } from "../entities/UserWarehouses";
@@ -16,9 +14,6 @@ import { Vendor } from "../entities/Vendor";
 @Injectable()
 export class CommonUtilitiesService {
   constructor(
-    private usersService: UsersService,
-    @InjectRepository(TransactionSequence)
-    private sequenceRepo: Repository<TransactionSequence>,
     private dataSource: DataSource,
   ) {}
 

@@ -35,6 +35,7 @@ import { Warehouse } from "../../entities/Warehouse";
 import { RoleWarehousePreset } from "../../entities/RoleWarehousePreset";
 import { RoleVendorPreset } from "../../entities/RoleVendorPreset";
 import { System } from "../../entities/System";
+import { CommonUtilitiesService } from "src/services/common-utilities.service";
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { System } from "../../entities/System";
     JwtService,
     UserSessionService,
     UserPermissionsService,
+    CommonUtilitiesService,
   ],
   exports: [
     UsersService,
@@ -88,6 +90,7 @@ import { System } from "../../entities/System";
     UserSessionService,
     UserPermissionsService,
     UserAuditTrailCreateService,
+    CommonUtilitiesService,
   ],
 })
 export class UsersModule { }

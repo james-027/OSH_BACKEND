@@ -118,13 +118,24 @@ export class StaffsService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        // if (allowedWarehouseIds.length > 0) {
+        //   where.warehouse_id = In(allowedWarehouseIds);
+        // }
       }
 
       if (statusId && statusId.length > 0) {
@@ -658,12 +669,12 @@ export class StaffsService {
         this.sseEventEmitter.emitCreate("staff_brands", response.id, response);
 
         if (requiresTraining) {
-        this.sseEventEmitter.emitCreate(
-          "staff_trainings",
-          response.id,
-          response,
-        );
-      }
+          this.sseEventEmitter.emitCreate(
+            "staff_trainings",
+            response.id,
+            response,
+          );
+        }
 
         this.sseEventEmitter.emitCreate(
           "staff_category_types",
@@ -2940,6 +2951,7 @@ export class StaffsService {
     file: Express.Multer.File,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const XLSX = require("xlsx");
 
@@ -2952,6 +2964,16 @@ export class StaffsService {
       dateNF: "yyyy-mm-dd",
       defval: null,
     });
+
+    let userAllowedWarehouseIds: number[] = [];
+    if (userId && roleId) {
+      userAllowedWarehouseIds =
+        await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
+    }
 
     const success = [];
     const errors = [];
@@ -3044,6 +3066,17 @@ export class StaffsService {
           continue;
         }
 
+        if (
+          userAllowedWarehouseIds.length > 0 &&
+          !userAllowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `You are not allowed to deploy staff to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
+
         const dto: UpdateStaffDeployDto = {
           warehouse_id: warehouse.id,
           remarks: row["Remarks"] ? String(row["Remarks"]).trim() : null,
@@ -3126,6 +3159,7 @@ export class StaffsService {
     file: Express.Multer.File,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const XLSX = require("xlsx");
 
@@ -3138,6 +3172,16 @@ export class StaffsService {
       dateNF: "yyyy-mm-dd",
       defval: null,
     });
+
+    let userAllowedWarehouseIds: number[] = [];
+    if (userId && roleId) {
+      userAllowedWarehouseIds =
+        await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
+    }
 
     const success = [];
     const errors = [];
@@ -3210,6 +3254,17 @@ export class StaffsService {
           errors.push({
             row: i + 2,
             error: `${existingRecord.staff_code} is not allowed to be transferred to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
+          });
+          continue;
+        }
+
+        if (
+          userAllowedWarehouseIds.length > 0 &&
+          !userAllowedWarehouseIds.includes(warehouse.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `You are not allowed to deploy staff to ${NAMING_CONVENTION.WAREHOUSE} '${row["New Store"]}'.`,
           });
           continue;
         }

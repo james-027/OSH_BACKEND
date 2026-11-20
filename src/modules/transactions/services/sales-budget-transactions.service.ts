@@ -25,15 +25,22 @@ export class SalesBudgetTransactionsService {
     roleId?: number,
     sales_year?: number,
   ): Promise<any[]> {
-    // Get allowed location IDs for user
+    // Get allowed location and warehouse IDs for user
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
           accessKeyId,
-        );
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     // Query builder: join warehouses, filter by access_key_id and allowed locations
     const qb = this.salesBudgetTransactionsRepository
@@ -52,6 +59,11 @@ export class SalesBudgetTransactionsService {
     if (allowedLocationIds && allowedLocationIds.length > 0) {
       qb.andWhere("warehouse.location_id IN (:...allowedLocationIds)", {
         allowedLocationIds,
+      });
+    }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      qb.andWhere("warehouse.id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
       });
     }
     if (sales_year !== undefined) {
@@ -247,20 +259,29 @@ export class SalesBudgetTransactionsService {
       .find({
         where: { warehouse_ifs: In(allIfsCodes) },
       });
-    // 3. Map ifs_code to location_id
+    // 3. Map ifs_code to location_id and warehouse_id
     const ifsToLocation: Record<string, number> = {};
+    const ifsToWarehouseId: Record<string, number> = {};
     for (const wh of warehouses) {
       ifsToLocation[wh.warehouse_ifs] = wh.location_id;
+      ifsToWarehouseId[wh.warehouse_ifs] = wh.id;
     }
-    // 4. Get allowed location_ids for user
+    // 4. Get allowed location_ids and warehouse_ids for user
     let allowedLocationIds: number[] = [];
+    let allowedWarehouseIds: number[] = [];
     if (user.id && user.role_id) {
-      allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           user.id,
           user.role_id,
           user.current_access_key,
-        );
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          user.id,
+          user.role_id,
+          user.current_access_key,
+        ),
+      ]);
     }
     // Prepare all unique keys from input for batch DB query
     const uniqueKeys = rows.map((row) => ({
@@ -308,18 +329,21 @@ export class SalesBudgetTransactionsService {
       const ifs_code = String(row["STORE IFS"] || "").trim();
       const material_code = String(row["MATERIAL CODE"] || "").trim();
       const key = `${bc_code}|${sales_month}|${ifs_code}|${material_code}`;
-      // LOCATION FILTER: check if user can upload for this ifs_code
+      // LOCATION & WAREHOUSE FILTER: check if user can upload for this ifs_code
       const location_id = ifsToLocation[ifs_code];
+      const warehouse_id = ifsToWarehouseId[ifs_code];
       if (
         !location_id ||
         (allowedLocationIds.length > 0 &&
-          !allowedLocationIds.includes(location_id))
+          !allowedLocationIds.includes(location_id)) ||
+        (allowedWarehouseIds.length > 0 &&
+          (!warehouse_id || !allowedWarehouseIds.includes(warehouse_id)))
       ) {
         errors.push({
           row: rowNum,
-          error: `User not allowed to upload for IFS ${ifs_code} (location_id: ${
-            location_id ?? "N/A"
-          })`,
+          error: `You are not allowed to upload for IFS ${ifs_code} (warehouse_id: ${
+            warehouse_id ?? "N/A"
+          }, location_id: ${location_id ?? "N/A"})`,
         });
         continue;
       }
@@ -328,7 +352,7 @@ export class SalesBudgetTransactionsService {
       if (found.some((f) => Boolean(f.from_repo))) {
         errors.push({
           row: rowNum,
-          error: `${bc_code}, Budget Month ${sales_month}, IFS ${ifs_code}, Material ${material_code} already exist from the repository server. Cannot be changed.`,
+          error: `You are not allowed to upload ${bc_code}, Budget Month ${sales_month}, IFS ${ifs_code}, Material ${material_code} already exist from the repository server. Cannot be changed.`,
         });
         continue;
       }
@@ -369,7 +393,11 @@ export class SalesBudgetTransactionsService {
         inserted_count++;
         success.push({ ...saved, __rowNum__: rowNum });
       } catch (err) {
-        errors.push({ row: rowNum, error: err?.message || String(err) });
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to create sales budget transaction";
+        errors.push({ row: rowNum, error: message });
       }
     }
 

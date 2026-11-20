@@ -428,13 +428,24 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          where.warehouse_id = In(allowedWarehouseIds);
+        }
       }
       const scheduleDetail = await this.scheduleDetailRepository.find({
         where,
@@ -495,13 +506,24 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedWarehouseIds.length > 0) {
+          where.warehouse_id = In(allowedWarehouseIds);
+        }
       }
 
       const scheduleDetail = await this.scheduleDetailRepository.find({
@@ -2370,6 +2392,7 @@ export class StaffAttendanceService {
     schedule_date: string,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const workbook = XLSX.readFile(file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -2487,6 +2510,16 @@ export class StaffAttendanceService {
       ]),
     );
 
+    let allowedWarehouseIds: number[] = [];
+    if (userId && roleId) {
+      allowedWarehouseIds =
+        await this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        );
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
@@ -2499,6 +2532,14 @@ export class StaffAttendanceService {
         errors.push({
           row: i + 3,
           error: `Warehouse '${warehouseName}' not found`,
+        });
+      } else if (
+        allowedWarehouseIds.length > 0 &&
+        !allowedWarehouseIds.includes(warehouse.id)
+      ) {
+        errors.push({
+          row: i + 3,
+          error: `User not allowed to upload for warehouse '${warehouseName}'`,
         });
       }
     }

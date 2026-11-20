@@ -177,13 +177,20 @@ export class WarehouseEmployeesService {
     modifiedAt?: string,
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
+    let allowedWarehouseIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      allowedLocationIds =
-        await this.commonUtilitiesService.getUserAllowedLocationIds(
+      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
           userId,
           roleId,
           accessKeyId,
-        );
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
     }
     const query = this.warehouseEmployeesRepository
       .createQueryBuilder("we")
@@ -209,6 +216,11 @@ export class WarehouseEmployeesService {
     } else if (userId && roleId) {
       // User exists but has no location access — block all records
       query.andWhere("1=0");
+    }
+    if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+      query.andWhere("we.warehouse_id IN (:...allowedWarehouseIds)", {
+        allowedWarehouseIds,
+      });
     }
     // If no userId/roleId (e.g. API key access), skip location filtering entirely
     if (assignmentDate) {
@@ -974,13 +986,20 @@ export class WarehouseEmployeesService {
 
       // Step 2: Get allowed location IDs based on user and role
       let allowedLocationIds: number[] | undefined = undefined;
+      let allowedWarehouseIds: number[] | undefined = undefined;
       if (userId && roleId) {
-        allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
       }
 
       // Step 3: Determine final location IDs to use
@@ -1040,6 +1059,11 @@ export class WarehouseEmployeesService {
       query = query
         .leftJoinAndSelect("warehouse_employees", "we", joinCondition)
         .where("w.location_id IN (:...finalLocationIds)");
+
+      if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
+        query = query.andWhere("w.id IN (:...allowedWarehouseIds)");
+        queryParams.allowedWarehouseIds = allowedWarehouseIds;
+      }
 
       // Add warehouse status filter if provided (accumulate before setParameters)
       if (store_status_ids && store_status_ids.length > 0) {
