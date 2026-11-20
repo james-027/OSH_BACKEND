@@ -337,4 +337,22 @@ export class PayrollHeader {
 
   @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
   total_miscellaneous_income: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_bond: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_asf: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_vat: number;
+
+    @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_tax: number;
+  
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_miscellaneous: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  total_premium_night_billing: number;
 }

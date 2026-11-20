@@ -17,6 +17,7 @@ import { StaffWarehouse } from "src/entities/StaffWarehouse";
 import { StaffHistory } from "src/entities/StaffHistory";
 import { Vendor } from "src/entities/Vendor";
 import { CommonUtilitiesService } from "src/services/common-utilities.service";
+
 import { TransactionSequence } from "src/entities/TransactionSequence";
 import { ActionsModule } from "../actions/actions.module";
 import { Status } from "src/entities/Status";
@@ -32,6 +33,8 @@ import { StaffVendorSalary } from "src/entities/StaffVendorSalary";
 import { ActualLogsHeader } from "src/entities/ActualLogsHeader";
 import { ActualLogsDetail } from "src/entities/ActualLogsDetail";
 import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
+import { SignatoryDetailModule } from "src/modules/signatory-details/signatory-details.module";
+
 
 
 
@@ -64,7 +67,8 @@ import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
     ]),
     UsersModule,
     SSEModule,
-    ActionsModule
+    ActionsModule,
+    SignatoryDetailModule
   ],
   controllers: [StaffSchedulingController],
   providers: [
@@ -72,7 +76,7 @@ import { TimeKeepingConfig } from "src/entities/TimeKeepingConfig";
     DwsScheduleSyncCronService,
     UserAuditTrailCreateService,
     ResponseMapperService,
-     CommonUtilitiesService,
+    CommonUtilitiesService,
   ],
   exports: [StaffSchedulingService],
 })

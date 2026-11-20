@@ -17,29 +17,97 @@ import { JwtAuthGuard } from "../../../guards/jwt-auth.guard";
 import { PermissionsGuard } from "../../../guards/permissions.guard";
 import { RequirePermissions } from "../../../decorators/permissions.decorator";
 import { SignatoryDetailService } from "../services/signatory-details.service";
-import { CreateSignatoryDetailDto } from "../dto/CreateSignatoryDto";
-import { UpdateSignatoryDetailDto } from "../dto/UpdateSignatoryDto";
-import {
-  FileInterceptor,
-  diskStorage,
-  UploadedFile as FileType,
-} from "../../../adapters";
-import {
-  imageFileFilter,
-  excelFileFilter,
-  FILE_SIZE_LIMITS,
-  generateTimestampFilename,
-} from "../../../utils/file-upload.utils";
+import { CreateSignatoryHeaderDto } from "../dto/CreateSignatoryDto";
+import { UpdateSignatoryHeaderDto } from "../dto/UpdateSignatoryDto";
 
-@Controller("signatory-details")
+@Controller("signatory")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SignatoryDetailController {
-  constructor(private readonly signatoryDetailService: SignatoryDetailService) {}
+  constructor(
+    private readonly signatoryDetailService: SignatoryDetailService,
+  ) {}
 
   @Get()
   @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
-  async findAll() {
-    return this.signatoryDetailService.findAll();
+  async findAll(  @Request() req?: any,)
+   {
+    const accessKeyId = req?.user?.current_access_key;
+    return this.signatoryDetailService.findAll(accessKeyId);
   }
 
+  @Get("types")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
+  async findSignatoryType() {
+    return this.signatoryDetailService.findSignatoryType();
+  }
+
+  @Get("signature-module/:moduleId")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
+  async findByModuleId(
+    @Param("moduleId", ParseIntPipe) moduleId: number,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    return this.signatoryDetailService.findBySignatoreeByModule(moduleId, accessKeyId);
+  }
+
+  @Get("signature-details/:headerId")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
+  async findByScheduleDetails(
+    @Param("headerId", ParseIntPipe) headerId: number,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    return this.signatoryDetailService.findSignatoryDetails(headerId);
+  }
+
+  @Post()
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "ADD" })
+  async create(
+    @Body() createDto: CreateSignatoryHeaderDto,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+
+    return this.signatoryDetailService.create(createDto, userId, accessKeyId);
+  }
+
+  @Put(":id")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "EDIT" })
+  async update(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateDto: UpdateSignatoryHeaderDto,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+
+    return this.signatoryDetailService.update(
+      id,
+      updateDto,
+      accessKeyId,
+      userId,
+    );
+  }
+
+  @Patch(":id/toggle-status-activate")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "ACTIVATE" })
+  async toggleStatusActivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.signatoryDetailService.toggleStatus(id, userId);
+  }
+
+  @Patch(":id/toggle-status-deactivate")
+  @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "DEACTIVATE" })
+  async toggleStatusDeactivate(
+    @Param("id", ParseIntPipe) id: number,
+    @Request() req,
+  ) {
+    const userId = req.user.id;
+    return this.signatoryDetailService.toggleStatus(id, userId);
+  }
 }

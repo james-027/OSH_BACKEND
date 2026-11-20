@@ -132,6 +132,8 @@ import { ActualTimeLogsModule } from "./modules/actual-time-logs/actual-time-log
 import { Customer } from "./entities/Customer";
 import { WeighInModule } from "./modules/weigh-in/weigh-in.module";
 import { CustomerModule } from "./modules/customer/customer.module";
+import { SignatoryDetailModule } from "./modules/signatory-details/signatory-details.module";
+
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
@@ -252,7 +254,8 @@ import { CustomerModule } from "./modules/customer/customer.module";
     HolidaysModule,
     ActualTimeLogsModule,
     WeighInModule,
-    CustomerModule
+    CustomerModule,
+    SignatoryDetailModule
   ],
   providers: [
     EmailService,

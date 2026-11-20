@@ -6,19 +6,20 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
 import { AccessKey } from "./AccessKey";
 import { Module } from "./Module";
+import { SignatoryDetail } from "./SignatoryDetails";
+
+
 
 @Entity("signatory_headers")
 export class SignatoryHeader {
   @PrimaryGeneratedColumn()
   id: number;
-
-  @Column({ length: 255 })
-  description: string;
 
   @Column({ default: 1 })
   status_id: number;
@@ -87,6 +88,12 @@ export class SignatoryHeader {
   })
   @JoinColumn({ name: "module_id" })
   module: Module;
+
+    @OneToMany(
+    () => SignatoryDetail,
+    (signatoryDetail) => signatoryDetail.signatoryHeader,
+  )
+  signatoryDetails: SignatoryDetail[];
 }
 
 
