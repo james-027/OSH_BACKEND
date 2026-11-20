@@ -80,18 +80,24 @@ export class StaffWarehousesService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accesskeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accesskeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accesskeyId,
+            ),
+          ]);
         if (allowedLocationIds && allowedLocationIds.length > 0) {
           where.location_id = In(allowedLocationIds);
         }
@@ -105,6 +111,10 @@ export class StaffWarehousesService {
           } else {
             where.warehouse_id = In(allowedWarehouseIds);
           }
+        }
+
+        if (allowedVendorIds && allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
         }
       }
 

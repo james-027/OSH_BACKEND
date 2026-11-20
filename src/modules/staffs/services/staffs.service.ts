@@ -118,24 +118,30 @@ export class StaffsService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
         if (allowedLocationIds.length > 0) {
           where.location_id = In(allowedLocationIds);
         }
-        // if (allowedWarehouseIds.length > 0) {
-        //   where.warehouse_id = In(allowedWarehouseIds);
-        // }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       if (statusId && statusId.length > 0) {
@@ -1963,6 +1969,7 @@ export class StaffsService {
     file: Express.Multer.File,
     userId: number,
     accessKeyId?: number,
+    roleId?: number,
   ) {
     const XLSX = require("xlsx");
 
@@ -1976,6 +1983,23 @@ export class StaffsService {
 
     const success = [];
     const errors = [];
+
+    const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+      userId && roleId
+        ? this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          )
+        : Promise.resolve([]),
+      userId && roleId
+        ? this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          )
+        : Promise.resolve([]),
+    ]);
 
     const requiresTraining = ACCESS_PROCESS.STAFF_TRAINING.includes(
       Number(accessKeyId),
@@ -2069,6 +2093,17 @@ export class StaffsService {
           continue;
         }
 
+        if (
+          allowedLocationIds.length > 0 &&
+          !allowedLocationIds.includes(location.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `You are not allowed to assign location '${row["Location"]}'`,
+          });
+          continue;
+        }
+
         if (!position) {
           errors.push({
             row: i + 2,
@@ -2081,6 +2116,17 @@ export class StaffsService {
           errors.push({
             row: i + 2,
             error: `Vendor '${row["Vendor"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedVendorIds.length > 0 &&
+          !allowedVendorIds.includes(vendor.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `You are not allowed to assign vendor '${row["Vendor"]}'`,
           });
           continue;
         }
@@ -2739,6 +2785,23 @@ export class StaffsService {
     const success = [];
     const errors = [];
 
+    const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+      userId && roleId
+        ? this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          )
+        : Promise.resolve([]),
+      userId && roleId
+        ? this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          )
+        : Promise.resolve([]),
+    ]);
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
@@ -2776,17 +2839,6 @@ export class StaffsService {
           })
           .getOne();
 
-        let allowedLocationIds: number[] | undefined = undefined;
-
-        if (userId && roleId) {
-          allowedLocationIds =
-            await this.commonUtilitiesService.getUserAllowedLocationIds(
-              userId,
-              roleId,
-              accessKeyId,
-            );
-        }
-
         if (!location) {
           errors.push({
             row: i + 2,
@@ -2795,7 +2847,10 @@ export class StaffsService {
           continue;
         }
 
-        if (allowedLocationIds && !allowedLocationIds.includes(location.id)) {
+        if (
+          allowedLocationIds.length > 0 &&
+          !allowedLocationIds.includes(location.id)
+        ) {
           errors.push({
             row: i + 2,
             error: `You are not permitted to transfer staff to location '${row["New Location"]}'.`,
@@ -2817,6 +2872,17 @@ export class StaffsService {
           errors.push({
             row: i + 2,
             error: `Agency '${row["New Agency"]}' not found`,
+          });
+          continue;
+        }
+
+        if (
+          allowedVendorIds.length > 0 &&
+          !allowedVendorIds.includes(vendor.id)
+        ) {
+          errors.push({
+            row: i + 2,
+            error: `You are not permitted to transfer staff to agency '${row["New Agency"]}'.`,
           });
           continue;
         }

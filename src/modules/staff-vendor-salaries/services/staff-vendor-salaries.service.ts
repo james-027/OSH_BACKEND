@@ -65,13 +65,24 @@ export class StaffVendorSalariesService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       where.status_id = STATUS_IDS.ACTIVE;
@@ -482,7 +493,25 @@ async uploadStaffVendorSalaries(
   file: Express.Multer.File,
   userId: number,
   accessKeyId?: number,
+  roleId?: number,
 ) {
+  let allowedLocationIds: number[] = [];
+  let allowedVendorIds: number[] = [];
+  if (userId && roleId) {
+    [allowedLocationIds, allowedVendorIds] = await Promise.all([
+      this.commonUtilitiesService.getUserAllowedLocationIds(
+        userId,
+        roleId,
+        accessKeyId,
+      ),
+      this.commonUtilitiesService.getUserAllowedVendorIds(
+        userId,
+        roleId,
+        accessKeyId,
+      ),
+    ]);
+  }
+
   const XLSX = require("xlsx");
 
   const workbook = XLSX.readFile(file.path);
@@ -604,6 +633,18 @@ async uploadStaffVendorSalaries(
         continue;
       }
 
+      if (
+        allowedVendorIds.length > 0 &&
+        !allowedVendorIds.includes(vendor.id)
+      ) {
+        errors.push({
+          row: excelRow,
+          error: `You do not have permission to upload salaries for Agency '${agencyName}'`,
+        });
+
+        continue;
+      }
+
       const location = await this.locationRepository.findOne({
         where: {
           location_name: locationName,
@@ -614,6 +655,18 @@ async uploadStaffVendorSalaries(
         errors.push({
           row: excelRow,
           error: `Location '${locationName}' not found`,
+        });
+
+        continue;
+      }
+
+      if (
+        allowedLocationIds.length > 0 &&
+        !allowedLocationIds.includes(location.id)
+      ) {
+        errors.push({
+          row: excelRow,
+          error: `You do not have permission to upload salaries for Location '${locationName}'`,
         });
 
         continue;

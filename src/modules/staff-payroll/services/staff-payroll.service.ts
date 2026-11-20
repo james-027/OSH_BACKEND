@@ -167,16 +167,29 @@ export class StaffPayrollService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
 
-        where.details = {
-          location_id: In(allowedLocationIds),
-        };
+        const detailsWhere: any = {};
+        if (allowedLocationIds.length > 0) {
+          detailsWhere.location_id = In(allowedLocationIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          detailsWhere.vendor_id = In(allowedVendorIds);
+        }
+        if (Object.keys(detailsWhere).length > 0) {
+          where.details = detailsWhere;
+        }
       }
 
       const payrollHeaders = await this.payrollHeaderRepository.find({
@@ -3595,13 +3608,24 @@ export class StaffPayrollService {
       }
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
-        where.location_id = In(allowedLocationIds);
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
+        if (allowedLocationIds.length > 0) {
+          where.location_id = In(allowedLocationIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
+        }
       }
 
       const payrollDetail = await this.payrollDetailRepository.find({

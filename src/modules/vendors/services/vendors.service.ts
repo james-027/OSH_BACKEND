@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, In } from "typeorm";
 import { UsersService } from "../../users/services/users.service";
 import { UserAuditTrailCreateService } from "../../users/services/user-audit-trail-create.service";
 
@@ -13,6 +13,7 @@ import { CreateVendorDto } from "src/modules/vendors/dto/CreateVendorDto";
 import { UpdateVendorDto } from "src/modules/vendors/dto/UpdateVendorDto";
 import { ResponseMapperService } from "../../../services/response-mapper.service";
 import { SSEEventEmitterHelper } from "../../sse/services/sse-event-emitter.helper";
+import { CommonUtilitiesService } from "../../../services/common-utilities.service";
 import logger from "../../../config/logger";
 
 @Injectable()
@@ -24,14 +25,32 @@ export class VendorsService {
     private userAuditTrailCreateService: UserAuditTrailCreateService,
     private responseMapperService: ResponseMapperService,
     private sseEventEmitter: SSEEventEmitterHelper,
+    private commonUtilitiesService: CommonUtilitiesService,
   ) {}
 
-  async findAll(accessKeyId?: number): Promise<any[]> {
+  async findAll(
+    accessKeyId?: number,
+    userId?: number,
+    roleId?: number,
+  ): Promise<any[]> {
     try {
       const where: any = {};
       if (accessKeyId !== undefined) {
         where.access_key_id = accessKeyId;
       }
+
+      if (userId && roleId) {
+        const allowedVendorIds =
+          await this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          );
+        if (allowedVendorIds && allowedVendorIds.length > 0) {
+          where.id = In(allowedVendorIds);
+        }
+      }
+
       const vendors = await this.vendorsRepository.find({
         where,
         relations: [

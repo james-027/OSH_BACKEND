@@ -26,7 +26,9 @@ export class VendorsController {
   @RequirePermissions({ module: "VENDORS", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
-    return this.vendorsService.findAll(accessKeyId);
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+    return this.vendorsService.findAll(accessKeyId, userId, roleId);
   }
 
   @Get("/all")

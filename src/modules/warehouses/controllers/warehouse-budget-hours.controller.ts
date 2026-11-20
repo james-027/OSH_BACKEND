@@ -157,19 +157,25 @@ export class WarehouseBudgetHoursController {
     const roleId = req.user.role_id;
     const accessKeyId = req.user?.current_access_key;
 
-    // Get allowed location_ids and warehouse_ids for this user/role
-    const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-      this.commonUtilitiesService.getUserAllowedLocationIds(
-        userId,
-        roleId,
-        accessKeyId,
-      ),
-      this.commonUtilitiesService.getUserAllowedWarehouseIds(
-        userId,
-        roleId,
-        accessKeyId,
-      ),
-    ]);
+    // Get allowed location_ids, warehouse_ids and vendor_ids for this user/role
+    const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+      await Promise.all([
+        this.commonUtilitiesService.getUserAllowedLocationIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedWarehouseIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+        this.commonUtilitiesService.getUserAllowedVendorIds(
+          userId,
+          roleId,
+          accessKeyId,
+        ),
+      ]);
 
     const excelValidationConfig: ExcelValidationConfig = {
       requiredFields: {
@@ -224,6 +230,7 @@ export class WarehouseBudgetHoursController {
       userId,
       allowedLocationIds,
       allowedWarehouseIds,
+      allowedVendorIds,
     );
   }
 }

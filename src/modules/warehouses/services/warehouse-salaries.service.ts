@@ -402,19 +402,26 @@ export class WarehouseSalariesService {
   ): Promise<any[]> {
     let allowedLocationIds: number[] | undefined = undefined;
     let allowedWarehouseIds: number[] | undefined = undefined;
+    let allowedVendorIds: number[] | undefined = undefined;
     if (userId && roleId) {
-      [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-        this.commonUtilitiesService.getUserAllowedLocationIds(
-          userId,
-          roleId,
-          accessKeyId,
-        ),
-        this.commonUtilitiesService.getUserAllowedWarehouseIds(
-          userId,
-          roleId,
-          accessKeyId,
-        ),
-      ]);
+      [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+        await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedWarehouseIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
     }
     const query = this.warehouseSalariesRepository
       .createQueryBuilder("ws")
@@ -437,6 +444,12 @@ export class WarehouseSalariesService {
     if (allowedWarehouseIds && allowedWarehouseIds.length > 0) {
       query.andWhere("ws.warehouse_id IN (:...allowedWarehouseIds)", {
         allowedWarehouseIds,
+      });
+    }
+
+    if (allowedVendorIds && allowedVendorIds.length > 0) {
+      query.andWhere("ws.vendor_id IN (:...allowedVendorIds)", {
+        allowedVendorIds,
       });
     }
 
@@ -833,6 +846,7 @@ export class WarehouseSalariesService {
     userId: number,
     allowedLocationIds?: number[],
     allowedWarehouseIds?: number[],
+    allowedVendorIds?: number[],
   ) {
     const warehouses = await this.warehousesService.findAll();
     const vendors = await this.vendorsRepository.find();
@@ -907,6 +921,18 @@ export class WarehouseSalariesService {
         errors.push({
           row: row.__rowNum__,
           error: `You do not have permission to upload salaries for STORE IFS ${row.warehouse_ifs} (${row.store_name}), based on your allowed stores.`,
+        });
+        continue;
+      }
+      // Vendor permission check
+      if (
+        allowedVendorIds &&
+        allowedVendorIds.length > 0 &&
+        !allowedVendorIds.includes(vendor.id)
+      ) {
+        errors.push({
+          row: row.__rowNum__,
+          error: `You do not have permission to upload salaries for SERVICE PROVIDER CODE ${row.service_provider_code}, based on your allowed vendor.`,
         });
         continue;
       }

@@ -3155,17 +3155,24 @@ export class UsersService {
     role_level: number,
     request?: any,
   ): Promise<any> {
-    const [uploaderAllowedLocationIds, uploaderAllowedWarehouseIds] =
-      await Promise.all([
-        this.commonUtilitiesService.getUserAllowedLocationIds(
-          created_by,
-          role_id,
-        ),
-        this.commonUtilitiesService.getUserAllowedWarehouseIds(
-          created_by,
-          role_id,
-        ),
-      ]);
+    const [
+      uploaderAllowedLocationIds,
+      uploaderAllowedWarehouseIds,
+      uploaderAllowedVendorIds,
+    ] = await Promise.all([
+      this.commonUtilitiesService.getUserAllowedLocationIds(
+        created_by,
+        role_id,
+      ),
+      this.commonUtilitiesService.getUserAllowedWarehouseIds(
+        created_by,
+        role_id,
+      ),
+      this.commonUtilitiesService.getUserAllowedVendorIds(
+        created_by,
+        role_id,
+      ),
+    ]);
     const XLSX = require("xlsx");
     const fs = require("fs");
     const workbook = XLSX.read(fs.readFileSync(filePath), { type: "buffer" });
@@ -3625,6 +3632,24 @@ export class UsersService {
 
               if (notFound.length > 0) {
                 throw new Error(`Vendor(s) not found: ${notFound.join(", ")}`);
+              }
+
+              if (uploaderAllowedVendorIds.length > 0) {
+                const unauthorizedVendors = vendors.filter(
+                  (v) => !uploaderAllowedVendorIds.includes(v.id),
+                );
+                if (unauthorizedVendors.length > 0) {
+                  throw new Error(
+                    `Unauthorized vendor assignment: You do not have permission to assign vendor(s): ${unauthorizedVendors
+                      .map(
+                        (v) =>
+                          v.service_provider_name ||
+                          v.vendor_code ||
+                          v.service_provider_code,
+                      )
+                      .join(", ")}`,
+                  );
+                }
               }
 
               for (const role of roles) {

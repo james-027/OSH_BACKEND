@@ -119,24 +119,33 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
         const detailsWhere: any = {};
         if (allowedLocationIds.length > 0) {
           detailsWhere.location_id = In(allowedLocationIds);
         }
         if (allowedWarehouseIds.length > 0) {
           detailsWhere.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          detailsWhere.vendor_id = In(allowedVendorIds);
         }
         if (Object.keys(detailsWhere).length > 0) {
           where.details = detailsWhere;
@@ -199,23 +208,32 @@ export class StaffSchedulingService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
         if (allowedLocationIds.length > 0) {
           where.location_id = In(allowedLocationIds);
         }
         if (allowedWarehouseIds.length > 0) {
           where.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
         }
       }
 

@@ -12,6 +12,7 @@ import { VendorsController } from "./controllers/vendors.controller";
 import { VendorsService } from "./services/vendors.service";
 import { ResponseMapperService } from "../../services/response-mapper.service";
 import { SSEModule } from "../sse/sse.module";
+import { CommonUtilitiesService } from "../../services/common-utilities.service";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { SSEModule } from "../sse/sse.module";
     VendorsService,
     UserAuditTrailCreateService,
     ResponseMapperService,
+    CommonUtilitiesService,
   ],
   exports: [VendorsService],
 })

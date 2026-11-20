@@ -428,23 +428,32 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
         if (allowedLocationIds.length > 0) {
           where.location_id = In(allowedLocationIds);
         }
         if (allowedWarehouseIds.length > 0) {
           where.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
         }
       }
       const scheduleDetail = await this.scheduleDetailRepository.find({
@@ -506,23 +515,32 @@ export class StaffAttendanceService {
       }
 
       if (userId && roleId) {
-        const [allowedLocationIds, allowedWarehouseIds] = await Promise.all([
-          this.commonUtilitiesService.getUserAllowedLocationIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-          this.commonUtilitiesService.getUserAllowedWarehouseIds(
-            userId,
-            roleId,
-            accessKeyId,
-          ),
-        ]);
+        const [allowedLocationIds, allowedWarehouseIds, allowedVendorIds] =
+          await Promise.all([
+            this.commonUtilitiesService.getUserAllowedLocationIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedWarehouseIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+            this.commonUtilitiesService.getUserAllowedVendorIds(
+              userId,
+              roleId,
+              accessKeyId,
+            ),
+          ]);
         if (allowedLocationIds.length > 0) {
           where.location_id = In(allowedLocationIds);
         }
         if (allowedWarehouseIds.length > 0) {
           where.warehouse_id = In(allowedWarehouseIds);
+        }
+        if (allowedVendorIds.length > 0) {
+          where.vendor_id = In(allowedVendorIds);
         }
       }
 
@@ -687,35 +705,50 @@ export class StaffAttendanceService {
     roleId?: number,
   ): Promise<any[]> {
     try {
-      // 1. Apply allowed-location permissions.
+      // 1. Apply allowed-location and allowed-vendor permissions.
       let effectiveLocationIds = locationIds;
+      let effectiveVendorIds = vendorIds;
 
       if (userId && roleId) {
-        const allowedLocationIds =
-          await this.commonUtilitiesService.getUserAllowedLocationIds(
+        const [allowedLocationIds, allowedVendorIds] = await Promise.all([
+          this.commonUtilitiesService.getUserAllowedLocationIds(
             userId,
             roleId,
             accessKeyId,
-          );
+          ),
+          this.commonUtilitiesService.getUserAllowedVendorIds(
+            userId,
+            roleId,
+            accessKeyId,
+          ),
+        ]);
 
-        if (!allowedLocationIds.length) {
-          return [];
+        if (allowedLocationIds.length > 0) {
+          effectiveLocationIds = locationIds?.length
+            ? locationIds.filter((id) => allowedLocationIds.includes(id))
+            : allowedLocationIds;
+
+          if (!effectiveLocationIds.length) {
+            return [];
+          }
         }
 
-        effectiveLocationIds = locationIds?.length
-          ? locationIds.filter((id) => allowedLocationIds.includes(id))
-          : allowedLocationIds;
+        if (allowedVendorIds.length > 0) {
+          effectiveVendorIds = vendorIds?.length
+            ? vendorIds.filter((id) => allowedVendorIds.includes(id))
+            : allowedVendorIds;
 
-        if (!effectiveLocationIds.length) {
-          return [];
+          if (!effectiveVendorIds.length) {
+            return [];
+          }
         }
       }
 
       // 2. Get expected store assignments.
       const staffWarehouseWhere: any = {};
 
-      if (vendorIds?.length) {
-        staffWarehouseWhere.vendor_id = In(vendorIds);
+      if (effectiveVendorIds?.length) {
+        staffWarehouseWhere.vendor_id = In(effectiveVendorIds);
       }
 
       if (effectiveLocationIds?.length) {
