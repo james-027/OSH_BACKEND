@@ -8,12 +8,17 @@ import { CustomerSyncService } from "src/modules/customer/services/customer-sync
 export class CustomerMasterDataScheduler {
   constructor(private readonly customerSyncService: CustomerSyncService) {}
   // Every 5 seconds (for testing)
-  @ConditionalCron("*/5 * * * * *", "ENABLE_CUSTOMER_MASTERDATA_CRON")
+  @ConditionalCron(
+    CronExpression.EVERY_MINUTE,
+    "ENABLE_CUSTOMER_MASTERDATA_CRON",
+  )
   async handleCron() {
     try {
       const result = await this.customerSyncService.syncCustomers();
 
-      console.log(result);
+      logger.info(
+        `Customer Master Data Sync completed: ${JSON.stringify(result)}`,
+      );
     } catch (error) {
       logger.error(
         `Customer Master Data Scheduler failed: ${
