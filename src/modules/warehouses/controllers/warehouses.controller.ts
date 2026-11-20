@@ -52,7 +52,7 @@ export class WarehousesController {
   @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
   @RequirePermissions({
     module: ["TAKE OUT STORES", "BPLUS STORES"],
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
@@ -71,7 +71,7 @@ export class WarehousesController {
   @CacheCustom(buildWarehouseKey, CACHE_TTL.COUNTS)
   @RequirePermissions({
     module: ["TAKE OUT STORES", "BPLUS STORES"],
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAllWarehousesNoRestriction(@Request() req) {
     const userId = req.user?.id;
@@ -83,7 +83,7 @@ export class WarehousesController {
   @Get("/stores/:warehouse_type_id")
   @RequirePermissions({
     module: ["TAKE OUT STORES", "BPLUS STORES"],
-    action: "VIEW",
+    action: "DATA ACCESS",
   })
   async findAllByType(
     @Param("warehouse_type_id", ParseIntPipe) warehouseTypeId: number,

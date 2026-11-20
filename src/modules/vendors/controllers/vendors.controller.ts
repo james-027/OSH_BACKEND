@@ -23,14 +23,14 @@ export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Get()
-  @RequirePermissions({ module: "VENDORS", action: "VIEW" })
+  @RequirePermissions({ module: "VENDORS", action: "DATA ACCESS" })
   async findAll(@Request() req) {
     const accessKeyId = req.user.current_access_key;
     return this.vendorsService.findAll(accessKeyId);
   }
 
   @Get("/all")
-  @RequirePermissions({ module: "VENDORS", action: "VIEW" })
+  @RequirePermissions({ module: "VENDORS", action: "DATA ACCESS" })
   async findAllVendorsNoRestriction(@Request() req) {
     const accessKeyId = req.user.current_access_key;
     return this.vendorsService.findAll();
