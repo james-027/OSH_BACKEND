@@ -60,13 +60,18 @@ export class CommonUtilitiesService {
   }
 
   /**
-   * Get user's allowed warehouse IDs based on user-role relationship, allowed locations, and access key.
-   * Follows Option B (Inherited/Default All):
-   * - If no explicit user_warehouses records exist: returns all active warehouses within the user's allowed locations.
-   * - If explicit user_warehouses records exist: returns only those assigned warehouses, strictly constrained to allowed locations.
-   * @param userId - The user's ID
-   * @param roleId - The user's role ID
-   * @param accessKeyId - Optional tenant access key ID
+   * Get user's explicitly whitelisted warehouse IDs based on user-role relationship,
+   * allowed locations, and access key.
+   *
+   * Follows Strict Whitelisting:
+   * - If no explicit `user_warehouses` records exist: returns `[]` (avoids redundant
+   *   fetching of all warehouses under allowed locations).
+   * - If explicit `user_warehouses` records exist: returns only active assigned
+   *   warehouses constrained to the user's allowed locations.
+   *
+   * @param userId The user's ID
+   * @param roleId The user's role ID
+   * @param accessKeyId Optional tenant access key ID
    * @returns Array of allowed warehouse IDs
    */
   async getUserAllowedWarehouseIds(
@@ -79,7 +84,7 @@ export class CommonUtilitiesService {
     }
 
     try {
-      // 1. First, retrieve allowed location IDs for this user, role, and tenant
+      // 1. Retrieve allowed location IDs for this user, role, and tenant
       const allowedLocationIds = await this.getUserAllowedLocationIds(
         userId,
         roleId,
@@ -90,58 +95,33 @@ export class CommonUtilitiesService {
         return [];
       }
 
-      // 2. Check for active explicit warehouse assignments for this user
-      const uwWhere: any = {
-        user_id: userId,
-        role_id: roleId,
-        status_id: 1,
-      };
-      if (accessKeyId) {
-        uwWhere.access_key_id = accessKeyId;
-      }
-
-      const assignedWarehouses = await this.dataSource
+      // 2. Single query: fetch active whitelisted warehouses constrained to allowed locations
+      const qb = this.dataSource
         .getRepository(UserWarehouses)
-        .find({
-          where: uwWhere,
-          select: ["warehouse_id"],
+        .createQueryBuilder("uw")
+        .innerJoin(
+          Warehouse,
+          "w",
+          "w.id = uw.warehouse_id AND w.status_id = :activeStatus",
+          { activeStatus: 1 },
+        )
+        .select("DISTINCT uw.warehouse_id", "warehouse_id")
+        .where("uw.user_id = :userId", { userId })
+        .andWhere("uw.role_id = :roleId", { roleId })
+        .andWhere("uw.status_id = :activeStatus", { activeStatus: 1 })
+        .andWhere("w.location_id IN (:...allowedLocationIds)", {
+          allowedLocationIds,
         });
 
-      // 3. Option B logic:
-      // If no explicit user_warehouses restrictions are set, inherit all active warehouses in allowed locations
-      if (assignedWarehouses.length === 0) {
-        const defaultWhere: any = {
-          location_id: In(allowedLocationIds),
-          status_id: 1,
-        };
-        if (accessKeyId) {
-          defaultWhere.access_key_id = accessKeyId;
-        }
-
-        const allInLocations = await this.dataSource
-          .getRepository(Warehouse)
-          .find({
-            where: defaultWhere,
-            select: ["id"],
-          });
-
-        return allInLocations.map((w) => w.id);
+      if (accessKeyId) {
+        qb.andWhere("uw.access_key_id = :accessKeyId", {
+          accessKeyId,
+        }).andWhere("w.access_key_id = :accessKeyId", { accessKeyId });
       }
 
-      // If explicit restrictions exist, return only assigned warehouses that belong to allowed locations
-      const assignedWarehouseIds = assignedWarehouses.map((uw) => uw.warehouse_id);
-      const validAssignedWarehouses = await this.dataSource
-        .getRepository(Warehouse)
-        .find({
-          where: {
-            id: In(assignedWarehouseIds),
-            location_id: In(allowedLocationIds),
-            status_id: 1,
-          },
-          select: ["id"],
-        });
+      const rows = await qb.getRawMany<{ warehouse_id: number }>();
 
-      return validAssignedWarehouses.map((w) => w.id);
+      return rows.map((row) => Number(row.warehouse_id));
     } catch (error) {
       console.error("Error fetching user warehouse IDs:", error);
       return [];
@@ -149,14 +129,20 @@ export class CommonUtilitiesService {
   }
 
   /**
-   * Get user's allowed vendor IDs based on user-role relationship and access key.
-   * Follows Option B (Inherited/Default All):
-   * - If no explicit user_vendors records exist: returns all active vendors (filtered by access_key_id if provided).
-   * - If explicit user_vendors records exist: returns only those assigned vendor IDs.
-   * Note: Vendor entity has no location_id, so it does not filter by user locations.
-   * @param userId - The user's ID
-   * @param roleId - The user's role ID
-   * @param accessKeyId - Optional tenant access key ID
+   * Get user's explicitly whitelisted vendor IDs based on user-role relationship
+   * and tenant access key.
+   *
+   * Follows Strict Whitelisting:
+   * - If no explicit `user_vendors` records exist: returns `[]` (avoids fetching
+   *   and filtering against every active vendor in the tenant).
+   * - If explicit `user_vendors` records exist: returns only active assigned
+   *   vendor IDs matching the tenant access key.
+   *
+   * Note: Vendor entity has no `location_id`, so it is scoped by `access_key_id` only.
+   *
+   * @param userId The user's ID
+   * @param roleId The user's role ID
+   * @param accessKeyId Optional tenant access key ID
    * @returns Array of allowed vendor IDs
    */
   async getUserAllowedVendorIds(
@@ -169,56 +155,29 @@ export class CommonUtilitiesService {
     }
 
     try {
-      // 1. Check for active explicit vendor assignments for this user
-      const uvWhere: any = {
-        user_id: userId,
-        role_id: roleId,
-        status_id: 1,
-      };
-      if (accessKeyId) {
-        uvWhere.access_key_id = accessKeyId;
-      }
-
-      const assignedVendors = await this.dataSource
+      const qb = this.dataSource
         .getRepository(UserVendors)
-        .find({
-          where: uvWhere,
-          select: ["vendor_id"],
-        });
+        .createQueryBuilder("uv")
+        .innerJoin(
+          Vendor,
+          "v",
+          "v.id = uv.vendor_id AND v.status_id = :activeStatus",
+          { activeStatus: 1 },
+        )
+        .select("DISTINCT uv.vendor_id", "vendor_id")
+        .where("uv.user_id = :userId", { userId })
+        .andWhere("uv.role_id = :roleId", { roleId })
+        .andWhere("uv.status_id = :activeStatus", { activeStatus: 1 });
 
-      // 2. Option B logic:
-      // If no explicit user_vendors restrictions are set, inherit all active vendors
-      if (assignedVendors.length === 0) {
-        const defaultWhere: any = {
-          status_id: 1,
-        };
-        if (accessKeyId) {
-          defaultWhere.access_key_id = accessKeyId;
-        }
-
-        const allVendors = await this.dataSource
-          .getRepository(Vendor)
-          .find({
-            where: defaultWhere,
-            select: ["id"],
-          });
-
-        return allVendors.map((v) => v.id);
+      if (accessKeyId) {
+        qb.andWhere("uv.access_key_id = :accessKeyId", {
+          accessKeyId,
+        }).andWhere("v.access_key_id = :accessKeyId", { accessKeyId });
       }
 
-      // If explicit restrictions exist, return assigned active vendors
-      const assignedVendorIds = assignedVendors.map((uv) => uv.vendor_id);
-      const validAssignedVendors = await this.dataSource
-        .getRepository(Vendor)
-        .find({
-          where: {
-            id: In(assignedVendorIds),
-            status_id: 1,
-          },
-          select: ["id"],
-        });
+      const rows = await qb.getRawMany<{ vendor_id: number }>();
 
-      return validAssignedVendors.map((v) => v.id);
+      return rows.map((row) => Number(row.vendor_id));
     } catch (error) {
       console.error("Error fetching user vendor IDs:", error);
       return [];
@@ -266,7 +225,12 @@ export class CommonUtilitiesService {
     roleId?: number,
     accessKeyId?: number,
   ): Promise<number[]> {
-    if (!userIds || userIds.length === 0 || !targetLocationIds || targetLocationIds.length === 0) {
+    if (
+      !userIds ||
+      userIds.length === 0 ||
+      !targetLocationIds ||
+      targetLocationIds.length === 0
+    ) {
       return [];
     }
 
@@ -275,7 +239,9 @@ export class CommonUtilitiesService {
       .createQueryBuilder("ul")
       .select("DISTINCT ul.user_id", "userId")
       .where("ul.user_id IN (:...userIds)", { userIds })
-      .andWhere("ul.location_id IN (:...targetLocationIds)", { targetLocationIds })
+      .andWhere("ul.location_id IN (:...targetLocationIds)", {
+        targetLocationIds,
+      })
       .andWhere("ul.status_id = :statusId", { statusId: 1 });
 
     if (roleId) {
@@ -323,7 +289,6 @@ export class CommonUtilitiesService {
     }
     return result;
   }
-
 
   /**
    * Format date to YYYY-MM-DD string
