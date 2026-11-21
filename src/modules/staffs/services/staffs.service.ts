@@ -1750,6 +1750,7 @@ export class StaffsService {
     updateStaffDeployDto: UpdateStaffDeployDto,
     userId: number,
     accessKeyId?: number,
+    isBulkUpload: boolean = false,
   ): Promise<any> {
     try {
       const staff = await this.staffsRepository.findOne({
@@ -1902,6 +1903,7 @@ export class StaffsService {
           status_id: 1,
         },
         userId,
+        !isBulkUpload,
       );
 
       try {
@@ -1933,15 +1935,18 @@ export class StaffsService {
 
       const response =
         this.responseMapperService.mapEntityToResponse(staffWarehouse);
-      try {
-        this.sseEventEmitter.emitUpdate("staffs", response.id, response);
-        this.sseEventEmitter.emitUpdate(
-          "staff_warehouses",
-          response.id,
-          response,
-        );
-      } catch (err) {
-        logger.error("SSE event failed:", err);
+
+      if (!isBulkUpload) {
+        try {
+          this.sseEventEmitter.emitUpdate("staffs", response.id, response);
+          this.sseEventEmitter.emitUpdate(
+            "staff_warehouses",
+            response.id,
+            response,
+          );
+        } catch (err) {
+          logger.error("SSE event failed:", err);
+        }
       }
 
       return response;
@@ -3043,6 +3048,7 @@ export class StaffsService {
 
     const success = [];
     const errors = [];
+    const deployedStaffIds: number[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -3156,33 +3162,12 @@ export class StaffsService {
           dto,
           userId,
           accessKeyId,
+          true,
         );
 
-        try {
-          await this.actionLogsService.logAction({
-            module_name: this.module_name,
-            ref_id: existingRecord.id,
-            action_id: ACTION_IDS.DEPLOY,
-            description: `Staff ${existingRecord.first_name} ${existingRecord.last_name} Deployed to ${NAMING_CONVENTION.WAREHOUSE}: ${warehouse.warehouse_name}`,
-            raw_data: JSON.stringify({
-              source: "STAFF DEPLOY UPLOAD",
-              staff_id: existingRecord.id,
-              staff_code: existingRecord.staff_code,
-              warehouse_id: warehouse.id,
-              warehouse_name: warehouse.warehouse_name,
-              effectivity_date: dto.effectivity_date,
-              end_date: dto.end_date,
-              remarks: dto.remarks,
-              row: i + 2,
-            }),
-            created_by: userId,
-          });
-        } catch (err) {
-          logger.error(
-            `Action log failed for uploaded staff deploy, staff_id=${existingRecord.id}:`,
-            err,
-          );
-        }
+        // Collect successfully deployed staff IDs for the single SSE event
+        deployedStaffIds.push(existingRecord.id);
+
         success.push({
           row: i + 2,
           action: "updated",
@@ -3202,6 +3187,11 @@ export class StaffsService {
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
+    }
+
+    // SINGLE SSE EMISSION AFTER ALL STAFF HAVE BEEN PROCESSED
+    if (deployedStaffIds.length > 0) {
+      this.sseEventEmitter.emitUpdate("staffs", deployedStaffIds[0]);
     }
 
     return {
@@ -3251,13 +3241,14 @@ export class StaffsService {
 
     const success = [];
     const errors = [];
+    const buddyUpStaffIds: number[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
       try {
         // REQUIRED FIELD VALIDATION
-        const requiredFields = ["Staff Code", "New Store", "Effectivity Date"];
+        const requiredFields = ["DWS ID", "New Store", "Effectivity Date"];
 
         const missingFields = requiredFields.filter(
           (field) =>
@@ -3276,14 +3267,25 @@ export class StaffsService {
         }
 
         const staffCode = row["Staff Code"]?.toString().trim();
+        const dwsID = row["DWS ID"]?.toString().trim();
 
         let existingRecord = null;
 
-        existingRecord = await this.staffsRepository.findOne({
-          where: {
-            staff_code: staffCode,
-          },
-        });
+        if (staffCode) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              staff_code: staffCode,
+            },
+          });
+        }
+
+        if (!existingRecord && dwsID) {
+          existingRecord = await this.staffsRepository.findOne({
+            where: {
+              old_dws_id: dwsID,
+            },
+          });
+        }
 
         if (!existingRecord) {
           errors.push({
@@ -3337,6 +3339,7 @@ export class StaffsService {
 
         const isBuddyUp =
           existingRecord.assign_status_id === STATUS_IDS.TEMPORARY_ASSIGNMENT;
+
         if (!isBuddyUp) {
           errors.push({
             row: i + 2,
@@ -3358,32 +3361,12 @@ export class StaffsService {
           dto,
           userId,
           accessKeyId,
+          true,
         );
-        try {
-          await this.actionLogsService.logAction({
-            module_name: this.module_name,
-            ref_id: existingRecord.id,
-            action_id: ACTION_IDS.BUDDY_UP,
-            description: `Staff ${existingRecord.first_name} ${existingRecord.last_name} Buddy Up to ${NAMING_CONVENTION.WAREHOUSE}: ${warehouse.warehouse_name}`,
-            raw_data: JSON.stringify({
-              source: "STAFF BUDDY_UP UPLOAD",
-              staff_id: existingRecord.id,
-              staff_code: existingRecord.staff_code,
-              warehouse_id: warehouse.id,
-              warehouse_name: warehouse.warehouse_name,
-              effectivity_date: dto.effectivity_date,
-              end_date: dto.end_date,
-              remarks: dto.remarks,
-              row: i + 2,
-            }),
-            created_by: userId,
-          });
-        } catch (err) {
-          logger.error(
-            `Action log failed for uploaded staff deploy, staff_id=${existingRecord.id}:`,
-            err,
-          );
-        }
+
+        // Collect successfully updated staff IDs for the single SSE event
+        buddyUpStaffIds.push(existingRecord.id);
+
         success.push({
           row: i + 2,
           action: "updated",
@@ -3403,6 +3386,15 @@ export class StaffsService {
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
+    }
+
+    // SINGLE SSE EMISSION AFTER ALL STAFF HAVE BEEN PROCESSED
+    if (buddyUpStaffIds.length > 0) {
+      this.sseEventEmitter.emitUpdate("staffs", buddyUpStaffIds[0], {
+        action: "BULK_BUDDY_UP",
+        staff_ids: buddyUpStaffIds,
+        total_updated: buddyUpStaffIds.length,
+      });
     }
 
     return {
