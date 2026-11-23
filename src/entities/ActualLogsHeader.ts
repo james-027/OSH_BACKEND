@@ -6,11 +6,13 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany
 } from "typeorm";
 import { Status } from "./Status";
 import { User } from "./User";
 import { LogsType } from "./LogsType";
 import { AccessKey } from "./AccessKey";
+import { ActualLogsDetail } from "./ActualLogsDetail";
 
 @Entity("actual_logs_header")
 export class ActualLogsHeader {
@@ -83,4 +85,9 @@ export class ActualLogsHeader {
   @ManyToOne(() => AccessKey, { eager: false })
   @JoinColumn({ name: "access_key_id" })
   accessKey: AccessKey;
+
+    @OneToMany(() => ActualLogsDetail, (detail) => detail.actualHeader, {
+      cascade: true,
+    })
+    details: ActualLogsDetail[];
 }

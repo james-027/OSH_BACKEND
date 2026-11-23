@@ -3369,6 +3369,12 @@ export class StaffSchedulingService {
               response.id,
               response,
             );
+
+            this.sseEventEmitter.emitUpdate(
+              "actual_time_logs",
+              response.id,
+              response,
+            );
           } catch (err) {
             logger.error(`SSE event failed for Schedule ${response.id}:`, err);
           }
