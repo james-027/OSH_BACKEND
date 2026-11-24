@@ -1787,6 +1787,10 @@ public async getApprovalSummaryDocument(
       moduleName,
     };
 
+    const isDigitalCraneScale =
+      moduleName.trim().toUpperCase().includes("DIGITAL CRANE SCALE") ||
+      debitAdvice.control_no !== undefined;
+
     await this.emailNotificationMailService.sendMail({
       moduleId,
       to,
@@ -1794,6 +1798,7 @@ public async getApprovalSummaryDocument(
       subject: emailSubject,
       html: this.buildDebitAdviceEmail(emailData),
       attachments,
+      disableThreading: isDigitalCraneScale,
     });
   }
   public async sendApprovalSummaryEmail({
