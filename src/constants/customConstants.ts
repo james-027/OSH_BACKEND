@@ -12,6 +12,10 @@ export const MODULE_IDS = {
   BILLING_REPORT: 56,
 } as const;
 
+export const MODULE_NAMES = {
+  BILLING_REPORT: "BILLING REPORT",
+} as const;
+
 export const NAMING_CONVENTION = {
   WAREHOUSE: "Store",
 } as const;
