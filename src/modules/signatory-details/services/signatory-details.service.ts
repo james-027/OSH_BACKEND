@@ -61,43 +61,46 @@ export class SignatoryDetailService {
   //   }
   // }
 
-  async findAll(accessKeyId: number): Promise<any[]> {
-    try {
-      const signatoryHeaders = await this.signatoryHeaderRepository.find({
-        where: {
-          access_key_id: accessKeyId,
-        },
-        relations: [
-          "status",
-          "createdBy",
-          "updatedBy",
-          "module",
-          "signatoryDetails",
-          "signatoryDetails.status",
-          "signatoryDetails.createdBy",
-          "signatoryDetails.updatedBy",
-          "signatoryDetails.signatoryType",
-          "signatoryDetails.signatoree",
-          "signatoryDetails.position",
-        ],
-      });
+async findAll(accessKeyId: number): Promise<any[]> {
+  try {
+    const signatoryHeaders = await this.signatoryHeaderRepository.find({
+      where: {
+        access_key_id: accessKeyId,
+      },
+      relations: [
+        "status",
+        "createdBy",
+        "updatedBy",
+        "module",
+        "signatoryDetails",
+        "signatoryDetails.status",
+        "signatoryDetails.createdBy",
+        "signatoryDetails.updatedBy",
+        "signatoryDetails.signatoryType",
+        "signatoryDetails.signatoree",
+        "signatoryDetails.position",
+      ],
+    });
 
-      return signatoryHeaders.map((entity) => ({
-        id: entity.id,
-        status_id: entity.status_id,
-        created_by: entity.created_by,
-        updated_by: entity.updated_by,
-        access_key_id: entity.access_key_id,
-        module_id: entity.module_id,
-        created_at: entity.created_at,
-        modified_at: entity.modified_at,
+    return signatoryHeaders.map((entity) => ({
+      id: entity.id,
+      status_id: entity.status_id,
+      created_by: entity.created_by,
+      updated_by: entity.updated_by,
+      access_key_id: entity.access_key_id,
+      module_id: entity.module_id,
+      created_at: entity.created_at,
+      modified_at: entity.modified_at,
 
-        created_user: entity.createdBy?.first_name || null,
-        updated_user: entity.updatedBy?.first_name || null,
-        status_name: entity.status?.status_name || null,
-        module_name: entity.module?.module_name || null,
+      created_user: entity.createdBy?.first_name || null,
+      updated_user: entity.updatedBy?.first_name || null,
+      status_name: entity.status?.status_name || null,
+      module_name: entity.module?.module_name || null,
 
-        signatoryDetails: (entity.signatoryDetails || []).map((detail) => ({
+      // Only get ACTIVE signatory details
+      signatoryDetails: (entity.signatoryDetails || [])
+        .filter((detail) => detail.status_id === STATUS_IDS.ACTIVE)
+        .map((detail) => ({
           id: detail.id,
           signatory_header_id: detail.signatory_header_id,
           status_id: detail.status_id,
@@ -110,7 +113,7 @@ export class SignatoryDetailService {
           modified_at: detail.modified_at,
 
           created_user: detail.createdBy?.first_name || null,
-          updated_user: entity.updatedBy?.first_name || null,
+          updated_user: detail.updatedBy?.first_name || null,
           status_name: detail.status?.status_name || null,
 
           signatory_type_name: detail.signatoryType?.description || null,
@@ -122,12 +125,12 @@ export class SignatoryDetailService {
 
           position_name: detail.position?.position_name || null,
         })),
-      }));
-    } catch (error) {
-      console.error("Error fetching signatory headers:", error);
-      throw new Error("Failed to fetch signatory headers");
-    }
+    }));
+  } catch (error) {
+    console.error("Error fetching signatory headers:", error);
+    throw new Error("Failed to fetch signatory headers");
   }
+}
 
   async findSignatoryDetails(headerId: number): Promise<any[]> {
     try {
@@ -166,37 +169,40 @@ export class SignatoryDetailService {
     }
   }
 
-  async findBySignatoreeByModule(
-    moduleId: number,
-    accessKeyId: number,
-  ): Promise<any[]> {
-    try {
-      const signatoryDetails = await this.signatoryDetailRepository.find({
-        where: {
-          signatoryHeader: {
-            module_id: moduleId,
-            status_id: STATUS_IDS.ACTIVE,
-            access_key_id: accessKeyId,
-          },
-        },
-        relations: [
-          "status",
-          "createdBy",
-          "updatedBy",
-          "signatoryHeader",
-          "signatoryHeader.module",
-          "signatoryType",
-          "position",
-          "signatoree",
-        ],
-      });
+async findBySignatoreeByModule(
+  moduleName: string,
+  accessKeyId: number,
+): Promise<any[]> {
+  try {
 
-      return this.responseMapperService.mapEntitiesToResponse(signatoryDetails);
-    } catch (error) {
-      console.error("Error fetching signatory details by module:", error);
-      throw new Error("Failed to fetch signatory details");
-    }
+    const signatoryDetails = await this.signatoryDetailRepository.find({
+      where: {
+        signatoryHeader: {
+          module: {
+            module_name: moduleName,
+          },
+          status_id: STATUS_IDS.ACTIVE,
+          access_key_id: accessKeyId,
+        },
+      },
+      relations: [
+        "status",
+        "createdBy",
+        "updatedBy",
+        "signatoryHeader",
+        "signatoryHeader.module",
+        "signatoryType",
+        "position",
+        "signatoree",
+      ],
+    });
+
+    return this.responseMapperService.mapEntitiesToResponse(signatoryDetails);
+  } catch (error) {
+    console.error("Error fetching signatory details by module:", error);
+    throw new Error("Failed to fetch signatory details");
   }
+}
 
   async create(
     createDto: CreateSignatoryHeaderDto,

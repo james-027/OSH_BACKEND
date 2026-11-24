@@ -41,14 +41,18 @@ export class SignatoryDetailController {
     return this.signatoryDetailService.findSignatoryType();
   }
 
-  @Get("signature-module/:moduleId")
+  @Get("signature-module/:moduleName")
   @RequirePermissions({ module: "SIGNATORY MANAGEMENT", action: "VIEW" })
-  async findByModuleId(
-    @Param("moduleId", ParseIntPipe) moduleId: number,
+  async findByModuleName(
+    @Param("moduleName") moduleName: string,
     @Request() req?: any,
   ) {
     const accessKeyId = req?.user?.current_access_key;
-    return this.signatoryDetailService.findBySignatoreeByModule(moduleId, accessKeyId);
+
+    return this.signatoryDetailService.findBySignatoreeByModule(
+      moduleName,
+      accessKeyId,
+    );
   }
 
   @Get("signature-details/:headerId")

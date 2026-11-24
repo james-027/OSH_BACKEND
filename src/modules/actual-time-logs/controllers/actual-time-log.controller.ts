@@ -47,5 +47,27 @@ export class ActualTimeLogsController {
     );
   }
 
+  @Get("details")
+  @RequirePermissions({ module: "ACTUAL TIME LOGS", action: "VIEW" })
+  async findActualHeaderDetails(
+    @Query("actual_header_id") actualHeaderId?: string,
+    @Request() req?: any,
+  ) {
+    const accessKeyId = req?.user?.current_access_key;
+    const userId = req.user?.id;
+    const roleId = req.user?.role_id;
+    
+    const parsedHeaderId = actualHeaderId
+      ? Number(actualHeaderId)
+      : undefined;
+
+    return this.actualTimeLogsService.findActualHeaderDetails(
+      parsedHeaderId,
+      accessKeyId,
+      userId,
+      roleId
+    );
+  }
+
  
 }

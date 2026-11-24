@@ -31,7 +31,7 @@ import {
   DAYS_FACTOR_RATE,
   BILLING_TYPE_IDS,
   BILLING_TYPE_ABBRS,
-  MODULE_IDS
+  MODULE_NAMES
 } from "src/constants/customConstants";
 import { ActionLogsService } from "src/modules/actions/services/action-logs.service";
 import { Warehouse } from "src/entities/Warehouse";
@@ -3369,6 +3369,12 @@ export class StaffSchedulingService {
               response.id,
               response,
             );
+
+            this.sseEventEmitter.emitUpdate(
+              "actual_time_logs",
+              response.id,
+              response,
+            );
           } catch (err) {
             logger.error(`SSE event failed for Schedule ${response.id}:`, err);
           }
@@ -3897,7 +3903,7 @@ export class StaffSchedulingService {
   ): Promise<{ data: any[]; totals: any; signatories:any[] }> {
     try {
 
-    const signatories = await this.signatoryDetailService.findBySignatoreeByModule(MODULE_IDS.BILLING_REPORT,accessKeyId);
+    const signatories = await this.signatoryDetailService.findBySignatoreeByModule(MODULE_NAMES.BILLING_REPORT,accessKeyId);
 
       const query = this.payrollDetailRepository
         .createQueryBuilder("payrollDetail")
