@@ -533,6 +533,24 @@ export class EmailQueueService {
     for (const [, queues] of groupedQueues.entries()) {
       const firstQueue = queues[0];
 
+      const moduleRecord = await this.moduleRepository.findOne({
+        where: {
+          id: Number(firstQueue.module_id),
+          status_id: 1,
+        },
+      });
+
+      const moduleName = moduleRecord?.module_name?.trim().toUpperCase() ?? "";
+      const isStrictIndividualModule = moduleName.includes("DIGITAL CRANE SCALE");
+
+      // Strict 1-by-1 sending: never group Digital Crane Scale tally sheets
+      if (isStrictIndividualModule) {
+        for (const queue of queues) {
+          await this.processQueueItem(queue.id);
+        }
+        continue;
+      }
+
       const grouped = await this.groupQueuesByTrigger(
         Number(firstQueue.trigger_status_id),
         Number(firstQueue.module_id),
@@ -559,7 +577,7 @@ export class EmailQueueService {
 
               // Preserve the recipient that was resolved when the queue was created.
               recipient_to: queue.recipient_to,
-            recipient_cc: queue.recipient_cc,
+              recipient_cc: queue.recipient_cc,
             });
 
             try {

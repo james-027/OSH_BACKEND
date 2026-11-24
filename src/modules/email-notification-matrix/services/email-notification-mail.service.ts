@@ -20,6 +20,7 @@ export class EmailNotificationMailService {
     html: string;
     text?: string;
     attachments?: any[];
+    disableThreading?: boolean;
   }) {
     const config = await this.emailNotificationMatrixRepository.findOne({
       where: {
